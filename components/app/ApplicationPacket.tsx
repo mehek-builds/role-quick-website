@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, type ApplicationReview, type GeneratedResume, type ResumeSpec } from "@/lib/api";
 import { canonicalApplicationFromPacket, isStubPacketSpec, sectionHeading, startsNewSection, statusLabel, stripMetadata, withoutHistoricalPacketAuditStaleAttention } from "@/features/applications";
-import { cleanJdCapture, completedSubmissionGroups, displayQuestionLabel, humanInputItems, type SubmissionChecklistItem } from "@/features/applications";
+import { cleanJdCapture, cleanScrapedLabel, completedSubmissionGroups, displayQuestionLabel, humanInputItems, type SubmissionChecklistItem } from "@/features/applications";
 import { resumeContactLine } from "@/lib/resumeContact";
 import { userFacingError } from "@/lib/user-facing-error";
 import { useDashboardOverlayExit } from "@/components/app/useDashboardOverlayExit";
@@ -219,9 +219,17 @@ function SectionHeading({ id, eyebrow, title, note }: { id: string; eyebrow: str
 
 /* filled_fields arrives as a flat list of names, with answers to discovered
    questions prefixed "question:" (the same convention the review screen already
-   un-prefixes for its chips). */
+   un-prefixes for its chips).
+
+   AND IT IS A DOM CAPTURE, so one field can arrive as several captures of itself concatenated:
+   "Preferred first name* preferred first name preferred_name" - the visible label, the accessible
+   name and the raw form key - measured live 2026-08-29. This is the record of what was submitted on
+   the applicant's behalf, and printing the employer's form internals into it reads as a bug in the
+   record itself. cleanScrapedLabel is conservative and never returns empty (see scraped-text.ts),
+   so a label with nothing duplicate in it arrives here unchanged. */
 function fieldLabel(field: string): string {
-  return field.startsWith("question:") ? field.slice("question:".length).trim() : field;
+  const unprefixed = field.startsWith("question:") ? field.slice("question:".length).trim() : field;
+  return cleanScrapedLabel(unprefixed);
 }
 
 function CheckRow({ item, checked }: { item: SubmissionChecklistItem; checked: boolean }) {
@@ -481,6 +489,11 @@ export function ApplicationPacket({
      Lookups are scoped to the dialog rather than document.getElementById: the ids are not unique to
      an instance, so a global lookup lets one viewer measure another one's sections. */
   const rafPending = useRef(false);
+  /* WHAT THE READER CLICKED OUTRANKS WHAT THE SCROLLER MEASURES, until the scroll settles.
+     A click starts a smooth scroll; the spy below fires throughout it and would repaint the rail
+     with every intermediate position, so the pill the reader just pressed appeared not to take. */
+  const jumpTarget = useRef<string | null>(null);
+  const jumpSettle = useRef(0);
   const onScroll = useCallback(() => {
     if (rafPending.current) return;
     rafPending.current = true;
@@ -489,14 +502,32 @@ export function ApplicationPacket({
       const box = scroller.current;
       const root = dialog.current;
       if (!box || !root) return;
-      const top = box.getBoundingClientRect().top;
+      const rect = box.getBoundingClientRect();
       const ids = ["packet-resume", "packet-jd", "packet-questions", "packet-proof"];
-      let current = ids[0];
-      for (const id of ids) {
-        const node = root.querySelector(`#${id}`);
-        if (node && node.getBoundingClientRect().top - top <= 24) current = id;
+      /* THE SCROLLER BOTTOMS OUT BEFORE THE LAST SECTION REACHES THE TOP, and the rule below could
+         only ever name a section that had crossed the top. So on this dialog - where the questions
+         section is the tail of a two-column layout - "Questions · 14" was unreachable: the pane
+         scrolled to its end with the FORMS heading plainly on screen while the rail still read JOB
+         DESCRIPTION, which is what made the pill take two presses to appear to work. Measured
+         2026-08-29. At the end of the scroll the answer is simply the last section that exists. */
+      /* GENUINE OVERFLOW ONLY. `atBottom` is trivially true on a pane that barely scrolls, and
+         acting on it there would mark the LAST section active while the reader is still looking at
+         the first - the same defect the seeding comment above records for a packet short enough
+         never to scroll. The rule below only makes sense once there is more scrollable height than
+         the 24px threshold it is standing in for. */
+      const scrollable = box.scrollHeight - box.clientHeight > 24;
+      const atBottom = scrollable && box.scrollTop + box.clientHeight >= box.scrollHeight - 2;
+      const present = ids.filter((id) => root.querySelector(`#${id}`) !== null);
+      if (atBottom && present.length > 0) {
+        setActive(jumpTarget.current ?? present[present.length - 1]);
+        return;
       }
-      setActive(current);
+      let current = present[0] ?? ids[0];
+      for (const id of present) {
+        const node = root.querySelector(`#${id}`);
+        if (node && node.getBoundingClientRect().top - rect.top <= 24) current = id;
+      }
+      setActive(jumpTarget.current ?? current);
     });
   }, []);
 
@@ -504,6 +535,15 @@ export function ApplicationPacket({
     /* packet-resume routes to the top anchor; see the comment on #packet-top. */
     const target = id === "packet-resume" ? "packet-top" : id;
     const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+    /* Marked active immediately, and held there until the scroll stops moving. Both halves matter:
+       without the immediate set the pill lags a smooth scroll, and without the hold the spy
+       overwrites it mid-flight with whatever is passing under the threshold. */
+    setActive(id);
+    jumpTarget.current = id;
+    window.clearTimeout(jumpSettle.current);
+    jumpSettle.current = window.setTimeout(() => {
+      jumpTarget.current = null;
+    }, 600);
     dialog.current?.querySelector(`#${target}`)?.scrollIntoView({ behavior, block: "start" });
   }
 

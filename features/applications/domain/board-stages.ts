@@ -50,3 +50,58 @@ export function boardCoverageNote(coverage: { total: number; onBoard: number; of
   }
   return `${coverage.offBoard} of ${coverage.total} have not been sent yet. A card reaches Applied once Litos sends it.`;
 }
+
+/**
+ * The same sentence, counted from the ledger printed directly above it instead of from the board's
+ * own fetch.
+ *
+ * WHY THIS EXISTS. `boardCoverage` counts the cards /applications/board returned, which caps at 200.
+ * The ledger header six pixels higher counts the merged canonical inventory. On 2026-08-29 the two
+ * were 200 and 100 on one screen: "Your applications 100", and immediately beneath it "187 of 200
+ * have not been sent yet". Both numbers were correct about their own universe and the screen was
+ * still telling a student that Litos cannot count her applications.
+ *
+ * The board keeps drawing every card it was handed - hiding a real card to make a caption tidy
+ * would be the worse error, and is the exact defect boardCoverage was written for. What changes is
+ * WHICH INVENTORY THE SENTENCE IS ABOUT: it is about the list it sits under, so the two can never
+ * disagree again, by construction rather than by both happening to be right.
+ *
+ * `sent` is the canonical send count from pipeline-counts.ts, NOT a stage tally. The Applied column
+ * is the student's own axis (see the header of Board.tsx) and can hold a card she moved there
+ * herself; reading that column as an answer to "how many did Litos send" is the third of the four
+ * causes listed in pipeline-counts.ts.
+ */
+export function pipelineCoverage(
+  inventory: { total: number; sent: number },
+): { total: number; onBoard: number; offBoard: number } {
+  const total = Math.max(0, inventory.total);
+  const onBoard = Math.min(Math.max(0, inventory.sent), total);
+  return { total, onBoard, offBoard: total - onBoard };
+}
+
+/**
+ * What the board says when its Applied column and the canonical send count are not the same number.
+ *
+ * "Applied 13" beside "12 Sent" was one of the six disagreeing figures. They are not the same claim
+ * and never were: `sent` is what Litos submitted, while the Applied column is where the STUDENT has
+ * filed a card, including one she applied to herself and moved across by hand. Rather than collapse
+ * a real distinction (which would either invent sends or hide her own cards), the board names it,
+ * once, and only when the two actually differ.
+ *
+ * IT STATES THE DIFFERENCE, IT DOES NOT EXPLAIN IT. An earlier draft read "moved there by you
+ * rather than sent by Litos", and that is a cause this function cannot know. The two figures come
+ * from two independent fetches - /applications/board and the merged canonical inventory - so an
+ * excess can equally mean a card the board returned that the ledger's window did not reach, and
+ * telling a student she filed something herself when Litos in fact sent it is precisely the kind of
+ * confident wrong sentence this whole pass is removing. Naming the two universes is the honest
+ * form, and it is what the reader needs in order to reconcile the numbers.
+ *
+ * Null when they agree, which is the ordinary case and the one where a caption would be noise.
+ */
+export function boardStageReconciliationNote(appliedCards: number, sent: number): string | null {
+  const difference = appliedCards - sent;
+  if (difference <= 0) return null;
+  return difference === 1
+    ? "1 card sits in Applied that this list does not count as sent by Litos."
+    : `${difference} cards sit in Applied that this list does not count as sent by Litos.`;
+}

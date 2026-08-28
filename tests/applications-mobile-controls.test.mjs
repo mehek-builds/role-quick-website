@@ -71,9 +71,14 @@ test("the packet switcher has a phone shape and a desktop shape, and exactly one
      stage picker and the Account tab strip. A four-column table does not survive 375px, and a
      vertical list of every application between the page header and the review surface would bury
      the packet the student actually opened. */
+  /* The horizontal scrolling itself moved into ScrollableRow on 2026-08-29, together with the
+     affordance it never had: the strip clipped at the viewport edge and every platform this runs on
+     hides the scrollbar until a scroll is already under way, so the only cue that more existed
+     appeared to someone who had already guessed. The shape asserted here is unchanged - an
+     edge-bleeding strip below lg - only the element that owns the overflow. */
   assert.match(
     ledgerSection,
-    /-mx-4 overflow-x-auto[^"]*lg:hidden/,
+    /<ScrollableRow label="Your applications" className="-mx-4 [^"]*lg:hidden"/,
     "expected a horizontally scrolling, edge-bleeding switcher strip below lg",
   );
   assert.match(
@@ -97,8 +102,22 @@ test("the packet switcher has a phone shape and a desktop shape, and exactly one
   );
 });
 
+test("the phone strip advertises that it scrolls, and only when it actually does", async () => {
+  /* A fade painted unconditionally is a promise of more content that an account with three
+     applications does not have. The edges are measured. */
+  const ui = await readFile("components/app/ui.tsx", "utf8");
+  const row = ui.slice(ui.indexOf("export function ScrollableRow("));
+  assert.ok(row.length > 0, "ScrollableRow must exist for the strip to use");
+  assert.match(row, /node\.scrollLeft \+ node\.clientWidth < node\.scrollWidth - 1/, "the end edge is measured");
+  assert.match(row, /edges\.end && \(/, "and only drawn when there is something past it");
+  assert.match(row, /new ResizeObserver\(measure\)/, "and re-measured when the row or its cards change size");
+  assert.match(row, /pointer-events-none/, "the fade must never intercept a tap meant for a card");
+  assert.match(row, /tabIndex=\{0\}/, "a scroll region with content has to be reachable by keyboard");
+  assert.match(row, /aria-label=\{label\}/);
+});
+
 test("every switcher chip is a 44px target that reports which packet is open", () => {
-  const strip = ledgerSection.slice(ledgerSection.indexOf("-mx-4 overflow-x-auto"));
+  const strip = ledgerSection.slice(ledgerSection.indexOf('<ScrollableRow label="Your applications"'));
   const chip = strip.slice(0, strip.indexOf("</button>"));
   assert.match(chip, /min-h-11/, "a chip a thumb has to hit needs 44px");
   /* Optional chaining, re-pointed 2026-08-04 with ISSUE-037. The section now also renders as the

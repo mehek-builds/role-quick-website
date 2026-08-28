@@ -25,10 +25,10 @@ import {
   type ManualHandoffResponse,
   type ResumeSpec,
 } from "@/lib/api";
-import { Card, Chip, EmptyState, ErrorNote, ExtensionStoreLink, PendingLabel, ShimmerRows, TerminalActionBar, formatRelativeDate } from "@/components/app/ui";
+import { Card, Chip, EmptyState, ErrorNote, ExtensionStoreLink, PendingLabel, ScrollableRow, ShimmerRows, TerminalActionBar, formatRelativeDate } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
 import { canonicalApplicationFromPacket, canonicalEnvelopeLegacyHydrationId, canonicalEnvelopeWithMissingLegacyHydration, canonicalTrackerPacket, explicitTerms, sendableLinkedPacketFromCanonicalEnvelope, withRestoredLinkedPackets, linkedLegacyPacketFromCanonicalTrackerPacket, mergeCanonicalApplicationHistory, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, reviewWithLists, screenForStatus, sectionHeading, selectedPacketForRequest, startsNewSection, statusLabel, stripMetadata, upsertCanonicalApplicationHistory } from "@/features/applications";
-import { applicationFilterFromSearch, applicationFilterHeading, cleanJdCapture, ledgerRendersOnLanding, reviewCanBeSent, statusMatchesApplicationFilter, type ApplicationFilter } from "@/features/applications";
+import { applicationFilterFromSearch, applicationFilterHeading, cleanJdCapture, ledgerRendersOnLanding, pipelineCounts, reviewCanBeSent, sentSince, startOfLocalDay, statusMatchesApplicationFilter, unansweredRequiredQuestionCount, type ApplicationFilter } from "@/features/applications";
 import { nextPreferredReadyPacket, packetMatchesJob } from "@/features/applications";
 import { auditAnswerWrite, reviewAnswersNeedSave, saveReviewAnswers, type ReviewAnswerSaveResponse } from "@/features/applications";
 import { saveAttentionAcknowledgement, type AttentionAcknowledgementResponse } from "@/features/applications";
@@ -1690,6 +1690,9 @@ function Applications() {
       : "/resume/history";
     Promise.allSettled([
       api<{ resumes: GeneratedResume[] }>(historyPath),
+      /* Kept in lockstep with the Home loader's identical literal, and capped at the server's own
+         maximum for this parameter - anything higher is a 400 that lands here as an empty canonical
+         list and drops every canonical-only application off this page. See the loader's comment. */
       api<{ applications: CanonicalApplication[] }>("/applications?limit=100"),
     ])
       .then(async ([historyResult, canonicalResult]) => {
@@ -2008,6 +2011,17 @@ function Applications() {
     () => sendableLinkedPacketFromCanonicalEnvelope(canonicalEnvelopePacket),
     [canonicalEnvelopePacket],
   );
+  /* WHAT "READY" IS NOT. canonicalReadyToSend answers "is there a sendable packet on a portal Litos
+     can submit through", which the detail card was rendering as "Litos can send this application
+     for you" over a button reading "Continue to send". Measured 2026-08-29: that button landed on
+     unanswered required employer questions. Both facts were true and the card stated only the one
+     that flattered it. This is the other one, and it is a count so the card can say what is
+     missing rather than merely that something is. */
+  const canonicalRequiredQuestionsRemaining = useMemo(() => {
+    const review = canonicalReadyToSend?.spec._review;
+    if (!review) return 0;
+    return unansweredRequiredQuestionCount(review.questions ?? [], review.question_metadata_blockers ?? []);
+  }, [canonicalReadyToSend]);
   /* Old deployments stored PACKET_AUDIT_STALE as an attention item. Opening one of those rows is
      itself enough to begin the safe compatibility path: clear any old browser proof, request a
      fresh audit, and remain on review with acknowledgement false. No click is replayed and no send
@@ -2149,6 +2163,13 @@ function Applications() {
      sent looking like eleven live opportunities. The mark has to know about the row the filter
      just removed. */
   const duplicateMarks = useMemo(() => duplicatePostingMarks(reviewablePackets), [reviewablePackets]);
+  /* Memoised for the reason every derivation over this list is: the page holds a 200-row inventory
+     and re-renders on a 2.5s poll and on every keystroke in the ledger search box. Computed inline
+     in the Board's props it walked all 200 packets and minted a new object on each of those. */
+  const boardInventory = useMemo(
+    () => ({ total: reviewablePackets.length, sent: pipelineCounts(reviewablePackets).sent }),
+    [reviewablePackets],
+  );
   const deferredApplicationQuery = useDeferredValue(applicationQuery);
   const visiblePackets = useMemo(() => {
     const filtered = reviewablePackets.filter((packet) =>
@@ -2255,16 +2276,15 @@ function Applications() {
 
   /* Counts what was actually sent since midnight, from the submitted_at the server stamped. A
      count of "applications touched today" would climb every time a resume was regenerated, which
-     is the number every rival inflates. */
-  const appliedToday = useMemo(() => {
-    if (packets === null) return null;
-    const midnight = new Date();
-    midnight.setHours(0, 0, 0, 0);
-    return reviewablePackets.filter((packet) => {
-      const at = packet.spec._review?.submitted_at;
-      return at ? new Date(at).getTime() >= midnight.getTime() : false;
-    }).length;
-  }, [packets, reviewablePackets]);
+     is the number every rival inflates.
+
+     The window and the filter both live in pipeline-counts.ts now, so the day figure and the
+     all-time one are read off the same inventory by the same rule. Inlined here, "applied today"
+     was the sixth of the six disagreeing figures on 2026-08-29 simply because nothing tied it to
+     the other five. */
+  const appliedToday = useMemo(() => (
+    packets === null ? null : sentSince(reviewablePackets, startOfLocalDay(new Date()))
+  ), [packets, reviewablePackets]);
 
   /* What the countdown reaching zero does. It is the same POST the review screen's own send makes,
      so an unattended send goes through the identical server path, quota and refusal rules as one
@@ -4814,7 +4834,11 @@ function Applications() {
               </div>
             </div>
 
-          <div className="-mx-4 overflow-x-auto border-t border-border px-4 py-2.5 sm:-mx-6 sm:px-6 lg:hidden">
+          {/* The phone-width inventory. It clipped at the viewport edge with no cue that it moved:
+              the platforms this runs on hide the scrollbar until a scroll is already under way, so
+              the only signal that more existed appeared to someone who had already guessed. See
+              ScrollableRow, which measures rather than decorating. */}
+          <ScrollableRow label="Your applications" className="-mx-4 border-t border-border px-4 py-2.5 sm:-mx-6 sm:px-6 lg:hidden">
             {visiblePackets.length === 0 ? (
               <div className="flex items-center justify-between gap-3 py-2">
                 <p className="text-sm text-muted">No applications match this view.</p>
@@ -4856,7 +4880,7 @@ function Applications() {
                 ))}
               </div>
             )}
-          </div>
+          </ScrollableRow>
 
           <div className="hidden max-h-[280px] overflow-y-auto border-t border-border lg:block">
             {visiblePackets.length === 0 ? (
@@ -4917,6 +4941,7 @@ function Applications() {
           application={canonicalSelected}
           checkingSendPath={canonicalHydration?.id === canonicalSelected.id && canonicalHydration.status === "loading"}
           readyToSend={canonicalReadyToSend !== null}
+          requiredQuestionsRemaining={canonicalRequiredQuestionsRemaining}
           onContinueToSend={() => {
             if (!canonicalReadyToSend) return;
             /* Use the same synchronous transition as an ordinary ledger row click. It records the
@@ -4932,6 +4957,10 @@ function Applications() {
           coverLetterBusy={coverLetterBusy}
           coverLetterLoading={canonicalCoverLetterLoading}
           hasTailoredResume={canonicalGeneratedPacket !== null}
+          /* The value onOpenPacket actually needs, not the one that merely proves a resume exists.
+             onOpenPacket is `canonicalEnvelopePacket && openRevisit(...)`, so this is the same
+             expression its own guard tests. */
+          packetReady={canonicalEnvelopePacket !== null}
           coverLetter={canonicalCoverLetter}
           coverLetterBody={canonicalCoverLetterBody}
           coverLetterJd={canonicalCoverLetterJd}
@@ -5025,6 +5054,12 @@ function Applications() {
            rather than the route boundary's full-page recovery screen. */
         <SectionBoundary band="tracker-board" title="Your applications">
         <Board
+          /* THE SENTENCE UNDER THIS BOARD IS ABOUT THE LIST ABOVE IT. Without this the board
+             counted its own /applications/board fetch, and the ledger header directly above read a
+             different total off the merged canonical inventory: 100 and 200 on one screen,
+             2026-08-29. `total` is deliberately reviewablePackets.length, the exact expression the
+             header renders, so agreement is structural rather than coincidental. */
+          inventory={boardInventory}
           openableIds={new Set((packets ?? []).map((item) => item.id))}
           onOpen={(id) => {
             const packet = (packets ?? []).find((item) => item.id === id);
@@ -5518,12 +5553,14 @@ function CanonicalApplicationDetail({
   application,
   checkingSendPath,
   readyToSend,
+  requiredQuestionsRemaining,
   onContinueToSend,
   fillBusy,
   tailorBusy,
   coverLetterBusy,
   coverLetterLoading,
   hasTailoredResume,
+  packetReady,
   coverLetter,
   coverLetterBody,
   coverLetterJd,
@@ -5554,6 +5591,10 @@ function CanonicalApplicationDetail({
       `onContinueToSend` instead of the extension-only copy. The student's own click is what reaches
       selectPacket, exactly like every Tracker row click already does. */
   readyToSend: boolean;
+  /** Required employer questions still standing between this packet and a send. See
+   *  unansweredRequiredQuestionCount: `readyToSend` alone was being read as "nothing is waiting on
+   *  you", which is a different and, on 2026-08-29, false claim. */
+  requiredQuestionsRemaining: number;
   /** Explicit, user-pressed handoff to the managed review and send screen. Never called except from
       a click in this component. */
   onContinueToSend: () => void;
@@ -5562,6 +5603,11 @@ function CanonicalApplicationDetail({
   coverLetterBusy: boolean;
   coverLetterLoading: boolean;
   hasTailoredResume: boolean;
+  /** Whether the packet this card's "Open tailored packet" control would open is actually loaded.
+   *  See the control itself for the 2026-08-29 measurement: it was rendered live off a DIFFERENT
+   *  value from the one its handler needed, so for the ~10s the page took to fetch the linked
+   *  packet the button was fully styled, focusable, and did nothing at all on click. */
+  packetReady: boolean;
   coverLetter: CanonicalCoverLetterResponse | null;
   coverLetterBody: string;
   coverLetterJd: string;
@@ -5581,9 +5627,23 @@ function CanonicalApplicationDetail({
 }) {
   const submitted = application.submission_state === "submitted";
   const updatedAt = application.updated_at ?? application.created_at;
+  /* THE CARD'S ONE STATE, decided once and read by the chip, the copy and the button alike.
+     Sendable means a packet exists on a portal Litos can submit through AND nothing required is
+     still waiting on the applicant. Splitting those two apart is how this card came to show a
+     "Needs you" chip over the sentence "Litos can send this application for you" over a button
+     called "Continue to send" that landed on unanswered required questions. */
+  const questionsRemaining = Math.max(0, requiredQuestionsRemaining);
+  const answersOutstanding = readyToSend && questionsRemaining > 0;
+  const sendable = readyToSend && questionsRemaining === 0;
+  const questionsPhrase = questionsRemaining === 1 ? "1 required question" : `${questionsRemaining} required questions`;
   return (
     <Card className="overflow-hidden">
-      <div className="grid h-1 grid-cols-3" aria-hidden="true"><span className="bg-teal" /><span className="bg-brand" /><span className="bg-coral" /></div>
+      {/* THE THREE-COLOUR BAR CAME OFF THIS CARD, 2026-08-29. It is the pillar motif (teal / brand /
+          coral) and it is decorative everywhere it appears, but a segmented horizontal bar pinned to
+          the top of the one card whose entire job is reporting how far an application has got reads
+          as a progress meter, and it had no labels, no legend and no relationship to state. It
+          stays on ApplicationFillReceipt below, which reports a completed handoff rather than a
+          position in a pipeline, so nothing there invites the same reading. */}
       <div className="p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -5591,7 +5651,12 @@ function CanonicalApplicationDetail({
             <h2 className="mt-2 text-heading font-[450] text-ink">{application.role}</h2>
             <p className="mt-1 text-small text-muted">{application.company}{updatedAt ? ` · Updated ${formatRelativeDate(updatedAt)}` : ""}</p>
           </div>
-          <Chip label={submitted ? "Sent" : "Needs you"} kind={submitted ? "sent" : "warn"} />
+          {/* Three states, not two. "Needs you" over "Litos can send this for you" was the
+              contradiction; a packet that genuinely needs nothing now says so. */}
+          <Chip
+            label={submitted ? "Sent" : sendable ? "Ready" : "Needs you"}
+            kind={submitted ? "sent" : sendable ? "ready" : "warn"}
+          />
         </div>
         <div className="mt-5 rounded-inner border border-border bg-surface-alt p-4" role={checkingSendPath ? "status" : undefined}>
           <p className="text-small font-medium text-ink">
@@ -5599,9 +5664,11 @@ function CanonicalApplicationDetail({
               ? "This application is recorded as sent."
               : checkingSendPath
                 ? "Checking whether Litos can send this one for you..."
-                : readyToSend
-                  ? "Litos can send this application for you."
-                  : "Continue on the employer's form."}
+                : answersOutstanding
+                  ? `${questionsPhrase} before Litos can send this.`
+                  : sendable
+                    ? "Litos can send this application for you."
+                    : "Continue on the employer's form."}
           </p>
           <p className="mt-1 text-small leading-6 text-muted">
             {submitted
@@ -5612,9 +5679,11 @@ function CanonicalApplicationDetail({
                    changes to "Continue to send" - the student still presses it themselves; nothing
                    here jumps them to another screen on its own. */
                 ? "Litos is loading this application's tailored packet to see whether it can send it for you directly."
-                : readyToSend
-                  ? "This application's tailored packet is ready on a portal Litos can submit through. Continue to Litos's managed review and send screen to finish it - no extension, no separate tab."
-                  : "Litos will verify the extension account, bind this exact application, and open the employer page. Click Fill in the extension card, review every field, then press the employer's submit control yourself."}
+                : answersOutstanding
+                  ? "The tailored packet is ready and the portal is one Litos can submit through. The employer still asks for answers only you can give, so Litos stops here rather than sending an incomplete form. Answering them is the last step before it can go."
+                  : sendable
+                    ? "This application's tailored packet is ready on a portal Litos can submit through. Continue to Litos's managed review and send screen to finish it - no extension, no separate tab."
+                    : "Litos will verify the extension account, bind this exact application, and open the employer page. Click Fill in the extension card, review every field, then press the employer's submit control yourself."}
           </p>
         </div>
         <div className="mt-4 rounded-inner border border-brand/30 bg-brand-soft/35 p-4">
@@ -5631,7 +5700,24 @@ function CanonicalApplicationDetail({
             <Button type="button" variant="secondary" disabled={tailorBusy || coverLetterBusy || coverLetterLoading} onClick={onOpenCoverLetterEditor}>
               {coverLetterLoading ? "Loading..." : "Write cover letter"}
             </Button>
-            {hasTailoredResume && <Button type="button" variant="quiet" onClick={onOpenPacket}>Open tailored packet</Button>}
+            {/* A CONTROL THAT CANNOT ACT MUST NOT LOOK LIKE ONE THAT CAN. This rendered on
+                `hasTailoredResume` while its handler needed `canonicalEnvelopePacket`, and those are
+                not the same value: for the roughly ten seconds the page spent fetching the linked
+                packet, the button was styled, focusable, labelled and inert. Measured 2026-08-29,
+                and it is the third time this exact signature has been reported this month.
+                Now it says what it is doing and refuses the press until the press would work. The
+                modal it opens has its own loading state for the resume itself. */}
+            {hasTailoredResume && (checkingSendPath || packetReady) && (
+              <Button
+                type="button"
+                variant="quiet"
+                disabled={!packetReady}
+                aria-busy={!packetReady}
+                onClick={onOpenPacket}
+              >
+                {packetReady ? "Open tailored packet" : "Loading packet..."}
+              </Button>
+            )}
             {coverLetterDownloadUrl && <ButtonLink href={coverLetterDownloadUrl} variant="quiet">Download cover letter</ButtonLink>}
           </div>
           {coverLetterEditorOpen && (
@@ -5696,8 +5782,16 @@ function CanonicalApplicationDetail({
               instead, not offered a second, worse path to the same application. checkingSendPath
               holds both back for the same reason one half-second earlier - the eligibility check
               itself is still in flight, so neither action is safe to offer yet. */}
+          {/* THE BUTTON NAMES WHERE IT GOES. Both arms reach the same managed screens through the
+              same handler - the destination was never wrong, the promise was. "Continue to send" is
+              reserved for a packet that is actually sendable; when the employer is still asking for
+              something, the button says how many and lands exactly there. */}
           {!submitted && !checkingSendPath && readyToSend && (
-            <Button type="button" onClick={onContinueToSend}>Continue to send</Button>
+            <Button type="button" onClick={onContinueToSend}>
+              {answersOutstanding
+                ? questionsRemaining === 1 ? "Answer 1 question" : `Answer ${questionsRemaining} questions`
+                : "Continue to send"}
+            </Button>
           )}
           {!submitted && !checkingSendPath && !readyToSend && application.portal_url && (
             <Button type="button" disabled={fillBusy || tailorBusy} onClick={onFill}>
@@ -6579,6 +6673,13 @@ function DirectApplicationQuestion({ task, position, total, saving, saved, focus
   const busy = saving || submitting;
   const savedAnswer = task.question.answer ?? "";
   const answerDirty = answer !== savedAnswer;
+  /* THIS QUESTION IS ON SCREEN FOR THE ONE UNDER IT, and its own answer already stands.
+     Navigating past it must not write: a save here would post the same bytes back, and posting an
+     answer refreshes the employer question pass, which resets the pass key the navigator counts
+     against - so the very count this parent was re-admitted to hold still would move again. Editing
+     it is still a real edit and still saves; only the untouched pass-through is silent. See
+     dependent-questions.ts. */
+  const contextOnly = task.context === true && !answerDirty;
   const requiredBlank = task.question.required && !answer.trim();
   const exactOptions = task.question.options ?? [];
   const acceptsMultipleOptions = questionAcceptsMultipleOptions(task.question);
@@ -6623,8 +6724,14 @@ function DirectApplicationQuestion({ task, position, total, saving, saved, focus
 
   async function submitAnswer(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (saved && !answerDirty && hasNext) {
+    if ((saved || contextOnly) && !answerDirty && hasNext) {
       navigate(onNext);
+      return;
+    }
+    /* The last step of the pass, reached on an untouched context parent: there is nothing to save
+       and nowhere further to go, so hand her the packet rather than posting a no-op. */
+    if (contextOnly && !hasNext) {
+      onReviewApplication();
       return;
     }
     if (busy || answerBlocked) return;
@@ -6641,9 +6748,11 @@ function DirectApplicationQuestion({ task, position, total, saving, saved, focus
     }
   }
 
-  const actionLabel = task.intent === "confirm"
-    ? hasNext ? "Confirm and next" : "Confirm answer"
-    : saved ? hasNext ? "Save changes and next" : "Save changes" : hasNext ? "Save and next" : "Save answer";
+  const actionLabel = contextOnly
+    ? hasNext ? "Next question" : "Review application"
+    : task.intent === "confirm"
+      ? hasNext ? "Confirm and next" : "Confirm answer"
+      : saved ? hasNext ? "Save changes and next" : "Save changes" : hasNext ? "Save and next" : "Save answer";
 
   function updateAnswer(next: string) {
     if (busy) return;
@@ -6679,7 +6788,11 @@ function DirectApplicationQuestion({ task, position, total, saving, saved, focus
           {displayQuestionLabel(task.question.question)}
         </h2>
         <p id={helperId} className="mt-2 text-small leading-6 text-muted">
-          {task.question.required ? "Required. " : ""}Litos saves this answer to this application before showing the next one.
+          {/* A parent says why it is on screen at all. Without this it reads as a question being
+              asked twice, which is what re-admitting it looks like from the outside. */}
+          {task.context === true
+            ? "Your answer to this is saved. It is shown because the next question refers back to it."
+            : `${task.question.required ? "Required. " : ""}Litos saves this answer to this application before showing the next one.`}
         </p>
         {task.question.explanation && (
           <p className="mt-2 text-small leading-6 text-muted">{task.question.explanation}</p>

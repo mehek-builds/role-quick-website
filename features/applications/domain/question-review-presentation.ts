@@ -302,6 +302,35 @@ export function questionReviewPresentation(
   return { editableQuestions, metadataBlockers };
 }
 
+/**
+ * How many required employer questions still stand between this packet and a send.
+ *
+ * WHY A COUNT AND NOT A BOOLEAN. The Tracker's detail card used to say "Litos can send this
+ * application for you... ready on a portal Litos can submit through" over a primary button reading
+ * "Continue to send", and pressing it landed on unanswered required questions. Measured 2026-08-29.
+ * `readyToSend` there meant "a sendable packet exists on a supported portal", which is true and is
+ * not the same claim as "nothing is waiting on you". Saying WHICH and HOW MANY is what turns a
+ * button that misleads into one that describes where it goes.
+ *
+ * Counts the same two things `requiredQuestionReviewRoute` routes on, and in the same order of
+ * authority, so the sentence on the card and the screen the button reaches cannot disagree:
+ *   - required questions rendered as editable controls whose answer is blank, and
+ *   - required metadata blockers, which are questions whose label or options could not be read at
+ *     all. Those need a managed re-read rather than typing, but they equally stop a send, and
+ *     leaving them out would print "0 required questions" over a packet that cannot go.
+ */
+export function unansweredRequiredQuestionCount(
+  questions: readonly ApplicationQuestion[],
+  serverBlockers: readonly ApplicationQuestionMetadataBlocker[] = [],
+): number {
+  const presentation = questionReviewPresentation(questions, serverBlockers);
+  const blank = presentation.editableQuestions.filter(
+    (question) => question.required && !question.answer.trim(),
+  ).length;
+  const unreadable = presentation.metadataBlockers.filter((blocker) => blocker.required).length;
+  return blank + unreadable;
+}
+
 export function requiredQuestionReviewRoute(
   questions: readonly ApplicationQuestion[],
   serverBlockers: readonly ApplicationQuestionMetadataBlocker[] = [],

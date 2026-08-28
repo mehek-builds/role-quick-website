@@ -30,9 +30,9 @@ import {
   MATCH_WEIGHTING_NOTE,
   jobSubmittedOnDay,
   mergeCanonicalApplicationHistory,
+  pipelineCounts,
   packetMatchesJob,
   rankJobs,
-  reviewCanBeSent,
   statusMatchesApplicationFilter,
   resumeGenerationBody,
   useJobMatchScores,
@@ -405,27 +405,27 @@ export default function Home() {
      numbers on purpose: this is a different kind of debt from the rest of "Needs you", and folding
      it in would bury a thing that takes seconds to clear inside a count of things that do not. */
   const waitingOnYou = useMemo(() => waitingApplications(packets), [packets]);
-  const applicationSummary = useMemo(() => {
-    const submitted = packets.filter((packet) => packet.spec._review?.status === "submitted").length;
-    /* THIS COUNTS EXACTLY WHAT ?state=action HOLDS, including the rows the waiting-on-you block
-       above already names.
-       It used to exclude them, and the reason it gave has since stopped being true: "Tracker's
-       action reads 'N stopped for you / Finish the missing answers', which is the wrong instruction
-       for a CAPTCHA". That copy is now "Review the stopped applications", which is right for a
-       CAPTCHA and for a missing answer alike. What the exclusion cost was a tile reading 20 over a
-       link that landed on a list headed "21 of 50", measured on 2026-08-08, and a number you cannot
-       reconcile with the screen it takes you to is the defect this whole pass is about. Overlapping
-       with the block above is the cheaper error: that block is an emphasis, not a partition. */
-    const needsAction = packets.filter((packet) => (
-      ["needs_attention", "ready_for_final_approval", "failed"].includes(packet.spec._review?.status ?? "")
-      || (
-        ["resume_ready", "questions_ready", "ready_to_submit"].includes(packet.spec._review?.status ?? "")
-        && packet.spec._review?.portal_supported === false
-      )
-    )).length;
-    const ready = packets.filter((packet) => reviewCanBeSent(packet.spec._review)).length;
-    return { ready, submitted, needsAction };
-  }, [packets]);
+  /* THE ONE DERIVATION, shared with the Tracker's ledger, its board and Momentum.
+     These three tiles used to be counted inline here, with their own copies of the status lists, so
+     nothing else on the dashboard could reuse them and every other surface grew its own arithmetic.
+     Six figures for one pipeline was the result; pipeline-counts.ts has the measurement and the
+     four causes. The counting rule itself is unchanged - it is now `statusMatchesApplicationFilter`,
+     the same predicate that decides which rows each tile's `?state=` link lands on, which is what
+     makes "Needs you 88" and the 88 rows the link opens the same 88 applications.
+
+     THIS COUNTS EXACTLY WHAT ?state=action HOLDS, including the rows the waiting-on-you block above
+     already names. It used to exclude them, and the reason it gave has since stopped being true:
+     "Tracker's action reads 'N stopped for you / Finish the missing answers', which is the wrong
+     instruction for a CAPTCHA". That copy is now "Review the stopped applications", which is right
+     for a CAPTCHA and for a missing answer alike. What the exclusion cost was a tile reading 20 over
+     a link that landed on a list headed "21 of 50", measured on 2026-08-08, and a number you cannot
+     reconcile with the screen it takes you to is the defect this whole pass is about. Overlapping
+     with the block above is the cheaper error: that block is an emphasis, not a partition. */
+  const pipeline = useMemo(() => pipelineCounts(packets), [packets]);
+  const applicationSummary = useMemo(
+    () => ({ ready: pipeline.ready, submitted: pipeline.sent, needsAction: pipeline.needsYou }),
+    [pipeline],
+  );
   /* Each summary block gates on its own total, so a student with emails but no applications is
      not shown a row of application zeros to prove it (and vice versa). */
   const applicationTotal = applicationSummary.ready + applicationSummary.submitted + applicationSummary.needsAction;
@@ -685,6 +685,19 @@ export default function Home() {
         stage: "saved",
         sent: false,
         updatedAt: null,
+        /* Home holds the whole review, so it can answer "has anything actually happened here"
+           from evidence rather than from a status word. canonicalStatus returns needs_attention
+           for a canonical row that was only ever recorded, and these cards were offering "Finish
+           application" over postings never opened (2026-08-29). A run leaves traces: questions it
+           discovered, fields it filled, a reason it stopped, or a run id. None of those means
+           nothing has been started, whatever the status says. */
+        started: Boolean(
+          (review?.questions?.length ?? 0) > 0
+          || (review?.filled_fields?.length ?? 0) > 0
+          || review?.attention_reason?.trim()
+          || review?.submission_run_id?.trim()
+          || review?.submitted_at?.trim(),
+        ),
       } as JobApplicationMatch),
     };
   }
@@ -783,7 +796,7 @@ export default function Home() {
             {/* The same count the Tracker tile prints, from the same packets, so the two figures on
                 this row can never disagree. It is what turns "N prepared / 0 sent" from two true
                 numbers with an unexplained gap into a sentence with somewhere to go. */}
-            <Funnel stopped={{ count: applicationSummary.needsAction, href: "/dashboard/applications?state=action" }} />
+            <Funnel sent={pipeline.sent} stopped={{ count: applicationSummary.needsAction, href: "/dashboard/applications?state=action" }} />
           </SectionBoundary>
           {applicationTotal > 0 && (
             <SectionBoundary band="tracker-summary" title="Applications">

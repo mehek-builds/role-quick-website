@@ -11,6 +11,7 @@ export * from "./domain/apply-variant";
 export * from "./domain/audit-refusal";
 export * from "./domain/board-stages";
 export * from "./domain/canonical-tracker";
+export * from "./domain/dependent-questions";
 export * from "./domain/duplicate-postings";
 export * from "./domain/education-drift";
 export * from "./domain/jd-display";
@@ -18,6 +19,7 @@ export * from "./domain/match-model";
 export * from "./domain/packet-audit-acknowledgement";
 export * from "./domain/packet-audit-display";
 export * from "./domain/packet-evidence-session";
+export * from "./domain/pipeline-counts";
 export * from "./domain/packet-pdf-verification";
 export * from "./domain/prescript";
 export * from "./domain/question-review-presentation";
@@ -42,6 +44,7 @@ export {
   type ResumeGenerationInitiation,
 } from "./domain/daily-matches";
 export * from "./domain/requirement-terms";
+export * from "./domain/scraped-text";
 export * from "./domain/review-answer-save";
 export * from "./domain/attention-acknowledgement";
 export * from "./domain/submission-checklist";

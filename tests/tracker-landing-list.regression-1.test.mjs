@@ -96,12 +96,24 @@ describe("the board says what it is not drawing", () => {
     assert.match(note, /none sent yet/);
   });
 
-  test("the board renders that note, counted off the cards it holds", () => {
-    /* Counted client-side from the same array the columns filter. A number sent separately by the
-       server could disagree with the columns beside it, which is the failure mode the whole
-       response-shape boundary exists to prevent. */
-    assert.match(board, /boardCoverageNote\(boardCoverage\(cards, visibleStages\)\)/);
+  test("the board renders that note, counted off the ledger printed above it", () => {
+    /* Counted client-side, never from a number the server sent separately: that could disagree with
+       the columns beside it, which is the failure mode the whole response-shape boundary exists to
+       prevent.
+
+       WHICH client-side array changed on 2026-08-29. It was `cards`, this board's own
+       /applications/board fetch, while the ledger header six pixels above counted the merged
+       canonical inventory - so one screen carried "Your applications 100" directly over "187 of 200
+       have not been sent yet". The sentence is now about the list it sits under. The card fallback
+       stays for callers with no inventory to hand it (the QA harness). */
+    assert.match(board, /inventory \? pipelineCoverage\(inventory\) : boardCoverage\(cards, visibleStages\)/);
     assert.match(board, /\{coverageNote\}/);
+    assert.match(
+      applications,
+      /\(\) => \(\{ total: reviewablePackets\.length, sent: pipelineCounts\(reviewablePackets\)\.sent \}\)/,
+      "and the Tracker hands it the exact expression its own header renders",
+    );
+    assert.match(applications, /inventory=\{boardInventory\}/);
   });
 
   test("a board that is drawing everything stays silent", () => {
@@ -113,14 +125,14 @@ describe("the board says what it is not drawing", () => {
 describe("Home's zero has somewhere to go", () => {
   test("Momentum is told how many are stopped, from Home's own count", () => {
     /* The same number the Tracker tile prints, so the two figures on one row cannot disagree. */
-    assert.match(home, /<Funnel stopped=\{\{ count: applicationSummary\.needsAction, href: "\/dashboard\/applications\?state=action" \}\} \/>/);
+    assert.match(home, /<Funnel sent=\{pipeline\.sent\} stopped=\{\{ count: applicationSummary\.needsAction, href: "\/dashboard\/applications\?state=action" \}\} \/>/);
   });
 
   test("the explanation only appears when the zero actually needs explaining", () => {
     /* Work prepared, none sent, and something genuinely waiting. Any other combination prints
        nothing: inventing a gap on a brand new account is the same class of lie as printing a zero
        nobody measured. */
-    assert.match(funnel, /f\.applications_submitted === 0 && f\.resumes_tailored > 0 && \(stopped\?\.count \?\? 0\) > 0/);
+    assert.match(funnel, /\(sent \?\? f\.applications_submitted\) === 0 && f\.resumes_tailored > 0 && \(stopped\?\.count \?\? 0\) > 0/);
   });
 
   test("and it is a link, not a sentence with nowhere to go", () => {
@@ -130,7 +142,12 @@ describe("Home's zero has somewhere to go", () => {
   });
 
   test("the counters themselves are untouched: still only what was measured", () => {
-    assert.match(funnel, /<Stat value=\{f\.applications_submitted\} label="sent in total" \/>/);
+    /* "sent in total" takes the caller's canonical count when it has one, for the same reason
+       `stopped` is passed in: Home already counts sent from the merged inventory its Tracker tile
+       counts. On 2026-08-29 this Stat printed /metrics/funnel's 13 six inches from a Sent tile
+       reading 12. The backend figure stays as the fallback for a caller with no inventory, and it
+       still feeds the bars and the two windowed stats, which this page does not recompute. */
+    assert.match(funnel, /<Stat value=\{sent \?\? f\.applications_submitted\} label="sent in total" \/>/);
     assert.match(funnel, /<Stat value=\{f\.resumes_tailored\} label="resumes prepared for you" \/>/);
   });
 });
@@ -153,7 +170,11 @@ describe("the autopilot pill is a countdown, not a stopwatch", () => {
 
   test("the day's count still counts only confirmed sends", () => {
     /* "0 applied today" was correct: nothing had ever been submitted. The fix belonged on the pill
-       claiming otherwise beside it, not on the counter. */
-    assert.match(applications, /packet\.spec\._review\?\.submitted_at/);
+       claiming otherwise beside it, not on the counter.
+       The rule moved into pipeline-counts.ts so the day figure and the all-time figure read the
+       same inventory by the same predicate; sentSince is still the server's `submitted_at` stamp
+       and nothing else. */
+    assert.match(applications, /sentSince\(reviewablePackets, startOfLocalDay\(new Date\(\)\)\)/);
+    assert.match(read("features/applications/domain/pipeline-counts.ts"), /_review\?\.submitted_at/);
   });
 });
