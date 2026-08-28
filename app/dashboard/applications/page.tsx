@@ -26,6 +26,7 @@ import {
   type ResumeSpec,
 } from "@/lib/api";
 import { Card, Chip, EmptyState, ErrorNote, ExtensionStoreLink, PendingLabel, ScrollableRow, ShimmerRows, TerminalActionBar, formatRelativeDate } from "@/components/app/ui";
+import { CompanyLogo } from "@/components/app/CompanyLogo";
 import { ThinkingOrb } from "thinking-orbs";
 import { canonicalApplicationFromPacket, canonicalEnvelopeLegacyHydrationId, canonicalEnvelopeWithMissingLegacyHydration, canonicalTrackerPacket, explicitTerms, sendableLinkedPacketFromCanonicalEnvelope, withRestoredLinkedPackets, linkedLegacyPacketFromCanonicalTrackerPacket, mergeCanonicalApplicationHistory, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, reviewWithLists, screenForStatus, sectionHeading, selectedPacketForRequest, startsNewSection, statusLabel, stripMetadata, upsertCanonicalApplicationHistory } from "@/features/applications";
 import { applicationFilterFromSearch, applicationFilterHeading, cleanJdCapture, ledgerRendersOnLanding, pipelineCounts, reviewCanBeSent, sentSince, startOfLocalDay, statusMatchesApplicationFilter, unansweredRequiredQuestionCount, type ApplicationFilter } from "@/features/applications";
@@ -4867,7 +4868,17 @@ function Applications() {
                     className={`flex min-h-11 max-w-[15rem] shrink-0 flex-col justify-center rounded-inner border px-3 py-2 text-left ${packet.id === selectedApplicationRowId ? "border-brand bg-brand-soft" : "border-border"}`}
                   >
                     <span className={`truncate text-[13px] font-medium ${packet.id === selectedApplicationRowId ? "text-brand-ink" : "text-ink"}`}>{packet.job_context.role || "Role"}</span>
-                    <span className="truncate text-[11px] text-muted">{packet.job_context.company || "Company"}</span>
+                    {/* Same pairing as the desktop row, so a company is recognised by the same mark
+                        at both widths rather than by logo on one and by name on the other. */}
+                    <span className="mt-0.5 flex min-w-0 items-center gap-1.5">
+                      <CompanyLogo
+                        size="sm"
+                        company={packet.job_context.company || "Company"}
+                        careerUrl={null}
+                        companyDomain={canonicalApplicationFromPacket(packet)?.company_domain}
+                      />
+                      <span className="truncate text-[11px] text-muted">{packet.job_context.company || "Company"}</span>
+                    </span>
                     {packet.spec._review && (
                       <span className="mt-1 truncate font-mono text-label uppercase tracking-[0.05em] text-muted">
                         {statusLabel(false, packet.spec._review.status)}
@@ -4901,7 +4912,18 @@ function Applications() {
               </div>
             ) : (
               <>
-                <div className="hidden grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto_auto] items-center gap-3 border-b border-border px-2 py-2 text-[11px] text-muted sm:grid">
+                {/* THE HEADER AND EVERY ROW ARE SEPARATE GRID CONTAINERS, so `auto` tracks were
+                    sized from each one's OWN content: a row reading "Aug 21, 2026" had wider auto
+                    columns than one reading "today", and a row carrying a second DUPLICATE chip
+                    wider still, so the fr columns absorbed a different remainder each time and the
+                    Company column landed somewhere different on almost every line. Measured on the
+                    live Tracker 2026-08-29: five distinct x-positions across fourteen rows (893,
+                    837, 870, 815, 788).
+                    Fixed tracks are what make separate grids agree. 5rem clears the widest date
+                    (70px) and 15rem the widest status cell (231px, "Needs you" beside "Already
+                    applied"), both measured on the same account. The transparent left border
+                    matches the toned one on each row so the header sits on the same 2px offset. */}
+                <div className="hidden grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_5rem_15rem] items-center gap-3 border-b border-l-2 border-l-transparent border-border px-2 py-2 text-[11px] text-muted sm:grid">
                   <span>Role</span>
                   <span>Company</span>
                   <span>Last updated</span>
@@ -4909,10 +4931,22 @@ function Applications() {
                 </div>
                 <div className="divide-y divide-border">
                   {visiblePackets.map((packet) => (
-                    <button key={packet.id} type="button" data-application-row-id={packet.id} onClick={() => openApplication(packet)} aria-pressed={packet.id === selectedApplicationRowId} className={`grid min-h-14 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-2 text-left transition-colors sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto_auto] ${packet.id === selectedApplicationRowId ? "bg-brand-soft/55" : "hover:bg-surface-alt"}`}>
+                    <button key={packet.id} type="button" data-application-row-id={packet.id} onClick={() => openApplication(packet)} aria-pressed={packet.id === selectedApplicationRowId} className={`grid min-h-14 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-l-2 px-2 text-left transition-colors sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_5rem_15rem] ${rowEdgeTone(packet.spec._review?.status)} ${packet.id === selectedApplicationRowId ? "bg-brand-soft/55" : "hover:bg-surface-alt"}`}>
                       <span className="truncate text-sm font-medium text-ink">{packet.job_context.role || "Role"}</span>
-                      <span className="hidden truncate text-xs text-muted sm:block">{packet.job_context.company || "Company"}</span>
-                      <time className="hidden text-xs text-muted sm:block">{formatRelativeDate(packetTimestamp(packet))}</time>
+                      {/* The logo travels WITH the name rather than taking a column of its own, so
+                          the name still starts on the Company track and the pair reads as one
+                          identity. min-w-0 on the flex row is what lets the name truncate instead
+                          of pushing the date out of its track. */}
+                      <span className="hidden min-w-0 items-center gap-2 sm:flex">
+                        <CompanyLogo
+                          size="sm"
+                          company={packet.job_context.company || "Company"}
+                          careerUrl={null}
+                          companyDomain={canonicalApplicationFromPacket(packet)?.company_domain}
+                        />
+                        <span className="truncate text-xs text-muted">{packet.job_context.company || "Company"}</span>
+                      </span>
+                      <time className="hidden text-xs tabular-nums text-muted sm:block">{formatRelativeDate(packetTimestamp(packet))}</time>
                       <span className="flex items-center gap-1.5">
                         {packet.spec._review && <Chip label={statusLabel(false, packet.spec._review.status)} kind={chipKind(packet.spec._review.status)} />}
                         {(() => {
@@ -8302,11 +8336,37 @@ function formatElapsed(seconds: number): string {
 
 // "Needs attention" and "Stopped safely" were painted in the same ready/success treatment as
 // "Ready for review", so the label was the only signal anything was wrong.
-function chipKind(status: ApplicationReview["status"]): "sent" | "ready" | "warn" | "bounced" {
-  if (status === "submitted") return "sent";
-  if (status === "needs_attention" || status === "failed") return "bounced";
-  if (status === "ready_for_final_approval") return "warn";
-  return "ready";
+//
+// THE TONE FOLLOWS THE WORD ON THE CHIP, which is the vocabulary a student actually learns.
+// statusLabel collapses nine backend statuses into four words on purpose (application-review.ts),
+// and this used to key off the raw status instead, which broke that in both directions: "Needs you"
+// rendered RED for needs_attention and AMBER for ready_for_final_approval - two colours for one
+// word - while every "Getting ready" packet took the blue your-turn tone for work that was not the
+// student's turn at all. On the live Tracker that meant 187 of 200 rows in danger red, so the whole
+// screen read as failure on an account where nothing had failed. ui.tsx states the five looks
+// plainly: amber means it stopped, red means it FAILED. Only a failure is red now.
+function chipKind(status: ApplicationReview["status"]): "sent" | "ready" | "warn" | "bounced" | "draft" {
+  const label = statusLabel(false, status);
+  if (label === "Sent") return "sent";
+  if (label === "Ready") return "ready";
+  if (label === "Getting ready") return "draft";
+  return status === "failed" ? "bounced" : "warn";
+}
+
+/* The same four states as a hairline down the left edge of a ledger row, so the list is scannable
+   by state without reading a single chip. The board beside it already tones its cards this way
+   (Board.tsx STAGE_TONE); this is that idea at row scale.
+   It states WHAT a row is, never how fast to deal with it - a "Needs you" edge is the same weight
+   as a "Sent" one. Transparent for "Getting ready", because a row Litos is working on is asking
+   nothing and an edge on every row is a stripe pattern rather than a signal. */
+function rowEdgeTone(status: ApplicationReview["status"] | undefined): string {
+  if (status === undefined) return "border-l-transparent";
+  const kind = chipKind(status);
+  if (kind === "sent") return "border-l-positive/45";
+  if (kind === "ready") return "border-l-brand/50";
+  if (kind === "bounced") return "border-l-danger/45";
+  if (kind === "warn") return "border-l-warn/45";
+  return "border-l-transparent";
 }
 
 function applicationCardClasses(packet: GeneratedResume, selected: boolean): string {

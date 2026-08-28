@@ -451,6 +451,10 @@ export type CanonicalApplication = {
   legacy_generated_resume_id?: string | null;
   job_id?: string | null;
   company: string;
+  /** The employer's own domain, resolved server-side from a verified map so the Tracker can draw
+   *  the company's logo without guessing one from the name. Absent on a backend that predates it,
+   *  and null whenever the map does not know the company; both render a monogram. */
+  company_domain?: string | null;
   company_scope_key?: string;
   role: string;
   portal_url?: string | null;

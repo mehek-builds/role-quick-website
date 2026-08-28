@@ -344,10 +344,50 @@ test('a blocked or failed run is not painted in the ready treatment', () => {
   // The selected packet's status used to print a third time in the page header, beside the
   // create button; that copy is gone. The invariant lives on the row, which is where status is
   // painted now: needs_attention and failed must not fall through to the "ready" chip.
+  //
+  // Asserted on the RULE rather than on the old branch, because the branch it used to pin has been
+  // replaced by a stronger one: the tone is derived from statusLabel, so it cannot disagree with
+  // the word printed on the chip. needs_attention now reaches "warn" and failed reaches "bounced";
+  // neither can reach "ready", which is the invariant this test exists for.
   assert.match(dashboard, /function chipKind/);
   assert.match(dashboard, /kind=\{chipKind\(packet\.spec\._review\.status\)\}/);
   const chipKind = dashboard.slice(dashboard.indexOf("function chipKind"));
-  assert.match(chipKind.slice(0, 400), /status === "needs_attention" \|\| status === "failed"\) return "bounced"/);
+  const body = chipKind.slice(chipKind.indexOf("{"), chipKind.indexOf("\n}"));
+  assert.match(body, /const label = statusLabel\(false, status\);/);
+  assert.match(body, /if \(label === "Ready"\) return "ready";/);
+  // "Ready" is the only route to the your-turn tone, and only statusLabel decides who is Ready.
+  assert.equal((body.match(/return "ready"/g) ?? []).length, 1);
+});
+
+test('one word on the chip means one colour, and red means a failure', () => {
+  /* statusLabel collapses nine backend statuses into four words on purpose. Keying the tone off the
+     raw status broke that in both directions: "Needs you" rendered RED for needs_attention and
+     AMBER for ready_for_final_approval - two colours for one word - while "Getting ready" took the
+     blue your-turn tone for work that was not the student's turn. On the live Tracker that put 187
+     of 200 rows in danger red on an account where nothing had failed.
+     ui.tsx states the five looks plainly: amber means it stopped, red means it FAILED. */
+  const chipKind = dashboard.slice(dashboard.indexOf("function chipKind"));
+  /* From the opening brace, so the return-type annotation's own list of tone names is not counted
+     as a use of them. */
+  const body = chipKind.slice(chipKind.indexOf("{"), chipKind.indexOf("\n}"));
+  assert.match(body, /return status === "failed" \? "bounced" : "warn";/);
+  assert.equal((body.match(/"bounced"/g) ?? []).length, 1, 'only a failure may be red');
+  assert.match(body, /if \(label === "Getting ready"\) return "draft";/, 'work Litos is doing is quiet, not your turn');
+});
+
+test('the ledger row carries the same four states as a hairline, and never as urgency', () => {
+  /* The board beside it already tones its cards by stage (Board.tsx STAGE_TONE); this is that at
+     row scale, so the list is scannable by state without reading a chip. DESIGN.md's hard law is
+     that colour never encodes urgency: every state gets the same 2px weight, and the state Litos is
+     working on gets none at all rather than a stripe on every row. */
+  assert.match(dashboard, /function rowEdgeTone/);
+  const tone = dashboard.slice(dashboard.indexOf("function rowEdgeTone"));
+  const body = tone.slice(0, tone.indexOf("\n}"));
+  for (const edge of ["border-l-positive/45", "border-l-brand/50", "border-l-danger/45", "border-l-warn/45"]) {
+    assert.match(body, new RegExp(edge.replace("/", "\\/")), `${edge} is one of the four row states`);
+  }
+  assert.match(body, /return "border-l-transparent";/);
+  assert.match(dashboard, /\$\{rowEdgeTone\(packet\.spec\._review\?\.status\)\}/);
 });
 
 test('the elapsed clock is anchored to the server, not to component mount', () => {
