@@ -60,7 +60,7 @@ import { applyBankVariant, type ApplyOutcome } from "@/features/applications";
 import { RequirementProvider, RequirementText, MatchLegend } from "@/components/app/RequirementText";
 import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX, exactPacketAuditClauses, exactPacketAuditRanges } from "@/features/applications";
 import { educationDrift, educationDriftMessage, type EducationProfile } from "@/features/applications";
-import { checklistRowControl, completedSubmissionGroups, directInputTaskPlan, directQuestionPromptFingerprint, directQuestionTaskFingerprint, displayQuestionLabel, documentAsksByKind, documentControls, humanInputItems, QUESTION_CHOICE_LIST_LIMIT, type DirectQuestionTask, type DirectQuestionTaskIntent, type SubmissionChecklistAction, type SubmissionChecklistItem } from "@/features/applications";
+import { checklistRowControl, completedSubmissionGroups, directInputTaskPlan, directQuestionPromptFingerprint, directQuestionTaskFingerprint, displayQuestionLabel, documentAsksByKind, documentControls, humanInputItems, metadataRefreshOutranksStandingAttention, QUESTION_CHOICE_LIST_LIMIT, type DirectQuestionTask, type DirectQuestionTaskIntent, type SubmissionChecklistAction, type SubmissionChecklistItem } from "@/features/applications";
 import { prescriptEditableQuestions, prescriptNeedsHer, prescriptSummary } from "@/features/applications";
 import { answerWithExactOptionToggled, exactSelectedQuestionOptions, questionAcceptsMultipleOptions, questionReviewPresentation, requiredQuestionReviewRoute } from "@/features/applications";
 import type { JdMatchResponse, JobMatch } from "@/features/applications";
@@ -6929,7 +6929,26 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
   const directQuestionFingerprints = new Set(
     directQuestionTasks.map((task) => directQuestionPromptFingerprint(task)),
   );
-  const currentNonQuestionTask = directTaskPlan.nonQuestionTasks[0]?.item ?? null;
+  const standingNonQuestionTask = directTaskPlan.nonQuestionTasks[0]?.item ?? null;
+  /* THE OCCLUSION THIS SCREEN SHIPPED WITH: the branch below leads with the first standing
+     non-question attention task, and the metadata-refresh panel, the ONLY control on this screen
+     that starts the managed re-read, renders only when no such task stands. Measured live on the
+     Mytos Lever packet, 2026-08-28 (application 55de7c9e): a stale withheld-press sentence about an
+     answer that had since been re-answered stood in front of the panel indefinitely, so every save
+     landed back on this screen with the launch hidden behind the very report it would replace.
+     metadataRefreshOutranksStandingAttention is the fail-closed domain decision for when the panel
+     may lead instead: acknowledged passing audit, metadata_refresh route, unknown-only attention,
+     no stall, no open unverified submission, no document or captcha row. Nothing stored changes,
+     nothing is acknowledged for her, and the run only starts on her own press of the panel's
+     button. */
+  const currentNonQuestionTask = standingNonQuestionTask !== null
+    && metadataRefreshOutranksStandingAttention(attentionReview, packetEvidenceReviewed, {
+      company: packet.job_context.company,
+      role: packet.job_context.role,
+      documents: submission.documents,
+    })
+    ? null
+    : standingNonQuestionTask;
   const currentMetadataBlocker = directTaskPlan.metadataBlockers[0] ?? null;
   const defaultDirectPromptFingerprint = remainingDirectQuestions[0]
     ? directQuestionPromptFingerprint(remainingDirectQuestions[0])
