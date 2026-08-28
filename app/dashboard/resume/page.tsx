@@ -5,7 +5,13 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { api, ApiError, ExperienceEntry, getTargeting, getToken } from "@/lib/api";
 import { API_URL } from "@/lib/config";
-import { APPLICATION_DOCUMENT_SIZE_LIMIT_LABEL, validateApplicationDocument } from "@/lib/document-size";
+import {
+  APPLICATION_DOCUMENT_ACCEPT_ATTRIBUTE,
+  APPLICATION_DOCUMENT_SIZE_LIMIT_LABEL,
+  OVERSIZE_DOCUMENT_HINT,
+  validateApplicationDocument,
+  type ApplicationDocumentGate,
+} from "@/lib/document-size";
 import { restoreFocusAfterRetry } from "@/lib/latest-request";
 import { litosClientHeaders } from "@/lib/product";
 import { Card, Chip, DataErrorState, PendingLabel, ShimmerRows, ErrorNote } from "@/components/app/ui";
@@ -26,6 +32,14 @@ import {
   type ResumeResource,
 } from "./mutation-controller";
 
+/* One gate object for both the choose-time check and the render-time affordance, so the two
+   cannot answer differently about the same File. */
+const RESUME_UPLOAD_GATE: ApplicationDocumentGate = {
+  accept: "pdf",
+  typeMessage: "Choose one PDF file.",
+  oversizeHint: OVERSIZE_DOCUMENT_HINT,
+};
+
 type ProfileLoadResult =
   | { kind: "missing" }
   | { kind: "ready"; profile: ResumeParsedProfile; targetingError: string | null };
@@ -34,10 +48,6 @@ export default function ResumeWorkspace() {
   const embedded = usePathname() === "/dashboard/documents";
   const fileRef = useRef<HTMLInputElement>(null);
   const [dragActive, setDragActive] = useState(false);
-  /* True when the shown error refused selectedFile before any request: re-running the upload on
-     that same File object can never end differently, so the affordance next to the error must
-     offer a different file, not a retry. */
-  const [selectedFileRejected, setSelectedFileRejected] = useState(false);
   const mutations = useResumeMutationController();
   const {
     bankLoadError,
@@ -398,24 +408,23 @@ export default function ResumeWorkspace() {
     [mutations],
   );
 
+  /* Derived at render, not stored: a stored flag desyncs from selectedFile, which lives in the
+     shell-scoped mutation controller and survives this component remounting. A rejected file can
+     never pass the same gate again, so the affordance beside it must offer the picker, not a
+     retry, and must never read "Upload complete". */
+  const selectedFileRejected = selectedFile !== null && validateApplicationDocument(selectedFile, RESUME_UPLOAD_GATE) !== null;
+
   function chooseUpload(file: File | undefined) {
     if (!file || !uploadReady || mutations.isActive()) return;
-    /* The type check, the cap, and the refusal copy are the shared gate's (document-size.ts):
-       past the cap the platform rejects the body as an unreadable 413, so the check happens
-       before any bytes move, with the same sentence every upload surface shows. */
-    const problem = validateApplicationDocument(file, {
-      accept: "pdf",
-      typeMessage: "Choose one PDF file.",
-      oversizeHint: 'Export a smaller PDF (most editors have a "reduce file size" option) and try again.',
-    });
+    /* The shared gate (document-size.ts): the check happens before any bytes move, because past
+       the cap the platform rejects the body as an unreadable 413. */
+    const problem = validateApplicationDocument(file, RESUME_UPLOAD_GATE);
     if (problem) {
       setSelectedFile(file);
-      setSelectedFileRejected(true);
       setError(problem);
       return;
     }
     setSelectedFile(file);
-    setSelectedFileRejected(false);
     void upload(file);
   }
 
@@ -470,7 +479,7 @@ export default function ResumeWorkspace() {
             <input
               ref={fileRef}
               type="file"
-              accept="application/pdf"
+              accept={APPLICATION_DOCUMENT_ACCEPT_ATTRIBUTE.pdf}
               disabled={mutationBusy || !uploadReady}
               className="hidden"
               onChange={(e) => {
@@ -500,7 +509,7 @@ export default function ResumeWorkspace() {
           aria-busy={uploadPending}
         >
           <p><span className="font-medium text-ink">Drop one PDF here</span>, or use the upload button. Maximum {APPLICATION_DOCUMENT_SIZE_LIMIT_LABEL}.</p>
-          {selectedFile && <div className="mt-3 flex flex-wrap items-center gap-3"><span className="font-mono text-xs text-ink">{selectedFile.name}</span>{uploadPending ? <span role="status" aria-live="polite" className="inline-flex items-center gap-2"><progress aria-label="Uploading and reading resume" className="h-1.5 w-24 accent-brand" />Reading the PDF...</span> : error ? <button type="button" onClick={() => { if (selectedFileRejected) { fileRef.current?.click(); } else { chooseUpload(selectedFile); } }} aria-describedby={uploadBlockedReason ? "resume-upload-blocked-reason" : undefined} disabled={!uploadReady} className="font-medium text-brand-ink underline underline-offset-4 disabled:text-muted disabled:no-underline">{selectedFileRejected ? "Choose another file" : "Retry"}</button> : <span role="status" className="text-positive">Upload complete</span>}</div>}
+          {selectedFile && <div className="mt-3 flex flex-wrap items-center gap-3"><span className="font-mono text-xs text-ink">{selectedFile.name}</span>{uploadPending ? <span role="status" aria-live="polite" className="inline-flex items-center gap-2"><progress aria-label="Uploading and reading resume" className="h-1.5 w-24 accent-brand" />Reading the PDF...</span> : selectedFileRejected || error ? <button type="button" onClick={() => { if (selectedFileRejected) { fileRef.current?.click(); } else { chooseUpload(selectedFile); } }} aria-describedby={uploadBlockedReason ? "resume-upload-blocked-reason" : undefined} disabled={!uploadReady} className="font-medium text-brand-ink underline underline-offset-4 disabled:text-muted disabled:no-underline">{selectedFileRejected ? "Choose another file" : "Retry"}</button> : <span role="status" className="text-positive">Upload complete</span>}</div>}
         </div>
 
         {profileRefreshing && profile !== null && profile !== "missing" && !uploadPending && (

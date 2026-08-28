@@ -50,15 +50,23 @@ test("resume upload supports drop, file limits, progress, and retry", () => {
   assert.match(page, /Maximum \{APPLICATION_DOCUMENT_SIZE_LIMIT_LABEL\}/);
   assert.match(page, /Reading the PDF/);
   /* A client-rejected file cannot succeed by retrying, so that state must offer the picker
-     instead of re-running the same File. Genuine request failures keep Retry. */
+     instead of re-running the same File, and must never read as an upload that happened.
+     Genuine request failures keep Retry. Rejection is derived from the gate at render, not
+     stored: selectedFile lives in the shell-scoped mutation controller and survives this
+     component remounting, so a stored flag would desync from it. */
+  assert.match(page, /const selectedFileRejected = selectedFile !== null && validateApplicationDocument\(selectedFile, RESUME_UPLOAD_GATE\) !== null/);
   assert.match(page, /"Choose another file" : "Retry"/);
+  assert.match(page, /selectedFileRejected \|\| error \?/);
 });
 
 test("every upload surface refuses files through the one shared gate", () => {
-  /* Four surfaces send a student's file toward the API, and each one used to hand-roll the type
+  /* Five surfaces send a student's file toward the API, and each one used to hand-roll the type
      check, the byte cap, and the oversize sentence; the copies drifted (hand-rolled MB math on
      one, an unreachable 20 MB promise on another). The contract is that they all call the shared
-     gate, so the cap and its copy can only change in one place. */
+     gate AND filter the picker with the gate's own accept spelling, so the cap, its copy, and
+     the picker filter can only change in one place. The one file input outside this list is
+     components/try/TrySimulator.tsx, exempt because it reads the file in the browser and sends
+     only extracted text, never the bytes; if it ever POSTs the file itself, it joins this list. */
   for (const surface of [
     "components/start/steps.tsx",
     "app/dashboard/resume/page.tsx",
@@ -66,7 +74,9 @@ test("every upload surface refuses files through the one shared gate", () => {
     "app/dashboard/applications/page.tsx",
     "app/dashboard/network/page.tsx",
   ]) {
-    assert.match(read(surface), /validateApplicationDocument\(/, `${surface} bypasses the shared upload gate`);
+    const source = read(surface);
+    assert.match(source, /validateApplicationDocument\(/, `${surface} bypasses the shared upload gate`);
+    assert.match(source, /APPLICATION_DOCUMENT_ACCEPT_ATTRIBUTE/, `${surface} hand-rolls its picker accept filter`);
   }
 });
 

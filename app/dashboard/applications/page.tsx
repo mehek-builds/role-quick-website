@@ -66,7 +66,7 @@ import { prescriptEditableQuestions, prescriptNeedsHer, prescriptSummary } from 
 import { answerWithExactOptionToggled, exactQuestionOption, exactSelectedQuestionOptions, questionAcceptsMultipleOptions, questionReviewPresentation, requiredQuestionReviewRoute } from "@/features/applications";
 import type { JdMatchResponse, JobMatch } from "@/features/applications";
 import { userFacingError } from "@/lib/user-facing-error";
-import { validateApplicationDocument } from "@/lib/document-size";
+import { APPLICATION_DOCUMENT_ACCEPT_ATTRIBUTE, OVERSIZE_DOCUMENT_HINT, validateApplicationDocument } from "@/lib/document-size";
 import { messageAsksForTheExtension } from "@/lib/extension-store-link";
 import { track } from "@/lib/analytics";
 import { replaceClosedComposerUrl } from "./composer-url";
@@ -3226,13 +3226,12 @@ function Applications() {
   async function uploadCanonicalCoverLetter(file: File): Promise<void> {
     const applicationId = canonicalSelected?.id;
     if (!applicationId) return;
-    /* The shared client-side gate (document-size.ts): past the cap the platform rejects the body
-       as an unreadable 413 that surfaces only as "Failed to fetch", so an oversize cover letter
-       must be refused with a sentence before any bytes move. */
+    /* The shared gate (document-size.ts): refused with a sentence before any bytes move, because
+       past the cap the platform rejects the body as an unreadable 413. */
     const problem = validateApplicationDocument(file, {
       accept: "pdf-or-txt",
       typeMessage: "Upload the cover letter as a PDF or plain-text (.txt) file.",
-      oversizeHint: "Export a smaller file and try again.",
+      oversizeHint: OVERSIZE_DOCUMENT_HINT,
     });
     if (problem) {
       setCanonicalFillError(problem);
@@ -5803,7 +5802,7 @@ function CanonicalApplicationDetail({
                   Upload PDF or text
                   <input
                     type="file"
-                    accept="application/pdf,text/plain,.pdf,.txt"
+                    accept={APPLICATION_DOCUMENT_ACCEPT_ATTRIBUTE["pdf-or-txt"]}
                     className="sr-only"
                     disabled={coverLetterBusy || coverLetterLoading}
                     onChange={(event) => {

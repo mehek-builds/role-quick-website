@@ -13,6 +13,7 @@ import {
   type RequiredDocumentAsk,
 } from "@/lib/api";
 import {
+  APPLICATION_DOCUMENT_ACCEPT_ATTRIBUTE,
   APPLICATION_DOCUMENT_SIZE_LIMIT_LABEL,
   formatDocumentBytes,
   validateApplicationDocument,
@@ -53,13 +54,6 @@ import {
  */
 
 type Stage = "ask" | "official" | "attached";
-
-/* Shared with Profile > Documents, which lists the same files. Two formatters is how one transcript
-   reads "1.2 MB" here and "1178 KB" on the page she deletes it from. See lib/document-size.ts for
-   why the scale is decimal. */
-const formatBytes = formatDocumentBytes;
-
-const SIZE_LIMIT_LABEL = APPLICATION_DOCUMENT_SIZE_LIMIT_LABEL;
 
 export function TranscriptModal({
   applicationId,
@@ -455,15 +449,21 @@ export function TranscriptModal({
               >
                 <input
                   type="file"
-                  accept="application/pdf,.pdf"
+                  accept={APPLICATION_DOCUMENT_ACCEPT_ATTRIBUTE.pdf}
                   className="sr-only"
-                  onChange={(event) => choose(event.target.files?.[0])}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    /* Cleared so re-picking a same-named file after a refusal still fires change:
+                       she re-exports a smaller transcript under the portal's default filename. */
+                    event.target.value = "";
+                    choose(file);
+                  }}
                 />
                 <span className="text-sm font-medium text-ink">
                   {chosen ? chosen.name : "Drop your transcript here, or browse"}
                 </span>
                 <span className="mt-1 text-xs text-muted">
-                  {chosen && shownSize !== null ? formatBytes(shownSize) : `PDF, up to ${SIZE_LIMIT_LABEL}`}
+                  {chosen && shownSize !== null ? formatDocumentBytes(shownSize) : `PDF, up to ${APPLICATION_DOCUMENT_SIZE_LIMIT_LABEL}`}
                 </span>
               </label>
 
@@ -499,7 +499,7 @@ export function TranscriptModal({
                 </span>
                 <span className="min-w-0">
                   <span className="block truncate text-sm font-medium text-ink">{fileName || "Your transcript"}</span>
-                  {shownSize !== null && <span className="block font-mono text-[11px] text-muted">{formatBytes(shownSize)}</span>}
+                  {shownSize !== null && <span className="block font-mono text-[11px] text-muted">{formatDocumentBytes(shownSize)}</span>}
                 </span>
               </div>
               {/* Whether the STORED file is reusable rides on the document, not on the attachment,

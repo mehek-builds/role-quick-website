@@ -52,7 +52,34 @@ export function formatDocumentBytes(bytes: number): string {
 
 export type ApplicationDocumentAccept = "pdf" | "pdf-or-docx" | "pdf-or-txt" | "csv";
 
+/** The options one upload surface hands the gate: which formats, and its own refusal sentences. */
+export type ApplicationDocumentGate = {
+  accept: ApplicationDocumentAccept;
+  typeMessage: string;
+  oversizeHint?: string;
+};
+
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+/**
+ * One spelling per accept kind for the file input's `accept` attribute, so the picker's filter and
+ * the gate's check cannot drift apart: a kind widened in matchesAccept without a matching attribute
+ * would leave the picker hiding files the gate now allows, and vice versa. Extensions ride along
+ * with the media types because a valid file can arrive with an empty `type`, and an attribute of
+ * bare media types would hide it from the picker that the gate was written to admit.
+ */
+export const APPLICATION_DOCUMENT_ACCEPT_ATTRIBUTE: Record<ApplicationDocumentAccept, string> = {
+  pdf: "application/pdf,.pdf",
+  "pdf-or-docx": `application/pdf,.pdf,${DOCX_MIME},.docx`,
+  "pdf-or-txt": "application/pdf,.pdf,text/plain,.txt",
+  csv: "text/csv,.csv",
+};
+
+/**
+ * The remedy sentence for an oversize resume-shaped document, shared by the surfaces that show it
+ * so a copy edit cannot leave two of them refusing the same file with different instructions.
+ */
+export const OVERSIZE_DOCUMENT_HINT = 'Export a smaller file (most editors have a "reduce file size" option) and try again.';
 
 /* The media type OR the extension. A file dragged out of some file managers arrives with an empty
    `type`, and refusing it here would be refusing a valid file for a reason the student cannot see.
@@ -67,7 +94,7 @@ function matchesAccept(file: Pick<File, "name" | "type">, accept: ApplicationDoc
     case "pdf-or-txt":
       return isPdf || file.type === "text/plain" || /\.txt$/i.test(file.name);
     case "csv":
-      return /\.csv$/i.test(file.name);
+      return file.type === "text/csv" || /\.csv$/i.test(file.name);
   }
 }
 
@@ -89,12 +116,12 @@ function matchesAccept(file: Pick<File, "name" | "type">, accept: ApplicationDoc
  */
 export function validateApplicationDocument(
   file: Pick<File, "name" | "size" | "type">,
-  options: { accept: ApplicationDocumentAccept; typeMessage: string; oversizeHint?: string },
+  options: ApplicationDocumentGate,
 ): string | null {
   if (!matchesAccept(file, options.accept)) return options.typeMessage;
   if (file.size > MAX_APPLICATION_DOCUMENT_BYTES) {
     const shown = formatDocumentBytes(file.size);
-    const lead = parseFloat(shown) <= MAX_APPLICATION_DOCUMENT_BYTES / 1_000_000
+    const lead = shown === formatDocumentBytes(MAX_APPLICATION_DOCUMENT_BYTES)
       ? `That file is just over the ${APPLICATION_DOCUMENT_SIZE_LIMIT_LABEL} limit`
       : `That file is ${shown}, over the ${APPLICATION_DOCUMENT_SIZE_LIMIT_LABEL} limit`;
     return options.oversizeHint ? `${lead}. ${options.oversizeHint}` : `${lead}.`;

@@ -15,7 +15,13 @@ import {
   putTargeting,
   uploadResume,
 } from "@/lib/api";
-import { APPLICATION_DOCUMENT_SIZE_LIMIT_LABEL, validateApplicationDocument } from "@/lib/document-size";
+import {
+  APPLICATION_DOCUMENT_ACCEPT_ATTRIBUTE,
+  APPLICATION_DOCUMENT_SIZE_LIMIT_LABEL,
+  OVERSIZE_DOCUMENT_HINT,
+  formatDocumentBytes,
+  validateApplicationDocument,
+} from "@/lib/document-size";
 import { captchaConsentedAt, captchaConsentCompletion, captchaConsentGranted } from "@/lib/captcha-consent";
 import { CaptchaConsentControl } from "@/components/app/CaptchaConsentControl";
 import { ConsentAcknowledgementControl } from "@/components/app/ConsentAcknowledgementControl";
@@ -663,13 +669,12 @@ export function ResumeStep({
 
   async function upload(f: File) {
     if (busy) return;
-    /* The type check, the cap, and the refusal sentence are the shared gate's: past the cap the
-       platform rejects the body as an unreadable 413, so the check must happen before any bytes
-       move, and the copy must be the one every upload surface shows. See document-size.ts. */
+    /* The shared gate (document-size.ts): the check happens before any bytes move, because past
+       the cap the platform rejects the body as an unreadable 413. */
     const problem = validateApplicationDocument(f, {
       accept: "pdf-or-docx",
       typeMessage: "Use a PDF or DOCX file.",
-      oversizeHint: 'Export a smaller PDF (most editors have a "reduce file size" option) and try again.',
+      oversizeHint: OVERSIZE_DOCUMENT_HINT,
     });
     if (problem) {
       setError(problem);
@@ -704,13 +709,12 @@ export function ResumeStep({
    * them again is exactly the thing being fixed. */
   const rows = useMemo(() => {
     if (!parsed || !file) return [];
-    const kb = Math.max(1, Math.round(file.size / 1024));
     const exp = parsed.experience?.length ?? 0;
     const proj = parsed.projects?.length ?? 0;
     const banked = parsed.bank_total ?? parsed.bank_seeded ?? 0;
     const elapsed = parseSeconds === null ? "" : `${parseSeconds.toFixed(1)}s`;
     return [
-      { k: "Received", v: `${file.name} · ${kb} KB` },
+      { k: "Received", v: `${file.name} · ${formatDocumentBytes(file.size)}` },
       { k: "Name", v: parsed.full_name || "not found" },
       { k: "School", v: parsed.school || "not found" },
       { k: "Graduation", v: parsed.grad_year ? String(parsed.grad_year) : "not found" },
@@ -856,7 +860,7 @@ export function ResumeStep({
       <input
         ref={inputRef}
         type="file"
-        accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        accept={APPLICATION_DOCUMENT_ACCEPT_ATTRIBUTE["pdf-or-docx"]}
         className="hidden"
         onChange={(e) => {
           const f = e.target.files?.[0];

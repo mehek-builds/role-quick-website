@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  APPLICATION_DOCUMENT_ACCEPT_ATTRIBUTE,
   APPLICATION_DOCUMENT_SIZE_LIMIT_LABEL,
   MAX_APPLICATION_DOCUMENT_BYTES,
   formatDocumentBytes,
@@ -87,5 +88,26 @@ test("each accept kind admits its formats by media type or extension", () => {
   no({ name: "letter.docx", type: "" }, "pdf-or-txt");
 
   ok({ name: "Connections.CSV", type: "" }, "csv");
+  ok({ name: "connections", type: "text/csv" }, "csv");
   no({ name: "Connections.xlsx", type: "" }, "csv");
+});
+
+test("every file the picker's accept filter offers is a file the gate admits", () => {
+  /* The accept attribute and the gate are exported side by side so they cannot drift: a kind
+     widened in one but not the other would leave the picker offering files the gate refuses, or
+     hiding files the gate was written to admit. Each attribute token must therefore pass its own
+     kind's validation, whether the file arrives with only that media type or only that
+     extension. */
+  for (const [accept, attribute] of Object.entries(APPLICATION_DOCUMENT_ACCEPT_ATTRIBUTE)) {
+    for (const token of attribute.split(",")) {
+      const file = token.startsWith(".")
+        ? { name: `export${token}`, type: "", size: 1_000 }
+        : { name: "export.bin", type: token, size: 1_000 };
+      assert.equal(
+        validateApplicationDocument(file, { accept: accept as ApplicationDocumentAccept, typeMessage: "refused" }),
+        null,
+        `accept="${token}" offers a file the "${accept}" gate refuses`,
+      );
+    }
+  }
 });

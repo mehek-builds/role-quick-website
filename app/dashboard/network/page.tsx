@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
-import { validateApplicationDocument } from "@/lib/document-size";
+import { APPLICATION_DOCUMENT_ACCEPT_ATTRIBUTE, formatDocumentBytes, validateApplicationDocument } from "@/lib/document-size";
 import { Button } from "@/components/app/Button";
 import { Card, DataErrorState, EmptyState, ErrorNote, PendingLabel, ShimmerRows } from "@/components/app/ui";
 import { MotionPanel, runDashboardTransition } from "@/components/app/Motion";
@@ -328,6 +328,7 @@ export default function NetworkPage() {
     const problem = validateApplicationDocument(next, {
       accept: "csv",
       typeMessage: "Choose LinkedIn's Connections.csv file.",
+      oversizeHint: "Split the export into smaller CSV files and import them one at a time.",
     });
     if (problem) {
       setFile(null);
@@ -490,9 +491,9 @@ export default function NetworkPage() {
             <p className="mt-3 text-small text-muted">Litos reads names, roles, companies, and profile URLs from your LinkedIn Connections.csv export. It uses them to match companies and possible referral paths. Litos never sends LinkedIn messages for you.</p>
             <ul className="mt-4 space-y-2 text-small text-muted"><li>Raw files are deleted after parsing and within 24 hours.</li><li>Disconnect stops future use. Your imported data stays retained so you can delete it later.</li><li>Delete removes imported network data.</li></ul>
             <label className={`mt-5 flex gap-3 rounded-inner border border-border bg-surface-alt p-4 text-small text-ink ${mutationBusy ? "cursor-not-allowed opacity-60" : ""}`}><input type="checkbox" checked={consent} disabled={mutationBusy} onChange={(event) => changeConsent(event.target.checked)} className="mt-0.5 size-4 accent-coral" /><span>I consent to Litos processing my LinkedIn connections export for company matches and referral paths.</span></label>
-            <input ref={fileRef} type="file" accept=".csv,text/csv" hidden disabled={busy} onChange={(event) => chooseFile(event.target.files?.[0])} />
+            <input ref={fileRef} type="file" accept={APPLICATION_DOCUMENT_ACCEPT_ATTRIBUTE.csv} hidden disabled={busy} onChange={(event) => { const next = event.target.files?.[0]; event.target.value = ""; chooseFile(next); }} />
             <div className="mt-5 flex flex-wrap gap-3"><Button type="button" variant="secondary" onClick={() => fileRef.current?.click()} disabled={busy}>Choose Connections.csv</Button><Button type="button" variant="secondary" disabled={!file || !consent || busy} onClick={() => void previewImport()}>{operationKind === "preview" ? <PendingLabel>Checking file</PendingLabel> : "Preview import"}</Button></div>
-            {file && <p className="mt-3 font-mono text-label text-muted">{file.name} · {Math.ceil(file.size / 1024)} KB</p>}
+            {file && <p className="mt-3 font-mono text-label text-muted">{file.name} · {formatDocumentBytes(file.size)}</p>}
             {preview && <div className="mt-5 rounded-inner border border-coral/35 bg-coral-soft/45 p-4" role="status"><p className="font-mono text-machine text-ink">{preview.accepted_rows} accepted · {preview.rejected_rows} rejected</p>{preview.warnings?.map((warning) => <p key={warning} className="mt-2 text-small text-muted">{warning}</p>)}<Button type="button" variant="secondary" className="mt-4 border-coral text-coral-ink" disabled={!consent || busy} onClick={() => void commitImport()}>{operationKind === "commit" ? <PendingLabel>Saving import</PendingLabel> : "Import accepted rows"}</Button></div>}
           </Card>
           <Card className="p-6">

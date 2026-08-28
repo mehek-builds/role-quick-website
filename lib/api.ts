@@ -1751,12 +1751,10 @@ export async function uploadResume(file: File): Promise<ParsedProfile> {
   return data as ParsedProfile;
 }
 
-/* The upload cap and its rationale live in document-size.ts, next to the shared gate and the
-   formatter, so the byte count, the prose label, and the refusal sentence cannot drift apart. */
-export { MAX_APPLICATION_DOCUMENT_BYTES } from "./document-size";
-
 /**
  * Attach a file the student chose to one application, and keep it for the next employer that asks.
+ * The upload cap and its rationale live in document-size.ts, next to the shared gate and the
+ * formatter, so the byte count, the prose label, and the refusal sentence cannot drift apart.
  *
  * Multipart, and it still goes through `api()` rather than a bare fetch the way uploadResume does.
  * That is safe because the Content-Type header in requestApi is set only for a STRING body, so a
