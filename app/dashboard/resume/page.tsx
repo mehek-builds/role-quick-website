@@ -3,8 +3,9 @@
 import { Button } from "@/components/app/Button";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { api, ApiError, ExperienceEntry, getTargeting, getToken } from "@/lib/api";
+import { api, ApiError, ExperienceEntry, getTargeting, getToken, MAX_APPLICATION_DOCUMENT_BYTES } from "@/lib/api";
 import { API_URL } from "@/lib/config";
+import { formatDocumentBytes } from "@/lib/document-size";
 import { restoreFocusAfterRetry } from "@/lib/latest-request";
 import { litosClientHeaders } from "@/lib/product";
 import { Card, Chip, DataErrorState, PendingLabel, ShimmerRows, ErrorNote } from "@/components/app/ui";
@@ -246,7 +247,10 @@ export default function ResumeWorkspace() {
         });
         const data = await res.json().catch(() => null);
         if (!res.ok) {
-          setError(data?.error ?? "Upload failed. Is it a PDF under 10 MB?");
+          /* Size cannot be the cause here: the client gate in chooseUpload already excluded it,
+             so blaming it would send the student checking a number that is fine. Same fallback
+             as uploadResume in lib/api.ts for the same response. */
+          setError(data?.error ?? "Could not read that resume.");
         } else {
           const parsedProfile = data as ResumeParsedProfile;
           uploadedProfileRef.current = parsedProfile;
@@ -266,7 +270,10 @@ export default function ResumeWorkspace() {
           await refreshUploadedProfile();
         }
       } catch {
-        setError("Network error during upload. You can retry the same file.");
+        /* A fetch that rejects has no response at all: offline, a dropped connection, or a
+           platform-level rejection served without CORS headers. The browser's own words are
+           "Failed to fetch", which explains nothing. Same wording as uploadResume in lib/api.ts. */
+        setError("The upload did not reach us. Check your connection and try again.");
       } finally {
         setUploading(false);
       }
@@ -391,9 +398,19 @@ export default function ResumeWorkspace() {
     if (!file || !uploadReady || mutations.isActive()) return;
     const pdfMime = file.type === "application/pdf";
     const genericPdf = (file.type === "" || file.type === "application/octet-stream") && /\.pdf$/i.test(file.name);
-    if ((!pdfMime && !genericPdf) || file.size > 10 * 1024 * 1024) {
+    if (!pdfMime && !genericPdf) {
       setSelectedFile(file);
-      setError("Choose one PDF no larger than 10 MB.");
+      setError("Choose one PDF file.");
+      return;
+    }
+    /* Same client-side gate as the onboarding upload (steps.tsx): past
+       MAX_APPLICATION_DOCUMENT_BYTES the platform rejects the request body before the backend
+       runs, as a plain-text 413 with no CORS headers, which the browser reports only as a bare
+       "Failed to fetch" after the whole upload. So the check happens before any bytes move.
+       The old 10 MB here was the backend's multipart limit: a number no upload could reach. */
+    if (file.size > MAX_APPLICATION_DOCUMENT_BYTES) {
+      setSelectedFile(file);
+      setError(`That file is ${formatDocumentBytes(file.size)} and resumes upload up to 4 MB. Export a smaller PDF (most editors have a "reduce file size" option) and try again.`);
       return;
     }
     setSelectedFile(file);
@@ -480,7 +497,7 @@ export default function ResumeWorkspace() {
           aria-disabled={!uploadReady}
           aria-busy={uploadPending}
         >
-          <p><span className="font-medium text-ink">Drop one PDF here</span>, or use the upload button. Maximum 10 MB.</p>
+          <p><span className="font-medium text-ink">Drop one PDF here</span>, or use the upload button. Maximum 4 MB.</p>
           {selectedFile && <div className="mt-3 flex flex-wrap items-center gap-3"><span className="font-mono text-xs text-ink">{selectedFile.name}</span>{uploadPending ? <span role="status" aria-live="polite" className="inline-flex items-center gap-2"><progress aria-label="Uploading and reading resume" className="h-1.5 w-24 accent-brand" />Reading the PDF...</span> : error ? <button type="button" onClick={() => chooseUpload(selectedFile)} aria-describedby={uploadBlockedReason ? "resume-upload-blocked-reason" : undefined} disabled={!uploadReady} className="font-medium text-brand-ink underline underline-offset-4 disabled:text-muted disabled:no-underline">Retry</button> : <span role="status" className="text-positive">Upload complete</span>}</div>}
         </div>
 
