@@ -86,10 +86,26 @@ function fragmentKey(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
 }
 
+/* Parenthetical form chrome. An ATS prints these beside a label to describe the CONTROL, not the
+   question, exactly as the asterisk does, and they arrive inside the same capture. */
+const PARENTHETICAL_FORM_MARKER = /\((?:required|optional|opt|mandatory)\)/gi;
+
+/* Prefixes a DOM capture puts in front of a field's own name. "field-location" beside "location" is
+   the same field named twice, once for a person and once for the form. Stripped only to TEST for
+   that duplication - a prefixed token whose stem is not already present is left alone, because then
+   it is the only name that field has. */
+const FIELD_KEY_PREFIX = /^(?:field|input|id|for|name|control)-/i;
+
 /** True for a token that is a machine field key rather than anything a person wrote. */
 function isRawFieldKey(token: string): boolean {
   const trimmed = token.trim();
   if (!trimmed || /\s/.test(trimmed)) return false;
+  /* A DOM prefix in front of a machine key is still a machine key, and the stem test below cannot
+     catch it: the two captures of one field can carry DIFFERENT truncations of the same id
+     ("custom_attribute_2706278" beside "field-custom_attribute_270627", snapAddy, 2026-08-29), so
+     there is no stem to match. What is left after the prefix decides it. */
+  const core = trimmed.replace(FIELD_KEY_PREFIX, "");
+  if (core !== trimmed && /^[a-z0-9]+(?:[_.][a-z0-9]+)+$/i.test(core)) return true;
   /* snake_case or a dotted path ("preferred_name", "work_authorization_us", "applicant.email"), or
      a bracketed form path ("job_application[answers][3]"). A single ordinary word is NOT a field
      key: "Pronouns" is a real label and must survive.
@@ -120,9 +136,20 @@ export function cleanScrapedLabel(value: string | null | undefined): string {
   const collapsed = raw.replace(/\s+/g, " ").trim();
   if (!collapsed) return raw;
 
-  /* Field keys first: they are unambiguous, and removing them shortens the duplicate search. */
-  const words = collapsed.split(" ");
-  const withoutKeys = words.filter((word) => !isRawFieldKey(word));
+  /* Control chrome first: "(required)" describes the control, like the asterisk beside it. */
+  const withoutChrome = collapsed.replace(PARENTHETICAL_FORM_MARKER, " ").replace(/\s+/g, " ").trim();
+  /* Field keys next: they are unambiguous, and removing them shortens the duplicate search. */
+  const words = (withoutChrome || collapsed).split(" ");
+  const stems = new Set(words.map((word) => fragmentKey(word)).filter(Boolean));
+  const withoutKeys = words.filter((word) => {
+    if (isRawFieldKey(word)) return false;
+    /* A prefixed restatement of a field already named in plain words. Measured live on the snapAddy
+       packet 2026-08-29: "location* (required) location location field-location" and
+       "github* (required) github custom_attribute_2706278 field-custom_attribute_270627". Dropped
+       only when the stem is ALREADY PRESENT, so a field whose only name is prefixed keeps it. */
+    const stem = fragmentKey(word.replace(FIELD_KEY_PREFIX, ""));
+    return !(FIELD_KEY_PREFIX.test(word) && stem.length > 0 && stems.has(stem));
+  });
   const kept: string[] = [];
   /* Longest-first phrase dedupe over the remaining words. A trailing phrase whose key is already
      covered by what has been kept is a re-capture of the same label, not new information. */
@@ -138,7 +165,16 @@ export function cleanScrapedLabel(value: string | null | undefined): string {
     }
   }
 
-  const cleaned = kept.join(" ").replace(TRAILING_REQUIRED_MARKER, "").trim();
+  /* AN ADJACENT EXACT REPEAT IS THE SAME CAPTURE TWICE. The DOM read emits a field's visible label
+     and its accessible name back to back, so "location* location" and "github* github" arrive with
+     the pair touching. Compared under fragmentKey, so the required marker on the first copy does not
+     hide the match, and the FIRST occurrence is the one kept: it is the one a person wrote. Only
+     ADJACENT pairs, so a label that legitimately uses a word twice at a distance is untouched. */
+  const deduped = kept.filter((word, index) => (
+    index === 0 || fragmentKey(word) === "" || fragmentKey(word) !== fragmentKey(kept[index - 1])
+  ));
+
+  const cleaned = deduped.join(" ").replace(TRAILING_REQUIRED_MARKER, "").trim();
   /* NEVER CLEAN TO EMPTY, and never hand back something shorter than the evidence justifies. */
   if (!cleaned) return collapsed;
   return cleaned;
