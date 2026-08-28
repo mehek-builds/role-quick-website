@@ -11,33 +11,12 @@ import { sanitizeTryPacket } from "@/lib/try-work-authorization";
 
 /* The real try-it path (design doc 2026-07-08): paste resume text + pick a
    cached posting -> one Claude call -> truncated personal packet. Hardening:
-   honeypot, per-session + per-IP rate limit, 10KB cap, resume-looks-like-a-
-   resume floor, pasted text treated strictly as data. Resume text is NEVER
-   persisted; the only state is the rate-limit counter.
-
-   Rate-limit store: in-memory Map for now (fine for a single dev/preview
-   instance and roughly fine on one warm serverless instance). TODO before
-   real traffic: move the counters to Vercel KV/Upstash per the design doc. */
+   honeypot, 10KB cap, resume-looks-like-a-resume floor, pasted text treated
+   strictly as data. Resume text is never persisted. */
 
 const MODEL = process.env.RQ_TRY_MODEL ?? "claude-opus-4-8";
 const MAX_INPUT_BYTES = 10_000;
 const MIN_INPUT_CHARS = 200;
-const SESSION_LIMIT = 3; // runs per session token per day
-const IP_LIMIT = 20; // runs per IP per day (dorm/carrier NATs are shared)
-
-const counters = new Map<string, { n: number; day: string }>();
-
-function bump(key: string, limit: number): boolean {
-  const day = new Date().toISOString().slice(0, 10);
-  const cur = counters.get(key);
-  if (!cur || cur.day !== day) {
-    counters.set(key, { n: 1, day });
-    return true;
-  }
-  if (cur.n >= limit) return false;
-  cur.n += 1;
-  return true;
-}
 
 function looksLikeResume(text: string): boolean {
   const t = text.toLowerCase();
@@ -165,13 +144,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Rate limits: 3/day per session token, 20/day per IP.
   const session = req.cookies.get("rq_try")?.value ?? crypto.randomUUID();
-  const ip =
-    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "local";
-  if (!bump(`s:${session}`, SESSION_LIMIT) || !bump(`ip:${ip}`, IP_LIMIT)) {
-    return NextResponse.json({ degraded: true, reason: "rate_limited" }, { status: 429 });
-  }
 
   try {
     const client = new Anthropic();

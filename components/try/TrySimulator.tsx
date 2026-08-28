@@ -163,9 +163,7 @@ export function TrySimulator({
            makes a broken personal trial look successful with someone else's data. */
         setGenerating(false);
         setNotice(
-          data.reason === "rate_limited"
-            ? "You have used all your live tries today. Your resume was not replaced with sample information."
-            : "Your live preview could not be made. Your resume was not replaced with sample information. Try again shortly.",
+          "Your live preview could not be made. Your resume was not replaced with sample information. Try again shortly.",
         );
         return;
       }
