@@ -78,3 +78,20 @@ for (const [path, name] of VIEWERS) {
     assert.match(source, /getBoundingClientRect\(\)\.top - (?:rect\.top|top) <= 24/);
   });
 }
+
+/*
+ * The packet's field chips are a lowercased DOM read, and stripping the duplicate captures out of
+ * them is only half the job. Verified live on the Verkada packet, 2026-08-29: filled_fields holds
+ * "question:preferred first name preferred first name preferred_name" beside "question:when do you
+ * graduate?" and "question:what is your gpa?", so a chip list that de-duplicated but did not case
+ * still rendered the employer's DOM rather than Litos's voice.
+ */
+test("the packet's field chips are cased as well as de-duplicated", async () => {
+  const source = await readFile("components/app/ApplicationPacket.tsx", "utf8");
+  const fn = source.slice(source.indexOf("function fieldLabel("));
+  assert.match(
+    fn.slice(0, fn.indexOf("\n}")),
+    /return cleanScrapedPrompt\(cleanScrapedLabel\(unprefixed\)\);/,
+    "a field chip and a question row must not present the same label two different ways",
+  );
+});
