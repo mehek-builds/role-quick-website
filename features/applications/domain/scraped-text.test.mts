@@ -86,6 +86,41 @@ test("only a token that cannot be prose is treated as a field key", () => {
   assert.equal(cleanScrapedLabel("Sponsorship"), "Sponsorship");
 });
 
+/* The same defect in the shapes production actually holds. Read off the snapAddy packet's
+   filled_fields on 2026-08-29, after the first pass at this shipped: the audit named one string and
+   these are its siblings, arriving from the same DOM triple-capture. */
+test("the sibling shapes of the measured junk are cleaned too", () => {
+  assert.equal(cleanScrapedLabel("location* (required) location location field-location"), "location");
+  assert.equal(
+    cleanScrapedLabel("github* (required) github custom_attribute_2706278 field-custom_attribute_270627"),
+    "github",
+  );
+});
+
+test("control chrome is not the question", () => {
+  assert.equal(cleanScrapedLabel("Cover letter (optional)"), "Cover letter");
+  assert.equal(cleanScrapedLabel("Phone number (required)"), "Phone number");
+  /* A parenthetical that says something about the ANSWER stays: it is the employer speaking to the
+     applicant, not the form describing its own control. */
+  assert.equal(cleanScrapedLabel("Start date (mm/yyyy)"), "Start date (mm/yyyy)");
+  assert.equal(cleanScrapedLabel("Salary (USD)"), "Salary (USD)");
+});
+
+test("a prefixed field name survives when it is the only name that field has", () => {
+  /* The drop is evidence-based: "field-location" goes because "location" is already there. With no
+     plain-word stem present, the prefixed token is the label and removing it would leave nothing. */
+  assert.equal(cleanScrapedLabel("field-location"), "field-location");
+  assert.equal(cleanScrapedLabel("Where are you based? field-location"), "Where are you based? field-location");
+});
+
+test("only ADJACENT repeats collapse, so a label may use a word twice", () => {
+  assert.equal(cleanScrapedLabel("Name Name"), "Name");
+  assert.equal(
+    cleanScrapedLabel("What name is on your passport, and what name do you use?"),
+    "What name is on your passport, and what name do you use?",
+  );
+});
+
 test("a short echo cannot truncate a real question", () => {
   /* The duplicate rule has a six-character floor precisely so a coincidental repeat does not eat
      the rest of a prompt. */
