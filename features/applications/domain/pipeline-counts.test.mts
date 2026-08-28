@@ -82,17 +82,21 @@ test("saved resumes are not applications, so they leave every figure alone", () 
   assert.equal(counts.sent, 1);
 });
 
-test("the board names a card the student moved into Applied herself rather than printing two numbers", () => {
+test("the board names the difference between its column and the sent count, without inventing a cause", () => {
+  /* It states WHAT differs, never WHY. The two figures come from two independent fetches, so an
+     excess can mean a card the student filed herself OR one the board returned that the ledger's
+     window did not reach - and telling her she filed something Litos actually sent would be the
+     same confident wrong sentence this whole pass is removing. */
   assert.equal(
     boardStageReconciliationNote(13, 12),
-    "1 card in Applied was moved there by you rather than sent by Litos.",
+    "1 card sits in Applied that this list does not count as sent by Litos.",
   );
   assert.equal(
     boardStageReconciliationNote(15, 12),
-    "3 cards in Applied were moved there by you rather than sent by Litos.",
+    "3 cards sit in Applied that this list does not count as sent by Litos.",
   );
-  // Fewer cards on the column than sent applications is not a claim this can make: the board is a
-  // subset of the inventory, and a caption about a negative difference would be noise.
+  // Fewer cards on the column than sent applications says nothing a reader needs: the caption
+  // exists to explain a column that looks too big, and a negative difference would be noise.
   assert.equal(boardStageReconciliationNote(12, 12), null);
   assert.equal(boardStageReconciliationNote(9, 12), null);
 });

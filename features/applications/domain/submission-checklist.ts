@@ -1006,8 +1006,17 @@ export function directInputTaskPlan(
      done: the parent comes back at intent "review", which is the same intent the plan already uses
      for a question whose answer stands and wants looking at, so nothing is blanked and no stored
      answer is touched. */
+  /* RESOLVED OVER THE EMPLOYER'S WHOLE FORM, not over the editable subset.
+     `editableQuestions` has holes in it - anything held back as a metadata blocker is missing - and
+     "the nearest free-standing question above" computed over a list with holes silently names the
+     wrong one. A follow-up whose real parent is a Select2 whose options could not be read would be
+     paired with whatever unrelated question happened to precede it, and the screen would state "The
+     next question refers back to this one" about a question it does not refer to. Passing the full
+     stored list means an unreadable parent resolves to itself and is then simply not re-admitted
+     (it is not in editableQuestions, so the task builder skips it), which leaves the follow-up
+     exactly where it was - the documented behaviour for a parent that cannot be found. */
   const requiredQuestionIds = withRequiredParentQuestionIds(
-    presentation.editableQuestions,
+    review.questions ?? [],
     outstandingQuestionIds,
   );
 

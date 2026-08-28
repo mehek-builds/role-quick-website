@@ -28,8 +28,16 @@ for (const [path, name] of VIEWERS) {
     const source = await readFile(path, "utf8");
     assert.match(
       source,
-      /const atBottom = box\.scrollTop \+ box\.clientHeight >= box\.scrollHeight - 2;/,
+      /const atBottom = scrollable && box\.scrollTop \+ box\.clientHeight >= box\.scrollHeight - 2;/,
       "the end of the scroll has to be detected",
+    );
+    /* AND ONLY ON A PANE THAT MEANINGFULLY SCROLLS. `atBottom` is trivially true on one that barely
+       overflows, and acting on it there marks the LAST section active while the reader is still at
+       the top - the same defect this file's seeding comment records for a short packet. */
+    assert.match(
+      source,
+      /const scrollable = box\.scrollHeight - box\.clientHeight > 24;/,
+      "a pane that barely overflows must not be treated as scrolled to its end",
     );
     assert.match(
       source,

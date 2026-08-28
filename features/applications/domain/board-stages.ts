@@ -88,12 +88,20 @@ export function pipelineCoverage(
  * a real distinction (which would either invent sends or hide her own cards), the board names it,
  * once, and only when the two actually differ.
  *
+ * IT STATES THE DIFFERENCE, IT DOES NOT EXPLAIN IT. An earlier draft read "moved there by you
+ * rather than sent by Litos", and that is a cause this function cannot know. The two figures come
+ * from two independent fetches - /applications/board and the merged canonical inventory - so an
+ * excess can equally mean a card the board returned that the ledger's window did not reach, and
+ * telling a student she filed something herself when Litos in fact sent it is precisely the kind of
+ * confident wrong sentence this whole pass is removing. Naming the two universes is the honest
+ * form, and it is what the reader needs in order to reconcile the numbers.
+ *
  * Null when they agree, which is the ordinary case and the one where a caption would be noise.
  */
 export function boardStageReconciliationNote(appliedCards: number, sent: number): string | null {
   const difference = appliedCards - sent;
   if (difference <= 0) return null;
   return difference === 1
-    ? "1 card in Applied was moved there by you rather than sent by Litos."
-    : `${difference} cards in Applied were moved there by you rather than sent by Litos.`;
+    ? "1 card sits in Applied that this list does not count as sent by Litos."
+    : `${difference} cards sit in Applied that this list does not count as sent by Litos.`;
 }

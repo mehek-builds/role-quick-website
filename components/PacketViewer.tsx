@@ -181,7 +181,13 @@ export function PacketViewer({ packet, onClose }: { packet: Packet; onClose: () 
       const top = box.getBoundingClientRect().top;
       const marks = ["packet-resume", "packet-jd", "packet-questions", "packet-email"];
       const present = marks.filter((id) => root.querySelector(`#${id}`) !== null);
-      const atBottom = box.scrollTop + box.clientHeight >= box.scrollHeight - 2;
+      /* GENUINE OVERFLOW ONLY. `atBottom` is trivially true on a pane that barely scrolls, and
+         acting on it there would mark the LAST section active while the reader is still looking at
+         the first - the same defect the seeding comment above records for a packet short enough
+         never to scroll. The rule below only makes sense once there is more scrollable height than
+         the 24px threshold it is standing in for. */
+      const scrollable = box.scrollHeight - box.clientHeight > 24;
+      const atBottom = scrollable && box.scrollTop + box.clientHeight >= box.scrollHeight - 2;
       if (atBottom && present.length > 0) {
         setActive(jumpTarget.current ?? present[present.length - 1]);
         return;

@@ -90,10 +90,15 @@ function fragmentKey(value: string): string {
 function isRawFieldKey(token: string): boolean {
   const trimmed = token.trim();
   if (!trimmed || /\s/.test(trimmed)) return false;
-  /* snake_case or kebab-with-underscores ("preferred_name", "work_authorization_us"), a bracketed
-     form path ("job_application[answers][3]"), or a dotted/bracket path. A single ordinary word is
-     NOT a field key: "Pronouns" is a real label and must survive. */
-  return /^[a-z0-9]+(?:[_.][a-z0-9]+)+$/i.test(trimmed) || /[[\]]/.test(trimmed);
+  /* snake_case or a dotted path ("preferred_name", "work_authorization_us", "applicant.email"), or
+     a bracketed form path ("job_application[answers][3]"). A single ordinary word is NOT a field
+     key: "Pronouns" is a real label and must survive.
+
+     THE BRACKET RULE NEEDS A NAME IN FRONT OF THE BRACKET. Matching a bare bracket anywhere in the
+     token ate genuine label fragments - "Salary expectation [USD]" and "Rate your experience [1-5]"
+     both lose the unit or the scale, which silently changes the question being answered. A form
+     path always has an identifier before its first subscript; a bracketed aside in prose does not. */
+  return /^[a-z0-9]+(?:[_.][a-z0-9]+)+$/i.test(trimmed) || /^[a-z0-9_.]+\[[^\]]*\]/i.test(trimmed);
 }
 
 /**

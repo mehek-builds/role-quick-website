@@ -506,12 +506,20 @@ export function ScrollableRow({
     if (!node || typeof ResizeObserver === "undefined") return;
     /* The row's own size AND its content's: cards arrive from a fetch, so observing only the
        viewport would leave the first paint's measurement standing over a strip that has since
-       grown past the edge. */
+       grown past the edge.
+
+       ONE OBSERVER FOR THE LIFETIME OF THE ROW, and the content is watched through a wrapper rather
+       than by re-observing each card. `children` is a fresh value on every parent render, so
+       depending on it tore this down and re-observed every card on each one - and the Tracker's
+       parent re-renders on every 2.5s submission poll and every keystroke in its search box, with
+       one card per packet in a 200-row inventory. The observer sees the wrapper's own box grow and
+       shrink as cards arrive, which is the fact that actually matters here. */
     const observer = new ResizeObserver(measure);
     observer.observe(node);
-    for (const child of Array.from(node.children)) observer.observe(child);
+    const content = node.firstElementChild;
+    if (content) observer.observe(content);
     return () => observer.disconnect();
-  }, [measure, children]);
+  }, [measure]);
 
   return (
     <div className="relative">

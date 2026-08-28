@@ -2163,6 +2163,13 @@ function Applications() {
      sent looking like eleven live opportunities. The mark has to know about the row the filter
      just removed. */
   const duplicateMarks = useMemo(() => duplicatePostingMarks(reviewablePackets), [reviewablePackets]);
+  /* Memoised for the reason every derivation over this list is: the page holds a 200-row inventory
+     and re-renders on a 2.5s poll and on every keystroke in the ledger search box. Computed inline
+     in the Board's props it walked all 200 packets and minted a new object on each of those. */
+  const boardInventory = useMemo(
+    () => ({ total: reviewablePackets.length, sent: pipelineCounts(reviewablePackets).sent }),
+    [reviewablePackets],
+  );
   const deferredApplicationQuery = useDeferredValue(applicationQuery);
   const visiblePackets = useMemo(() => {
     const filtered = reviewablePackets.filter((packet) =>
@@ -5052,7 +5059,7 @@ function Applications() {
              different total off the merged canonical inventory: 100 and 200 on one screen,
              2026-08-29. `total` is deliberately reviewablePackets.length, the exact expression the
              header renders, so agreement is structural rather than coincidental. */
-          inventory={{ total: reviewablePackets.length, sent: pipelineCounts(reviewablePackets).sent }}
+          inventory={boardInventory}
           openableIds={new Set((packets ?? []).map((item) => item.id))}
           onOpen={(id) => {
             const packet = (packets ?? []).find((item) => item.id === id);

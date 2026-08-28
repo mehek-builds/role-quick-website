@@ -153,6 +153,41 @@ test("the step count is the same across both visits, which is the property that 
   assert.equal(secondVisit.questionTasks.length, 2, "1 of 2 stays 1 of 2");
 });
 
+test("a follow-up whose real parent is unreadable is not paired with an unrelated question", () => {
+  /* THE FALSE-PARENT CASE. The real parent here is blocked as a metadata blocker (a closed control
+     whose exact options could not be read), so it never reaches editableQuestions. Resolving the
+     parent over that filtered list would name the citizenship question above it instead, and the
+     screen would state "the next question refers back to this one" about a question it does not
+     refer to. Parents are resolved over the employer's whole stored form, so an unreadable parent
+     resolves to itself, is not editable, and is simply not re-admitted - which leaves the follow-up
+     exactly where it was, the documented behaviour for a parent that cannot be found. */
+  const questions = [
+    question("citizenship", "Country of citizenship", "United Arab Emirates"),
+    /* A select with no options is exactly what questionReviewPresentation holds back. */
+    {
+      id: "sanctions",
+      question: SANCTIONS_PROMPT,
+      answer: "",
+      required: true,
+      kind: "short_answer",
+      portal_input_type: "select",
+      options: [],
+    },
+    question("detail", FOLLOW_UP_PROMPT, ""),
+  ];
+  const plan = planFor(
+    questions as never,
+    "Answer required: If you selected a response to the prior question, please provide additional detail.",
+  );
+  const ids = plan.questionTasks.map((task) => task.question.id);
+  assert.equal(ids.includes("citizenship"), false, "an unrelated question is never named as the parent");
+  assert.deepEqual(ids, ["detail"]);
+  assert.ok(
+    plan.metadataBlockers.length > 0,
+    "the unreadable parent is still reported as a blocker, so it is not silently lost",
+  );
+});
+
 test("an unrelated settled question is not dragged back in", () => {
   /* Only a PARENT returns. A queue that re-admitted every settled question would re-ask the whole
      form on every visit. */

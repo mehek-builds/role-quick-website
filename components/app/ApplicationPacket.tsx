@@ -510,7 +510,13 @@ export function ApplicationPacket({
          scrolled to its end with the FORMS heading plainly on screen while the rail still read JOB
          DESCRIPTION, which is what made the pill take two presses to appear to work. Measured
          2026-08-29. At the end of the scroll the answer is simply the last section that exists. */
-      const atBottom = box.scrollTop + box.clientHeight >= box.scrollHeight - 2;
+      /* GENUINE OVERFLOW ONLY. `atBottom` is trivially true on a pane that barely scrolls, and
+         acting on it there would mark the LAST section active while the reader is still looking at
+         the first - the same defect the seeding comment above records for a packet short enough
+         never to scroll. The rule below only makes sense once there is more scrollable height than
+         the 24px threshold it is standing in for. */
+      const scrollable = box.scrollHeight - box.clientHeight > 24;
+      const atBottom = scrollable && box.scrollTop + box.clientHeight >= box.scrollHeight - 2;
       const present = ids.filter((id) => root.querySelector(`#${id}`) !== null);
       if (atBottom && present.length > 0) {
         setActive(jumpTarget.current ?? present[present.length - 1]);

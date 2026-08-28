@@ -110,9 +110,10 @@ describe("the board says what it is not drawing", () => {
     assert.match(board, /\{coverageNote\}/);
     assert.match(
       applications,
-      /inventory=\{\{ total: reviewablePackets\.length, sent: pipelineCounts\(reviewablePackets\)\.sent \}\}/,
+      /\(\) => \(\{ total: reviewablePackets\.length, sent: pipelineCounts\(reviewablePackets\)\.sent \}\)/,
       "and the Tracker hands it the exact expression its own header renders",
     );
+    assert.match(applications, /inventory=\{boardInventory\}/);
   });
 
   test("a board that is drawing everything stays silent", () => {

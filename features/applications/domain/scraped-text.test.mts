@@ -74,6 +74,12 @@ test("only a token that cannot be prose is treated as a field key", () => {
   assert.equal(cleanScrapedLabel("Preferred name preferred_name"), "Preferred name");
   assert.equal(cleanScrapedLabel("Work authorization work_authorization_us"), "Work authorization");
   assert.equal(cleanScrapedLabel("Answer job_application[answers][3]"), "Answer");
+  /* A BRACKET ALONE IS NOT A FIELD KEY. Matching one anywhere in the token ate genuine label
+     fragments and silently changed the question being answered: the unit off a salary field, the
+     scale off a rating. A form path always has an identifier in front of its first subscript. */
+  assert.equal(cleanScrapedLabel("Salary expectation [USD]"), "Salary expectation [USD]");
+  assert.equal(cleanScrapedLabel("Rate your experience [1-5]"), "Rate your experience [1-5]");
+  assert.equal(cleanScrapedLabel("Availability (summer 2027)"), "Availability (summer 2027)");
   /* Hyphenated and possessive words are prose and must survive: dropping one silently rewrites the
      employer's question. */
   assert.equal(cleanScrapedLabel("Full-time availability"), "Full-time availability");
