@@ -7,6 +7,7 @@ import {
   api,
   ApiError,
   getPostingQuestions,
+  getSubmissionOrphanRisks,
   getToken,
   isGuestSession,
   type ApplicationFillHandoff,
@@ -15,6 +16,7 @@ import {
   type ApplicationProfile,
   type ApplicationReview,
   type AttachedDocument,
+  type AttendedHandoffCapability,
   type CanonicalApplication,
   type CanonicalCoverLetterResponse,
   type CoverLetter,
@@ -24,6 +26,13 @@ import {
   type PacketAuditResponse,
   type ManualHandoffResponse,
   type ResumeSpec,
+  type SelfSubmitStartResponse,
+  type SubmissionRetrySafety,
+  type SubmissionOrphanRisk,
+  type SubmissionOrphanResolutionRequest,
+  type PostingDistinctionRisk,
+  SUBMISSION_ORPHAN_RISK_REFRESH_EVENT,
+  resolveSubmissionOrphanRisk,
 } from "@/lib/api";
 import { Card, Chip, EmptyState, ErrorNote, ExtensionStoreLink, PendingLabel, ShimmerRows, TerminalActionBar, formatRelativeDate } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
@@ -34,7 +43,10 @@ import { auditAnswerWrite, reviewAnswersNeedSave, saveReviewAnswers, type Review
 import { saveAttentionAcknowledgement, type AttentionAcknowledgementResponse } from "@/features/applications";
 import { duplicateBadge, duplicatePostingMarks, duplicatePostingNote } from "@/features/applications";
 import { isHttpsJobUrl, missingApplicationFields, type ApplicationDraftField } from "@/features/applications";
-import { COVER_LETTER_WAIT_MS, HANDOFF_CLOCK_TICK_MS, coverLetterBlocks, coverLetterGate, documentsFromSpecMarks, handoffWindowExpired, nextCoverLetterValue, nextSubmissionState, publishSubmissionEnvelope, reconcilePacketEvidenceWithSubmission, submissionAfterPacketAudit, submissionCoverLetterField, submissionReviewPacketIdentity, submissionSnapshotIsOlder } from "@/features/applications";
+import { COVER_LETTER_WAIT_MS, HANDOFF_CLOCK_TICK_MS, coverLetterBlocks, coverLetterGate, documentsFromSpecMarks } from "@/features/applications";
+import { canonicalManualResolutionMatches, handoffWindowExpired, nextCoverLetterValue, nextSubmissionState, publishSubmissionEnvelope, reconcilePacketEvidenceWithSubmission, submissionAfterPacketAudit, submissionBoundaryAuthorizationBlocksResolution, submissionCoverLetterField, submissionReviewPacketIdentity, submissionRetrySafetyAllowsRetry, submissionRetrySafetyBlocksNegativeResolution, submissionRetrySafetyFromUnknown, submissionSnapshotIsOlder } from "@/features/applications";
+import { activeAttendedManualAttemptId, activeAttendedManualRecovery, attendedHandoffAuthorizationDisposition, attendedHandoffBoundaryLockToken, attendedHandoffOutcomeMayPublish, attendedHandoffOutcomeResponseMatches, attendedManualAttemptIdentity, attendedSelfSubmitMayOpen, beginAttendedHandoffOpenerLock, beginAttendedHandoffOutcomeLock, failClosedUnverifiedNotSentResponse, finishAttendedHandoffBoundaryLock, legacyEmployerFallbackMayRender, unverifiedSubmissionOutcomeResponseMatches, type AttendedHandoffAuthorizationDisposition, type AttendedHandoffBoundaryLock, type AttendedHandoffCurrentVersion, type AttendedHandoffRequestVersion, type AttendedManualRecovery } from "@/features/applications";
+import { attendedHandoffCapabilitiesEqual, attendedHandoffCapabilityFromUnknown, attendedHandoffCapabilityMatchesUrl, canonicalAttendedCapabilityUrl } from "@/features/applications";
 import { MatchScore, MatchGaps } from "@/components/app/MatchScore";
 import { auditRefusalCode, historicalPacketAuditStaleMessage, nextMatchScoreRequest, packetAuditReviewRecoveryCode } from "@/features/applications";
 import { getBaseResume } from "@/lib/base-resume";
@@ -55,6 +67,8 @@ import { AutopilotLockNote, NextMatchCard, useAutopilot, type NextMatch } from "
 import { InterviewPrep } from "@/components/app/InterviewPrep";
 import { fetchJdMatch, resumeSpecText } from "@/features/applications";
 import { exactAttendedHandoffUrl } from "@/lib/attended-handoff";
+import { safeBrowserLiveViewUrl } from "@/lib/browser-live-view";
+import { safeEvidenceImageUrl } from "@/lib/evidence-image";
 import { armHandoffs, ensureCurrentExtensionSession, minimumAttendedHandoffExtensionVersion, startFreeFillThroughExtension } from "@/lib/extension-bridge";
 import { applyBankVariant, type ApplyOutcome } from "@/features/applications";
 import { RequirementProvider, RequirementText, MatchLegend } from "@/components/app/RequirementText";
@@ -76,6 +90,15 @@ import { acknowledgePacketEvidence, packetAuditAcknowledgementAccepted, packetQu
 import { useBilling } from "@/components/billing/BillingProvider";
 import { isStructuredUpgradeDenial } from "@/features/billing";
 import { completeOperationId, operationIdFor } from "@/lib/operation-id";
+import { SubmissionOrphanRiskPanel } from "@/components/app/SubmissionOrphanRiskPanel";
+import { PostingDistinctionResolution } from "@/components/app/PostingDistinctionResolution";
+import {
+  postingDistinctionRiskFromUnknown,
+  postingDistinctionRiskKey,
+  postingDistinctionRisksEqual,
+  submissionOrphanResolutionMatches,
+  submissionOrphanRisksFromUnknown,
+} from "@/features/applications";
 
 type Screen = "review" | "questions" | "submitting" | "portal" | "submitted";
 type ApplicationSort = "next" | "recent" | "company";
@@ -96,6 +119,107 @@ type PrepareApplicationOptions = {
   failureScreen?: "questions" | "portal" | "review";
   source?: "metadata_refresh";
 };
+type FillPostingDistinctionState = {
+  surface: "composer" | "tracker" | "submission";
+  applicationId: string;
+  requestedPacketId: string | null;
+  requestGeneration: number;
+  contextGeneration: number;
+  risk: PostingDistinctionRisk | null;
+  message: string;
+  tone: "refusal" | "resolved";
+};
+type PostingDistinctionCleared = (resolvedRisk: PostingDistinctionRisk) => void;
+type PostingDistinctionRiskChanged = (
+  previousRisk: PostingDistinctionRisk,
+  nextRisk: PostingDistinctionRisk,
+) => void;
+
+function visibleFillPostingDistinction(
+  state: FillPostingDistinctionState | null,
+  surface: FillPostingDistinctionState["surface"],
+  contextGeneration: number,
+  applicationId?: string | null,
+  packetId?: string | null,
+): FillPostingDistinctionState | null {
+  if (!state
+    || state.surface !== surface
+    || state.contextGeneration !== contextGeneration
+    || (applicationId !== undefined && state.applicationId !== applicationId)
+    || (packetId !== undefined && state.requestedPacketId !== packetId)
+    || (state.risk && state.risk.candidate_application_id !== state.applicationId)
+    || (state.risk && packetId !== undefined && state.risk.candidate_packet_id !== packetId)) return null;
+  return state;
+}
+
+function retrySafetyBlockerMessage(retrySafety: unknown): string | null {
+  if (submissionRetrySafetyAllowsRetry(retrySafety)) return null;
+  if (retrySafety && typeof retrySafety === "object" && "kind" in retrySafety) {
+    if (retrySafety.kind === "blocked_confirmed") {
+      return "Litos has confirmed that an earlier attempt reached this employer, so it will not start another one.";
+    }
+    if (retrySafety.kind === "blocked_unverified") {
+      return "Litos cannot verify the outcome of an earlier attempt. Check whether the employer received it before trying again.";
+    }
+  }
+  return "Litos is still checking the immutable attempt history. It will not start another attempt until the server confirms that it is safe.";
+}
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const MANUAL_HANDOFF_RESPONSE_DEADLINE_MS = 30_000;
+
+/** A mutation failure is authoritative only when it carries a complete server retry verdict. */
+function retrySafetyFromApiFailure(reason: unknown): SubmissionRetrySafety | null {
+  if (!(reason instanceof ApiError) || !reason.data || typeof reason.data !== "object") return null;
+  const value = (reason.data as Record<string, unknown>).retry_safety;
+  return submissionRetrySafetyFromUnknown(value) as SubmissionRetrySafety | null;
+}
+
+function useBoundaryAuthorizationResolutionBlocked(retrySafety: SubmissionRetrySafety | null | undefined): boolean {
+  const [nowMs, setNowMs] = useState(0);
+  const expiresAt = retrySafety?.kind === "blocked_unverified"
+    && retrySafety.reason === "boundary_authorized"
+    ? retrySafety.expiresAt
+    : null;
+  useEffect(() => {
+    if (!expiresAt) return;
+    const expiresAtMs = Date.parse(expiresAt);
+    if (!Number.isFinite(expiresAtMs) || expiresAtMs <= nowMs) return;
+    const timer = window.setTimeout(
+      () => setNowMs(Date.now()),
+      Math.min(HANDOFF_CLOCK_TICK_MS, Math.max(1, expiresAtMs - nowMs + 25)),
+    );
+    return () => window.clearTimeout(timer);
+  }, [expiresAt, nowMs]);
+  return submissionBoundaryAuthorizationBlocksResolution(retrySafety, nowMs);
+}
+
+type AttendedHandoffClientRequest = AttendedHandoffRequestVersion;
+
+function attendedManualReplayBody(recovery: AttendedManualRecovery): string {
+  return JSON.stringify({
+    attempt_id: recovery.attemptId,
+    boundary_lease_id: recovery.leaseId,
+    boundary_activation_id: recovery.activationId,
+  });
+}
+
+function attendedManualResponseMatchesRecovery(
+  response: Pick<ManualHandoffResponse, "application_id" | "manual_attempt_id" | "boundary_lease_id" | "boundary_activation_id" | "manual_handoff_resume_available" | "replay">,
+  requestedApplicationId: string,
+  requestedRecovery: AttendedManualRecovery | null,
+): boolean {
+  if (response.application_id !== requestedApplicationId
+    || response.manual_handoff_resume_available !== true
+    || !UUID_PATTERN.test(response.manual_attempt_id)
+    || !UUID_PATTERN.test(response.boundary_lease_id)
+    || !UUID_PATTERN.test(response.boundary_activation_id)
+    || response.replay !== Boolean(requestedRecovery)) return false;
+  return !requestedRecovery
+    || (response.manual_attempt_id === requestedRecovery.attemptId
+      && response.boundary_lease_id === requestedRecovery.leaseId
+      && response.boundary_activation_id === requestedRecovery.activationId);
+}
 
 type DirectAnswerSaveResult = {
   saved: true;
@@ -226,7 +350,24 @@ function packetAuditRecoveryMayCommit(currentApplicationId: string | null, reque
    send. An empty object is a real answer, "nothing is attached"; undefined is "nobody has looked".
    The `partial: true` seed below is exactly the second case, and so is a backend that predates the
    documents route. */
-export type SubmissionResponse = { application_id: string; review: ApplicationReview; cover_letter?: CoverLetter | null; documents?: Record<string, AttachedDocument>; handoff_url?: string; configured?: boolean; partial?: boolean };
+export type SubmissionResponse = {
+  application_id: string;
+  review: ApplicationReview;
+  /** Immutable attempt-ledger fold. Null exists only on a partial board seed and always fails closed. */
+  retry_safety: SubmissionRetrySafety | null;
+  cover_letter?: CoverLetter | null;
+  documents?: Record<string, AttachedDocument>;
+  handoff_url?: string;
+  /** Exact attended/manual attempt reserved before the employer page or self-submit control exists. */
+  manual_attempt_id?: string;
+  /** URL-free replay identity returned by the passive poll for one authorized manual boundary. */
+  boundary_lease_id?: string;
+  boundary_activation_id?: string;
+  manual_handoff_resume_available?: boolean;
+  attended_handoff_capability?: AttendedHandoffCapability | null;
+  configured?: boolean;
+  partial?: boolean;
+};
 
 type ResumeGenerationResponse = {
   resume_id: string;
@@ -252,6 +393,15 @@ type ApplicationFillResponse = {
   application?: CanonicalApplication;
 };
 type FillReceipt = ApplicationFillResponse & { company: string; role: string; portalUrl: string };
+type CanonicalManualResolutionResponse = {
+  application_id: string;
+  attempt_id: string;
+  found: boolean;
+  idempotent: boolean;
+  retry_safety: SubmissionRetrySafety;
+  resolved_attempt_retry_safety: SubmissionRetrySafety;
+  application: CanonicalApplication;
+};
 
 function sameCoverLetter(left: CoverLetter | undefined, right: CoverLetter): boolean {
   return left?.body === right.body
@@ -423,12 +573,197 @@ function Applications() {
   const resumeOperationIds = useRef(new Map<string, string>());
   const coverLetterOperationIds = useRef(new Map<string, string>());
   const [canonicalFillError, setCanonicalFillError] = useState<string | null>(null);
+  const [fillPostingDistinction, setFillPostingDistinction] = useState<FillPostingDistinctionState | null>(null);
+  const fillRequestGenerationRef = useRef(0);
+  const fillContextGenerationRef = useRef(0);
+  const [canonicalResolutionBusy, setCanonicalResolutionBusy] = useState(false);
+  const [submissionOrphanRisks, setSubmissionOrphanRisks] = useState<SubmissionOrphanRisk[]>([]);
+  const [submissionOrphanRiskBusy, setSubmissionOrphanRiskBusy] = useState<string | null>(null);
+  const [submissionOrphanRiskError, setSubmissionOrphanRiskError] = useState<string | null>(null);
   /* A third errorSurface, not a reuse of canonicalFillError: that one is read only inside
      CanonicalApplicationDetail (line ~3689), which is not the screen the extension-recovery button
      lives on. Without this, fillApplication's "tracker" surface would set an error nothing on
      SubmissionScreen renders, so a blocked pop-up, a missing extension, or a failed /applications
      call would fail completely silently from her point of view - the button just does nothing. */
   const [submissionFillError, setSubmissionFillError] = useState<string | null>(null);
+  const attendedHandoffRequestsRef = useRef<Map<string, AttendedHandoffBoundaryLock>>(new Map());
+  const [selfSubmitStartingIds, setSelfSubmitStartingIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [attendedOutcomePendingIds, setAttendedOutcomePendingIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [selfSubmitStartError, setSelfSubmitStartError] = useState<{ applicationId: string; message: string } | null>(null);
+  function attendedHandoffPacketIdentity(applicationId: string): string {
+    const current = submissionSnapshotsRef.current.get(applicationId)
+      ?? (submissionRef.current?.application_id === applicationId ? submissionRef.current : null);
+    if (!current) return "missing";
+    return JSON.stringify([
+      current.review.status,
+      attendedHandoffCapabilityFromUnknown(current.attended_handoff_capability),
+      current.review.ats_name ?? null,
+      current.review.attention_reason ?? null,
+      submissionReviewPacketIdentity(current.review),
+      current.cover_letter ?? null,
+      current.documents ?? null,
+    ]);
+  }
+
+  function attendedHandoffRequestVersion(
+    applicationId: string,
+    token: string,
+  ): AttendedHandoffClientRequest {
+    return {
+      applicationId,
+      token,
+      contextGeneration: fillContextGenerationRef.current,
+      publicationGeneration: submissionPublicationGeneration(
+        submissionPublicationGenerationsRef.current,
+        applicationId,
+      ),
+      editorRevision: editorRevisionRef.current,
+      mutationGeneration: submissionMutationGenerationRef.current,
+      packetIdentity: attendedHandoffPacketIdentity(applicationId),
+    };
+  }
+
+  function beginAttendedHandoffRequest(applicationId: string): AttendedHandoffClientRequest | null {
+    const token = window.crypto.randomUUID();
+    if (!beginAttendedHandoffOpenerLock(attendedHandoffRequestsRef.current, applicationId, token)) return null;
+    return attendedHandoffRequestVersion(applicationId, token);
+  }
+
+  function currentAttendedHandoffVersion(
+    request: AttendedHandoffClientRequest,
+  ): AttendedHandoffCurrentVersion {
+    const currentSubmission = submissionSnapshotsRef.current.get(request.applicationId)
+      ?? (submissionRef.current?.application_id === request.applicationId ? submissionRef.current : null);
+    return {
+      applicationId: selectedIdRef.current,
+      token: attendedHandoffBoundaryLockToken(attendedHandoffRequestsRef.current, request.applicationId),
+      contextGeneration: fillContextGenerationRef.current,
+      publicationGeneration: submissionPublicationGeneration(
+        submissionPublicationGenerationsRef.current,
+        request.applicationId,
+      ),
+      editorRevision: editorRevisionRef.current,
+      mutationGeneration: submissionMutationGenerationRef.current,
+      packetIdentity: attendedHandoffPacketIdentity(request.applicationId),
+      terminal: currentSubmission?.review.status === "submitted"
+        || currentSubmission?.retry_safety?.kind === "blocked_confirmed",
+    };
+  }
+
+  function currentAttendedHandoffDisposition(
+    request: AttendedHandoffClientRequest,
+    arrivedLate = false,
+    equivalentAuthorization?: AttendedManualRecovery,
+  ): AttendedHandoffAuthorizationDisposition {
+    const currentSubmission = submissionSnapshotsRef.current.get(request.applicationId)
+      ?? (submissionRef.current?.application_id === request.applicationId ? submissionRef.current : null);
+    const currentAuthorization = currentSubmission
+      ? activeAttendedManualRecovery(currentSubmission)
+      : null;
+    return attendedHandoffAuthorizationDisposition({
+      request,
+      arrivedLate,
+      publicationEquivalent: Boolean(
+        equivalentAuthorization
+        && currentAuthorization?.attemptId === equivalentAuthorization.attemptId
+        && currentAuthorization.leaseId === equivalentAuthorization.leaseId
+        && currentAuthorization.activationId === equivalentAuthorization.activationId
+      ),
+      current: currentAttendedHandoffVersion(request),
+    });
+  }
+
+  function currentAttendedOutcomeMayPublish(request: AttendedHandoffClientRequest): boolean {
+    return attendedHandoffOutcomeMayPublish({
+      request,
+      current: currentAttendedHandoffVersion(request),
+    });
+  }
+
+  function finishAttendedHandoffRequest(request: AttendedHandoffClientRequest): void {
+    finishAttendedHandoffBoundaryLock(
+      attendedHandoffRequestsRef.current,
+      request.applicationId,
+      request.token,
+    );
+  }
+
+  function beginAttendedOutcome(applicationId: string): string | null {
+    const token = window.crypto.randomUUID();
+    if (!beginAttendedHandoffOutcomeLock(attendedHandoffRequestsRef.current, applicationId, token)) return null;
+    setAttendedOutcomePendingIds((current) => {
+      if (current.has(applicationId)) return current;
+      const next = new Set(current);
+      next.add(applicationId);
+      return next;
+    });
+    return token;
+  }
+
+  function finishAttendedOutcome(applicationId: string, token: string): void {
+    if (!finishAttendedHandoffBoundaryLock(attendedHandoffRequestsRef.current, applicationId, token)) return;
+    setAttendedOutcomePendingIds((current) => {
+      if (!current.has(applicationId)) return current;
+      const next = new Set(current);
+      next.delete(applicationId);
+      return next;
+    });
+  }
+
+  function installDiscardedAttendedAuthorization(
+    applicationId: string,
+    value: unknown,
+    recovery: AttendedManualRecovery,
+    serverReview: ApplicationReview,
+    capabilityValue: unknown,
+  ): boolean {
+    const safety = submissionRetrySafetyFromUnknown(value);
+    const capability = attendedHandoffCapabilityFromUnknown(capabilityValue);
+    if (safety?.kind !== "blocked_unverified"
+      || safety.reason !== "boundary_authorized"
+      || safety.attemptId !== recovery.attemptId
+      || safety.leaseId !== recovery.leaseId
+      || serverReview.submission_claim_id !== recovery.attemptId
+      || !capability) return false;
+    const current = submissionSnapshotsRef.current.get(applicationId)
+      ?? (submissionRef.current?.application_id === applicationId ? submissionRef.current : null);
+    if (!current || current.review.status === "submitted") return false;
+    const currentSafety = submissionRetrySafetyFromUnknown(current.retry_safety);
+    if (currentSafety?.kind === "blocked_confirmed"
+      || (currentSafety && currentSafety.kind !== "no_evidence"
+        && currentSafety.attemptId !== recovery.attemptId)) return false;
+    const currentClaim = current.review.submission_claim_id;
+    const exactClaim = !currentClaim || currentClaim === recovery.attemptId;
+    const next: SubmissionResponse = {
+      ...current,
+      review: exactClaim
+        ? {
+          ...current.review,
+          submission_claim_id: recovery.attemptId,
+          submission_claimed_at: serverReview.submission_claimed_at
+            ?? current.review.submission_claimed_at,
+        }
+        : current.review,
+      retry_safety: safety as SubmissionRetrySafety,
+      handoff_url: undefined,
+      manual_attempt_id: exactClaim ? recovery.attemptId : undefined,
+      boundary_lease_id: exactClaim ? recovery.leaseId : undefined,
+      boundary_activation_id: exactClaim ? recovery.activationId : undefined,
+      manual_handoff_resume_available: false,
+      attended_handoff_capability: capability as AttendedHandoffCapability,
+    };
+    submissionMutationGenerationRef.current += 1;
+    submissionSnapshotsRef.current.set(applicationId, next);
+    advanceSubmissionPublicationGeneration(submissionPublicationGenerationsRef.current, applicationId);
+    setPackets((currentPackets) => currentPackets?.map((packet) => packet.id === applicationId
+      ? packetWithDirectSubmission(packet, next)
+      : packet) ?? currentPackets);
+    if (submissionRef.current?.application_id === applicationId) {
+      submissionRef.current = next;
+      setSubmission(next);
+    }
+    return true;
+  }
   const [canonicalCoverLetter, setCanonicalCoverLetter] = useState<CanonicalCoverLetterResponse | null>(null);
   const [canonicalCoverLetterBody, setCanonicalCoverLetterBody] = useState("");
   const [canonicalCoverLetterJd, setCanonicalCoverLetterJd] = useState("");
@@ -447,6 +782,7 @@ function Applications() {
   const commitCanonicalSelection = useCallback((next: CanonicalApplication | null) => {
     const nextId = next?.id ?? null;
     if (canonicalSelectedIdRef.current !== nextId) {
+      fillContextGenerationRef.current += 1;
       canonicalSelectedIdRef.current = nextId;
       canonicalCoverLetterEditorRevisionRef.current += 1;
       canonicalCoverLetterEditorDirtyRef.current = false;
@@ -541,6 +877,7 @@ function Applications() {
      newer A poll merely because B is selected, and returning to A must not reduce that full
      snapshot to the partial board seed. */
   const submissionSnapshotsRef = useRef<Map<string, SubmissionResponse>>(new Map());
+  const partialSubmissionHydrationAttemptsRef = useRef<Set<string>>(new Set());
   /* A response can keep the same updated_at even after an accepted answer mutation. A poll that
      started before that write must not restore its blank question snapshot afterward. */
   const submissionMutationGenerationRef = useRef(0);
@@ -701,6 +1038,14 @@ function Applications() {
   const [extractingJd, setExtractingJd] = useState(false);
   const [showNewApplication, setShowNewApplication] = useState(false);
   const [newApplication, setNewApplication] = useState(EMPTY_APPLICATION_DRAFT);
+  const replaceNewApplicationDraft = useCallback((next: NewApplicationDraft) => {
+    // Route restores, checkout restores, and completed actions replace composer identity without
+    // going through the field-level edit handler. They must still retire every in-flight fill and
+    // resolver from the prior posting, including an A -> B -> A round trip.
+    fillContextGenerationRef.current += 1;
+    setFillPostingDistinction((current) => current?.surface === "composer" ? null : current);
+    setNewApplication(next);
+  }, []);
   const [fillReceipt, setFillReceipt] = useState<FillReceipt | null>(null);
   /* ISSUE-040: the composer's own refusal, kept OUT of the page-level `error` on purpose.
      "Fill in all four boxes first." used to render in the banner above the composer, which on a
@@ -766,7 +1111,13 @@ function Applications() {
    * packet switcher renders above this screen, so a refusal about Cresta must not be left sitting
    * under the Send button for Redwood. Render-time comparison rather than an effect, so switching
    * away is enough to retire it. */
-  const [sendRefusal, setSendRefusal] = useState<{ applicationId: string; message: string; issues: string[] } | null>(null);
+  const [sendRefusal, setSendRefusal] = useState<{
+    applicationId: string;
+    message: string;
+    issues: string[];
+    postingDistinctionRisk: PostingDistinctionRisk | null;
+    tone: "refusal" | "resolved";
+  } | null>(null);
   const [restartingId, setRestartingId] = useState<string | null>(null);
   /* A stale metadata screen needs a new employer-form read, but it must not silently carry edits
      the applicant has not saved. The ref closes the same-tick double-click gap; the id keeps the
@@ -774,10 +1125,74 @@ function Applications() {
   const metadataRefreshRef = useRef<string | null>(null);
   const [metadataRefreshId, setMetadataRefreshId] = useState<string | null>(null);
   const [metadataRefreshError, setMetadataRefreshError] = useState<{ applicationId: string; message: string } | null>(null);
-  const refuseSend = useCallback((applicationId: string, message: string, issues: string[] = []) => {
+  const refuseSend = useCallback((
+    applicationId: string,
+    message: string,
+    issues: string[] = [],
+    responseData: unknown = null,
+  ) => {
     // One live region at a time, the rule refuseInComposer already sets on this screen.
     setError(null);
-    setSendRefusal({ applicationId, message, issues });
+    setSendRefusal({
+      applicationId,
+      message,
+      issues,
+      postingDistinctionRisk: postingDistinctionRiskFromUnknown(responseData),
+      tone: "refusal",
+    });
+  }, []);
+  const markPostingDistinctionCleared = useCallback((
+    applicationId: string,
+    resolvedRisk: PostingDistinctionRisk,
+  ) => {
+    setSendRefusal((current) => current?.applicationId === applicationId
+      && postingDistinctionRisksEqual(current.postingDistinctionRisk, resolvedRisk)
+      ? {
+        ...current,
+        message: "The exact posting difference is saved. Nothing was sent. Review this application, then press Send application again when you are ready.",
+        issues: [],
+        postingDistinctionRisk: null,
+        tone: "resolved",
+      }
+      : current);
+  }, []);
+  const replacePostingDistinctionRisk = useCallback((
+    applicationId: string,
+    previousRisk: PostingDistinctionRisk,
+    nextRisk: PostingDistinctionRisk,
+  ) => {
+    setSendRefusal((current) => current?.applicationId === applicationId
+      && postingDistinctionRisksEqual(current.postingDistinctionRisk, previousRisk)
+      ? { ...current, postingDistinctionRisk: nextRisk }
+      : current);
+  }, []);
+  const markFillPostingDistinctionCleared = useCallback((
+    surface: FillPostingDistinctionState["surface"],
+    applicationId: string,
+    resolvedRisk: PostingDistinctionRisk,
+  ) => {
+    setFillPostingDistinction((current) => current?.surface === surface
+      && current.applicationId === applicationId
+      && postingDistinctionRisksEqual(current.risk, resolvedRisk)
+      ? {
+        ...current,
+        risk: null,
+        message: "The exact posting difference is saved. Nothing was sent. Review this application, then press Fill application again when you are ready.",
+        tone: "resolved",
+      }
+      : current);
+  }, []);
+  const replaceFillPostingDistinctionRisk = useCallback((
+    surface: FillPostingDistinctionState["surface"],
+    applicationId: string,
+    previousRisk: PostingDistinctionRisk,
+    nextRisk: PostingDistinctionRisk,
+  ) => {
+    setFillPostingDistinction((current) => current?.surface === surface
+      && current.applicationId === applicationId
+      && postingDistinctionRisksEqual(current.risk, previousRisk)
+      ? { ...current, risk: nextRisk }
+      : current);
   }, []);
   const [pendingJob, setPendingJob] = useState<MonitoredJob | null>(null);
   const resolvedJobParam = useRef<string | null>(null);
@@ -810,6 +1225,62 @@ function Applications() {
       return review === next.review ? next : { ...next, review };
     });
   }, []);
+
+  /**
+   * A retry-sensitive mutation that fails still returns the server's immutable attempt fold when
+   * it can. Publish that fold synchronously before any recovery await or busy-state release. A
+   * missing, malformed, or non-API answer becomes explicit unknown, which keeps every replay and
+   * outcome control closed until a causally fresh submission read proves otherwise.
+   */
+  function installSubmissionRetrySafetyFromFailure(applicationId: string, reason: unknown): void {
+    const retrySafety = retrySafetyFromApiFailure(reason);
+    submissionMutationGenerationRef.current += 1;
+    const remembered = submissionSnapshotsRef.current.get(applicationId);
+    const visible = submissionRef.current?.application_id === applicationId ? submissionRef.current : null;
+    const packet = packets?.find((candidate) => candidate.id === applicationId);
+    const seeded = packet?.spec._review
+      ? {
+        application_id: applicationId,
+        review: reviewWithLists(packet.spec._review),
+        retry_safety: retrySafety,
+        cover_letter: packet.spec._cover_letter ?? null,
+        documents: documentsFromSpecMarks(packet.spec._documents),
+      } satisfies SubmissionResponse
+      : null;
+    const current = remembered && visible
+      ? nextSubmissionState(remembered, visible)
+      : remembered ?? visible ?? seeded;
+    if (!current) return;
+    const next: SubmissionResponse = { ...current, retry_safety: retrySafety };
+    submissionSnapshotsRef.current.set(applicationId, next);
+    advanceSubmissionPublicationGeneration(submissionPublicationGenerationsRef.current, applicationId);
+    if (submissionRef.current?.application_id !== applicationId) return;
+    submissionRef.current = next;
+    setSubmission(next);
+  }
+
+  function installCanonicalRetrySafetyFromFailure(
+    applicationId: string,
+    reason: unknown,
+    fallback?: CanonicalApplication | null,
+  ): void {
+    const retrySafety = retrySafetyFromApiFailure(reason);
+    setCanonicalSelected((current) => current?.id === applicationId
+      ? { ...current, retry_safety: retrySafety }
+      : current);
+    setPackets((current) => {
+      if (!current) return current;
+      const stored = canonicalApplicationFromPacket(current.find((packet) => packet.id === applicationId));
+      const application = stored ?? (fallback?.id === applicationId ? fallback : null);
+      return application
+        ? upsertCanonicalApplicationHistory(current, { ...application, retry_safety: retrySafety })
+        : current;
+    });
+    if (submissionSnapshotsRef.current.has(applicationId)
+      || submissionRef.current?.application_id === applicationId) {
+      installSubmissionRetrySafetyFromFailure(applicationId, reason);
+    }
+  }
   const [coverLetterBody, setCoverLetterBody] = useState("");
   const packetCoverLetterEditorRevisionRef = useRef(0);
   const editPacketCoverLetterBody = useCallback((body: string) => {
@@ -862,6 +1333,7 @@ function Applications() {
   const committedApplicationRequestKeyRef = useRef(applicationRequestKey);
   const pendingApplicationFocusRef = useRef(false);
   const pendingApplicationLandingFocusRef = useRef<{ rowId: string | null } | null>(null);
+  const submissionOrphanRiskRefreshGenerationRef = useRef(0);
   const applicationTaskHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const [openingApplicationId, setOpeningApplicationId] = useState<string | null>(null);
   const [switcherOpen, setSwitcherOpen] = useState(false);
@@ -873,6 +1345,76 @@ function Applications() {
       applicationsMountedRef.current = false;
     };
   }, []);
+
+  const refreshSubmissionOrphanRisks = useCallback(async () => {
+    const requestGeneration = ++submissionOrphanRiskRefreshGenerationRef.current;
+    const query = new URLSearchParams(window.location.search);
+    if (window.location.hostname === "localhost" && query.has("qa")) {
+      if (requestGeneration !== submissionOrphanRiskRefreshGenerationRef.current) return;
+      setSubmissionOrphanRisks([]);
+      setSubmissionOrphanRiskError(null);
+      return;
+    }
+    try {
+      /* Every refresh is unshared. A focus read that starts after a resolution must not attach to a
+         pre-mutation GET that is still in flight and then become the latest generation. */
+      const result = await getSubmissionOrphanRisks({ cache: "no-store" });
+      const risks = submissionOrphanRisksFromUnknown(result);
+      if (!risks) throw new Error("Submission-risk history was incomplete.");
+      if (!applicationsMountedRef.current
+        || requestGeneration !== submissionOrphanRiskRefreshGenerationRef.current) return;
+      setSubmissionOrphanRisks(risks);
+      setSubmissionOrphanRiskError(null);
+    } catch (reason) {
+      if (applicationsMountedRef.current
+        && requestGeneration === submissionOrphanRiskRefreshGenerationRef.current) {
+        setSubmissionOrphanRiskError(userFacingError(
+          reason,
+          "Litos could not load the earlier extension submission checks. Sending remains blocked until they load.",
+        ));
+      }
+      throw reason;
+    }
+  }, []);
+
+  useEffect(() => {
+    const refresh = () => void refreshSubmissionOrphanRisks().catch(() => undefined);
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    refresh();
+    window.addEventListener("focus", refresh);
+    window.addEventListener(SUBMISSION_ORPHAN_RISK_REFRESH_EVENT, refresh);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener(SUBMISSION_ORPHAN_RISK_REFRESH_EVENT, refresh);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, [refreshSubmissionOrphanRisks]);
+
+  const submitOrphanRiskResolution = useCallback(async (
+    attemptId: string,
+    request: SubmissionOrphanResolutionRequest,
+  ) => {
+    if (submissionOrphanRiskBusy !== null) return;
+    setSubmissionOrphanRiskBusy(attemptId);
+    setSubmissionOrphanRiskError(null);
+    try {
+      const result = await resolveSubmissionOrphanRisk(attemptId, request);
+      if (!submissionOrphanResolutionMatches(attemptId, request.found, result)) {
+        throw new Error("The submission-risk response belonged to a different attempt.");
+      }
+      await refreshSubmissionOrphanRisks();
+    } catch (reason) {
+      setSubmissionOrphanRiskError(userFacingError(
+        reason,
+        "Litos could not save that check. The duplicate lock is still in place.",
+      ));
+    } finally {
+      setSubmissionOrphanRiskBusy((current) => current === attemptId ? null : current);
+    }
+  }, [refreshSubmissionOrphanRisks, submissionOrphanRiskBusy]);
 
   function beginCanonicalRequest(applicationId: string, channel: CanonicalRequestScope["channel"]): CanonicalRequestScope {
     const generationRef = channel === "cover-letter"
@@ -950,9 +1492,12 @@ function Applications() {
     submissionRef.current = submission;
     if (!submission || submission.partial) return;
     const remembered = submissionSnapshotsRef.current.get(submission.application_id);
-    submissionSnapshotsRef.current.set(
+    const next = nextSubmissionState(remembered, submission);
+    if (next === remembered) return;
+    submissionSnapshotsRef.current.set(submission.application_id, next);
+    advanceSubmissionPublicationGeneration(
+      submissionPublicationGenerationsRef.current,
       submission.application_id,
-      nextSubmissionState(remembered, submission),
     );
   }, [submission]);
 
@@ -1074,6 +1619,9 @@ function Applications() {
   }, []);
 
   const selectPacket = useCallback((incoming: GeneratedResume) => {
+    // Every selection action invalidates delayed fill responses, including A -> B -> A. Comparing
+    // only the eventual id cannot distinguish that round trip from the original request context.
+    fillContextGenerationRef.current += 1;
     /* A READY envelope is the named exception to the refusal below, not a hole in it.
      *
      * The guard's own comment says "an explicit packet action first restores the linked packet's
@@ -1114,6 +1662,7 @@ function Applications() {
         setError(null);
         setPollError(null);
         setSendRefusal(null);
+        setFillPostingDistinction(null);
         setNotice(null);
       });
       return;
@@ -1160,15 +1709,26 @@ function Applications() {
          an empty object would claim the application had been measured and could block a send on
          an ask this seed cannot confirm. */
       setSubmission(rememberedSubmission ?? (status
-        ? { application_id: packet.id, review: selectedReview!, cover_letter: packet.spec._cover_letter ?? null, documents: documentsFromSpecMarks(packet.spec._documents), partial: true }
+        ? {
+          application_id: packet.id,
+          review: selectedReview!,
+          /* A board row contains no immutable attempt fold. Production stays unknown and therefore
+             fail-closed until the submission GET lands. QA packets are controlled fixtures with no
+             durable attempt history, so their explicit no-evidence verdict keeps those demos live. */
+          retry_safety: qaMode === true ? { kind: "no_evidence" } : null,
+          cover_letter: packet.spec._cover_letter ?? null,
+          documents: documentsFromSpecMarks(packet.spec._documents),
+          partial: true,
+        }
         : null));
       setError(null);
       setPollError(null);
       setSendRefusal(null);
+      setFillPostingDistinction(null);
       setNotice(null);
       moveToScreen(historicalPacketAuditStale || status === "ready_for_final_approval" ? "review" : screenForStatus(status, "review"));
     });
-  }, [commitCanonicalSelection, moveToScreen]);
+  }, [commitCanonicalSelection, moveToScreen, qaMode]);
 
   /* User navigation writes local state and route state as one action. The local write makes the
      switch feel immediate; the URL makes reload, sharing, and browser history reopen the same
@@ -1206,6 +1766,7 @@ function Applications() {
   }, [selectPacket]);
 
   const resetApplicationWorkflow = useCallback((options: { afterReset?: () => void; animate?: boolean } = {}) => {
+    fillContextGenerationRef.current += 1;
     pendingApplicationFocusRef.current = false;
     locallyRevisitingIdRef.current = null;
     selectedIdRef.current = null;
@@ -1228,6 +1789,7 @@ function Applications() {
       setQuestions([]);
       setSubmission(null);
       setSendRefusal(null);
+      setFillPostingDistinction(null);
       setNotice(null);
       options.afterReset?.();
     };
@@ -1392,7 +1954,11 @@ function Applications() {
        accepted write. */
     if (submissionMutationGenerationRef.current !== requestedMutationGeneration) return;
     const rememberedBeforeRead = submissionSnapshotsRef.current.get(requestedId);
-    const rememberedAfterRead = nextSubmissionState(rememberedBeforeRead, result);
+    const rememberedAfterRead = nextSubmissionState(
+      rememberedBeforeRead,
+      result,
+      { authoritativeRetrySafety: true },
+    );
     if (rememberedAfterRead !== rememberedBeforeRead) {
       submissionSnapshotsRef.current.set(requestedId, rememberedAfterRead);
       advanceSubmissionPublicationGeneration(submissionPublicationGenerationsRef.current, requestedId);
@@ -1476,10 +2042,15 @@ function Applications() {
       || submissionSnapshotIsOlder(submissionRef.current, result)
     ) return;
     const rememberedBeforePoll = submissionSnapshotsRef.current.get(requestedId);
-    result = nextSubmissionState(rememberedBeforePoll, result);
+    result = nextSubmissionState(rememberedBeforePoll, result, { authoritativeRetrySafety: true });
     submissionSnapshotsRef.current.set(requestedId, result);
     const submissionBeforePoll = submissionRef.current;
-    result = publishSubmissionEnvelope(submissionRef, result, "poll");
+    result = publishSubmissionEnvelope(
+      submissionRef,
+      result,
+      "poll",
+      { authoritativeRetrySafety: true },
+    );
     if (result !== submissionBeforePoll) {
       advanceSubmissionPublicationGeneration(submissionPublicationGenerationsRef.current, requestedId);
     }
@@ -1490,7 +2061,7 @@ function Applications() {
     }
     /* NOT a bare `review.updated_at` comparison: that versions the review alone, and this response
        also carries cover_letter, handoff_url and configured. See submission-state.ts. */
-    setSubmission((current) => nextSubmissionState(current, result));
+    setSubmission((current) => nextSubmissionState(current, result, { authoritativeRetrySafety: true }));
     /* A response is authoritative while the poll still owns portal/submitting, including deletion.
        The request may have started there and resolved after the applicant reached Questions, so
        check the synchronous route at the state-write boundary. Keeping the current array on any
@@ -1541,6 +2112,23 @@ function Applications() {
     moveToScreen(screenForStatus(result.review.status, "submitting"));
   }, [captureCompletedSubmission, moveToScreen, qaMode, revalidateAcknowledgedEvidence, selectedId]);
 
+  /* A board row seeds only a partial envelope. Hydrate it on every screen, including review, so a
+     reload can recover an existing URL-free boundary tuple without reopening or reauthorizing an
+     employer page. The selection revision makes revisiting the same application a fresh attempt,
+     while the set prevents Strict Mode or a rerender from overlapping the same passive GET. */
+  useEffect(() => {
+    if (!selectedId || qaMode || submission?.application_id !== selectedId || submission.partial !== true) return;
+    const hydrationKey = `${selectedId}:${editorRevisionRef.current}`;
+    if (partialSubmissionHydrationAttemptsRef.current.has(hydrationKey)) return;
+    partialSubmissionHydrationAttemptsRef.current.add(hydrationKey);
+    void refreshSubmission().catch((reason) => {
+      if (selectedIdRef.current !== selectedId) return;
+      setError(reason instanceof Error
+        ? reason.message
+        : "Litos could not recover the saved application state. Reload before continuing.");
+    });
+  }, [qaMode, refreshSubmission, selectedId, submission?.application_id, submission?.partial]);
+
   /* The applicant's own escape hatch when the cover letter has not arrived. The 2.5s poll already
      asks for it, so this exists for the case the poll cannot recover from on its own: a hung or
      failed fetch. It reports failure instead of swallowing it, which is the whole point. */
@@ -1559,9 +2147,26 @@ function Applications() {
   /* `packets` and `submission` hold two copies of the same cover letter, and generate/save/delete
      wrote only the first. So writing a cover letter on the review screen left the portal screen
      still blocked on the letter that had just been written. Every writer goes through here. */
+  const commitSubmissionSidecarMutation = useCallback((
+    applicationId: string,
+    update: (current: SubmissionResponse) => SubmissionResponse,
+  ) => {
+    const current = submissionSnapshotsRef.current.get(applicationId)
+      ?? (submissionRef.current?.application_id === applicationId ? submissionRef.current : null);
+    if (!current) return;
+    const next = update(current);
+    submissionMutationGenerationRef.current += 1;
+    submissionSnapshotsRef.current.set(applicationId, next);
+    advanceSubmissionPublicationGeneration(submissionPublicationGenerationsRef.current, applicationId);
+    if (submissionRef.current?.application_id === applicationId) {
+      submissionRef.current = next;
+      setSubmission(next);
+    }
+  }, [setSubmission]);
+
   const applyCoverLetterToSubmission = useCallback((applicationId: string, coverLetter: CoverLetter | null) => {
-    setSubmission((current) => current && current.application_id === applicationId ? { ...current, cover_letter: coverLetter } : current);
-  }, []);
+    commitSubmissionSidecarMutation(applicationId, (current) => ({ ...current, cover_letter: coverLetter }));
+  }, [commitSubmissionSidecarMutation]);
 
   /* The same problem the cover letter has, for documents: `packets` and `submission` each hold a
      copy of what an application carries, and the send gate reads the second one. Written here rather
@@ -1572,8 +2177,7 @@ function Applications() {
      `documents` is set to a real object even when the attachment is cleared, so an application that
      has been measured never falls back to the never-measured state and silently loses its gate. */
   const applyDocumentToSubmission = useCallback((applicationId: string, kind: string, attachment: AttachedDocument | null) => {
-    setSubmission((current) => {
-      if (!current || current.application_id !== applicationId) return current;
+    commitSubmissionSidecarMutation(applicationId, (current) => {
       const documents = { ...(current.documents ?? {}) };
       if (attachment) documents[kind] = attachment;
       else delete documents[kind];
@@ -1597,7 +2201,7 @@ function Applications() {
       } else delete marks[kind];
       return { ...packet, spec: { ...packet.spec, _documents: marks } };
     }) ?? current);
-  }, []);
+  }, [commitSubmissionSidecarMutation]);
 
   useEffect(() => {
     if (!selectedId || qaMode || !["submitting", "portal"].includes(screen)) return;
@@ -1821,10 +2425,10 @@ function Applications() {
     if (params.get("new") !== "1") return;
     const restored = params.get("checkout_action") === "tailor" ? readCheckoutDraft() : null;
     queueMicrotask(() => {
-      if (restored) setNewApplication(restored);
+      if (restored) replaceNewApplicationDraft(restored);
       setShowNewApplication(true);
     });
-  }, []);
+  }, [replaceNewApplicationDraft]);
 
   /* `?job=` NAMES A POSTING, and this is where a link that means something else gets sorted out.
    *
@@ -1895,7 +2499,7 @@ function Applications() {
           jobId: pendingJob.id,
           canonicalApplicationId: null,
         };
-        setNewApplication(draft);
+        replaceNewApplicationDraft(draft);
         setShowNewApplication(true);
         if (checkoutAction === "tailor") {
           setNotice("Your job is ready. Choose Tailor resume when you want Litos to start.");
@@ -1920,7 +2524,7 @@ function Applications() {
     // createApplication is redeclared every render and is not a dependency worth chasing: the
     // effect is keyed on pendingJob, which is cleared above, so it runs once per arrival.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openApplication, packets, pendingJob]);
+  }, [openApplication, packets, pendingJob, replaceNewApplicationDraft]);
 
   /* Fail closed during query-only navigation. The router can publish application=B while the
      history request for B is still resolving and selectedId still names A. No actionable control
@@ -2299,6 +2903,7 @@ function Applications() {
         captureCompletedSubmission(result, "autopilot");
         setPackets((current) => current?.map((item) => (item.id === id ? { ...item, spec: { ...item.spec, _review: result.review } } : item)) ?? current);
       } catch (reason) {
+        installSubmissionRetrySafetyFromFailure(id, reason);
         /* PARK THE ROW BEFORE THE BANNER, or the loop stops here.
          *
          * A packet audit refusal is not transient and the autopilot cannot clear it: the recovery is
@@ -2461,6 +3066,12 @@ function Applications() {
       .flatMap((clause) => clause.highlight_terms)
       .filter((term) => term.tone === "edited").length
     : !activePacketEvidence ? editedTerms.size : 0;
+  const selectedRetrySafety = selectedSubmission && selectedSubmission.application_id === selected?.id
+    ? selectedSubmission.retry_safety
+    : null;
+  const retrySafetyBlocker = retrySafetyBlockerMessage(selectedRetrySafety);
+  const reviewAttemptSafetyBlocked = review?.status !== "ready_for_final_approval"
+    && retrySafetyBlocker !== null;
   /* THE KEY IS A PROMISE ABOUT MARKS THAT ARE ON THE PAGE, so it may not outlive them. It used to
      render unconditionally, which meant that in exact-packet mode - where the job description paints
      only the audit's validated highlight terms and the resume pane is a rasterised PDF that cannot
@@ -2506,6 +3117,7 @@ function Applications() {
   const reviewPrimaryBusy = saving || coverLetterBusy || packetAuditBusy;
   const reviewPrimaryDisabled = reviewPrimaryBusy
     || !review?.jd_text.trim()
+    || reviewAttemptSafetyBlocked
     || Boolean(activePacketEvidence && !packetEvidenceReady && !packetEvidenceNeedsFreshAudit);
   const reviewPrimaryLabel = !activePacketEvidence
     ? review?.status === "ready_for_final_approval"
@@ -2543,11 +3155,18 @@ function Applications() {
   function applyDraftEdit(next: NewApplicationDraft) {
     // The refusal described the form as it was. Typing is the student answering it.
     setComposerRefusal(null);
+    const identityChanged = next.company !== newApplication.company
+      || next.role !== newApplication.role
+      || next.portalUrl !== newApplication.portalUrl;
+    if (identityChanged) {
+      fillContextGenerationRef.current += 1;
+      setFillPostingDistinction((current) => current?.surface === "composer" ? null : current);
+    }
     setNewApplication((current) => {
-      const identityChanged = next.company !== current.company
+      const currentIdentityChanged = next.company !== current.company
         || next.role !== current.role
         || next.portalUrl !== current.portalUrl;
-      return identityChanged ? { ...next, jobId: null, canonicalApplicationId: null } : next;
+      return currentIdentityChanged ? { ...next, jobId: null, canonicalApplicationId: null } : next;
     });
   }
 
@@ -2622,7 +3241,7 @@ function Applications() {
       await createApplication({ ...draft, jobDescription }, upgradeTrigger, requestScope);
     } catch (reason) {
       if (!canonicalRequestMayPublish(requestScope)) return;
-      setNewApplication(draft);
+      replaceNewApplicationDraft(draft);
       setShowNewApplication(true);
       commitCanonicalSelection(null);
       refuseInComposer(
@@ -2724,13 +3343,31 @@ function Applications() {
       reportFailure("Enter a complete job URL beginning with https://.", ["portalUrl"]);
       return;
     }
+    const requestGeneration = ++fillRequestGenerationRef.current;
+    const contextGeneration = fillContextGenerationRef.current;
+    const requestedPacketId = errorSurface === "submission" ? selectedIdRef.current : null;
+    const requestedCanonicalApplicationId = errorSurface === "tracker"
+      ? draft.canonicalApplicationId
+      : null;
+    const requestMayPublish = () => requestGeneration === fillRequestGenerationRef.current
+      && contextGeneration === fillContextGenerationRef.current
+      && (errorSurface !== "submission"
+        || (requestedPacketId !== null && selectedIdRef.current === requestedPacketId))
+      && (errorSurface !== "tracker"
+        || (requestedCanonicalApplicationId !== null
+          && canonicalSelectedIdRef.current === requestedCanonicalApplicationId));
     setComposerRefusal(null);
     setCanonicalFillError(null);
     setSubmissionFillError(null);
+    setFillPostingDistinction((current) => current?.surface === errorSurface ? null : current);
     setCreating("fill");
     setError(null);
     setNotice(null);
     let companyTab: Window | null = null;
+    let retrySensitiveApplication: CanonicalApplication | null = draft.canonicalApplicationId === canonicalSelected?.id
+      ? canonicalSelected
+      : null;
+    let retrySensitiveMutationStarted = false;
     try {
       if (qaMode) {
         setFillReceipt({
@@ -2764,7 +3401,14 @@ function Applications() {
           return;
         }
 
-        const extension = await ensureCurrentExtensionSession({ token: getToken(), guest: isGuestSession() });
+        const extension = await ensureCurrentExtensionSession(
+          { token: getToken(), guest: isGuestSession() },
+          minimumAttendedHandoffExtensionVersion(undefined),
+        );
+        if (!requestMayPublish()) {
+          companyTab.close();
+          return;
+        }
         if (!extension.installed || !extension.signedIn || extension.otherAccount || extension.updateRequired) {
           throw new Error(extension.updateRequired
             ? "Update the Litos extension from the Chrome Web Store, then try again."
@@ -2783,11 +3427,22 @@ function Applications() {
             source_surface: "dashboard",
           }),
         });
+        if (!requestMayPublish()) {
+          companyTab.close();
+          return;
+        }
+        retrySensitiveApplication = created.application;
         setPackets((current) => current
           ? upsertCanonicalApplicationHistory(current, created.application)
           : current);
+        retrySensitiveMutationStarted = true;
         const filled = await api<ApplicationFillResponse>(`/applications/${encodeURIComponent(created.application.id)}/fill`, { method: "POST" });
+        if (!requestMayPublish()) {
+          companyTab.close();
+          return;
+        }
         const trackedApplication = filled.application ?? created.application;
+        retrySensitiveApplication = trackedApplication;
         setPackets((current) => current
           ? upsertCanonicalApplicationHistory(current, trackedApplication)
           : current);
@@ -2810,6 +3465,10 @@ function Applications() {
           applicationId: handoff.application_id,
           portalUrl: handoff.portal_url,
         });
+        if (!requestMayPublish()) {
+          companyTab.close();
+          return;
+        }
         if (companyTab.closed) throw new Error("The company tab closed before Litos could open the form. Try again.");
         companyTab.location.replace(handoff.portal_url);
         setFillReceipt({ ...filled, company, role, portalUrl: handoff.portal_url });
@@ -2819,16 +3478,89 @@ function Applications() {
         });
       }
       if (errorSurface === "composer") {
-        setNewApplication(EMPTY_APPLICATION_DRAFT);
+        replaceNewApplicationDraft(EMPTY_APPLICATION_DRAFT);
         forgetCheckoutDraft();
         setShowNewApplication(false);
         replaceClosedComposerUrl(window.location, (data, unused, url) => window.history.replaceState(data, unused, url));
       }
     } catch (reason) {
+      if (retrySensitiveMutationStarted && retrySensitiveApplication) {
+        installCanonicalRetrySafetyFromFailure(retrySensitiveApplication.id, reason, retrySensitiveApplication);
+      }
+      if (!requestMayPublish()) {
+        companyTab?.close();
+        return;
+      }
+      const postingDistinctionRisk = reason instanceof ApiError
+        ? postingDistinctionRiskFromUnknown(reason.data)
+        : null;
+      if (postingDistinctionRisk
+        && retrySensitiveApplication
+        && postingDistinctionRisk.candidate_application_id === retrySensitiveApplication.id
+        && (errorSurface !== "submission"
+          || postingDistinctionRisk.candidate_packet_id === requestedPacketId)) {
+        setFillPostingDistinction({
+          surface: errorSurface,
+          applicationId: retrySensitiveApplication.id,
+          requestedPacketId,
+          requestGeneration,
+          contextGeneration,
+          risk: postingDistinctionRisk,
+          message: reason instanceof Error ? reason.message : "Litos could not identify the earlier posting safely.",
+          tone: "refusal",
+        });
+      }
       companyTab?.close();
       reportFailure(reason instanceof Error ? reason.message : "Litos could not prepare this form. Your job details are still here.");
     } finally {
-      setCreating(null);
+      if (requestGeneration === fillRequestGenerationRef.current) setCreating(null);
+    }
+  }
+
+  async function resolveCanonicalManualSubmission(found: boolean) {
+    const current = canonicalSelected;
+    const safety = current?.retry_safety;
+    if (!current || safety?.kind !== "blocked_unverified" || !UUID_PATTERN.test(safety.attemptId)) {
+      setCanonicalFillError("This unresolved submission attempt is not available. Reload before answering.");
+      return;
+    }
+    if (!found && submissionRetrySafetyBlocksNegativeResolution(safety)) {
+      setCanonicalFillError("This exact attempt crossed the employer boundary, so it cannot be recorded as not sent. Confirm it only if you found evidence that it was submitted.");
+      return;
+    }
+    const requestedApplicationId = current.id;
+    const requestedAttemptId = safety.attemptId;
+    setCanonicalResolutionBusy(true);
+    setCanonicalFillError(null);
+    try {
+      const result = await api<CanonicalManualResolutionResponse>(
+        `/applications/${encodeURIComponent(requestedApplicationId)}/manual-submission-resolution`,
+        {
+          method: "POST",
+          body: JSON.stringify({ attempt_id: requestedAttemptId, found }),
+        },
+      );
+      if (!canonicalManualResolutionMatches(
+        requestedApplicationId,
+        requestedAttemptId,
+        found,
+        result,
+      )) {
+        throw new Error("The server did not bind that answer to the exact submission attempt. Reload before continuing.");
+      }
+      const updatedApplication: CanonicalApplication = {
+        ...result.application,
+        retry_safety: result.retry_safety,
+      };
+      setPackets((existing) => existing
+        ? upsertCanonicalApplicationHistory(existing, updatedApplication)
+        : existing);
+      setCanonicalSelected((selected) => selected?.id === requestedApplicationId ? updatedApplication : selected);
+    } catch (reason) {
+      installCanonicalRetrySafetyFromFailure(requestedApplicationId, reason, current);
+      setCanonicalFillError(reason instanceof Error ? reason.message : "We could not record what you found.");
+    } finally {
+      setCanonicalResolutionBusy(false);
     }
   }
 
@@ -2995,7 +3727,7 @@ function Applications() {
         } else {
           openApplication(created, { history: "replace" });
         }
-        setNewApplication(EMPTY_APPLICATION_DRAFT);
+        replaceNewApplicationDraft(EMPTY_APPLICATION_DRAFT);
         forgetCheckoutDraft();
         setShowNewApplication(false);
         track("application_generation_completed", { source: draft.jobId ? "monitored_job" : "manual" });
@@ -3032,7 +3764,7 @@ function Applications() {
       if (!fallbackCreated?.spec._review) throw new Error("Your resume was made, but we could not open it. Reload the page.");
       completeOperationId(resumeOperationIds.current, operationKey);
       openApplication(fallbackCreated, { history: "replace" });
-      setNewApplication(EMPTY_APPLICATION_DRAFT);
+      replaceNewApplicationDraft(EMPTY_APPLICATION_DRAFT);
       forgetCheckoutDraft();
       setShowNewApplication(false);
       track("application_generation_completed", { source: draft.jobId ? "monitored_job" : "manual" });
@@ -3594,6 +4326,28 @@ function Applications() {
     if (!selected) return;
     const applicationId = selected.id;
     if (!options.allowServerAnswerRefresh && routeMissingRequiredAnswers(finalQuestions)) return;
+    const currentSubmission = submissionRef.current?.application_id === applicationId
+      ? submissionRef.current
+      : submission?.application_id === applicationId
+        ? submission
+        : null;
+    const retryBlocker = retrySafetyBlockerMessage(currentSubmission?.retry_safety);
+    if (retryBlocker) {
+      /* This is the shared write boundary for every NEW attempt: first fill, Try again,
+         expired-session restart, metadata refresh, and the review screen after a stopped run. The
+         mutable review's unverified_submission resolution can choose the explanatory card, but it
+         can never grant permission to reach submit-request. Only the server's immutable fold does
+         that. */
+      if (options.failureScreen === "questions") {
+        setError(null);
+        setMetadataRefreshError({ applicationId, message: retryBlocker });
+        moveToScreen("questions");
+      } else {
+        refuseSend(applicationId, retryBlocker);
+        moveToScreen(options.failureScreen ?? "portal");
+      }
+      return;
+    }
     setPrepareStartedAt(new Date().toISOString());
     setSubmittingPhase("preparing");
     moveToScreen("submitting");
@@ -3638,18 +4392,27 @@ function Applications() {
       } else {
         await new Promise((resolve) => setTimeout(resolve, 650));
         const now = new Date().toISOString();
-        setSubmission({ application_id: selected.id, review: { ...review!, status: "submitted", submission_authorized_at: now, submitted_at: now, filled_fields: ["name", "email", "resume", "cover letter"], receipt: { confirmation_text: "Thank you. Your controlled test application was received.", final_url: "/qa/portal-submission/success", screenshot_url: "/qa/portal-receipt.svg", captured_at: now, reference_id: "LITOS-QA-2027" } } });
+        setSubmission({
+          application_id: selected.id,
+          retry_safety: { kind: "blocked_confirmed", attemptId: "qa-controlled-submit", confirmedAt: now },
+          review: { ...review!, status: "submitted", submission_authorized_at: now, submitted_at: now, filled_fields: ["name", "email", "resume", "cover letter"], receipt: { confirmation_text: "Thank you. Your controlled test application was received.", final_url: "/qa/portal-submission/success", screenshot_url: "/qa/portal-receipt.svg", captured_at: now, reference_id: "LITOS-QA-2027" } },
+        });
         moveToScreen("submitted");
         return;
       }
     } catch (reason) {
+      installSubmissionRetrySafetyFromFailure(applicationId, reason);
       if (await recoverPacketAuditReview(applicationId, reason)) return;
       /* A restart is pressed FROM the portal screen and is about the packet on it, so its refusal
          goes back there and lands beside the control, not on the review screen behind a banner. */
-      moveToScreen(options.failureScreen ?? (options.restart ? "portal" : "review"));
       const message = reason instanceof Error ? reason.message : "We could not open the company's application page.";
       const issues = reason instanceof ApiError ? reason.issues : [];
-      if (options.restart) refuseSend(applicationId, message, issues);
+      const responseData = reason instanceof ApiError ? reason.data : null;
+      const distinctionRisk = postingDistinctionRiskFromUnknown(responseData);
+      moveToScreen(distinctionRisk
+        ? "portal"
+        : options.failureScreen ?? (options.restart ? "portal" : "review"));
+      if (distinctionRisk || options.restart) refuseSend(applicationId, message, issues, responseData);
       else if (options.failureScreen === "questions") {
         setError(null);
         setMetadataRefreshError({ applicationId, message });
@@ -3661,12 +4424,32 @@ function Applications() {
     if (!selected || !submission) return;
     if (submission.application_id !== selected.id) return;
     const requestedId = selected.id;
+    const activeSubmission = submissionRef.current?.application_id === selected.id
+      ? submissionRef.current
+      : submission;
+    if (outcome === "cleared" && submissionRetrySafetyBlocksNegativeResolution(activeSubmission.retry_safety)) {
+      setError("This exact attempt crossed the employer boundary, so it cannot be cleared as not sent. Confirm it only if you found evidence that it was submitted.");
+      return;
+    }
+    const attemptId = activeAttendedManualAttemptId(activeSubmission);
+    if (!qaMode && !attemptId) {
+      setError("This employer handoff is not tied to the active reserved attempt. Reload before continuing.");
+      return;
+    }
+    const requestedAttemptId = attemptId ?? "qa-attended-handoff";
+    const outcomeToken = beginAttendedOutcome(requestedId);
+    if (!outcomeToken) return;
     setError(null);
     try {
       const result = qaMode
         ? outcome === "submitted"
           ? {
             ...submission,
+            retry_safety: {
+              kind: "blocked_confirmed" as const,
+              attemptId: requestedAttemptId,
+              confirmedAt: new Date().toISOString(),
+            },
             review: {
               ...submission.review,
               status: "submitted" as const,
@@ -3680,16 +4463,42 @@ function Applications() {
               },
             },
           }
-          : { ...submission, review: { ...submission.review, status: "ready_for_final_approval" as const, attention_reason: undefined } }
+          : {
+            ...submission,
+            retry_safety: {
+              kind: "safe_not_sent" as const,
+              attemptId: requestedAttemptId,
+              proofKind: "applicant_checked_not_sent" as const,
+              resolvedAt: new Date().toISOString(),
+            },
+            review: {
+              ...submission.review,
+              status: "ready_for_final_approval" as const,
+              attention_reason: undefined,
+              submission_claim_id: undefined,
+            },
+          }
         : await api<SubmissionResponse>(`/applications/${requestedId}/submission/handoff-complete`, {
           method: "POST",
-          body: JSON.stringify({ outcome }),
+          body: JSON.stringify({ outcome, attempt_id: requestedAttemptId }),
         });
+      if (!attendedHandoffOutcomeResponseMatches(
+        result,
+        requestedId,
+        requestedAttemptId,
+        outcome,
+      )) {
+        throw new Error("Litos could not verify the exact outcome of this employer attempt. Reload before continuing.");
+      }
+      const exactResult: SubmissionResponse = { ...result, review: reviewWithLists(result.review) };
+      submissionMutationGenerationRef.current += 1;
+      submissionSnapshotsRef.current.set(requestedId, exactResult);
+      advanceSubmissionPublicationGeneration(submissionPublicationGenerationsRef.current, requestedId);
       if (selectedIdRef.current !== requestedId) {
-        setPackets((current) => current?.map((packet) => packet.id === requestedId ? packetWithDirectSubmission(packet, result) : packet) ?? current);
+        setPackets((current) => current?.map((packet) => packet.id === requestedId ? packetWithDirectSubmission(packet, exactResult) : packet) ?? current);
         return;
       }
-      const published = publishSubmissionEnvelope(submissionRef, result, "direct");
+      const published = publishSubmissionEnvelope(submissionRef, exactResult, "direct");
       const nextEvidence = reconcilePacketEvidenceWithSubmission(
         packetEvidenceRef.current,
         requestedId,
@@ -3703,9 +4512,210 @@ function Applications() {
       setSubmission(published);
       moveToScreen(published.review.status === "submitted" ? "submitted" : "portal");
     } catch (reason) {
+      installSubmissionRetrySafetyFromFailure(requestedId, reason);
       if (!(await recoverPacketAuditReview(requestedId, reason))) {
         setError(reason instanceof Error ? reason.message : "We could not tell whether it went through.");
       }
+    } finally {
+      finishAttendedOutcome(requestedId, outcomeToken);
+    }
+  }
+
+  /**
+   * Reserve the exact manual attempt before exposing the employer page. The submission GET is a
+   * passive poll and may return only URL-free capability metadata. It cannot create an attempt,
+   * return a replay tuple, or return an employer URL. A user click pre-opens a blank tab, the
+   * server runs its final duplicate gate, and only the exact response may navigate that tab.
+   */
+  async function startSelfSubmission() {
+    if (!selected || !submission) return;
+    if (submission.application_id !== selected.id) return;
+    const requestedId = selected.id;
+    const requestedSubmission = submissionSnapshotsRef.current.get(requestedId)
+      ?? (submissionRef.current?.application_id === requestedId ? submissionRef.current : submission);
+    const requestedRecovery = activeAttendedManualRecovery(requestedSubmission);
+    if (!attendedSelfSubmitMayOpen(
+      requestedSubmission.retry_safety,
+      Boolean(requestedRecovery),
+    )) {
+      setSelfSubmitStartError({
+        applicationId: requestedId,
+        message: "Litos cannot safely open another employer attempt from the current submission record. Reload before continuing.",
+      });
+      return;
+    }
+    const requestedPacketIdentity = submissionReviewPacketIdentity(requestedSubmission.review);
+    const requestedCapability = attendedHandoffCapabilityFromUnknown(
+      requestedSubmission.attended_handoff_capability,
+    );
+    if (requestedCapability?.kind !== "self_submit") {
+      setSelfSubmitStartError({
+        applicationId: requestedId,
+        message: "This application no longer has an exact server-bound handoff. Reload before continuing.",
+      });
+      return;
+    }
+    const clientRequest = beginAttendedHandoffRequest(requestedId);
+    if (!clientRequest) return;
+    const companyTab = window.open("about:blank", "_blank");
+    if (!companyTab) {
+      finishAttendedHandoffRequest(clientRequest);
+      setSelfSubmitStartError({
+        applicationId: requestedId,
+        message: "Chrome blocked the company tab. Allow pop-ups for Litos, then try again.",
+      });
+      return;
+    }
+    try {
+      companyTab.opener = null;
+      companyTab.document.body.textContent = "Litos is running the final duplicate check before opening this company page.";
+    } catch {
+      companyTab.close();
+      finishAttendedHandoffRequest(clientRequest);
+      setSelfSubmitStartError({
+        applicationId: requestedId,
+        message: "Litos could not prepare a safe company tab. Nothing was opened.",
+      });
+      return;
+    }
+
+    setSelfSubmitStartingIds((current) => new Set(current).add(requestedId));
+    setSelfSubmitStartError(null);
+    let recoveryInstalled = false;
+    try {
+      const responseController = new AbortController();
+      const requestStartedAt = window.performance.now();
+      const timeout = window.setTimeout(() => responseController.abort(), MANUAL_HANDOFF_RESPONSE_DEADLINE_MS);
+      let result: SelfSubmitStartResponse;
+      try {
+        result = await api<SelfSubmitStartResponse>(
+          `/applications/${encodeURIComponent(requestedId)}/submission/self-submit-start`,
+          {
+            method: "POST",
+            signal: responseController.signal,
+            ...(requestedRecovery ? { body: attendedManualReplayBody(requestedRecovery) } : {}),
+          },
+        );
+      } finally {
+        window.clearTimeout(timeout);
+      }
+      const returnedPortalUrl = canonicalAttendedCapabilityUrl(result.portal_url);
+      const returnedReviewPortalUrl = canonicalAttendedCapabilityUrl(result.review?.portal_url);
+      if (result.review?.status !== "ready_for_final_approval"
+        || !returnedPortalUrl
+        || returnedReviewPortalUrl !== returnedPortalUrl
+        || submissionReviewPacketIdentity(result.review) !== requestedPacketIdentity
+        || !attendedHandoffCapabilitiesEqual(
+          requestedCapability,
+          result.attended_handoff_capability,
+        )
+        || !(await attendedHandoffCapabilityMatchesUrl(
+          result.attended_handoff_capability,
+          "self_submit",
+          returnedPortalUrl,
+        ))) {
+        throw new Error("Litos could not verify the exact saved application behind this handoff. Nothing was opened.");
+      }
+      const arrivedLate = window.performance.now() - requestStartedAt > MANUAL_HANDOFF_RESPONSE_DEADLINE_MS;
+      const current = submissionSnapshotsRef.current.get(requestedId)
+        ?? (submissionRef.current?.application_id === requestedId ? submissionRef.current : submission);
+      const candidate: SubmissionResponse = {
+        ...current,
+        application_id: result.application_id,
+        review: reviewWithLists(result.review),
+        retry_safety: result.retry_safety,
+        handoff_url: undefined,
+        manual_attempt_id: result.manual_attempt_id,
+        boundary_lease_id: result.boundary_lease_id,
+        boundary_activation_id: result.boundary_activation_id,
+        manual_handoff_resume_available: result.manual_handoff_resume_available,
+        attended_handoff_capability: result.attended_handoff_capability,
+      };
+      const returnedRecovery = activeAttendedManualRecovery(candidate);
+      if (!attendedManualResponseMatchesRecovery(result, requestedId, requestedRecovery)
+        || !returnedRecovery
+        || returnedRecovery.attemptId !== result.manual_attempt_id
+        || returnedRecovery.leaseId !== result.boundary_lease_id
+        || returnedRecovery.activationId !== result.boundary_activation_id) {
+        throw new Error("Litos could not verify the exact manual attempt and company page. Nothing was opened. Reload before continuing.");
+      }
+      const disposition = currentAttendedHandoffDisposition(
+        clientRequest,
+        arrivedLate,
+        returnedRecovery,
+      );
+      if (disposition === "discard") {
+        installDiscardedAttendedAuthorization(
+          requestedId,
+          result.retry_safety,
+          returnedRecovery,
+          result.review,
+          result.attended_handoff_capability,
+        );
+        companyTab.close();
+        setSelfSubmitStartError({
+          applicationId: requestedId,
+          message: "The exact employer attempt was reserved, but this packet changed before the page opened. Reload to recover that attempt. Nothing else was opened.",
+        });
+        return;
+      }
+      const publicationChanged = submissionPublicationGeneration(
+        submissionPublicationGenerationsRef.current,
+        requestedId,
+      ) !== clientRequest.publicationGeneration;
+      const next: SubmissionResponse = publicationChanged
+        ? { ...candidate, review: current.review }
+        : candidate;
+
+      submissionMutationGenerationRef.current += 1;
+      submissionSnapshotsRef.current.set(requestedId, next);
+      advanceSubmissionPublicationGeneration(submissionPublicationGenerationsRef.current, requestedId);
+      recoveryInstalled = true;
+      setPackets((currentPackets) => currentPackets?.map((packet) => packet.id === requestedId
+        ? packetWithDirectSubmission(packet, next)
+        : packet) ?? currentPackets);
+      if (disposition !== "navigate") {
+        if (selectedIdRef.current === requestedId
+          && submissionRef.current?.application_id === requestedId) {
+          const published = publishSubmissionEnvelope(submissionRef, next, "direct");
+          setSubmission(published);
+        }
+        companyTab.close();
+        setSelfSubmitStartError({
+          applicationId: requestedId,
+          message: arrivedLate
+            ? "The authorization arrived after the safe tab deadline. Press Resume company page to open that exact handoff."
+            : "The exact handoff is reserved. Return to this application and press Resume company page.",
+        });
+        return;
+      }
+      const published = publishSubmissionEnvelope(submissionRef, next, "direct");
+      setSubmission(published);
+      companyTab.location.replace(returnedPortalUrl);
+    } catch (reason) {
+      companyTab.close();
+      if (!recoveryInstalled && (!requestedRecovery || reason instanceof ApiError)) {
+        installSubmissionRetrySafetyFromFailure(requestedId, reason);
+      }
+      if (selectedIdRef.current === requestedId
+        && fillContextGenerationRef.current === clientRequest.contextGeneration) {
+        setSelfSubmitStartError({
+          applicationId: requestedId,
+          message: recoveryInstalled
+            ? "Chrome could not open the reserved company page. Press Resume company page to try that exact handoff again."
+            : reason instanceof Error
+            ? reason.message
+            : "Litos could not reserve this exact manual submission. Nothing was opened.",
+        });
+      }
+    } finally {
+      finishAttendedHandoffRequest(clientRequest);
+      setSelfSubmitStartingIds((current) => {
+        if (!current.has(requestedId)) return current;
+        const next = new Set(current);
+        next.delete(requestedId);
+        return next;
+      });
     }
   }
 
@@ -3728,30 +4738,61 @@ function Applications() {
     if (!selected || !submission) return;
     if (submission.application_id !== selected.id) return;
     const requestedId = selected.id;
+    const activeSubmission = submissionRef.current?.application_id === selected.id
+      ? submissionRef.current
+      : submission;
+    const attemptId = activeAttendedManualAttemptId(activeSubmission);
+    if (!qaMode && !attemptId) {
+      setError("This manual submission is not tied to the active reserved attempt. Reload before continuing.");
+      return;
+    }
+    const requestedAttemptId = attemptId ?? "qa-attended-handoff";
+    const outcomeToken = beginAttendedOutcome(requestedId);
+    if (!outcomeToken) return;
     setError(null);
     try {
       const result = qaMode
         ? {
-          ...submission,
+          ...activeSubmission,
+          retry_safety: {
+            kind: "blocked_confirmed" as const,
+            attemptId: requestedAttemptId,
+            confirmedAt: new Date().toISOString(),
+          },
           review: {
-            ...submission.review,
+            ...activeSubmission.review,
             status: "submitted" as const,
             submitted_at: new Date().toISOString(),
             attention_reason: undefined,
             receipt: {
               confirmation_text: "Confirmed by you: this employer asked for a document Litos could not attach, so you sent this application yourself.",
-              final_url: submission.review.portal_url ?? "/qa/portal-submission/success",
+              final_url: activeSubmission.review.portal_url ?? "/qa/portal-submission/success",
               captured_at: new Date().toISOString(),
               source: "attended_handoff" as const,
             },
           },
         }
-        : await api<SubmissionResponse>(`/applications/${requestedId}/submission/self-submitted`, { method: "POST" });
+        : await api<SubmissionResponse>(`/applications/${requestedId}/submission/self-submitted`, {
+          method: "POST",
+          body: JSON.stringify({ attempt_id: requestedAttemptId }),
+        });
+      if (!attendedHandoffOutcomeResponseMatches(
+        result,
+        requestedId,
+        requestedAttemptId,
+        "submitted",
+      )) {
+        throw new Error("Litos could not verify that this exact employer attempt was submitted. Reload before continuing.");
+      }
+      const exactResult: SubmissionResponse = { ...result, review: reviewWithLists(result.review) };
+      submissionMutationGenerationRef.current += 1;
+      submissionSnapshotsRef.current.set(requestedId, exactResult);
+      advanceSubmissionPublicationGeneration(submissionPublicationGenerationsRef.current, requestedId);
       if (selectedIdRef.current !== requestedId) {
-        setPackets((current) => current?.map((packet) => packet.id === requestedId ? packetWithDirectSubmission(packet, result) : packet) ?? current);
+        setPackets((current) => current?.map((packet) => packet.id === requestedId ? packetWithDirectSubmission(packet, exactResult) : packet) ?? current);
         return;
       }
-      const published = publishSubmissionEnvelope(submissionRef, result, "direct");
+      const published = publishSubmissionEnvelope(submissionRef, exactResult, "direct");
       const nextEvidence = reconcilePacketEvidenceWithSubmission(
         packetEvidenceRef.current,
         requestedId,
@@ -3765,9 +4806,12 @@ function Applications() {
       setSubmission(published);
       moveToScreen(published.review.status === "submitted" ? "submitted" : "portal");
     } catch (reason) {
+      installSubmissionRetrySafetyFromFailure(requestedId, reason);
       if (!(await recoverPacketAuditReview(requestedId, reason))) {
         setError(reason instanceof Error ? reason.message : "We could not record that you sent this one yourself.");
       }
+    } finally {
+      finishAttendedOutcome(requestedId, outcomeToken);
     }
   }
 
@@ -4325,6 +5369,7 @@ function Applications() {
       }
       moveToScreen(screenForStatus(result.review.status, "portal"));
     } catch (reason) {
+      installSubmissionRetrySafetyFromFailure(requestedId, reason);
       if (selectedIdRef.current !== requestedId) return;
       if (await recoverPacketAuditReview(requestedId, reason)) return;
       setSecurityCodeError(reason instanceof Error ? reason.message : "Could not send the security code.");
@@ -4338,68 +5383,97 @@ function Applications() {
    * whether it reached the employer. `found` is her own look, never a guess: `true` records this as
    * sent (the same terminal state a confirmed send reaches, with the source named so the receipt
    * never claims Litos verified it), `false` releases the claim so submit-request's disposition gate
-   * can start a fresh run instead of refusing forever. Ref-guarded for the same reason
-   * submitSecurityCode is: a real employer sits on the other end, and a repeat while the first
-   * answer is still in flight must not fire a second request. */
-  const unverifiedSubmissionInFlight = useRef<string | null>(null);
-  const [unverifiedSubmissionId, setUnverifiedSubmissionId] = useState<string | null>(null);
+   * can start a fresh run instead of refusing forever. The shared per-application boundary lock
+   * keeps this answer mutually exclusive with every opener and attended outcome for the same job. */
   const [unverifiedSubmissionError, setUnverifiedSubmissionError] = useState<string | null>(null);
 
   async function submitUnverifiedOutcome(found: boolean) {
     if (!selected || !submission || submission.application_id !== selected.id) return;
-    if (unverifiedSubmissionInFlight.current === selected.id) return;
+    const activeSubmission = submissionRef.current?.application_id === selected.id
+      ? submissionRef.current
+      : submission;
+    if (activeSubmission.retry_safety?.kind !== "blocked_unverified" || !activeSubmission.retry_safety.attemptId.trim()) {
+      setUnverifiedSubmissionError("Litos could not bind this answer to the exact earlier attempt. Refresh before recording it.");
+      return;
+    }
+    if (!found && submissionRetrySafetyBlocksNegativeResolution(activeSubmission.retry_safety)) {
+      setUnverifiedSubmissionError("This exact attempt crossed the employer boundary, so it cannot be recorded as not sent. Confirm it only if you found evidence that it was submitted.");
+      return;
+    }
     const requestedId = selected.id;
-    unverifiedSubmissionInFlight.current = requestedId;
-    setUnverifiedSubmissionId(requestedId);
+    const attemptId = activeSubmission.retry_safety.attemptId;
+    const outcomeToken = beginAttendedOutcome(requestedId);
+    if (!outcomeToken) return;
+    const outcomeRequest = attendedHandoffRequestVersion(requestedId, outcomeToken);
     setUnverifiedSubmissionError(null);
     try {
       const now = new Date().toISOString();
       const result = qaMode
         ? found
           ? {
-            ...submission,
+            ...activeSubmission,
+            retry_safety: { kind: "blocked_confirmed" as const, attemptId, confirmedAt: now },
             review: {
-              ...submission.review,
+              ...activeSubmission.review,
               status: "submitted" as const,
-              submitted_at: submission.review.unverified_submission?.at ?? now,
+              submitted_at: activeSubmission.review.unverified_submission?.at ?? now,
               submission_error: undefined,
               attention_reason: undefined,
               attention_categories: undefined,
-              unverified_submission: { ...submission.review.unverified_submission!, resolution: "sent" as const, resolved_at: now },
+              unverified_submission: { ...activeSubmission.review.unverified_submission!, resolution: "sent" as const, resolved_at: now },
               receipt: {
                 confirmation_text: "Confirmed by you: you found this application in the employer’s portal after Litos pressed Send and lost the answer.",
-                final_url: submission.review.unverified_submission?.portal_url ?? submission.review.portal_url ?? "/qa/portal-submission/success",
+                final_url: activeSubmission.review.unverified_submission?.portal_url ?? activeSubmission.review.portal_url ?? "/qa/portal-submission/success",
                 captured_at: now,
                 source: "attended_handoff" as const,
               },
             },
           }
           : {
-            ...submission,
+            ...activeSubmission,
+            retry_safety: {
+              kind: "safe_not_sent" as const,
+              attemptId,
+              proofKind: "applicant_checked_not_sent" as const,
+              resolvedAt: now,
+            },
             review: {
-              ...submission.review,
+              ...activeSubmission.review,
               status: "needs_attention" as const,
               submission_claimed_at: undefined,
-              unverified_submission: { ...submission.review.unverified_submission!, resolution: "not_sent" as const, resolved_at: now },
+              submission_claim_id: undefined,
+              unverified_submission: { ...activeSubmission.review.unverified_submission!, resolution: "not_sent" as const, resolved_at: now },
               attention_reason: "You checked and the employer does not have this one, so nothing was sent. Litos can send it again whenever you are ready.",
               attention_categories: ["unverified_submission" as const],
             },
           }
         : await api<SubmissionResponse>(`/applications/${requestedId}/submission/unverified`, {
           method: "POST",
-          body: JSON.stringify({ found }),
+          body: JSON.stringify({ found, attempt_id: attemptId }),
         });
-      if (selectedIdRef.current !== requestedId) return;
-      submissionRef.current = result;
-      setSubmission(result);
-      setPackets((current) => current?.map((packet) => packet.id === requestedId ? packetWithSubmission(packet, result) : packet) ?? current);
-      moveToScreen(screenForStatus(result.review.status, "portal"));
+      if (!currentAttendedOutcomeMayPublish(outcomeRequest)) return;
+      if (!unverifiedSubmissionOutcomeResponseMatches(result, requestedId, attemptId, found)) {
+        throw new Error("Litos could not bind that answer to the exact earlier attempt. Reload before continuing.");
+      }
+      const outcomeResult = found ? result : failClosedUnverifiedNotSentResponse(result);
+      const exactResult: SubmissionResponse = {
+        ...outcomeResult,
+        review: reviewWithLists(outcomeResult.review),
+      };
+      submissionMutationGenerationRef.current += 1;
+      submissionSnapshotsRef.current.set(requestedId, exactResult);
+      advanceSubmissionPublicationGeneration(submissionPublicationGenerationsRef.current, requestedId);
+      const published = publishSubmissionEnvelope(submissionRef, exactResult, "direct");
+      setSubmission(published);
+      setPackets((current) => current?.map((packet) => packet.id === requestedId ? packetWithDirectSubmission(packet, published) : packet) ?? current);
+      moveToScreen(screenForStatus(published.review.status, "portal"));
     } catch (reason) {
+      if (!currentAttendedOutcomeMayPublish(outcomeRequest)) return;
+      installSubmissionRetrySafetyFromFailure(requestedId, reason);
       if (selectedIdRef.current !== requestedId) return;
       setUnverifiedSubmissionError(reason instanceof Error ? reason.message : "Could not record what you found.");
     } finally {
-      unverifiedSubmissionInFlight.current = null;
-      setUnverifiedSubmissionId(null);
+      finishAttendedOutcome(requestedId, outcomeToken);
     }
   }
 
@@ -4469,6 +5543,7 @@ function Applications() {
         moveToScreen(screenForStatus(result.review.status, "portal"));
       }
     } catch (reason) {
+      installSubmissionRetrySafetyFromFailure(requestedId, reason);
       /* Back to the screen this came from, and back to "preparing": leaving the phase on "sending"
          would caption the NEXT run of the progress screen as a send that is not happening. */
       setSubmittingPhase("preparing");
@@ -4488,6 +5563,7 @@ function Applications() {
         requestedId,
         reason instanceof Error ? reason.message : "Could not approve the final portal submission.",
         reason instanceof ApiError ? reason.issues : [],
+        reason instanceof ApiError ? reason.data : null,
       );
     } finally {
       approveInFlight.current = null;
@@ -4620,6 +5696,12 @@ function Applications() {
           save, and the toggle is on Jobs now, so a copy on this page could never fire. */}
       {!applicationTaskOpen && canUse("automatic_submission") !== false && <AutopilotLockNote enabled={autopilot.enabled} eligibility={autopilot.eligibility} />}
       {!applicationTaskOpen && preferenceError && <ErrorNote message={preferenceError} />}
+      <SubmissionOrphanRiskPanel
+        risks={submissionOrphanRisks}
+        busyAttemptId={submissionOrphanRiskBusy}
+        error={submissionOrphanRiskError}
+        onResolve={(attemptId, request) => void submitOrphanRiskResolution(attemptId, request)}
+      />
       {!applicationTaskOpen && packets !== null && reviewablePackets.length > 0 && (
         <NextMatchCard
           match={nextMatch}
@@ -4673,6 +5755,22 @@ function Applications() {
           onFetchJobDescription={fetchJobDescription}
           extractingJd={extractingJd}
           refusal={composerRefusal}
+          postingDistinction={visibleFillPostingDistinction(
+            fillPostingDistinction,
+            "composer",
+            fillContextGenerationRef.current,
+          )}
+          onPostingDistinctionCleared={(risk) => markFillPostingDistinctionCleared(
+            "composer",
+            risk.candidate_application_id,
+            risk,
+          )}
+          onPostingDistinctionRiskChanged={(previousRisk, nextRisk) => replaceFillPostingDistinctionRisk(
+            "composer",
+            previousRisk.candidate_application_id,
+            previousRisk,
+            nextRisk,
+          )}
         />
       )}
       {legacyCount > 0 && !applicationTaskOpen && (
@@ -4874,6 +5972,22 @@ function Applications() {
           coverLetterEditorOpen={canonicalCoverLetterEditorOpen}
           coverLetterDownloadUrl={canonicalCoverLetter?.download_url ?? canonicalGeneratedPacket?.cover_letter_download_url ?? null}
           error={canonicalFillError}
+          postingDistinction={visibleFillPostingDistinction(
+            fillPostingDistinction,
+            "tracker",
+            fillContextGenerationRef.current,
+            canonicalSelected.id,
+            canonicalSelected.legacy_generated_resume_id ?? undefined,
+          )}
+          onPostingDistinctionCleared={(risk) => markFillPostingDistinctionCleared("tracker", canonicalSelected.id, risk)}
+          onPostingDistinctionRiskChanged={(previousRisk, nextRisk) => replaceFillPostingDistinctionRisk(
+            "tracker",
+            canonicalSelected.id,
+            previousRisk,
+            nextRisk,
+          )}
+          resolutionBusy={canonicalResolutionBusy}
+          onResolveManualSubmission={(found) => void resolveCanonicalManualSubmission(found)}
           onFill={() => void fillApplication({
             company: canonicalSelected.company,
             role: canonicalSelected.role,
@@ -5034,11 +6148,58 @@ function Applications() {
           submission={selectedSubmission}
           packetEvidenceReviewed={packetEvidenceReviewed}
           manualTrialPacket={manualTrialEvidence?.response ?? null}
+          onManualHandoffAuthorized={(result, requestedSubmission, clientRequest) => {
+            if (result.application_id !== requestedSubmission.application_id) return "rejected";
+            const current = submissionSnapshotsRef.current.get(result.application_id)
+              ?? requestedSubmission;
+            const publicationChanged = submissionPublicationGeneration(
+              submissionPublicationGenerationsRef.current,
+              result.application_id,
+            ) !== clientRequest.publicationGeneration;
+            const candidate: SubmissionResponse = {
+              ...current,
+              application_id: result.application_id,
+              handoff_url: undefined,
+              manual_attempt_id: result.manual_attempt_id,
+              boundary_lease_id: result.boundary_lease_id,
+              boundary_activation_id: result.boundary_activation_id,
+              manual_handoff_resume_available: result.manual_handoff_resume_available,
+              attended_handoff_capability: result.attended_handoff_capability,
+              retry_safety: result.retry_safety,
+              review: publicationChanged ? current.review : reviewWithLists(result.review),
+            };
+            const next = nextSubmissionState(current, candidate, { authoritativeRetrySafety: true });
+            const recovery = activeAttendedManualRecovery(next);
+            if (!recovery
+              || recovery.attemptId !== result.manual_attempt_id
+              || recovery.leaseId !== result.boundary_lease_id
+              || recovery.activationId !== result.boundary_activation_id) return "rejected";
+            if (next !== current) {
+              submissionMutationGenerationRef.current += 1;
+              submissionSnapshotsRef.current.set(next.application_id, next);
+              advanceSubmissionPublicationGeneration(submissionPublicationGenerationsRef.current, next.application_id);
+            }
+            setPackets((currentPackets) => currentPackets?.map((packet) => packet.id === next.application_id
+              ? packetWithDirectSubmission(packet, next)
+              : packet) ?? currentPackets);
+            if (selectedIdRef.current === next.application_id
+              && submissionRef.current?.application_id === next.application_id) {
+              submissionRef.current = next;
+              setSubmission(next);
+              return "visible";
+            }
+            return "stored";
+          }}
+          onBeginAttendedHandoffRequest={beginAttendedHandoffRequest}
+          onAttendedHandoffDisposition={currentAttendedHandoffDisposition}
+          onFinishAttendedHandoffRequest={finishAttendedHandoffRequest}
+          onDiscardedAttendedAuthorization={installDiscardedAttendedAuthorization}
+          onRetrySafetyFailure={(reason) => installSubmissionRetrySafetyFromFailure(selected.id, reason)}
           approving={approvingId === selected.id}
           securityCodeSubmitting={securityCodeId === selected.id}
           securityCodeError={securityCodeError}
           onSubmitSecurityCode={submitSecurityCode}
-          unverifiedSubmissionSubmitting={unverifiedSubmissionId === selected.id}
+          unverifiedSubmissionSubmitting={attendedOutcomePendingIds.has(selected.id)}
           unverifiedSubmissionError={unverifiedSubmissionError}
           onSubmitUnverifiedOutcome={submitUnverifiedOutcome}
           educationProfile={educationProfile}
@@ -5050,6 +6211,12 @@ function Applications() {
           onHandoffComplete={completeHandoff}
           onApprove={approveFinalSubmission}
           sendRefusal={sendRefusal?.applicationId === selected.id ? sendRefusal : null}
+          onPostingDistinctionCleared={(risk) => markPostingDistinctionCleared(selected.id, risk)}
+          onPostingDistinctionRiskChanged={(previousRisk, nextRisk) => replacePostingDistinctionRisk(
+            selected.id,
+            previousRisk,
+            nextRisk,
+          )}
           onRestart={() => void restartPreparedRun()}
           restarting={restartingId === selected.id}
           onRetry={retryPreparation}
@@ -5119,6 +6286,12 @@ function Applications() {
           onToggleAcknowledged={(item, acknowledged) => void toggleAttentionAcknowledgement(item, acknowledged)}
           attentionTicking={attentionTicking}
           onAddDocument={askForDocument}
+          onStartSelfSubmission={() => void startSelfSubmission()}
+          selfSubmitStarting={selfSubmitStartingIds.has(selected.id)}
+          attendedOutcomePending={attendedOutcomePendingIds.has(selected.id)}
+          selfSubmitStartError={selfSubmitStartError?.applicationId === selected.id
+            ? selfSubmitStartError.message
+            : null}
           onSelfSubmitted={() => void recordSelfSubmitted()}
           onPacketAuditRefusal={(reason) => recoverPacketAuditReview(selected.id, reason)}
           onOpenWithExtension={() => void fillApplication({
@@ -5131,6 +6304,24 @@ function Applications() {
           }, "submission")}
           extensionFillBusy={creating === "fill"}
           extensionFillError={submissionFillError}
+          fillPostingDistinction={visibleFillPostingDistinction(
+            fillPostingDistinction,
+            "submission",
+            fillContextGenerationRef.current,
+            canonicalIdByPacketId[selected.id] ?? fillPostingDistinction?.applicationId,
+            selected.id,
+          )}
+          onFillPostingDistinctionCleared={(risk) => markFillPostingDistinctionCleared(
+            "submission",
+            risk.candidate_application_id,
+            risk,
+          )}
+          onFillPostingDistinctionRiskChanged={(previousRisk, nextRisk) => replaceFillPostingDistinctionRisk(
+            "submission",
+            previousRisk.candidate_application_id,
+            previousRisk,
+            nextRisk,
+          )}
         />
       ) : screen === "submitted" ? (
         <SubmissionReceipt review={selectedSubmission?.review ?? review} role={selected.job_context.role ?? "Role"} company={selected.job_context.company ?? "Company"} />
@@ -5376,6 +6567,9 @@ function Applications() {
               {packetEvidenceBlocker}
             </p>
           )}
+          {review.portal_supported !== false && reviewAttemptSafetyBlocked && retrySafetyBlocker && (
+            <p role="alert" className="text-sm leading-6 text-warn">{retrySafetyBlocker}</p>
+          )}
         </>
       )}
       </MotionPanel>
@@ -5449,6 +6643,11 @@ function CanonicalApplicationDetail({
   coverLetterEditorOpen,
   coverLetterDownloadUrl,
   error,
+  postingDistinction,
+  onPostingDistinctionCleared,
+  onPostingDistinctionRiskChanged,
+  resolutionBusy,
+  onResolveManualSubmission,
   onFill,
   onTailor,
   onOpenCoverLetterEditor,
@@ -5487,6 +6686,11 @@ function CanonicalApplicationDetail({
   coverLetterEditorOpen: boolean;
   coverLetterDownloadUrl: string | null;
   error: string | null;
+  postingDistinction: FillPostingDistinctionState | null;
+  onPostingDistinctionCleared: PostingDistinctionCleared;
+  onPostingDistinctionRiskChanged: PostingDistinctionRiskChanged;
+  resolutionBusy: boolean;
+  onResolveManualSubmission: (found: boolean) => void;
   onFill: () => void;
   onTailor: (upgradeTrigger: HTMLButtonElement) => void;
   onOpenCoverLetterEditor: () => void;
@@ -5498,7 +6702,12 @@ function CanonicalApplicationDetail({
   onDeleteCoverLetter: () => void;
   onOpenPacket: () => void;
 }) {
-  const submitted = application.submission_state === "submitted";
+  const unresolvedAttempt = application.retry_safety?.kind === "blocked_unverified";
+  const negativeResolutionBlocked = submissionRetrySafetyBlocksNegativeResolution(application.retry_safety);
+  const boundaryAuthorizationActive = useBoundaryAuthorizationResolutionBlocked(application.retry_safety);
+  const confirmedAttempt = application.retry_safety?.kind === "blocked_confirmed";
+  const retryAllowed = submissionRetrySafetyAllowsRetry(application.retry_safety);
+  const submitted = application.submission_state === "submitted" || confirmedAttempt;
   const updatedAt = application.updated_at ?? application.created_at;
   return (
     <Card className="overflow-hidden">
@@ -5510,12 +6719,21 @@ function CanonicalApplicationDetail({
             <h2 className="mt-2 text-heading font-[450] text-ink">{application.role}</h2>
             <p className="mt-1 text-small text-muted">{application.company}{updatedAt ? ` · Updated ${formatRelativeDate(updatedAt)}` : ""}</p>
           </div>
-          <Chip label={submitted ? "Sent" : "Needs you"} kind={submitted ? "sent" : "warn"} />
+          <Chip
+            label={submitted ? "Sent" : boundaryAuthorizationActive ? "In progress" : unresolvedAttempt ? "Check outcome" : retryAllowed ? "Needs you" : "Checking history"}
+            kind={submitted ? "sent" : "warn"}
+          />
         </div>
         <div className="mt-5 rounded-inner border border-border bg-surface-alt p-4" role={checkingSendPath ? "status" : undefined}>
           <p className="text-small font-medium text-ink">
             {submitted
               ? "This application is recorded as sent."
+              : boundaryAuthorizationActive
+                ? "The employer-boundary step was authorized and may still be in progress."
+              : unresolvedAttempt
+                ? "An earlier manual submit may have reached the employer."
+                : !retryAllowed
+                  ? "Litos is checking the immutable attempt history."
               : checkingSendPath
                 ? "Checking whether Litos can send this one for you..."
                 : readyToSend
@@ -5525,6 +6743,14 @@ function CanonicalApplicationDetail({
           <p className="mt-1 text-small leading-6 text-muted">
             {submitted
               ? "Tracker keeps this canonical record even when no tailored resume packet was generated."
+              : boundaryAuthorizationActive
+                ? "This exact attempt can never be recorded as not sent. Confirm it only if you find evidence that it was submitted."
+              : unresolvedAttempt
+                ? negativeResolutionBlocked
+                  ? "This exact attempt crossed the employer boundary. A positive confirmation remains available, but another attempt and a not-sent answer stay blocked."
+                  : "Check the employer portal or your confirmation email, then answer for this exact attempt. Litos will not start another one until you do."
+                : !retryAllowed
+                  ? "No employer form is exposed until the server confirms that another attempt is safe. Reload in a moment."
               : checkingSendPath
                 /* This row names a tailored packet the Tracker has not loaded yet. Once it loads,
                    if it turns out to be on a portal Litos can submit through, the button below
@@ -5536,6 +6762,27 @@ function CanonicalApplicationDetail({
                   : "Litos will verify the extension account, bind this exact application, and open the employer page. Click Fill in the extension card, review every field, then press the employer's submit control yourself."}
           </p>
         </div>
+        {unresolvedAttempt && (
+          <div className="mt-4 rounded-inner border border-coral/35 bg-coral-soft/35 p-4" role="alert">
+            <p className="text-small font-medium text-ink">Did the employer receive this application?</p>
+            <p className="mt-1 text-small leading-6 text-muted">
+              {negativeResolutionBlocked
+                ? "Confirm only if the employer portal or confirmation email shows that this exact attempt was submitted. It cannot be recorded as not sent after boundary authorization."
+                : "Answer only after checking the employer portal or confirmation email. Your answer resolves this exact immutable attempt, not any later retry."}
+            </p>
+            <div className="mt-4 flex flex-wrap gap-3">
+              {application.portal_url && <ButtonLink href={application.portal_url} target="_blank" rel="noreferrer" variant="quiet">Check employer page</ButtonLink>}
+              <Button type="button" disabled={resolutionBusy} onClick={() => onResolveManualSubmission(true)}>
+                {resolutionBusy ? "Recording..." : "I found it there"}
+              </Button>
+              {!negativeResolutionBlocked && (
+                <Button type="button" variant="secondary" disabled={resolutionBusy} onClick={() => onResolveManualSubmission(false)}>
+                  {resolutionBusy ? "Recording..." : "It is not there"}
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
         <div className="mt-4 rounded-inner border border-brand/30 bg-brand-soft/35 p-4">
           <p className="font-mono text-label uppercase tracking-[0.08em] text-brand-ink">Application packet</p>
           <p className="mt-2 text-small leading-6 text-muted">
@@ -5607,7 +6854,12 @@ function CanonicalApplicationDetail({
             </div>
           )}
         </div>
-        {error && <div className="mt-4"><ErrorNote message={error} /></div>}
+        {error && postingDistinction?.tone !== "resolved" && <div className="mt-4"><ErrorNote message={error} /></div>}
+        <FillPostingDistinctionNotice
+          state={postingDistinction}
+          onCleared={onPostingDistinctionCleared}
+          onRiskChanged={onPostingDistinctionRiskChanged}
+        />
         <div className="mt-5 flex flex-wrap gap-3">
           {/* readyToSend gets its OWN button rather than reusing onFill, and the extension button is
               held back while it is true: pressing "Open and fill application" starts the extension
@@ -5615,15 +6867,15 @@ function CanonicalApplicationDetail({
               instead, not offered a second, worse path to the same application. checkingSendPath
               holds both back for the same reason one half-second earlier - the eligibility check
               itself is still in flight, so neither action is safe to offer yet. */}
-          {!submitted && !checkingSendPath && readyToSend && (
+          {!submitted && !unresolvedAttempt && retryAllowed && !checkingSendPath && readyToSend && (
             <Button type="button" onClick={onContinueToSend}>Continue to send</Button>
           )}
-          {!submitted && !checkingSendPath && !readyToSend && application.portal_url && (
+          {!submitted && !unresolvedAttempt && retryAllowed && !checkingSendPath && !readyToSend && application.portal_url && (
             <Button type="button" disabled={fillBusy || tailorBusy} onClick={onFill}>
               {fillBusy ? "Checking extension..." : "Open and fill application"}
             </Button>
           )}
-          {!submitted && !checkingSendPath && !readyToSend && !application.portal_url && <p className="text-small text-muted">This record has no employer form URL. Add the job again with its exact HTTPS application link.</p>}
+          {!submitted && !unresolvedAttempt && retryAllowed && !checkingSendPath && !readyToSend && !application.portal_url && <p className="text-small text-muted">This record has no employer form URL. Add the job again with its exact HTTPS application link.</p>}
           <ButtonLink href="/dashboard/settings#application-details" variant="quiet">Review saved details</ButtonLink>
         </div>
       </div>
@@ -5676,6 +6928,9 @@ function NewApplicationPanel({
   onFetchJobDescription,
   extractingJd,
   refusal,
+  postingDistinction,
+  onPostingDistinctionCleared,
+  onPostingDistinctionRiskChanged,
 }: {
   value: NewApplicationDraft;
   onChange: (value: NewApplicationDraft) => void;
@@ -5687,9 +6942,13 @@ function NewApplicationPanel({
   /** Why the last press of a composer button did nothing, which boxes it was about, and which of
       the two buttons is being answered. */
   refusal: { message: string; fields: ApplicationDraftField[]; at: ComposerSlot; needsExtension: boolean } | null;
+  postingDistinction: FillPostingDistinctionState | null;
+  onPostingDistinctionCleared: PostingDistinctionCleared;
+  onPostingDistinctionRiskChanged: PostingDistinctionRiskChanged;
 }) {
   const patch = (next: Partial<NewApplicationDraft>) => onChange({ ...value, ...next });
-  const invalid = (field: ApplicationDraftField) => refusal?.fields.includes(field) ?? false;
+  const visibleRefusal = postingDistinction?.tone === "resolved" ? null : refusal;
+  const invalid = (field: ApplicationDraftField) => visibleRefusal?.fields.includes(field) ?? false;
   return (
     <Card className="p-6">
       <div className="max-w-2xl">
@@ -5715,7 +6974,7 @@ function NewApplicationPanel({
       {/* Read job's own slot. Measured: the two composer buttons are ~440px apart, so the generate
           row is not "beside" this one. With the message down there it sat at y = 979 on a 375x812
           viewport while this button was at y = 554. */}
-      <ComposerRefusalNote refusal={refusal} at="url" />
+      <ComposerRefusalNote refusal={visibleRefusal} at="url" />
       <label className="mt-4 block text-xs font-medium text-muted" htmlFor="new-application-jd">Job description</label>
       <textarea id="new-application-jd" value={value.jobDescription} onChange={(event) => patch({ jobDescription: event.target.value })} rows={12} placeholder="Optional for filling. Paste the complete job description to tailor a resume." aria-invalid={invalid("jobDescription") || undefined} className={`mt-1.5 w-full rounded-inner border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand ${invalid("jobDescription") ? "border-danger" : "border-control-border"}`} />
       {/* Beside the button that raised it, not in the page banner far above it. The button and this
@@ -5724,7 +6983,7 @@ function NewApplicationPanel({
           in a background tab. role="alert" is here and nowhere else for this message, so a screen
           reader still hears it exactly once. */}
       <div className="mt-5 flex flex-wrap items-center justify-end gap-3">
-        <ComposerRefusalNote refusal={refusal} at="action" />
+        <ComposerRefusalNote refusal={visibleRefusal} at="action" />
         <Button type="button" variant="secondary" onClick={(event) => onTailor(event.currentTarget)} disabled={creating !== null} className="border-brand text-brand-ink">
           {creating === "tailor" ? <PendingLabel state="composing">Tailoring</PendingLabel> : "Tailor resume"}
         </Button>
@@ -5732,8 +6991,38 @@ function NewApplicationPanel({
           {creating === "fill" ? <PendingLabel state="composing" onColor>Preparing form</PendingLabel> : "Fill application"}
         </Button>
       </div>
+      <FillPostingDistinctionNotice
+        state={postingDistinction}
+        onCleared={onPostingDistinctionCleared}
+        onRiskChanged={onPostingDistinctionRiskChanged}
+      />
     </Card>
   );
+}
+
+function FillPostingDistinctionNotice({
+  state,
+  onCleared,
+  onRiskChanged,
+}: {
+  state: FillPostingDistinctionState | null;
+  onCleared: PostingDistinctionCleared;
+  onRiskChanged: PostingDistinctionRiskChanged;
+}) {
+  if (!state) return null;
+  if (state.risk) {
+    return (
+      <PostingDistinctionResolution
+        key={postingDistinctionRiskKey(state.risk)}
+        risk={state.risk}
+        onCleared={onCleared}
+        onRiskChanged={onRiskChanged}
+      />
+    );
+  }
+  return state.tone === "resolved"
+    ? <div role="status" className="mt-3 rounded-inner border border-success/30 bg-success/5 px-4 py-3 text-sm leading-6 text-ink">{state.message}</div>
+    : null;
 }
 
 /** Which composer button a refusal is answering. The composer has exactly two, far enough apart
@@ -6407,9 +7696,9 @@ function SecurityCodeCard({ review, submitting, error, onSubmitCode }: {
  * verbatim rather than paraphrased here, the same way BlockerList would if this state had not
  * bypassed it. What is new is the pair of controls, because the answer can only be hers. Answering
  * "found" records this as sent - the same terminal state a normal send reaches, with the source
- * named so the receipt never claims Litos verified it. Answering "not found" releases the claim, so
- * the ordinary Try again/Review and fill controls become live again the next time this screen
- * renders, instead of refusing forever.
+ * named so the receipt never claims Litos verified it. Before boundary authorization, answering
+ * "not found" releases the claim so the ordinary Try again/Review and fill controls become live
+ * again. After authorization, only the positive answer remains because uncertainty is permanent.
  *
  * Takes the already-sanitized `safeAttentionReason` rather than the raw `review`, on purpose: every
  * other reader of `attention_reason` on this screen goes through `userFacingError` first (it exists
@@ -6418,10 +7707,11 @@ function SecurityCodeCard({ review, submitting, error, onSubmitCode }: {
  * exception message could land in this field. Taking the sanitized string as the prop, instead of
  * the whole review, makes reading the unsanitized field a type error rather than a habit to remember.
  */
-function UnverifiedSubmissionCard({ attentionReason, submitting, error, onSubmitOutcome }: {
+function UnverifiedSubmissionCard({ attentionReason, submitting, error, allowNotFound, onSubmitOutcome }: {
   attentionReason: string | undefined;
   submitting: boolean;
   error: string | null;
+  allowNotFound: boolean;
   onSubmitOutcome: (found: boolean) => void;
 }) {
   return (
@@ -6429,15 +7719,17 @@ function UnverifiedSubmissionCard({ attentionReason, submitting, error, onSubmit
       <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Waiting on you to look</p>
       <p className="mt-2 whitespace-pre-line text-sm leading-6 text-ink">
         {attentionReason
-          ?? "Litos pressed Send and could not confirm what came back. Check the filled-form proof shown in this dashboard, then choose what it shows."}
+          ?? "Litos opened an attempt and could not verify whether anything reached the employer. Check the filled-form proof shown in this dashboard, then choose what it shows."}
       </p>
       <div className="mt-4 flex flex-wrap gap-2">
         <Button onClick={() => onSubmitOutcome(true)} disabled={submitting} variant="secondary">
           {submitting ? "Recording..." : "I found it there"}
         </Button>
-        <Button onClick={() => onSubmitOutcome(false)} disabled={submitting}>
-          {submitting ? "Recording..." : "It is not there"}
-        </Button>
+        {allowNotFound && (
+          <Button onClick={() => onSubmitOutcome(false)} disabled={submitting}>
+            {submitting ? "Recording..." : "It is not there"}
+          </Button>
+        )}
       </div>
       {error && <p role="alert" className="mt-2 text-xs leading-5 text-danger">{error}</p>}
     </div>
@@ -6708,29 +8000,215 @@ function DirectApplicationQuestion({ task, position, total, saving, saved, focus
   );
 }
 
-function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTrialPacket, approving, securityCodeSubmitting, securityCodeError, onSubmitSecurityCode, unverifiedSubmissionSubmitting, unverifiedSubmissionError, onSubmitUnverifiedOutcome, educationProfile, educationProfileStatus, onCheckResume, onReloadCoverLetter, onWriteCoverLetter, coverLetterReloading, onHandoffComplete, onApprove, sendRefusal, onRestart, restarting, onRetry, onReviewPacket, onReviewQuestions, onOpenQuestion, onChooseOption, onSaveQuestion, savingAnswer, answeredQuestionFingerprints, directAnswerProgress, directAnswerDrafts, directAnswerFailure, onDirectAnswerDraftChange, onClearDirectAnswerDraft, onNavigateDirectQuestion, onClearDirectAnswerFailure, onRefreshQuestionMetadata, questionMetadataRefreshing, questionMetadataRefreshDisabled, questionMetadataNeedsPacketReview, questionMetadataRefreshError, onQuestionsFinished, onAddDocument, onToggleAcknowledged, attentionTicking, onSelfSubmitted, onPacketAuditRefusal, onOpenWithExtension, extensionFillBusy, extensionFillError }: { packet: GeneratedResume; submission: SubmissionResponse; packetEvidenceReviewed: boolean; manualTrialPacket: PacketAuditResponse | null; approving: boolean; securityCodeSubmitting: boolean; securityCodeError: string | null; onSubmitSecurityCode: (code: string) => void; unverifiedSubmissionSubmitting: boolean; unverifiedSubmissionError: string | null; onSubmitUnverifiedOutcome: (found: boolean) => void; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onReloadCoverLetter: () => void; onWriteCoverLetter: () => void; coverLetterReloading: boolean; onHandoffComplete: (outcome?: "cleared" | "submitted") => void; onApprove: () => void; sendRefusal: { message: string; issues: string[] } | null; onRestart: () => void; restarting: boolean; onRetry: () => void; onReviewPacket: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string, intent?: SubmissionChecklistAction) => void; onChooseOption: (questionId: string, option: string) => void; onSaveQuestion: (questionId: string, answer: string, intent: DirectQuestionTaskIntent, promptFingerprint: string, taskFingerprint: string, task: DirectQuestionTask) => Promise<DirectAnswerSaveResult>; savingAnswer: boolean; answeredQuestionFingerprints: ReadonlySet<string>; directAnswerProgress: DirectAnswerProgress | null; directAnswerDrafts: ReadonlyMap<string, DirectAnswerDraft>; directAnswerFailure: DirectAnswerFailure | null; onDirectAnswerDraftChange: (questionId: string, promptFingerprint: string, taskFingerprint: string, answer: string) => void; onClearDirectAnswerDraft: (promptFingerprint: string) => void; onNavigateDirectQuestion: (promptFingerprint: string) => void; onClearDirectAnswerFailure: (promptFingerprint: string) => void; onRefreshQuestionMetadata: () => void; questionMetadataRefreshing: boolean; questionMetadataRefreshDisabled: boolean; questionMetadataNeedsPacketReview: boolean; questionMetadataRefreshError: string | null; onQuestionsFinished: () => void; onAddDocument: (kind: string) => void; onToggleAcknowledged: (item: SubmissionChecklistItem, acknowledged: boolean) => void; attentionTicking: ReadonlySet<string>; onSelfSubmitted: () => void; onPacketAuditRefusal: (reason: unknown) => Promise<boolean>; onOpenWithExtension: () => void; extensionFillBusy: boolean; extensionFillError: string | null }) {
+type SubmissionScreenProps = {
+  packet: GeneratedResume;
+  submission: SubmissionResponse;
+  packetEvidenceReviewed: boolean;
+  manualTrialPacket: PacketAuditResponse | null;
+  onManualHandoffAuthorized: (
+    result: ManualHandoffResponse,
+    requestedSubmission: SubmissionResponse,
+    clientRequest: AttendedHandoffClientRequest,
+  ) => "visible" | "stored" | "rejected";
+  onBeginAttendedHandoffRequest: (applicationId: string) => AttendedHandoffClientRequest | null;
+  onAttendedHandoffDisposition: (
+    request: AttendedHandoffClientRequest,
+    arrivedLate?: boolean,
+    equivalentAuthorization?: AttendedManualRecovery,
+  ) => AttendedHandoffAuthorizationDisposition;
+  onFinishAttendedHandoffRequest: (request: AttendedHandoffClientRequest) => void;
+  onDiscardedAttendedAuthorization: (
+    applicationId: string,
+    retrySafety: unknown,
+    recovery: AttendedManualRecovery,
+    serverReview: ApplicationReview,
+    capability: unknown,
+  ) => boolean;
+  onRetrySafetyFailure: (reason: unknown) => void;
+  approving: boolean;
+  securityCodeSubmitting: boolean;
+  securityCodeError: string | null;
+  onSubmitSecurityCode: (code: string) => void;
+  unverifiedSubmissionSubmitting: boolean;
+  unverifiedSubmissionError: string | null;
+  onSubmitUnverifiedOutcome: (found: boolean) => void;
+  educationProfile: EducationProfile | null;
+  educationProfileStatus: EducationProfileStatus;
+  onCheckResume: () => void;
+  onReloadCoverLetter: () => void;
+  onWriteCoverLetter: () => void;
+  coverLetterReloading: boolean;
+  onHandoffComplete: (outcome?: "cleared" | "submitted") => void;
+  onApprove: () => void;
+  sendRefusal: {
+    message: string;
+    issues: string[];
+    postingDistinctionRisk: PostingDistinctionRisk | null;
+    tone: "refusal" | "resolved";
+  } | null;
+  onPostingDistinctionCleared: PostingDistinctionCleared;
+  onPostingDistinctionRiskChanged: PostingDistinctionRiskChanged;
+  onRestart: () => void;
+  restarting: boolean;
+  onRetry: () => void;
+  onReviewPacket: () => void;
+  onReviewQuestions: () => void;
+  onOpenQuestion: (questionId: string, intent?: SubmissionChecklistAction) => void;
+  onChooseOption: (questionId: string, option: string) => void;
+  onSaveQuestion: (
+    questionId: string,
+    answer: string,
+    intent: DirectQuestionTaskIntent,
+    promptFingerprint: string,
+    taskFingerprint: string,
+    task: DirectQuestionTask,
+  ) => Promise<DirectAnswerSaveResult>;
+  savingAnswer: boolean;
+  answeredQuestionFingerprints: ReadonlySet<string>;
+  directAnswerProgress: DirectAnswerProgress | null;
+  directAnswerDrafts: ReadonlyMap<string, DirectAnswerDraft>;
+  directAnswerFailure: DirectAnswerFailure | null;
+  onDirectAnswerDraftChange: (
+    questionId: string,
+    promptFingerprint: string,
+    taskFingerprint: string,
+    answer: string,
+  ) => void;
+  onClearDirectAnswerDraft: (promptFingerprint: string) => void;
+  onNavigateDirectQuestion: (promptFingerprint: string) => void;
+  onClearDirectAnswerFailure: (promptFingerprint: string) => void;
+  onRefreshQuestionMetadata: () => void;
+  questionMetadataRefreshing: boolean;
+  questionMetadataRefreshDisabled: boolean;
+  questionMetadataNeedsPacketReview: boolean;
+  questionMetadataRefreshError: string | null;
+  onQuestionsFinished: () => void;
+  onAddDocument: (kind: string) => void;
+  onToggleAcknowledged: (item: SubmissionChecklistItem, acknowledged: boolean) => void;
+  attentionTicking: ReadonlySet<string>;
+  onStartSelfSubmission: () => void;
+  selfSubmitStarting: boolean;
+  attendedOutcomePending: boolean;
+  selfSubmitStartError: string | null;
+  onSelfSubmitted: () => void;
+  onPacketAuditRefusal: (reason: unknown) => Promise<boolean>;
+  onOpenWithExtension: () => void;
+  extensionFillBusy: boolean;
+  extensionFillError: string | null;
+  fillPostingDistinction: FillPostingDistinctionState | null;
+  onFillPostingDistinctionCleared: PostingDistinctionCleared;
+  onFillPostingDistinctionRiskChanged: PostingDistinctionRiskChanged;
+};
+
+function SubmissionScreen({
+  packet,
+  submission,
+  packetEvidenceReviewed,
+  manualTrialPacket,
+  onManualHandoffAuthorized,
+  onBeginAttendedHandoffRequest,
+  onAttendedHandoffDisposition,
+  onFinishAttendedHandoffRequest,
+  onDiscardedAttendedAuthorization,
+  onRetrySafetyFailure,
+  approving,
+  securityCodeSubmitting,
+  securityCodeError,
+  onSubmitSecurityCode,
+  unverifiedSubmissionSubmitting,
+  unverifiedSubmissionError,
+  onSubmitUnverifiedOutcome,
+  educationProfile,
+  educationProfileStatus,
+  onCheckResume,
+  onReloadCoverLetter,
+  onWriteCoverLetter,
+  coverLetterReloading,
+  onHandoffComplete,
+  onApprove,
+  sendRefusal,
+  onPostingDistinctionCleared,
+  onPostingDistinctionRiskChanged,
+  onRestart,
+  restarting,
+  onRetry,
+  onReviewPacket,
+  onReviewQuestions,
+  onOpenQuestion,
+  onChooseOption,
+  onSaveQuestion,
+  savingAnswer,
+  answeredQuestionFingerprints,
+  directAnswerProgress,
+  directAnswerDrafts,
+  directAnswerFailure,
+  onDirectAnswerDraftChange,
+  onClearDirectAnswerDraft,
+  onNavigateDirectQuestion,
+  onClearDirectAnswerFailure,
+  onRefreshQuestionMetadata,
+  questionMetadataRefreshing,
+  questionMetadataRefreshDisabled,
+  questionMetadataNeedsPacketReview,
+  questionMetadataRefreshError,
+  onQuestionsFinished,
+  onAddDocument,
+  onToggleAcknowledged,
+  attentionTicking,
+  onStartSelfSubmission,
+  selfSubmitStarting,
+  attendedOutcomePending,
+  selfSubmitStartError,
+  onSelfSubmitted,
+  onPacketAuditRefusal,
+  onOpenWithExtension,
+  extensionFillBusy,
+  extensionFillError: unresolvedExtensionFillError,
+  fillPostingDistinction,
+  onFillPostingDistinctionCleared,
+  onFillPostingDistinctionRiskChanged,
+}: SubmissionScreenProps) {
   const { review } = submission;
+  const extensionFillError = fillPostingDistinction?.tone === "resolved"
+    ? null
+    : unresolvedExtensionFillError;
   const awaitingSecurityCode = review.status === "awaiting_security_code";
   const needsAttention = review.status === "needs_attention";
   const failedPacketAuditStale = review.status === "failed" && historicalPacketAuditStaleMessage(review);
-  /* A run may have reached the employer and stopped before it could say so. Gated on the resolution
-     being absent, not just the field's presence: once she has answered, the record stays on the
-     review as history (the same reason `stall` is closed with `resolved_at` rather than deleted),
-     and a resolved one must not reopen this card on every later visit. */
-  const awaitingUnverifiedSubmission = needsAttention && Boolean(review.unverified_submission) && !review.unverified_submission?.resolution;
+  const retryAllowed = submissionRetrySafetyAllowsRetry(submission.retry_safety);
+  const retrySafetyBlocker = retrySafetyBlockerMessage(submission.retry_safety);
+  const attendedManualIdentity = attendedManualAttemptIdentity(submission);
+  const attendedManualRecovery = activeAttendedManualRecovery(submission);
+  const attendedManualAttemptId = attendedManualIdentity?.attemptId ?? null;
+  const attendedManualAttemptActive = attendedManualAttemptId !== null;
+  const boundaryAuthorizationActive = useBoundaryAuthorizationResolutionBlocked(submission.retry_safety);
+  const negativeResolutionBlocked = submissionRetrySafetyBlocksNegativeResolution(submission.retry_safety);
+  const retrySafetyUnknown = submissionRetrySafetyFromUnknown(submission.retry_safety) === null;
+  const submissionBoundaryInFlight = boundaryAuthorizationActive && !attendedManualAttemptActive;
+  /* The immutable attempt fold owns this decision. unverified_submission remains useful display
+     history, but its mutable resolution can neither release a retry nor hide an unresolved attempt.
+     This also keeps the attempt id beside the yes/no request that resolves exactly that attempt. */
+  const awaitingUnverifiedSubmission = needsAttention
+    && submission.retry_safety?.kind === "blocked_unverified"
+    && !attendedManualAttemptActive;
+  const submissionOutcomeGateActive = awaitingUnverifiedSubmission
+    || submissionBoundaryInFlight
+    || attendedManualAttemptActive;
   /* Every control below that can replay, resolve, or open a live/exact form for this application is
      gated HERE, at the one place they all read from, rather than at each button individually. That
      is not a style preference: the four buttons this feature explicitly gated (Review and fill, Try
      again, I cleared the check, I submitted it myself) missed the others that share the same
      `needsAttention` flag - Check the answers, Finish in this dashboard, the live iframe, Open in
      new tab, and Open exact company form all read `hasQuestionsToReview` / `handoffUrl` /
-     `attendedHandoffUrl` and would have rendered right alongside the yes/no card, letting her
+     `attendedHandoffAvailable` and would have rendered right alongside the yes/no card, letting her
      interact with (or submit through) the exact form the card exists to ask about first. Gating the
      three shared values instead of the many places that read them makes the exclusion automatic for
      every future control built on them, the same way `awaiting_security_code` gets it for free by
      being its own status. */
-  const hasQuestionsToReview = needsAttention && !awaitingUnverifiedSubmission && review.questions.length > 0;
-  const handoffUrl = needsAttention && !awaitingUnverifiedSubmission ? submission.handoff_url : undefined;
+  const hasQuestionsToReview = needsAttention && !submissionOutcomeGateActive && review.questions.length > 0;
+  const handoffUrl = needsAttention && retryAllowed
+    ? safeBrowserLiveViewUrl(submission.handoff_url)
+    : undefined;
   /* Prefers the stalled run's own recorded location over the packet's general portal_url: they can
      differ (posting migrations, a portal_url repaired after the fact), and while an unverified send
      is open, "the exact page this stopped on" is the only one that answers her question. */
@@ -6749,68 +8227,55 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
      or provider error still offers only Try again. A CAPTCHA wall is not always deterministic (a
      retry can draw an easier challenge, or none), so this sits ALONGSIDE Try again rather than
      replacing it: the extension path is the guaranteed way to finish it now, not the only way. */
-  const captchaBlockedLastAttempt = needsAttention && !awaitingUnverifiedSubmission
+  const attendedHandoffCapability = attendedHandoffCapabilityFromUnknown(
+    submission.attended_handoff_capability,
+  );
+  const legacyEmployerFallbackAllowed = legacyEmployerFallbackMayRender(
+    submission.retry_safety,
+    submission.attended_handoff_capability,
+  );
+  const captchaBlockedLastAttempt = needsAttention && retryAllowed
+    && legacyEmployerFallbackAllowed
     && review.unverified_submission?.challenge_on_screen === true;
-  const attendedHandoffUrl = awaitingUnverifiedSubmission ? null : exactAttendedHandoffUrl(review);
-  const canFinishInDashboard = Boolean(handoffUrl) && !attendedHandoffUrl;
+  const attendedHandoffAvailable = needsAttention
+    && retryAllowed
+    && !attendedManualRecovery
+    && attendedHandoffCapability?.kind === "manual_handoff";
+  const resumableAttendedHandoffAvailable = needsAttention
+    && Boolean(attendedManualRecovery)
+    && attendedHandoffCapability?.kind === "manual_handoff";
+  const selfSubmitHandoffAvailable = attendedHandoffCapability?.kind === "self_submit"
+    && attendedSelfSubmitMayOpen(submission.retry_safety, Boolean(attendedManualRecovery));
+  const canFinishInDashboard = Boolean(handoffUrl) && legacyEmployerFallbackAllowed;
   const [attendedHandoffState, setAttendedHandoffState] = useState<"idle" | "preparing" | "failed">("idle");
   const [attendedHandoffError, setAttendedHandoffError] = useState<string | null>(null);
 
   async function openAttendedHandoff() {
-    if (!attendedHandoffUrl || attendedHandoffState === "preparing") return;
-    const companyTab = window.open("about:blank", "_blank");
-    if (!companyTab) {
-      setAttendedHandoffState("failed");
-      setAttendedHandoffError("Chrome blocked the company tab. Allow pop-ups for Litos, then try again.");
-      return;
-    }
-    try {
-      companyTab.opener = null;
-      companyTab.document.body.textContent = "Litos is verifying the exact saved application.";
-    } catch {
-      companyTab.close();
-      setAttendedHandoffState("failed");
-      setAttendedHandoffError("Litos could not prepare a safe company tab. Nothing was opened.");
-      return;
-    }
-
-    setAttendedHandoffState("preparing");
-    setAttendedHandoffError(null);
-    const extension = await ensureCurrentExtensionSession(
-      { token: getToken(), guest: isGuestSession() },
-      minimumAttendedHandoffExtensionVersion(review.ats_name),
-    );
-    if (!extension.installed || !extension.signedIn || extension.otherAccount) {
-      companyTab.close();
-      setAttendedHandoffState("failed");
-      setAttendedHandoffError(extension.updateRequired
-        ? "Update the Litos extension from the Chrome Web Store, then try again. This saved application needs the current version."
-        : extension.otherAccount
-          ? "The Litos extension is signed in to another account. Sign out there, then try again."
-          : "Install the current Litos extension and sign in to this account before opening the company form.");
-      return;
-    }
-    const armed = await armHandoffs([{ id: submission.application_id, portalUrl: attendedHandoffUrl }]);
-    if (!armed) {
-      companyTab.close();
-      setAttendedHandoffState("failed");
-      setAttendedHandoffError("Litos could not bind this exact saved application to Chrome. Nothing was opened.");
-      return;
-    }
-    try {
-      companyTab.location.replace(attendedHandoffUrl);
-      setAttendedHandoffState("idle");
-    } catch {
-      companyTab.close();
-      setAttendedHandoffState("failed");
-      setAttendedHandoffError("Chrome could not open the exact saved company form. Nothing was submitted.");
-    }
+    await openManualAttendedHandoff(true);
   }
 
-  async function openManualAttendedHandoff() {
-    if (!attendedHandoffUrl || !manualTrialPacket || attendedHandoffState === "preparing") return;
+  async function openManualAttendedHandoff(useExtension = false) {
+    const requestedCapability = attendedHandoffCapability;
+    const requestedRecovery = attendedManualRecovery;
+    const packetForValidation = manualTrialPacket ?? (review.packet_audit
+      ? {
+        packet_audit: review.packet_audit,
+        pdf: {
+          sha256: review.packet_audit.bindings.pdf.sha256,
+          size_bytes: review.packet_audit.bindings.pdf.sizeBytes,
+        },
+      }
+      : null);
+    if (requestedCapability?.kind !== "manual_handoff"
+      || (!attendedHandoffAvailable && !resumableAttendedHandoffAvailable)
+      || !packetForValidation
+      || attendedHandoffState === "preparing") return;
+    const requestedSubmission = submission;
+    const clientRequest = onBeginAttendedHandoffRequest(requestedSubmission.application_id);
+    if (!clientRequest) return;
     const companyTab = window.open("about:blank", "_blank");
     if (!companyTab) {
+      onFinishAttendedHandoffRequest(clientRequest);
       setAttendedHandoffState("failed");
       setAttendedHandoffError("Chrome blocked the company tab. Allow pop-ups for Litos, then try again.");
       return;
@@ -6820,25 +8285,160 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
       companyTab.document.body.textContent = "Litos is rechecking the exact packet and routing email.";
     } catch {
       companyTab.close();
+      onFinishAttendedHandoffRequest(clientRequest);
       setAttendedHandoffState("failed");
       setAttendedHandoffError("Litos could not prepare a safe company tab. Nothing was opened.");
       return;
     }
     setAttendedHandoffState("preparing");
     setAttendedHandoffError(null);
+    let recoveryInstalled = false;
     try {
-      const current = await api<ManualHandoffResponse>(`/applications/${submission.application_id}/submission/manual-handoff`, { method: "POST" });
+      if (useExtension) {
+        const extension = await ensureCurrentExtensionSession(
+          { token: getToken(), guest: isGuestSession() },
+          minimumAttendedHandoffExtensionVersion(review.ats_name),
+        );
+        if (onAttendedHandoffDisposition(clientRequest) !== "navigate") {
+          companyTab.close();
+          return;
+        }
+        if (!extension.installed || !extension.signedIn || extension.otherAccount) {
+          companyTab.close();
+          setAttendedHandoffState("failed");
+          setAttendedHandoffError(extension.updateRequired
+            ? "Update the Litos extension from the Chrome Web Store, then try again. This saved application needs the current version."
+            : extension.otherAccount
+              ? "The Litos extension is signed in to another account. Sign out there, then try again."
+              : "Install the current Litos extension and sign in to this account before opening the company form.");
+          return;
+        }
+      }
+      const responseController = new AbortController();
+      const requestStartedAt = window.performance.now();
+      const timeout = window.setTimeout(() => responseController.abort(), MANUAL_HANDOFF_RESPONSE_DEADLINE_MS);
+      let current: ManualHandoffResponse;
+      try {
+        current = await api<ManualHandoffResponse>(`/applications/${requestedSubmission.application_id}/submission/manual-handoff`, {
+          method: "POST",
+          signal: responseController.signal,
+          ...(requestedRecovery ? { body: attendedManualReplayBody(requestedRecovery) } : {}),
+        });
+      } finally {
+        window.clearTimeout(timeout);
+      }
       const handoff = current.manual_handoff;
-      if (!manualHandoffMatchesPacket(current, attendedHandoffUrl, manualTrialPacket)) {
+      const authorizedUrl = canonicalAttendedCapabilityUrl(handoff.url);
+      if (!attendedManualResponseMatchesRecovery(
+        current,
+        requestedSubmission.application_id,
+        requestedRecovery,
+      ) || current.review?.status !== "needs_attention"
+        || !authorizedUrl
+        || exactAttendedHandoffUrl(current.review) !== authorizedUrl
+        || !attendedHandoffCapabilitiesEqual(
+          requestedCapability,
+          current.attended_handoff_capability,
+        )
+        || !(await attendedHandoffCapabilityMatchesUrl(
+          current.attended_handoff_capability,
+          "manual_handoff",
+          authorizedUrl,
+        ))
+        || !manualHandoffMatchesPacket(
+          current,
+          authorizedUrl,
+          packetForValidation,
+        Date.now(),
+        false,
+      )) {
         throw new Error("The saved packet, routing email, or company form changed. Review the exact packet again before opening the company form.");
       }
-      companyTab.location.replace(handoff.url);
+      let arrivedLate = window.performance.now() - requestStartedAt > MANUAL_HANDOFF_RESPONSE_DEADLINE_MS;
+      const returnedRecovery: AttendedManualRecovery = {
+        attemptId: current.manual_attempt_id,
+        leaseId: current.boundary_lease_id,
+        activationId: current.boundary_activation_id,
+      };
+      let disposition = onAttendedHandoffDisposition(
+        clientRequest,
+        arrivedLate,
+        returnedRecovery,
+      );
+      if (disposition === "discard") {
+        onDiscardedAttendedAuthorization(
+          requestedSubmission.application_id,
+          current.retry_safety,
+          returnedRecovery,
+          current.review,
+          current.attended_handoff_capability,
+        );
+        companyTab.close();
+        setAttendedHandoffState("failed");
+        setAttendedHandoffError("The exact employer attempt was reserved, but this packet changed before the page opened. Reload to recover that attempt. Nothing else was opened.");
+        return;
+      }
+      let extensionArmed = true;
+      if (useExtension) {
+        try {
+          extensionArmed = await armHandoffs([{
+            id: requestedSubmission.application_id,
+            portalUrl: authorizedUrl,
+          }]);
+        } catch {
+          extensionArmed = false;
+        }
+        arrivedLate = window.performance.now() - requestStartedAt > MANUAL_HANDOFF_RESPONSE_DEADLINE_MS;
+        disposition = onAttendedHandoffDisposition(
+          clientRequest,
+          arrivedLate,
+          returnedRecovery,
+        );
+        if (disposition === "discard") {
+          onDiscardedAttendedAuthorization(
+            requestedSubmission.application_id,
+            current.retry_safety,
+            returnedRecovery,
+            current.review,
+            current.attended_handoff_capability,
+          );
+          companyTab.close();
+          setAttendedHandoffState("failed");
+          setAttendedHandoffError("The exact employer attempt was reserved, but this packet changed before the page opened. Reload to recover that attempt. Nothing else was opened.");
+          return;
+        }
+      }
+      const publication = onManualHandoffAuthorized(current, requestedSubmission, clientRequest);
+      if (publication === "rejected") {
+        throw new Error("Litos could not bind this authorization to the exact saved application. Nothing was opened.");
+      }
+      recoveryInstalled = true;
+      if (!extensionArmed || disposition !== "navigate" || publication === "stored") {
+        companyTab.close();
+        setAttendedHandoffState("failed");
+        setAttendedHandoffError(!extensionArmed
+          ? "Litos reserved the exact handoff, but Chrome could not bind it. Press Resume company page to open that same attempt manually."
+          : arrivedLate
+            ? "The authorization arrived after the safe tab deadline. Press Resume company page to open that exact handoff."
+            : "The exact handoff is reserved. Return to this application and press Resume company page.");
+        return;
+      }
+      companyTab.location.replace(authorizedUrl);
       setAttendedHandoffState("idle");
     } catch (reason) {
       companyTab.close();
-      if (await onPacketAuditRefusal(reason)) return;
+      if (!recoveryInstalled && (!requestedRecovery || reason instanceof ApiError)) {
+        onRetrySafetyFailure(reason);
+      }
+      if (!recoveryInstalled && await onPacketAuditRefusal(reason)) return;
       setAttendedHandoffState("failed");
-      setAttendedHandoffError(reason instanceof Error ? reason.message : "Litos could not revalidate this exact packet. Nothing was opened.");
+      setAttendedHandoffError(recoveryInstalled
+        ? "Chrome could not open the reserved company page. Press Resume company page to try that exact handoff again."
+        : reason instanceof Error
+          ? reason.message
+          : "Litos could not revalidate this exact packet. Nothing was opened.");
+    } finally {
+      onFinishAttendedHandoffRequest(clientRequest);
     }
   }
   /* A wait that ends. "Loading cover letter." used to be the ONLY thing this screen said about a
@@ -6925,7 +8525,7 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
     !directQuestionFingerprints.has(draft.promptFingerprint)
   )) ?? null;
   const directRecoveryNeeded = directRecoveryDraft !== null;
-  const directAnswerActive = needsAttention && !awaitingUnverifiedSubmission && currentDirectQuestion !== null;
+  const directAnswerActive = needsAttention && !submissionOutcomeGateActive && currentDirectQuestion !== null;
   const directQuestionTotal = Math.max(
     directProgress.total,
     directQuestionTasks.length,
@@ -7013,7 +8613,7 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
   const educationProfilePending = educationProfileStatus !== "ready";
   const sensitiveQuestionPresent = review.questions.some((question) => requiresSensitiveQuestionReview(question.question, question.answer));
   const [previewState, setPreviewState] = useState<{ url: string; loaded: boolean; failed: boolean } | null>(null);
-  const previewUrl = review.preview_screenshot_url ?? "";
+  const previewUrl = safeEvidenceImageUrl(review.preview_screenshot_url) ?? "";
   const previewLoaded = Boolean(previewUrl) && previewState?.url === previewUrl && previewState.loaded;
   const previewFailed = Boolean(previewUrl) && previewState?.url === previewUrl && previewState.failed;
   const previewReady = Boolean(previewUrl) && previewLoaded && !previewFailed;
@@ -7031,6 +8631,11 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
     return () => { if (timer !== undefined) window.clearTimeout(timer); };
   }, []);
   const handoffExpired = handoffWindowExpired(review, nowMs);
+  /* A valid `opened` retry verdict is intentionally not a final-approval blocker. This button
+     continues that exact attempt, so applying the general retry gate would deadlock every healthy
+     run before its first press. Unknown safety and permanent employer-boundary evidence are
+     different: after a lost response the client cannot prove this is still the same unpressed
+     attempt, so the send stays closed until a causally fresh server read restores that proof. */
   /* `transcriptPending` is appended AFTER `restarting` rather than inserted anywhere inside. Two
      suites read this expression as a literal, one of them requiring `|| handoffExpired ||` with a
      term on each side, and both exist because a gate term silently dropped from here is a button
@@ -7042,7 +8647,7 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
      they block on unrelated facts, neither implies the other, and a resolution that kept one end of
      this line and dropped the other would have re-opened a real employer send. That is what the
      whole-expression pin in tests/application-submission-gate.test.mjs is for. */
-  const finalApprovalBlocked = !packetEvidenceReviewed || educationProfilePending || Boolean(educationDriftWarning) || coverLetterPending || requiredAnswerMissing || sensitiveQuestionPresent || !previewReady || handoffExpired || approving || restarting || transcriptPending;
+  const finalApprovalBlocked = !packetEvidenceReviewed || educationProfilePending || Boolean(educationDriftWarning) || coverLetterPending || requiredAnswerMissing || sensitiveQuestionPresent || !previewReady || handoffExpired || approving || restarting || transcriptPending || retrySafetyUnknown || negativeResolutionBlocked;
   function approveVerifiedPreview() {
     if (finalApprovalBlocked) return;
     onApprove();
@@ -7051,21 +8656,22 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
      first in DOM order so mobile, tablet, keyboard, and screen-reader users inspect it before the
      yes/no controls. Desktop keeps the familiar action-left, evidence-right composition. */
   const filledFormEvidence = (
-    <Card className={`overflow-hidden ${awaitingUnverifiedSubmission ? "lg:order-2" : ""}`}>
+    <Card className={`overflow-hidden ${submissionOutcomeGateActive ? "lg:order-2" : ""}`}>
       <div id="live-company-page" className="border-b border-border px-5 py-4"><p className="text-sm font-medium text-ink">{canFinishInDashboard ? "Finish the company page here" : "What the form looked like after we filled it in"}</p></div>
       {canFinishInDashboard && handoffUrl ? (
         <iframe
           src={handoffUrl}
           title="Live company application page"
           className="h-[72vh] min-h-[560px] w-full bg-white"
+          sandbox="allow-same-origin allow-scripts"
           allow="clipboard-read; clipboard-write"
         />
-      ) : review.preview_screenshot_url ? (
+      ) : previewUrl ? (
         previewFailed ? (
           <div className="p-10 text-center text-sm text-warn">Litos could not load the filled form preview. Try filling the form again before sending.</div>
         ) : (
           <img
-            src={review.preview_screenshot_url}
+            src={previewUrl}
             alt="The company's application page after Litos filled it in"
             className="h-auto w-full"
             onLoad={() => setPreviewState({ url: previewUrl, loaded: true, failed: false })}
@@ -7076,9 +8682,9 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
     </Card>
   );
   return (
-    <div className={`mx-auto grid gap-5 ${needsAttention && !awaitingUnverifiedSubmission ? "max-w-3xl" : "max-w-5xl lg:grid-cols-[1fr_1.15fr]"}`}>
-      {awaitingUnverifiedSubmission && filledFormEvidence}
-      <Card className={`${needsAttention && !awaitingUnverifiedSubmission ? "p-4 sm:p-6" : "p-7"} ${awaitingUnverifiedSubmission ? "lg:order-1" : ""}`}>
+    <div className={`mx-auto grid gap-5 ${needsAttention && !submissionOutcomeGateActive ? "max-w-3xl" : "max-w-5xl lg:grid-cols-[1fr_1.15fr]"}`}>
+      {submissionOutcomeGateActive && filledFormEvidence}
+      <Card className={`${needsAttention && !submissionOutcomeGateActive ? "p-4 sm:p-6" : "p-7"} ${submissionOutcomeGateActive ? "lg:order-1" : ""}`}>
         {directRecoveryNeeded && (
           <div role="alert" className="mb-5 rounded-inner border border-border bg-surface-alt p-4">
             <p className="text-small font-medium text-ink">This employer field changed before your answer was saved.</p>
@@ -7122,14 +8728,18 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
           />
         ) : (
           <>
-            {directProgress.lastSavedPromptFingerprint && needsAttention && !awaitingUnverifiedSubmission && (
+            {directProgress.lastSavedPromptFingerprint && needsAttention && !submissionOutcomeGateActive && (
               <p className="font-mono text-label font-medium uppercase tracking-[0.08em] text-teal-ink">
                 Answer saved to this application
               </p>
             )}
-            <h2 className={`${directProgress.lastSavedPromptFingerprint && needsAttention && !awaitingUnverifiedSubmission ? "mt-3" : ""} text-heading font-medium text-ink`}>
+            <h2 className={`${directProgress.lastSavedPromptFingerprint && needsAttention && !submissionOutcomeGateActive ? "mt-3" : ""} text-heading font-medium text-ink`}>
               {awaitingSecurityCode
                 ? "One code away"
+                : attendedManualAttemptActive
+                  ? "Confirm the exact outcome"
+                : submissionBoundaryInFlight
+                  ? "Submission in progress"
                 : awaitingUnverifiedSubmission
                   ? "Waiting on you to look"
                   : needsAttention
@@ -7140,16 +8750,16 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
                       : "One thing to finish"
                     : review.status === "failed" ? "Stopped" : "Review"}
             </h2>
-            {needsAttention && !awaitingUnverifiedSubmission && (
+            {needsAttention && !submissionOutcomeGateActive && (
               <p className="mt-2 max-w-2xl text-body text-muted">
                 {!currentNonQuestionTask && directTaskPlan.metadataBlockers.length > 0
                   ? "Litos needs the employer's exact wording or choices before it can ask you for a safe answer."
                   : "Complete this step to keep the application moving."}
               </p>
             )}
-            {awaitingUnverifiedSubmission ? null : needsAttention ? (
+            {submissionOutcomeGateActive ? null : needsAttention ? (
               currentNonQuestionTask ? (
-                <BlockerList items={[currentNonQuestionTask]} portalUrl={staysInsideLitos || attendedHandoffUrl ? undefined : handoffUrl ?? portalUrl} onRestartInLitos={onReviewPacket} onOpenQuestion={onOpenQuestion} onChooseOption={onChooseOption} onAddDocument={onAddDocument} onToggleAcknowledged={onToggleAcknowledged} tickingIds={attentionTicking} />
+                <BlockerList items={[currentNonQuestionTask]} portalUrl={staysInsideLitos || !legacyEmployerFallbackAllowed ? undefined : handoffUrl ?? portalUrl} onRestartInLitos={onReviewPacket} onOpenQuestion={onOpenQuestion} onChooseOption={onChooseOption} onAddDocument={onAddDocument} onToggleAcknowledged={onToggleAcknowledged} tickingIds={attentionTicking} />
               ) : directTaskPlan.metadataBlockers.length > 0 ? (
                 <div className="mt-6 border-t border-border pt-6">
                   <p className="text-small font-medium text-ink">
@@ -7167,11 +8777,15 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
                           <ButtonLink href="#live-company-page" block className="sm:w-auto">
                             Answer in this dashboard
                           </ButtonLink>
-                        ) : attendedHandoffUrl ? (
+                        ) : attendedHandoffAvailable || resumableAttendedHandoffAvailable ? (
                           <Button onClick={() => void openAttendedHandoff()} disabled={attendedHandoffState === "preparing"} block className="sm:w-auto">
-                            {attendedHandoffState === "preparing" ? "Checking extension..." : "Open exact company form"}
+                            {attendedHandoffState === "preparing"
+                              ? "Checking extension..."
+                              : resumableAttendedHandoffAvailable
+                                ? "Resume exact company form"
+                                : "Open exact company form"}
                           </Button>
-                        ) : !staysInsideLitos && (handoffUrl ?? portalUrl) ? (
+                        ) : legacyEmployerFallbackAllowed && !staysInsideLitos && (handoffUrl ?? portalUrl) ? (
                           <ButtonLink href={(handoffUrl ?? portalUrl)!} target="_blank" rel="noreferrer" block className="sm:w-auto">
                             Answer on company page
                           </ButtonLink>
@@ -7189,12 +8803,14 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
                       <div className="mt-5 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
                         <Button
                           onClick={onRefreshQuestionMetadata}
-                          disabled={questionMetadataRefreshing || questionMetadataRefreshDisabled}
+                          disabled={!retryAllowed || questionMetadataRefreshing || questionMetadataRefreshDisabled}
                           aria-busy={questionMetadataRefreshing}
                           block
                           className="sm:w-auto"
                         >
-                          {questionMetadataNeedsPacketReview
+                          {!retryAllowed
+                            ? "Retry blocked"
+                            : questionMetadataNeedsPacketReview
                             ? "Review packet first"
                             : questionMetadataRefreshing
                               ? <PendingLabel onColor>Reading company form...</PendingLabel>
@@ -7240,8 +8856,21 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
             attentionReason={safeAttentionReason}
             submitting={unverifiedSubmissionSubmitting}
             error={unverifiedSubmissionError}
+            allowNotFound={!negativeResolutionBlocked}
             onSubmitOutcome={onSubmitUnverifiedOutcome}
           />
+        )}
+        {submissionBoundaryInFlight && (
+          <div role="status" className="mt-4 rounded-inner border border-warn/35 bg-warn-soft px-4 py-3 text-sm leading-6 text-warn">
+            Litos authorized this exact employer-boundary step. Another attempt and a not-sent resolution stay locked permanently, while a confirmed outcome remains available.
+          </div>
+        )}
+        {!submissionOutcomeGateActive
+          && retrySafetyBlocker
+          && (needsAttention || review.status === "failed") && (
+          <p role="alert" className="mt-4 rounded-inner bg-warn-soft px-4 py-3 text-sm leading-6 text-warn">
+            {retrySafetyBlocker}
+          </p>
         )}
         {review.status === "ready_for_final_approval" && educationDriftWarning && (
           <div role="alert" className="mt-4 rounded-inner bg-danger-soft px-4 py-3 text-sm leading-6 text-danger">
@@ -7263,7 +8892,7 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
           </div>
         )}
         {completedItems.length > 0 && (
-          needsAttention && !awaitingUnverifiedSubmission ? (
+          needsAttention && !submissionOutcomeGateActive ? (
             <details className="group mt-4 border-t border-border pt-4">
               <summary className="-mx-2 flex min-h-11 cursor-pointer list-none items-center justify-between gap-4 rounded-inner px-2 text-small text-ink [&::-webkit-details-marker]:hidden">
                 <span className="flex min-w-0 items-center gap-2">
@@ -7363,11 +8992,15 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
             </p>
           </div>
         )}
-        {attendedHandoffUrl && (
+        {(attendedHandoffAvailable || resumableAttendedHandoffAvailable) && (
           <div className="mt-4 rounded-inner border border-border bg-surface-alt px-4 py-3">
-            <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Continue in Chrome</p>
+            <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">
+              {resumableAttendedHandoffAvailable ? "Exact handoff reserved" : "Continue in Chrome"}
+            </p>
             <p className="mt-1 text-xs leading-5 text-muted">
-              Litos will verify this account, bind the exact saved packet to the company&rsquo;s one-click form, and refill it before you review and submit.
+              {resumableAttendedHandoffAvailable
+                ? "A previous tab did not finish opening. Resume the same authorized attempt. Litos will not create another one."
+                : "Litos will verify this account, bind the exact saved packet to the company&rsquo;s one-click form, and refill it before you review and submit."}
             </p>
             {manualTrialPacket && (
               <div className="mt-3 rounded-inner border border-border bg-surface px-3 py-3 text-xs leading-5 text-muted">
@@ -7388,7 +9021,7 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
             )}
           </div>
         )}
-        {needsAttention && !awaitingUnverifiedSubmission && !canFinishInDashboard && !attendedHandoffUrl && (
+        {needsAttention && retryAllowed && !canFinishInDashboard && !attendedHandoffAvailable && !resumableAttendedHandoffAvailable && (
           <div className="mt-4 rounded-inner border border-border bg-surface-alt px-4 py-3">
             <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">{staysInsideLitos ? "Restart inside Litos" : "No live browser to reopen"}</p>
             <p className="mt-1 text-xs leading-5 text-muted">
@@ -7399,21 +9032,26 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
           </div>
         )}
         <div className="mt-7 flex flex-wrap gap-2">
-          {canFinishInDashboard && <ButtonLink href="#live-company-page">Finish in this dashboard</ButtonLink>}
-          {attendedHandoffUrl && (
+          {!attendedOutcomePending && canFinishInDashboard && <ButtonLink href="#live-company-page">Finish in this dashboard</ButtonLink>}
+          {attendedHandoffAvailable && (
             <>
-              <Button onClick={() => void openAttendedHandoff()} disabled={attendedHandoffState === "preparing"}>
+              <Button onClick={() => void openAttendedHandoff()} disabled={attendedHandoffState === "preparing" || attendedOutcomePending}>
                 {attendedHandoffState === "preparing" ? "Checking extension..." : "Open exact company form"}
               </Button>
               {manualTrialPacket && (
-                <Button onClick={() => void openManualAttendedHandoff()} disabled={attendedHandoffState === "preparing"} variant="secondary">
+                <Button onClick={() => void openManualAttendedHandoff()} disabled={attendedHandoffState === "preparing" || attendedOutcomePending} variant="secondary">
                   {attendedHandoffState === "preparing" ? "Rechecking packet..." : "Open manually"}
                 </Button>
               )}
             </>
           )}
-          {needsAttention && !staysInsideLitos && handoffUrl && !attendedHandoffUrl && <ButtonLink href={handoffUrl} target="_blank" rel="noreferrer" variant={canFinishInDashboard ? "secondary" : "primary"}>Open in new tab</ButtonLink>}
-          {needsAttention && !staysInsideLitos && !handoffUrl && !attendedHandoffUrl && portalUrl && <ButtonLink href={portalUrl} target="_blank" rel="noreferrer" variant="secondary">Open company page</ButtonLink>}
+          {resumableAttendedHandoffAvailable && (
+            <Button onClick={() => void openManualAttendedHandoff()} disabled={attendedHandoffState === "preparing" || attendedOutcomePending} variant="secondary">
+              {attendedHandoffState === "preparing" ? "Resuming exact handoff..." : "Resume company page"}
+            </Button>
+          )}
+          {needsAttention && !submissionOutcomeGateActive && !staysInsideLitos && legacyEmployerFallbackAllowed && handoffUrl && <ButtonLink href={handoffUrl} target="_blank" rel="noreferrer" variant={canFinishInDashboard ? "secondary" : "primary"}>Open in new tab</ButtonLink>}
+          {needsAttention && !submissionOutcomeGateActive && !staysInsideLitos && legacyEmployerFallbackAllowed && !handoffUrl && portalUrl && <ButtonLink href={portalUrl} target="_blank" rel="noreferrer" variant="secondary">Open company page</ButtonLink>}
           {hasQuestionsToReview && <Button onClick={onReviewQuestions} >Check the answers</Button>}
           {/* The audited re-run. "Try again" replays submit-request against the LAST acknowledged
               packet, and any saved answer since then changes packet_version, so on exactly the rows
@@ -7424,8 +9062,8 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
           {/* None of these four replay or resolve anything while the claim is still on the row for
               an unverified send - submit-request would just answer the same 409 again - so they wait
               for UnverifiedSubmissionCard's yes/no to release it first. */}
-          {needsAttention && !awaitingUnverifiedSubmission && <Button onClick={onReviewPacket}>Open packet review</Button>}
-          {needsAttention && !awaitingUnverifiedSubmission && <Button onClick={onRetry} variant="secondary">Try again</Button>}
+          {needsAttention && !submissionOutcomeGateActive && <Button onClick={onReviewPacket}>Open packet review</Button>}
+          {needsAttention && retryAllowed && <Button onClick={onRetry} variant="secondary">Try again</Button>}
           {/* The synced-fill recovery: the extension reads the SAME reviewed answers this managed
               run already produced (handoff-packet.ts on the extension side), so nothing here
               regenerates or re-syncs anything - it opens the employer's page with those answers
@@ -7436,23 +9074,23 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
               not live on, so a failure here (blocked pop-up, extension not installed, a failed
               /applications call) would otherwise fail with no visible feedback at all. */}
           {captchaBlockedLastAttempt && (
-            <Button onClick={onOpenWithExtension} variant="secondary" disabled={extensionFillBusy}>
+            <Button onClick={onOpenWithExtension} variant="secondary" disabled={extensionFillBusy || attendedOutcomePending}>
               {extensionFillBusy ? "Checking extension..." : "Open and fill with extension"}
             </Button>
           )}
-          {needsAttention && !awaitingUnverifiedSubmission && submission.handoff_url && <Button onClick={() => onHandoffComplete("cleared")} variant="secondary">I cleared the check</Button>}
-          {needsAttention && !awaitingUnverifiedSubmission && submission.handoff_url && <Button onClick={() => onHandoffComplete("submitted")} variant="secondary">I submitted it myself</Button>}
-          {review.status === "failed" && (failedPacketAuditStale
+          {needsAttention && attendedManualAttemptActive && !negativeResolutionBlocked && <Button onClick={() => onHandoffComplete("cleared")} disabled={attendedOutcomePending} variant="secondary">I cleared the check</Button>}
+          {needsAttention && attendedManualAttemptActive && <Button onClick={() => onHandoffComplete("submitted")} disabled={attendedOutcomePending} variant="secondary">{attendedOutcomePending ? "Recording outcome..." : "I submitted it myself"}</Button>}
+          {!submissionOutcomeGateActive && review.status === "failed" && (failedPacketAuditStale
             ? <Button onClick={onReviewPacket}>Open packet review</Button>
-            : <Button onClick={onRetry}>Try again</Button>)}
-          {review.status === "ready_for_final_approval" && educationDriftWarning && <Button onClick={onCheckResume} variant="secondary">Check resume</Button>}
+            : retryAllowed ? <Button onClick={onRetry}>Try again</Button> : null)}
+          {!submissionOutcomeGateActive && review.status === "ready_for_final_approval" && educationDriftWarning && <Button onClick={onCheckResume} variant="secondary">Check resume</Button>}
           {/* A REAL <button>, from the shared component, and that is not a stylistic preference on
               this screen. Seventy-nine prepared resumes and zero sent applications came out of pills
               rendered as <span> with nothing bound to them: a control that looks pressable and has
               no handler fails silently and looks exactly like a working one. `Button` renders
               `<button type="button">` and takes onClick and disabled directly, so there is no shape
               here that can go dead. */}
-          {review.status === "ready_for_final_approval" && handoffExpired && (
+          {!submissionOutcomeGateActive && review.status === "ready_for_final_approval" && handoffExpired && retryAllowed && (
             <Button onClick={onRestart} disabled={restarting} variant="secondary">{restarting ? "Starting it again..." : "Start it again"}</Button>
           )}
           {/* The way out of the eighth reason, one control per outstanding ask. On this status there
@@ -7460,7 +9098,7 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
               nothing on screen that resolves it, which is the shape of every defect this screen has
               been fixed for. Mapped rather than picking the first ask: two outstanding kinds are two
               separate pieces of work and a single button can only ever open one of them. */}
-          {review.status === "ready_for_final_approval" && outstandingDocumentAsks.map((ask) => (
+          {!submissionOutcomeGateActive && review.status === "ready_for_final_approval" && outstandingDocumentAsks.map((ask) => (
             <Button key={ask.kind} onClick={() => onAddDocument(ask.kind)} variant="secondary">Add {ask.kind}</Button>
           ))}
           {/* An ask she has answered with "I have ordered it" keeps a control, because plenty of
@@ -7468,7 +9106,7 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
               is the one this opens. It is worded differently from the row above so the two buttons
               are not the same offer twice: that one is the file this form is waiting for, this one is
               the copy she may not need to give. */}
-          {review.status === "ready_for_final_approval" && orderedDocumentAsks.map((ask) => (
+          {!submissionOutcomeGateActive && review.status === "ready_for_final_approval" && orderedDocumentAsks.map((ask) => (
             <Button key={ask.kind} onClick={() => onAddDocument(ask.kind)} variant="secondary">Add an unofficial {ask.kind}</Button>
           ))}
           {/* And the way BACK to a file that is already attached, which this row had no control for
@@ -7479,9 +9117,18 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
               Independent of every other kind, which it was not: gated on no ask being outstanding
               ANYWHERE, an attached transcript lost this control the moment a second kind was asked
               for, and a file the product cannot delete makes /privacy's promise false. */}
-          {review.status === "ready_for_final_approval" && attachedDocumentKinds.map((kind) => (
+          {!submissionOutcomeGateActive && review.status === "ready_for_final_approval" && attachedDocumentKinds.map((kind) => (
             <Button key={kind} onClick={() => onAddDocument(kind)} variant="quiet">Your {kind}</Button>
           ))}
+          {!submissionOutcomeGateActive
+            && review.status === "ready_for_final_approval"
+            && documentsLitosCannotDeliver
+            && !attendedManualAttemptActive
+            && selfSubmitHandoffAvailable && (
+              <Button onClick={onStartSelfSubmission} disabled={selfSubmitStarting || attendedOutcomePending} variant="secondary">
+                {selfSubmitStarting ? "Running duplicate check..." : "Open company page to finish"}
+              </Button>
+            )}
           {/* THE CONTROL THAT FINISHES AN APPLICATION LITOS CANNOT.
               A registrar's sealed copy and a form with no upload control are the two things no
               button on this screen can produce, and both leave the send gate shut for good. The
@@ -7490,10 +9137,17 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
               ready_for_final_approval behind a grey Send button forever.
               The same words as the control on a stalled handoff above, because it is the same act
               and the server writes the same record for it. */}
-          {review.status === "ready_for_final_approval" && documentsLitosCannotDeliver && (
-            <Button onClick={onSelfSubmitted} variant="secondary">I submitted it myself</Button>
+          {review.status === "ready_for_final_approval" && documentsLitosCannotDeliver && attendedManualAttemptActive && (
+            <>
+              {attendedManualRecovery && selfSubmitHandoffAvailable && (
+                <Button onClick={onStartSelfSubmission} disabled={selfSubmitStarting || attendedOutcomePending} variant="secondary">
+                  {selfSubmitStarting ? "Resuming exact handoff..." : "Resume company page"}
+                </Button>
+              )}
+              <Button onClick={onSelfSubmitted} disabled={attendedOutcomePending} variant="secondary">{attendedOutcomePending ? "Recording outcome..." : "I submitted it myself"}</Button>
+            </>
           )}
-          {review.status === "ready_for_final_approval" && <Button onClick={approveVerifiedPreview} disabled={finalApprovalBlocked}>Send application</Button>}
+          {!submissionOutcomeGateActive && review.status === "ready_for_final_approval" && <Button onClick={approveVerifiedPreview} disabled={finalApprovalBlocked}>Send application</Button>}
         </div>
         {attendedHandoffState === "preparing" && (
           <p role="status" aria-live="polite" className="mt-3 text-xs leading-5 text-muted">
@@ -7503,9 +9157,17 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
         {attendedHandoffError && (
           <p role="alert" className="mt-3 text-xs leading-5 text-danger">{attendedHandoffError}</p>
         )}
+        {selfSubmitStartError && (
+          <p role="alert" className="mt-3 text-xs leading-5 text-danger">{selfSubmitStartError}</p>
+        )}
         {extensionFillError && (
           <p role="alert" className="mt-3 text-xs leading-5 text-danger">{extensionFillError}</p>
         )}
+        <FillPostingDistinctionNotice
+          state={fillPostingDistinction}
+          onCleared={onFillPostingDistinctionCleared}
+          onRiskChanged={onFillPostingDistinctionRiskChanged}
+        />
         {/* Sibling of the alert rather than a child, for the same reason as ComposerRefusalNote:
             the paragraph above is pinned verbatim by captcha-extension-recovery. */}
         {messageAsksForTheExtension(extensionFillError) && <ExtensionStoreLink className="mt-2 inline-block text-xs" />}
@@ -7513,14 +9175,27 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
             through the page banner: the poll clears that one, and this screen is long enough that a
             message at the top of it is off screen from the control it is about. */}
         {sendRefusal && (
-          <div role="alert" className="mt-3 rounded-inner bg-danger-soft px-4 py-3 text-sm leading-6 text-danger">
-            <p>{sendRefusal.message}</p>
-            {sendRefusal.issues.length > 0 && (
-              <ul className="mt-2 list-disc space-y-1 pl-5 text-xs leading-5">
-                {sendRefusal.issues.map((issue) => <li key={issue}>{issue}</li>)}
-              </ul>
+          <>
+            <div
+              role={sendRefusal.tone === "resolved" ? "status" : "alert"}
+              className={`mt-3 rounded-inner px-4 py-3 text-sm leading-6 ${sendRefusal.tone === "resolved" ? "border border-success/30 bg-success/5 text-ink" : "bg-danger-soft text-danger"}`}
+            >
+              <p>{sendRefusal.message}</p>
+              {sendRefusal.issues.length > 0 && (
+                <ul className="mt-2 list-disc space-y-1 pl-5 text-xs leading-5">
+                  {sendRefusal.issues.map((issue) => <li key={issue}>{issue}</li>)}
+                </ul>
+              )}
+            </div>
+            {sendRefusal.postingDistinctionRisk && (
+              <PostingDistinctionResolution
+                key={postingDistinctionRiskKey(sendRefusal.postingDistinctionRisk)}
+                risk={sendRefusal.postingDistinctionRisk}
+                onCleared={onPostingDistinctionCleared}
+                onRiskChanged={onPostingDistinctionRiskChanged}
+              />
             )}
-          </div>
+          </>
         )}
         {review.status === "ready_for_final_approval" && educationDriftWarning && (
           <p className="mt-3 text-xs leading-5 text-warn">
@@ -7606,13 +9281,14 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
         <p className="mt-5 text-xs leading-5 text-muted">Litos will never pretend to be you. It will not get past the puzzle that checks you are human, a code on your phone, a login, or anything you have to swear to. It only says an application is sent once the company confirms it.</p>
         </>}
       </Card>
-      {!awaitingUnverifiedSubmission && !directAnswerActive && filledFormEvidence}
+      {!submissionOutcomeGateActive && !directAnswerActive && filledFormEvidence}
     </div>
   );
 }
 
 function SubmissionReceipt({ review, role, company }: { review: ApplicationReview; role: string; company: string }) {
   const receipt = review.receipt;
+  const receiptScreenshotUrl = safeEvidenceImageUrl(receipt?.screenshot_url);
   return (
     <div className="mx-auto max-w-4xl space-y-5">
       <CenteredState title="Sent" body={`${role} at ${company}`} />
@@ -7621,7 +9297,7 @@ function SubmissionReceipt({ review, role, company }: { review: ApplicationRevie
           <div><p className="font-mono text-[11px] uppercase tracking-[0.08em] text-positive">Proof it was sent</p><p className="mt-2 text-sm leading-6 text-ink">{receipt.confirmation_text}</p></div>
           <dl className="space-y-3 text-sm"><div><dt className="text-xs text-muted">Captured</dt><dd className="text-ink">{new Date(receipt.captured_at).toLocaleString()}</dd></div>{receipt.reference_id && <div><dt className="text-xs text-muted">Reference</dt><dd className="font-mono text-ink">{receipt.reference_id}</dd></div>}<div><dt className="text-xs text-muted">Where it was sent</dt><dd><a href={receipt.final_url} target="_blank" rel="noreferrer" className="break-all text-brand-ink underline">Open confirmation</a></dd></div></dl>
         </div>
-        {receipt.screenshot_url && <img src={receipt.screenshot_url} alt="The company's confirmation that the application arrived" className="h-auto w-full border-t border-border" />}
+        {receiptScreenshotUrl && <img src={receiptScreenshotUrl} alt="The company's confirmation that the application arrived" className="h-auto w-full border-t border-border" />}
       </Card>}
     </div>
   );
@@ -7900,8 +9576,8 @@ function PortalProgress({ status, startedAt, sending = false, submission }: { st
   const body = submitting
     ? "Waiting for confirmation."
     : "Not sent yet.";
-  const liveViewUrl = submission?.handoff_url;
-  const progressPreviewUrl = submission?.review.progress_screenshot_url;
+  const liveViewUrl = safeBrowserLiveViewUrl(submission?.handoff_url);
+  const progressPreviewUrl = safeEvidenceImageUrl(submission?.review.progress_screenshot_url);
   const progressStage = submitting
     ? "Waiting for the company confirmation"
     : submission?.review.progress_stage ?? "Opening the company form";
@@ -7988,6 +9664,7 @@ function PortalProgress({ status, startedAt, sending = false, submission }: { st
             src={liveViewUrl}
             title="Live company application form while Litos fills it"
             className="h-[72vh] min-h-[560px] w-full bg-white"
+            sandbox="allow-same-origin allow-scripts"
             allow="clipboard-read; clipboard-write"
           />
         ) : progressPreviewUrl ? (

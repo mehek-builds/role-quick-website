@@ -78,6 +78,21 @@ if (rawBuildTime !== undefined && Number.isNaN(Date.parse(rawBuildTime))) {
 }
 const BUILD_TIME = new Date(rawBuildTime ?? Date.now()).toISOString();
 
+/* Public release canaries need the source revision that was compiled, not the
+ * revision of whichever server happens to answer later. Vercel supplies the
+ * Git SHA during a repository-backed build, so capture and normalise it here
+ * beside BUILD_TIME. Local builds use an explicit incomplete identity. A
+ * Vercel build without trustworthy Git metadata fails instead of publishing a
+ * sentinel that could be mistaken for exact deployment proof. */
+const rawWebRevision = process.env.VERCEL_GIT_COMMIT_SHA?.trim();
+if (rawWebRevision !== undefined && !/^[a-f0-9]{40}$/i.test(rawWebRevision)) {
+  throw new Error("VERCEL_GIT_COMMIT_SHA must be one complete 40-character Git commit SHA.");
+}
+if (process.env.VERCEL === "1" && rawWebRevision === undefined) {
+  throw new Error("VERCEL_GIT_COMMIT_SHA is required for a Vercel build so its public revision can be verified.");
+}
+const LITOS_WEB_REVISION = rawWebRevision?.toLowerCase() ?? "local";
+
 export const CONTROLLED_PORTAL_ORIGIN_ENV = "LITOS_TEST_PORTAL_PUBLIC_ORIGIN";
 
 type Environment = Record<string, string | undefined>;
@@ -158,7 +173,7 @@ const nextConfig: NextConfig = {
    * silently disappear. A controlled tunnel host is admitted only after the
    * exact-origin validation above, and only in development. */
   allowedDevOrigins: ["127.0.0.1", ...extraControlledDevOrigins],
-  env: { BUILD_TIME },
+  env: { BUILD_TIME, LITOS_WEB_REVISION },
   async redirects() {
     return [
       {

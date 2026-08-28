@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   COVER_LETTER_WAIT_MS,
   HANDOFF_CLOCK_TICK_MS,
+  canonicalManualResolutionMatches,
   coverLetterBlocks,
   coverLetterGate,
   coverLetterIdentity,
@@ -14,11 +15,19 @@ import {
   publishSubmissionEnvelope,
   submissionAfterPacketAudit,
   submissionReviewPacketIdentity,
+  submissionBoundaryAuthorizationActive,
+  submissionBoundaryAuthorizationBlocksResolution,
+  submissionRetrySafetyAllowsRetry,
+  submissionRetrySafetyBlocksNegativeResolution,
+  submissionRetrySafetyFromUnknown,
+  submissionRetrySafetyIdentity,
+  submissionRetrySafetyPrecedence,
   submissionSnapshotIsOlder,
   submissionCoverLetterField,
   type SpecDocumentMark,
   type SubmissionSnapshot,
 } from "./submission-state.ts";
+import { legacyEmployerFallbackMayRender } from "./attended-handoff-replay.ts";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -110,13 +119,329 @@ test("a cover letter that is regenerated in place is installed", () => {
   assert.equal(nextSubmissionState(fromServer, regenerated), regenerated);
 });
 
-test("handoff_url and configured are versioned by nothing, so they are compared in their own right", () => {
+test("handoff URL, exact manual recovery tuple, and configured are compared in their own right", () => {
   const withHandoff: SubmissionSnapshot = { ...fromServer, handoff_url: "https://live.browserbase/session/1" };
   const withoutHandoff: SubmissionSnapshot = { ...fromServer, handoff_url: undefined };
+  const withManualAttempt: SubmissionSnapshot = {
+    ...fromServer,
+    manual_attempt_id: "6d58c1f5-e885-41f7-a16a-dac37f98ab17",
+    boundary_lease_id: "1e8ae85c-7fb2-4c54-913f-2db6c9318c1e",
+    boundary_activation_id: "8cba1f03-3d70-43cb-b770-466e18b8cdf4",
+    manual_handoff_resume_available: true,
+    retry_safety: {
+      kind: "blocked_unverified",
+      attemptId: "6d58c1f5-e885-41f7-a16a-dac37f98ab17",
+      at: "2026-08-24T08:00:00.000Z",
+      reason: "boundary_authorized",
+      leaseId: "1e8ae85c-7fb2-4c54-913f-2db6c9318c1e",
+      expiresAt: "2026-08-24T08:05:00.000Z",
+    },
+  };
   // A live browser URL that appears, and one that expires, are both news.
   assert.equal(nextSubmissionState(withoutHandoff, withHandoff), withHandoff);
   assert.equal(nextSubmissionState(withHandoff, withoutHandoff), withoutHandoff);
+  assert.equal(nextSubmissionState(fromServer, withManualAttempt), withManualAttempt);
+  assert.equal(
+    nextSubmissionState(withManualAttempt, fromServer).manual_attempt_id,
+    withManualAttempt.manual_attempt_id,
+    "an equal-clock GET cannot drop the exact manual reservation",
+  );
+  assert.equal(nextSubmissionState(withManualAttempt, fromServer).boundary_lease_id, withManualAttempt.boundary_lease_id);
+  assert.equal(nextSubmissionState(withManualAttempt, fromServer).boundary_activation_id, withManualAttempt.boundary_activation_id);
+  assert.equal(nextSubmissionState(withManualAttempt, fromServer).manual_handoff_resume_available, true);
+  const expired = { ...withManualAttempt, manual_handoff_resume_available: false };
+  assert.deepEqual(nextSubmissionState(withManualAttempt, expired), expired, "an authoritative expiry removes URL replay");
+  const confirmed: SubmissionSnapshot = {
+    ...withManualAttempt,
+    retry_safety: {
+      kind: "blocked_confirmed",
+      attemptId: withManualAttempt.manual_attempt_id!,
+      confirmedAt: "2026-08-24T08:02:00.000Z",
+    },
+    manual_attempt_id: undefined,
+    boundary_lease_id: undefined,
+    boundary_activation_id: undefined,
+    manual_handoff_resume_available: false,
+  };
+  assert.equal(nextSubmissionState(withManualAttempt, confirmed), confirmed, "a terminal outcome removes recovery metadata");
   assert.equal(nextSubmissionState(fromServer, { ...fromServer, configured: false }).configured, false);
+});
+
+test("an equal-clock malformed capability declaration replaces legacy absence and blocks raw links", () => {
+  const current: SubmissionSnapshot = {
+    ...fromServer,
+    retry_safety: { kind: "no_evidence" },
+  };
+  for (const declaration of [
+    null,
+    { version: "v2" },
+  ]) {
+    const incoming = {
+      ...current,
+      attended_handoff_capability: declaration,
+    } as unknown as SubmissionSnapshot;
+    const installed = nextSubmissionState(current, incoming);
+    assert.equal(installed, incoming);
+    assert.equal(legacyEmployerFallbackMayRender(installed.retry_safety, installed.attended_handoff_capability), false);
+  }
+});
+
+test("every immutable retry-safety event is installed while review.updated_at stays frozen", () => {
+  const verdicts = [
+    { kind: "no_evidence" as const },
+    {
+      kind: "blocked_unverified" as const,
+      attemptId: "attempt-1",
+      at: "2026-08-24T08:00:00.000Z",
+      reason: "opened" as const,
+    },
+    {
+      kind: "safe_not_sent" as const,
+      attemptId: "attempt-1",
+      proofKind: "applicant_checked_not_sent" as const,
+      resolvedAt: "2026-08-24T08:02:00.000Z",
+    },
+    {
+      kind: "blocked_unverified" as const,
+      attemptId: "attempt-2",
+      at: "2026-08-24T08:02:30.000Z",
+      reason: "boundary_authorized" as const,
+      leaseId: "lease-2",
+      expiresAt: "2026-08-24T08:05:30.000Z",
+    },
+    {
+      kind: "blocked_unverified" as const,
+      attemptId: "attempt-2",
+      at: "2026-08-24T08:03:00.000Z",
+      reason: "pressed" as const,
+    },
+    {
+      kind: "blocked_confirmed" as const,
+      attemptId: "attempt-2",
+      confirmedAt: "2026-08-24T08:04:00.000Z",
+    },
+  ];
+  let installed: SubmissionSnapshot = { ...fromServer, retry_safety: verdicts[0] };
+  for (const retry_safety of verdicts.slice(1)) {
+    const incoming: SubmissionSnapshot = { ...fromServer, retry_safety };
+    assert.equal(incoming.review.updated_at, installed.review.updated_at);
+    assert.equal(nextSubmissionState(installed, incoming, { authoritativeRetrySafety: true }), incoming);
+    installed = incoming;
+  }
+});
+
+test("only a complete safe server verdict permits retry", () => {
+  assert.equal(submissionRetrySafetyAllowsRetry({ kind: "no_evidence" }), true);
+  assert.equal(submissionRetrySafetyAllowsRetry({
+    kind: "safe_not_sent",
+    attemptId: "attempt-1",
+    proofKind: "applicant_checked_not_sent",
+    resolvedAt: "2026-08-24T08:02:00.000Z",
+  }), true);
+  assert.equal(submissionRetrySafetyAllowsRetry({ kind: "safe_not_sent", attemptId: "attempt-1" }), false);
+  assert.equal(submissionRetrySafetyAllowsRetry({
+    kind: "safe_not_sent",
+    attemptId: "attempt-1",
+    proofKind: "made_up_proof",
+    resolvedAt: "2026-08-24T08:02:00.000Z",
+  }), false);
+  assert.equal(submissionRetrySafetyAllowsRetry({
+    kind: "blocked_unverified",
+    attemptId: "attempt-1",
+    at: "2026-08-24T08:00:00.000Z",
+    reason: "boundary_authorized",
+    leaseId: "lease-1",
+    expiresAt: "2026-08-24T08:03:00.000Z",
+  }), false);
+  assert.equal(submissionRetrySafetyAllowsRetry({
+    kind: "blocked_unverified",
+    attemptId: "attempt-1",
+    at: "2026-08-24T08:00:00.000Z",
+    reason: "pressed",
+  }), false);
+  assert.equal(submissionRetrySafetyAllowsRetry({
+    kind: "blocked_confirmed",
+    attemptId: "attempt-1",
+    confirmedAt: "2026-08-24T08:04:00.000Z",
+  }), false);
+  assert.equal(submissionRetrySafetyAllowsRetry(undefined), false);
+  assert.equal(submissionRetrySafetyAllowsRetry(null), false);
+  assert.equal(submissionRetrySafetyAllowsRetry({
+    kind: "safe_not_sent",
+    attemptId: "attempt-1",
+    proofKind: "applicant_checked_not_sent",
+    resolvedAt: "not-a-date",
+  }), false);
+});
+
+test("canonical manual resolution requires an exact per-attempt verdict", () => {
+  const applicationId = "application-1";
+  const attemptId = "attempt-1";
+  const aggregate = {
+    kind: "blocked_confirmed",
+    attemptId,
+    confirmedAt: "2026-08-24T08:04:00.000Z",
+  };
+  const base = {
+    application_id: applicationId,
+    attempt_id: attemptId,
+    found: true,
+    retry_safety: aggregate,
+  };
+
+  assert.equal(
+    canonicalManualResolutionMatches(applicationId, attemptId, true, base),
+    false,
+    "aggregate safety cannot stand in for the required exact-attempt field",
+  );
+  assert.equal(canonicalManualResolutionMatches(applicationId, attemptId, true, {
+    ...base,
+    resolved_attempt_retry_safety: { ...aggregate, attemptId: "attempt-2" },
+  }), false);
+  assert.equal(canonicalManualResolutionMatches(applicationId, attemptId, true, {
+    ...base,
+    resolved_attempt_retry_safety: aggregate,
+  }), true);
+  assert.equal(canonicalManualResolutionMatches(applicationId, attemptId, false, {
+    ...base,
+    found: false,
+    resolved_attempt_retry_safety: {
+      kind: "safe_not_sent",
+      attemptId,
+      proofKind: "applicant_checked_not_sent",
+      resolvedAt: "2026-08-24T08:04:00.000Z",
+    },
+  }), true);
+});
+
+test("pressed, boundary-authorized, and invalid-sequence attempts permanently veto a negative answer", () => {
+  const at = "2026-08-24T08:00:00.000Z";
+  assert.equal(submissionRetrySafetyBlocksNegativeResolution({
+    kind: "blocked_unverified",
+    attemptId: "attempt-1",
+    at,
+    reason: "opened",
+  }), false, "an opening that never crossed the employer boundary can still be checked as not sent");
+  for (const reason of ["pressed", "boundary_authorized", "invalid_sequence"] as const) {
+    assert.equal(submissionRetrySafetyBlocksNegativeResolution({
+      kind: "blocked_unverified",
+      attemptId: "attempt-1",
+      at,
+      reason,
+    }), true, `${reason} must never expose a negative resolution`);
+  }
+  assert.equal(submissionRetrySafetyBlocksNegativeResolution({
+    kind: "blocked_unverified",
+    reason: "boundary_authorized",
+    expiresAt: "2020-01-01T00:00:00.000Z",
+  }), true, "expired or malformed boundary metadata cannot reopen the negative action");
+});
+
+test("runtime parsing rejects malformed safety before it can grant retry", () => {
+  assert.deepEqual(submissionRetrySafetyFromUnknown({ kind: "no_evidence" }), { kind: "no_evidence" });
+  assert.equal(submissionRetrySafetyFromUnknown({
+    kind: "safe_not_sent",
+    attemptId: "attempt-1",
+    proofKind: "applicant_checked_not_sent",
+    resolvedAt: "not-a-date",
+  }), null);
+  assert.equal(submissionRetrySafetyFromUnknown({
+    kind: "blocked_unverified",
+    attemptId: "attempt-1",
+    at: "2026-08-24T08:00:00.000Z",
+    reason: "boundary_authorized",
+    leaseId: "",
+    expiresAt: "2026-08-24T08:03:00.000Z",
+  }), null);
+});
+
+test("equal-clock retry safety only moves toward stricter evidence without causal authority", () => {
+  const safe: SubmissionSnapshot = { ...fromServer, retry_safety: { kind: "no_evidence" } };
+  const unknown: SubmissionSnapshot = { ...fromServer, retry_safety: null };
+  const opened: SubmissionSnapshot = {
+    ...fromServer,
+    retry_safety: {
+      kind: "blocked_unverified",
+      attemptId: "attempt-1",
+      at: "2026-08-24T08:00:00.000Z",
+      reason: "opened",
+    },
+  };
+  const pressed: SubmissionSnapshot = {
+    ...opened,
+    retry_safety: {
+      kind: "blocked_unverified",
+      attemptId: "attempt-1",
+      at: "2026-08-24T08:00:00.000Z",
+      reason: "pressed",
+    },
+  };
+  const invalidSequence: SubmissionSnapshot = {
+    ...opened,
+    retry_safety: {
+      kind: "blocked_unverified",
+      attemptId: "attempt-1",
+      at: "2026-08-24T08:00:00.000Z",
+      reason: "invalid_sequence",
+    },
+  };
+  const confirmed: SubmissionSnapshot = {
+    ...fromServer,
+    retry_safety: {
+      kind: "blocked_confirmed",
+      attemptId: "attempt-1",
+      confirmedAt: "2026-08-24T08:04:00.000Z",
+    },
+  };
+
+  assert.equal(submissionRetrySafetyPrecedence(safe.retry_safety), 0);
+  assert.ok(submissionRetrySafetyPrecedence(unknown.retry_safety) > submissionRetrySafetyPrecedence(safe.retry_safety));
+  assert.equal(nextSubmissionState(safe, unknown), unknown, "missing safety closes stale permission");
+  assert.equal(nextSubmissionState(unknown, safe), unknown, "an equal timestamp cannot turn uncertainty into permission");
+  assert.equal(nextSubmissionState(pressed, safe).retry_safety, pressed.retry_safety, "an earlier safe GET cannot erase a press");
+  assert.equal(nextSubmissionState(invalidSequence, opened).retry_safety, invalidSequence.retry_safety);
+  assert.equal(nextSubmissionState(confirmed, pressed).retry_safety, confirmed.retry_safety);
+  assert.equal(nextSubmissionState(opened, pressed), pressed, "newer immutable evidence progresses");
+  assert.equal(nextSubmissionState(pressed, confirmed), confirmed, "exact confirmation remains terminal");
+  assert.equal(
+    nextSubmissionState(unknown, safe, { authoritativeRetrySafety: true }),
+    safe,
+    "a causally fresh authoritative refresh may prove that retry is safe",
+  );
+});
+
+test("a boundary authorization is active only for a complete unexpired server verdict", () => {
+  const now = Date.parse("2026-08-24T08:02:00.000Z");
+  const active = {
+    kind: "blocked_unverified",
+    attemptId: "attempt-1",
+    at: "2026-08-24T08:00:00.000Z",
+    reason: "boundary_authorized",
+    leaseId: "lease-1",
+    expiresAt: "2026-08-24T08:03:00.000Z",
+  };
+  assert.equal(submissionBoundaryAuthorizationActive(active, now), true);
+  assert.equal(submissionBoundaryAuthorizationActive(active, Date.parse(active.expiresAt)), false);
+  assert.equal(submissionBoundaryAuthorizationActive({ ...active, leaseId: "" }, now), false);
+  assert.equal(submissionBoundaryAuthorizationActive({ ...active, expiresAt: "not-a-date" }, now), false);
+  assert.equal(submissionBoundaryAuthorizationBlocksResolution(active, now), true);
+  assert.equal(submissionBoundaryAuthorizationBlocksResolution(active, Date.parse(active.expiresAt)), false);
+  assert.equal(submissionBoundaryAuthorizationBlocksResolution({ ...active, leaseId: "" }, now), true);
+  assert.equal(submissionBoundaryAuthorizationBlocksResolution({ ...active, expiresAt: "not-a-date" }, now), true);
+  assert.equal(submissionRetrySafetyIdentity(active).includes("boundary_authorized"), true);
+  assert.equal(submissionRetrySafetyIdentity({ ...active, leaseId: "" }), "invalid");
+});
+
+test("missing retry safety replaces stale permission and repeated verdicts still dedupe", () => {
+  const safe: SubmissionSnapshot = { ...fromServer, retry_safety: { kind: "no_evidence" } };
+  const missing: SubmissionSnapshot = { ...fromServer, retry_safety: undefined };
+  assert.notEqual(submissionRetrySafetyIdentity(safe.retry_safety), submissionRetrySafetyIdentity(missing.retry_safety));
+  assert.equal(nextSubmissionState(safe, missing), missing, "a rolling response cannot preserve stale retry permission");
+  assert.equal(
+    nextSubmissionState(safe, { ...safe, retry_safety: { kind: "no_evidence" } }),
+    safe,
+    "an identical verdict does not rerender a settled packet",
+  );
 });
 
 /* THE SAME DEFECT AS THE COVER LETTER, IN THE FIELD ADDED AFTER IT.

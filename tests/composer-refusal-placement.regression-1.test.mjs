@@ -130,7 +130,7 @@ describe("the refusal renders where the button is, and is announced exactly once
     // is the thing that carries role="alert" and refusal.message.
     const row = code.match(/<div className="mt-5 flex flex-wrap items-center justify-end gap-3">([\s\S]*?)<\/div>/);
     assert.ok(row, "the generate button must keep its own row");
-    assert.match(row[1], /<ComposerRefusalNote refusal=\{refusal\} at="action" \/>/);
+    assert.match(row[1], /<ComposerRefusalNote refusal=\{visibleRefusal\} at="action" \/>/);
     assert.match(row[1], /Tailor resume/);
     assert.match(row[1], /Fill application/);
     assert.match(

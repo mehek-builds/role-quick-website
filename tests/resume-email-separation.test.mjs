@@ -33,10 +33,10 @@ describe("personal resume email and portal routing email stay separate", () => {
     assert.match(applications, /manualTrialPacketEvidenceIsFresh\(selected\.id, activePacketEvidence\)/);
     assert.match(applications, /\/packet-audit`, \{ method: "POST" \}/);
     assert.match(applications, /revalidateAcknowledgedPacketEvidence\(currentEvidence, requestedId, currentAudit, Date\.now\(\)\)/);
-    assert.match(applications, /async function openManualAttendedHandoff\(\)/);
-    assert.match(applications, /await api<ManualHandoffResponse>\(`\/applications\/\$\{submission\.application_id\}\/submission\/manual-handoff`, \{ method: "POST" \}\)/);
-    assert.match(applications, /manualHandoffMatchesPacket\(current, attendedHandoffUrl, manualTrialPacket\)/);
-    assert.match(applications, /companyTab\.location\.replace\(handoff\.url\)/);
+    assert.match(applications, /async function openManualAttendedHandoff\(useExtension = false\)/);
+    assert.match(applications, /await api<ManualHandoffResponse>\(`\/applications\/\$\{requestedSubmission\.application_id\}\/submission\/manual-handoff`, \{[\s\S]{0,120}method: "POST",[\s\S]{0,120}signal: responseController\.signal/);
+    assert.match(applications, /manualHandoffMatchesPacket\([\s\S]{0,180}current,[\s\S]{0,80}authorizedUrl,[\s\S]{0,80}packetForValidation/);
+    assert.match(applications, /companyTab\.location\.replace\(authorizedUrl\)/);
     assert.match(applications, /<Button onClick=\{\(\) => void openManualAttendedHandoff\(\)\}/);
     assert.doesNotMatch(applications, /<ButtonLink href=\{attendedHandoffUrl\}[\s\S]{0,120}Open manually/);
     assert.doesNotMatch(applications, /Portal routing email:[\s\S]{0,120}review\.applicant_email\?\.address/);

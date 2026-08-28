@@ -1,3 +1,8 @@
+import {
+  attendedHandoffCapabilityFromUnknown,
+  type AttendedHandoffCapabilityLike,
+} from "./attended-handoff-capability.ts";
+
 /**
  * Which submission snapshot the dashboard keeps when a poll answers.
  *
@@ -48,9 +53,224 @@ export type AttachedDocumentLike = {
   ordered_at?: string | null;
 };
 
+/** The structural subset of the server's immutable retry verdict used by this domain module. */
+export type SubmissionRetrySafetyProofKindLike =
+  | "typed_pre_click_stop"
+  | "applicant_checked_not_sent"
+  | "applicant_checked_all_possible_destinations_not_sent"
+  | "employer_rejected_not_filed"
+  | "employer_verification_pending_not_filed"
+  | "provider_definitive_rejection"
+  | "extension_cancelled_before_press";
+
+export type SubmissionRetrySafetyLike =
+  | { kind: "no_evidence" }
+  | { kind: "safe_not_sent"; attemptId: string; proofKind: SubmissionRetrySafetyProofKindLike; resolvedAt: string }
+  | { kind: "blocked_unverified"; attemptId: string; at: string; reason: "opened" | "pressed" | "invalid_sequence" }
+  | {
+    kind: "blocked_unverified";
+    attemptId: string;
+    at: string;
+    reason: "boundary_authorized";
+    leaseId: string;
+    expiresAt: string;
+  }
+  | { kind: "blocked_confirmed"; attemptId: string; confirmedAt: string };
+
+function nonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function timestampString(value: unknown): value is string {
+  return nonEmptyString(value) && Number.isFinite(Date.parse(value));
+}
+
+function submissionRetrySafetyProofKind(value: unknown): value is SubmissionRetrySafetyProofKindLike {
+  return value === "typed_pre_click_stop"
+    || value === "applicant_checked_not_sent"
+    || value === "applicant_checked_all_possible_destinations_not_sent"
+    || value === "employer_rejected_not_filed"
+    || value === "employer_verification_pending_not_filed"
+    || value === "provider_definitive_rejection"
+    || value === "extension_cancelled_before_press";
+}
+
+/** Runtime validation for the retry verdict carried by success and error envelopes. */
+export function submissionRetrySafetyFromUnknown(value: unknown): SubmissionRetrySafetyLike | null {
+  if (!value || typeof value !== "object") return null;
+  const safety = value as Partial<SubmissionRetrySafetyLike> & Record<string, unknown>;
+  if (safety.kind === "no_evidence") return safety as SubmissionRetrySafetyLike;
+  if (safety.kind === "safe_not_sent"
+    && nonEmptyString(safety.attemptId)
+    && submissionRetrySafetyProofKind(safety.proofKind)
+    && timestampString(safety.resolvedAt)) {
+    return safety as SubmissionRetrySafetyLike;
+  }
+  if (safety.kind === "blocked_unverified"
+    && nonEmptyString(safety.attemptId)
+    && timestampString(safety.at)
+    && (safety.reason === "opened" || safety.reason === "pressed" || safety.reason === "invalid_sequence")) {
+    return safety as SubmissionRetrySafetyLike;
+  }
+  if (safety.kind === "blocked_unverified"
+    && safety.reason === "boundary_authorized"
+    && nonEmptyString(safety.attemptId)
+    && timestampString(safety.at)
+    && nonEmptyString(safety.leaseId)
+    && timestampString(safety.expiresAt)) {
+    return safety as SubmissionRetrySafetyLike;
+  }
+  if (safety.kind === "blocked_confirmed"
+    && nonEmptyString(safety.attemptId)
+    && timestampString(safety.confirmedAt)) {
+    return safety as SubmissionRetrySafetyLike;
+  }
+  return null;
+}
+
+/**
+ * Validate the exact-attempt verdict returned by a canonical manual-resolution mutation.
+ * The aggregate application verdict may describe another attempt, so it is never a substitute.
+ */
+export function canonicalManualResolutionMatches(
+  requestedApplicationId: string,
+  requestedAttemptId: string,
+  found: boolean,
+  response: unknown,
+): boolean {
+  if (!response || typeof response !== "object") return false;
+  const result = response as Record<string, unknown>;
+  if (result.application_id !== requestedApplicationId
+    || result.attempt_id !== requestedAttemptId
+    || result.found !== found) return false;
+  const exactSafety = submissionRetrySafetyFromUnknown(result.resolved_attempt_retry_safety);
+  if (!exactSafety || exactSafety.kind === "no_evidence" || exactSafety.attemptId !== requestedAttemptId) {
+    return false;
+  }
+  return found ? exactSafety.kind === "blocked_confirmed" : exactSafety.kind === "safe_not_sent";
+}
+
+/**
+ * Whether the immutable server verdict explicitly permits another employer-facing attempt.
+ *
+ * The parameter is unknown on purpose. TypeScript describes a healthy response, but a rolling
+ * deploy, stale proxy, or malformed payload can still omit or corrupt the field at runtime. Only a
+ * fully valid safe variant opens the gate. In particular, no mutable review field is consulted.
+ */
+export function submissionRetrySafetyAllowsRetry(value: unknown): boolean {
+  const safety = submissionRetrySafetyFromUnknown(value);
+  if (!safety) return false;
+  if (safety.kind === "no_evidence") return true;
+  return safety.kind === "safe_not_sent";
+}
+
+/** Preserve the difference between legacy omission, a malformed declaration, and exact metadata. */
+function attendedHandoffCapabilityIdentity(value: unknown): string {
+  if (value === undefined) return "absent";
+  const capability = attendedHandoffCapabilityFromUnknown(value);
+  return capability
+    ? `valid:${capability.version}:${capability.kind}:${capability.capability_sha256}:${capability.url_sha256}`
+    : "invalid";
+}
+
+/**
+ * Whether an applicant may record that the exact attempt did not reach the employer.
+ *
+ * `pressed`, `boundary_authorized`, and `invalid_sequence` are permanent negative-answer vetoes.
+ * Metadata validity and lease expiry cannot turn one of those durable employer-boundary facts into
+ * permission. Positive confirmation remains a separate exact-attempt action.
+ */
+export function submissionRetrySafetyBlocksNegativeResolution(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const safety = value as Record<string, unknown>;
+  return safety.kind === "blocked_unverified"
+    && (safety.reason === "pressed"
+      || safety.reason === "boundary_authorized"
+      || safety.reason === "invalid_sequence");
+}
+
+/**
+ * Fail-closed ordering for verdicts that share the review timestamp.
+ *
+ * The review clock does not version the immutable attempt ledger. A delayed GET therefore cannot
+ * move from a larger value to a smaller one. Permission is intentionally below missing or malformed
+ * data, so equal timestamps alone can never turn uncertainty into another employer-facing attempt.
+ * A caller may override this only with separate causal proof that its server read began after the
+ * latest accepted client mutation.
+ */
+export function submissionRetrySafetyPrecedence(value: unknown): number {
+  const safety = submissionRetrySafetyFromUnknown(value);
+  if (!safety) return 1;
+  if (safety.kind === "no_evidence" || safety.kind === "safe_not_sent") return 0;
+  if (safety.kind === "blocked_confirmed") return 6;
+  if (safety.reason === "opened") return 2;
+  if (safety.reason === "boundary_authorized") return 3;
+  if (safety.reason === "pressed") return 4;
+  return 5;
+}
+
+/** Stable identity for a retry verdict, including blocked evidence that changes off-review. */
+export function submissionRetrySafetyIdentity(value: unknown): string {
+  if (value === undefined) return "absent";
+  const safety = submissionRetrySafetyFromUnknown(value);
+  if (!safety) return "invalid";
+  if (safety.kind === "no_evidence") return JSON.stringify([safety.kind]);
+  if (safety.kind === "safe_not_sent") {
+    return JSON.stringify([safety.kind, safety.attemptId, safety.proofKind, safety.resolvedAt]);
+  }
+  if (safety.kind === "blocked_unverified"
+    && (safety.reason === "opened" || safety.reason === "pressed" || safety.reason === "invalid_sequence")) {
+    return JSON.stringify([safety.kind, safety.attemptId, safety.at, safety.reason]);
+  }
+  if (safety.kind === "blocked_unverified"
+    && safety.reason === "boundary_authorized") {
+    return JSON.stringify([
+      safety.kind,
+      safety.attemptId,
+      safety.at,
+      safety.reason,
+      safety.leaseId,
+      safety.expiresAt,
+    ]);
+  }
+  if (safety.kind === "blocked_confirmed") {
+    return JSON.stringify([safety.kind, safety.attemptId, safety.confirmedAt]);
+  }
+  return "invalid";
+}
+
+/** Whether the server has committed an employer-boundary capability that has not yet expired. */
+export function submissionBoundaryAuthorizationActive(value: unknown, now = Date.now()): boolean {
+  if (!value || typeof value !== "object") return false;
+  const safety = value as Partial<SubmissionRetrySafetyLike> & Record<string, unknown>;
+  if (safety.kind !== "blocked_unverified"
+    || safety.reason !== "boundary_authorized"
+    || !nonEmptyString(safety.attemptId)
+    || !nonEmptyString(safety.at)
+    || !nonEmptyString(safety.leaseId)
+    || !nonEmptyString(safety.expiresAt)) return false;
+  const expiresAt = Date.parse(safety.expiresAt);
+  return Number.isFinite(expiresAt) && expiresAt > now;
+}
+
+/** A boundary verdict blocks applicant resolution until a complete authorization has expired. */
+export function submissionBoundaryAuthorizationBlocksResolution(value: unknown, now = Date.now()): boolean {
+  if (!value || typeof value !== "object") return false;
+  const safety = value as Partial<SubmissionRetrySafetyLike> & Record<string, unknown>;
+  if (safety.kind !== "blocked_unverified" || safety.reason !== "boundary_authorized") return false;
+  if (!nonEmptyString(safety.attemptId)
+    || !nonEmptyString(safety.at)
+    || !nonEmptyString(safety.leaseId)
+    || !nonEmptyString(safety.expiresAt)) return true;
+  const expiresAt = Date.parse(safety.expiresAt);
+  return !Number.isFinite(expiresAt) || expiresAt > now;
+}
+
 export type SubmissionSnapshot = {
   application_id: string;
   review: { updated_at: string };
+  /** Server-owned attempt ledger fold. Absent or null is unknown and therefore not retryable. */
+  retry_safety?: SubmissionRetrySafetyLike | null;
   cover_letter?: CoverLetterLike | null;
   /**
    * What this application already carries, keyed by document kind. Tri-state the way
@@ -59,6 +279,14 @@ export type SubmissionSnapshot = {
    */
   documents?: Readonly<Record<string, AttachedDocumentLike>>;
   handoff_url?: string;
+  /** Exact attended/manual attempt reserved by the server before exposing the employer control. */
+  manual_attempt_id?: string;
+  /** Exact immutable authorization tuple needed for an explicit, user-clicked URL replay. */
+  boundary_lease_id?: string;
+  boundary_activation_id?: string;
+  manual_handoff_resume_available?: boolean;
+  /** URL-free identity of the attended capability available for this exact application state. */
+  attended_handoff_capability?: AttendedHandoffCapabilityLike | null;
   configured?: boolean;
   /**
    * True only on the snapshot selectPacket seeds from a board row. It is a statement about
@@ -263,21 +491,65 @@ export function documentsFromSpecMarks(
  * the case the dedupe exists for: a 2.5s poll on a settled packet must not re-render the review
  * pane, the resume preview and the filled-form image forever.
  */
-export function nextSubmissionState<T extends SubmissionSnapshot>(current: T | null | undefined, incoming: T): T {
+export type NextSubmissionStateOptions = {
+  /** The server read began after the latest accepted local mutation generation. */
+  authoritativeRetrySafety?: boolean;
+};
+
+export function nextSubmissionState<T extends SubmissionSnapshot>(
+  current: T | null | undefined,
+  incoming: T,
+  options: NextSubmissionStateOptions = {},
+): T {
   if (!current) return incoming;
   // A snapshot for a different packet is not a version of this one, it is the wrong application.
   if (current.application_id !== incoming.application_id) return incoming;
   if (submissionSnapshotIsOlder(current, incoming)) return current;
   const currentCoverLetter = submissionCoverLetterField(current);
   const incomingCoverLetter = submissionCoverLetterField(incoming);
-  const nextIncoming = !incomingCoverLetter.included && currentCoverLetter.included
+  let nextIncoming = (!incomingCoverLetter.included && currentCoverLetter.included
     ? { ...incoming, cover_letter: currentCoverLetter.value }
-    : incoming;
+    : incoming) as T;
   // Never let a board seed outrank the server.
   if (current.partial) return nextIncoming;
   if (current.review.updated_at !== nextIncoming.review.updated_at) return nextIncoming;
+  if (!options.authoritativeRetrySafety
+    && submissionRetrySafetyPrecedence(nextIncoming.retry_safety)
+      < submissionRetrySafetyPrecedence(current.retry_safety)) {
+    nextIncoming = { ...nextIncoming, retry_safety: current.retry_safety };
+  }
+  /* A manual attempt id is an exact server reservation. Review timestamps do not version it, so a
+     delayed equal-clock GET that predates the reservation may not erase it by omission. A direct
+     response, or a later review clock, can still remove it through the normal authoritative path. */
+  const incomingKeepsExactManualAttempt = nextIncoming.retry_safety?.kind === "blocked_unverified"
+    && nextIncoming.retry_safety.reason === "boundary_authorized"
+    && nextIncoming.retry_safety.attemptId === current.manual_attempt_id;
+  if (current.manual_attempt_id
+    && incomingKeepsExactManualAttempt
+    && (!nextIncoming.manual_attempt_id
+      || nextIncoming.manual_attempt_id === current.manual_attempt_id)) {
+    nextIncoming = {
+      ...nextIncoming,
+      manual_attempt_id: nextIncoming.manual_attempt_id ?? current.manual_attempt_id,
+      boundary_lease_id: nextIncoming.boundary_lease_id ?? current.boundary_lease_id,
+      boundary_activation_id: nextIncoming.boundary_activation_id ?? current.boundary_activation_id,
+      manual_handoff_resume_available: nextIncoming.manual_handoff_resume_available
+        ?? current.manual_handoff_resume_available,
+      ...(nextIncoming.attended_handoff_capability !== undefined
+        ? { attended_handoff_capability: nextIncoming.attended_handoff_capability }
+        : current.attended_handoff_capability !== undefined
+          ? { attended_handoff_capability: current.attended_handoff_capability }
+          : {}),
+    };
+  }
   if (coverLetterIdentity(current.cover_letter) !== coverLetterIdentity(nextIncoming.cover_letter)) return nextIncoming;
   if (submissionReviewPacketIdentity(current.review) !== submissionReviewPacketIdentity(nextIncoming.review)) return nextIncoming;
+  /* retry_safety is derived from immutable attempt events and is not part of the mutable review.
+     A press, confirmation, or not-sent proof can therefore change this verdict while updated_at is
+     frozen. Install that event-derived answer in both directions, including a missing incoming
+     field, which must replace a previously permissive answer and fail closed during a rolling
+     deploy rather than preserve stale permission. */
+  if (submissionRetrySafetyIdentity(current.retry_safety) !== submissionRetrySafetyIdentity(nextIncoming.retry_safety)) return nextIncoming;
   /* `documents` lives outside `review` and is versioned by nothing, exactly like `cover_letter`
      above, so it gets its own comparison for the reason the header states. Left out, a poll whose
      only news was a newly attached transcript matched on review.updated_at (which nothing advances
@@ -290,6 +562,12 @@ export function nextSubmissionState<T extends SubmissionSnapshot>(current: T | n
      no verdict; returning `incoming` from here would, by throwing away that restoration. */
   if (documentsIdentity(current.documents) !== documentsIdentity(nextIncoming.documents)) return nextIncoming;
   if ((current.handoff_url ?? null) !== (nextIncoming.handoff_url ?? null)) return nextIncoming;
+  if ((current.manual_attempt_id ?? null) !== (nextIncoming.manual_attempt_id ?? null)) return nextIncoming;
+  if ((current.boundary_lease_id ?? null) !== (nextIncoming.boundary_lease_id ?? null)) return nextIncoming;
+  if ((current.boundary_activation_id ?? null) !== (nextIncoming.boundary_activation_id ?? null)) return nextIncoming;
+  if ((current.manual_handoff_resume_available ?? false) !== (nextIncoming.manual_handoff_resume_available ?? false)) return nextIncoming;
+  if (attendedHandoffCapabilityIdentity(current.attended_handoff_capability)
+    !== attendedHandoffCapabilityIdentity(nextIncoming.attended_handoff_capability)) return nextIncoming;
   if ((current.configured ?? null) !== (nextIncoming.configured ?? null)) return nextIncoming;
   return current;
 }
@@ -307,10 +585,11 @@ export function publishSubmissionEnvelope<T extends SubmissionSnapshot>(
   ref: { current: T | null },
   incoming: T,
   authority: "direct" | "poll",
+  options: NextSubmissionStateOptions = {},
 ): T {
   const canonical = authority === "direct"
     ? incoming
-    : nextSubmissionState(ref.current, incoming);
+    : nextSubmissionState(ref.current, incoming, options);
   ref.current = canonical;
   return canonical;
 }

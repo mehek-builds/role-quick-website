@@ -213,6 +213,8 @@ const OFFICIAL_TRANSCRIPT_PACKET = {
   },
 };
 
+const NO_EVIDENCE_RETRY_SAFETY = Object.freeze({ kind: "no_evidence" });
+
 /* A stopped application with two applicant-owned fields the dashboard can safely present directly.
  *
  * The first is an open text field. The second is a closed employer list with its exact options still
@@ -269,6 +271,7 @@ const DIRECT_ANSWER_PACKET = {
 
 const DIRECT_ANSWER_SUBMISSION = {
   application_id: DIRECT_ANSWER_PACKET.id,
+  retry_safety: NO_EVIDENCE_RETRY_SAFETY,
   review: DIRECT_ANSWER_PACKET.spec._review,
   cover_letter: null,
 };
@@ -302,6 +305,7 @@ const DIRECT_ANSWER_PACKET_B = {
 
 const DIRECT_ANSWER_SUBMISSION_B = {
   application_id: DIRECT_ANSWER_PACKET_B.id,
+  retry_safety: NO_EVIDENCE_RETRY_SAFETY,
   review: DIRECT_ANSWER_PACKET_B.spec._review,
   cover_letter: null,
 };
@@ -509,6 +513,7 @@ async function dashboardContext({
     maxConcurrentProfileUploads: 0,
     historyReads: 0,
     reviewAnswerWrites: [],
+    reviewAnswerResponses: [],
     applicationMutationRequests: [],
     networkStatusReads: 0,
     networkCommitWrites: 0,
@@ -732,13 +737,43 @@ async function dashboardContext({
           return;
         }
         const submittedQuestions = Array.isArray(body?.questions) ? body.questions : [];
+        const reviewedAt = current.review.questions_reviewed_at ?? "2026-08-24T12:00:00.000Z";
         const mergedQuestions = current.review.questions.map((storedQuestion) => {
           const submitted = submittedQuestions.find((question) => question?.id === storedQuestion.id);
-          return submitted ? { ...storedQuestion, ...submitted } : storedQuestion;
+          if (!submitted) return storedQuestion;
+          const answerUnchanged = submitted.answer === storedQuestion.answer;
+          const carriedApplicantClaim = answerUnchanged
+            && storedQuestion.answer_source === "applicant_review"
+            && storedQuestion.answer_reviewed_at === reviewedAt;
+          const mintedApplicantClaim = Boolean(
+            submitted.answer.trim()
+            && (
+              submitted.answer !== storedQuestion.answer
+              || (submitted.confirmed === true && submitted.question === storedQuestion.question)
+            ),
+          );
+          const persisted = {
+            ...storedQuestion,
+            answer: submitted.answer,
+            kind: submitted.kind,
+            required: storedQuestion.required || submitted.required,
+            question: storedQuestion.question,
+          };
+          /* `confirmed` is request-only. Production spends it into these two provenance fields
+             and never stores or returns the flag itself. */
+          delete persisted.confirmed;
+          delete persisted.answer_source;
+          delete persisted.answer_reviewed_at;
+          if (mintedApplicantClaim || carriedApplicantClaim) {
+            persisted.answer_source = "applicant_review";
+            persisted.answer_reviewed_at = reviewedAt;
+          }
+          return persisted;
         });
         const updatedReview = {
           ...current.review,
           questions: mergedQuestions,
+          questions_reviewed_at: reviewedAt,
           updated_at: "2026-08-24T12:00:00.000Z",
         };
         const status = gate?.status ?? 200;
@@ -754,11 +789,13 @@ async function dashboardContext({
           gate.markStarted();
           await gate.released;
         }
-        await fulfillJson(route, {
+        const responseBody = {
           application_id: applicationId,
           review: responseReview,
           ...(status === 202 ? { saved: false } : {}),
-        }, status);
+        };
+        state.reviewAnswerResponses.push(responseBody);
+        await fulfillJson(route, responseBody, status);
         gate?.markSettled();
         return;
       }
@@ -1603,12 +1640,14 @@ test("hand-built application overlays retain an inert exit and restore their exa
     submissionFixtures: {
       [TRANSCRIPT_PACKET.id]: {
         application_id: TRANSCRIPT_PACKET.id,
+        retry_safety: NO_EVIDENCE_RETRY_SAFETY,
         review: TRANSCRIPT_PACKET.spec._review,
         cover_letter: null,
         documents: {},
       },
       [OFFICIAL_TRANSCRIPT_PACKET.id]: {
         application_id: OFFICIAL_TRANSCRIPT_PACKET.id,
+        retry_safety: NO_EVIDENCE_RETRY_SAFETY,
         review: OFFICIAL_TRANSCRIPT_PACKET.spec._review,
         cover_letter: null,
         documents: {},
@@ -2490,6 +2529,20 @@ test("Application answers preserve drafts while moving backward and forward", as
 
     gate.release();
     await gate.settled;
+    assert.equal(state.reviewAnswerResponses.length, 1, "the first answer save did not return exactly one response");
+    const firstSavedReview = state.reviewAnswerResponses[0].review;
+    const firstSavedQuestion = firstSavedReview.questions.find((question) => question.id === "direct-location");
+    assert.equal(
+      firstSavedReview.questions.some((question) => Object.hasOwn(question, "confirmed")),
+      false,
+      "the response persisted the request-only confirmation flag",
+    );
+    assert.equal(firstSavedQuestion?.answer_source, "applicant_review", "the response did not mint applicant provenance");
+    assert.equal(
+      firstSavedQuestion?.answer_reviewed_at,
+      firstSavedReview.questions_reviewed_at,
+      "the response provenance was not bound to its review round",
+    );
     const closedHeading = page.getByRole("heading", { name: closedQuestion, exact: true });
     const closedChoices = page.getByRole("group", { name: closedQuestion, exact: true });
     await closedHeading.waitFor({ state: "visible", timeout: 10_000 });
@@ -2570,6 +2623,20 @@ test("Application answers preserve drafts while moving backward and forward", as
 
     finalGate.release();
     await finalGate.settled;
+    assert.equal(state.reviewAnswerResponses.length, 2, "the final answer save did not return exactly one additional response");
+    const finalSavedReview = state.reviewAnswerResponses[1].review;
+    const finalSavedQuestion = finalSavedReview.questions.find((question) => question.id === "direct-relocation");
+    assert.equal(
+      finalSavedReview.questions.some((question) => Object.hasOwn(question, "confirmed")),
+      false,
+      "the final response persisted the request-only confirmation flag",
+    );
+    assert.equal(finalSavedQuestion?.answer_source, "applicant_review", "the final response did not mint applicant provenance");
+    assert.equal(
+      finalSavedQuestion?.answer_reviewed_at,
+      finalSavedReview.questions_reviewed_at,
+      "the final response provenance was not bound to its review round",
+    );
     const reviewApplication = page.getByRole("button", { name: "Review application", exact: true });
     await reviewApplication.waitFor({ state: "visible", timeout: 10_000 });
     await finishDashboardAnimations(page);
@@ -2646,8 +2713,14 @@ test("A poll that sees an accepted answer before its PUT response preserves two-
   const acceptedReview = {
     ...DIRECT_ANSWER_PACKET.spec._review,
     questions: DIRECT_ANSWER_PACKET.spec._review.questions.map((question) => question.id === "direct-location"
-      ? { ...question, answer: submittedAnswer }
+      ? {
+        ...question,
+        answer: submittedAnswer,
+        answer_source: "applicant_review",
+        answer_reviewed_at: "2026-08-24T12:00:00.000Z",
+      }
       : question),
+    questions_reviewed_at: "2026-08-24T12:00:00.000Z",
     updated_at: "2026-08-24T12:00:00.000Z",
   };
   try {
@@ -2814,7 +2887,13 @@ test("A poll that sees the only accepted answer before its PUT response keeps th
   const submittedAnswer = "Abu Dhabi, United Arab Emirates";
   const acceptedReview = {
     ...singleQuestionPacket.spec._review,
-    questions: [{ ...singleQuestionPacket.spec._review.questions[0], answer: submittedAnswer }],
+    questions: [{
+      ...singleQuestionPacket.spec._review.questions[0],
+      answer: submittedAnswer,
+      answer_source: "applicant_review",
+      answer_reviewed_at: "2026-08-24T12:00:00.000Z",
+    }],
+    questions_reviewed_at: "2026-08-24T12:00:00.000Z",
     updated_at: "2026-08-24T12:00:00.000Z",
   };
   const { context, page, state } = await newDashboardPage({
@@ -2946,6 +3025,7 @@ test("A saved edit follows the authoritative three-question order", async () => 
     submissionFixtures: {
       [threeQuestionPacket.id]: {
         application_id: threeQuestionPacket.id,
+        retry_safety: NO_EVIDENCE_RETRY_SAFETY,
         review: threeQuestionReview,
         cover_letter: null,
       },
@@ -3335,6 +3415,21 @@ test("Application selection, close, and stale history resolve as one task state"
   const { context, page, state } = await newDashboardPage({
     viewport: { width: 1280, height: 900 },
     resumeHistoryFixture: [TRANSCRIPT_PACKET, RESUMES[1]],
+    submissionFixtures: {
+      [TRANSCRIPT_PACKET.id]: {
+        application_id: TRANSCRIPT_PACKET.id,
+        retry_safety: NO_EVIDENCE_RETRY_SAFETY,
+        review: TRANSCRIPT_PACKET.spec._review,
+        cover_letter: null,
+        documents: {},
+      },
+      [RESUMES[1].id]: {
+        application_id: RESUMES[1].id,
+        retry_safety: NO_EVIDENCE_RETRY_SAFETY,
+        review: RESUMES[1].spec._review,
+        cover_letter: null,
+      },
+    },
   });
   try {
     await page.addInitScript(() => {

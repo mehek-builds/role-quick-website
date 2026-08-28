@@ -173,7 +173,8 @@ describe("send eligibility discovered by hydration is offered, never forced", ()
   test("a ready row gets an explicit button to press, not an automatic screen change", () => {
     assert.match(
       applications,
-      /!submitted && !checkingSendPath && readyToSend && \(\s*\n\s*<Button type="button" onClick=\{onContinueToSend\}>Continue to send<\/Button>/,
+      /!submitted && !unresolvedAttempt && retryAllowed && !checkingSendPath && readyToSend && \(\s*\n\s*<Button type="button" onClick=\{onContinueToSend\}>Continue to send<\/Button>/,
+      "the explicit send transition must remain behind the server-owned immutable retry verdict",
     );
   });
 });
@@ -202,6 +203,10 @@ describe("CanonicalApplicationDetail says it is checking, not that this applicat
   test("the extension handoff button is held back while eligibility is still being checked, and once it is known ready", () => {
     // Pressing it opens a real Chrome tab. A row that is about to offer the managed send screens
     // must not also offer starting an extension handoff for the same application.
-    assert.match(applications, /!submitted && !checkingSendPath && !readyToSend && application\.portal_url/);
+    assert.match(
+      applications,
+      /!submitted && !unresolvedAttempt && retryAllowed && !checkingSendPath && !readyToSend && application\.portal_url/,
+      "the extension handoff must also wait for the exact prior attempt to be safely resolved",
+    );
   });
 });

@@ -96,7 +96,7 @@ test("the server's own sentence reaches the screen, next to the button that caus
 
   // apiErrorMessage already lifts `error` and `issues` off the body; the approve catch has to keep
   // them rather than replacing them with a generic line.
-  assert.match(dashboard, /refuseSend\(\s*requestedId,\s*reason instanceof Error \? reason\.message : "Could not approve the final portal submission\.",\s*reason instanceof ApiError \? reason\.issues : \[\],\s*\)/);
+  assert.match(dashboard, /refuseSend\(\s*requestedId,\s*reason instanceof Error \? reason\.message : "Could not approve the final portal submission\.",\s*reason instanceof ApiError \? reason\.issues : \[\],\s*reason instanceof ApiError \? reason\.data : null,\s*\)/);
   // ApiError carries the 422's `issues` array off FINAL_APPROVAL_VERIFICATION_FAILED. Dropping it
   // would reduce a list of named, fixable blockers to one folded-up sentence.
   assert.match(await readFile(new URL("../lib/api.ts", import.meta.url), "utf8"), /throw new ApiError\(res\.status, message, issues, data\)/);
@@ -104,7 +104,7 @@ test("the server's own sentence reaches the screen, next to the button that caus
   // Keyed to the packet, so a refusal about one application never sits under another's Send button.
   assert.match(dashboard, /sendRefusal=\{sendRefusal\?\.applicationId === selected\.id \? sendRefusal : null\}/);
   // Rendered inside the action card, and the 422's issue list rendered AS a list.
-  assert.match(dashboard, /\{sendRefusal && \([\s\S]{0,400}role="alert"[\s\S]{0,400}\{sendRefusal\.message\}/);
+  assert.match(dashboard, /\{sendRefusal && \([\s\S]{0,400}role=\{sendRefusal\.tone === "resolved" \? "status" : "alert"\}[\s\S]{0,500}\{sendRefusal\.message\}/);
   assert.match(dashboard, /sendRefusal\.issues\.map\(\(issue\) => <li key=\{issue\}>\{issue\}<\/li>\)/);
 });
 
@@ -129,7 +129,11 @@ test("the way out the sentence promises is a real control bound to the restart f
      neither a hand-rolled <span> nor a Button with no onClick can pass. */
   const restartControl = dashboard.match(/<Button onClick=\{onRestart\} disabled=\{restarting\}[^>]*>[^<]*<\/Button>/);
   assert.ok(restartControl, "the restart must render as the shared Button with a bound handler");
-  assert.match(dashboard, /handoffExpired && \(\s*<Button onClick=\{onRestart\}/);
+  assert.match(
+    dashboard,
+    /handoffExpired && retryAllowed && \(\s*<Button onClick=\{onRestart\}/,
+    "an expired handoff can restart only after the server has durably proven its exact attempt did not send",
+  );
   assert.match(dashboard, /onRestart=\{\(\) => void restartPreparedRun\(\)\}/);
   assert.match(dashboard, /restarting=\{restartingId === selected\.id\}/);
 

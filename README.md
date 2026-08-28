@@ -130,6 +130,15 @@ record of where it came from.
 After a push, verify the live HTML actually changed (curl for a new
 string), and check the deployment in `vercel ls role-quick-website`.
 
+For an exact post-deploy canary, request `https://trylitos.com/api/revision`
+with cache bypass. The response must have `identity_complete: true`, its
+40-character `revision` must equal the commit merged to `main`, and its
+`build_time` must be the expected new build. The endpoint sends no-store
+headers at the browser, CDN, and Vercel CDN layers. A local build reports
+`revision: "local"` and `identity_complete: false`, so it cannot be accepted as
+production proof. Repository-backed Vercel builds fail before deployment when
+their complete Git revision is unavailable or malformed.
+
 ## Open items
 
 - trylitos.com purchased on Porkbun and attached to the Litos Vercel project.

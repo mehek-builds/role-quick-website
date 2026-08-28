@@ -241,9 +241,24 @@ export function manualHandoffMatchesPacket(
   responseValue: unknown,
   expectedUrl: string,
   packetResponseValue: unknown,
+  now = Date.now(),
+  allowExpiredAuthorization = false,
 ): boolean {
   if (!isRecord(responseValue)
     || !isRecord(responseValue.manual_handoff)
+    || typeof responseValue.manual_attempt_id !== "string"
+    || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(responseValue.manual_attempt_id)
+    || !isRecord(responseValue.retry_safety)
+    || responseValue.retry_safety.kind !== "blocked_unverified"
+    || responseValue.retry_safety.reason !== "boundary_authorized"
+    || responseValue.retry_safety.attemptId !== responseValue.manual_attempt_id
+    || typeof responseValue.retry_safety.leaseId !== "string"
+    || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(responseValue.retry_safety.leaseId)
+    || typeof responseValue.retry_safety.at !== "string"
+    || !Number.isFinite(Date.parse(responseValue.retry_safety.at))
+    || typeof responseValue.retry_safety.expiresAt !== "string"
+    || !Number.isFinite(Date.parse(responseValue.retry_safety.expiresAt))
+    || (!allowExpiredAuthorization && Date.parse(responseValue.retry_safety.expiresAt) <= now)
     || !isRecord(packetResponseValue)
     || !isRecord(packetResponseValue.packet_audit)
     || !isRecord(packetResponseValue.pdf)) return false;
