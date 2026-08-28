@@ -1,5 +1,5 @@
 import type { ApplicationQuestion, ApplicationReview, RequiredDocumentAsk } from "@/lib/api";
-import { questionReviewPresentation } from "./question-review-presentation.ts";
+import { questionReviewPresentation, requiredQuestionReviewRoute } from "./question-review-presentation.ts";
 
 /**
  * What the row's control DOES, as opposed to what it says.
@@ -1006,6 +1006,76 @@ export function directInputTaskPlan(
     current,
     remaining: questionTasks.length + nonQuestionTasks.length,
   };
+}
+
+/**
+ * Whether the metadata-refresh launch may lead the attention screen while a non-question attention
+ * task still stands.
+ *
+ * Measured live on the Mytos Lever packet, 2026-08-28 (application
+ * 55de7c9e-13c0-44fd-8f78-0dee280dbd33): the row's standing attention was a withheld press, "Litos
+ * could not confirm one of the required answers had been accepted", categories ["unknown"], written
+ * before the named answer was re-answered with an exact employer option. The recovery for BOTH that
+ * sentence and the required metadata blocker is the same managed re-read of the employer's form,
+ * and the only control that starts it lives on the panel the standing task was hiding: the
+ * dashboard cycled between the answers screen and the attention screen, saving answers into a
+ * packet whose launch was never on screen. A stale sentence about a run that is over must not
+ * outrank the one action that replaces it with a fresh measurement.
+ *
+ * Nothing here clears, acknowledges, or resends anything. The stored attention state is untouched,
+ * the launch is still the applicant's own explicit press, and the run it starts is the fill and
+ * discovery run, which re-measures the form and rewrites the attention state from evidence.
+ *
+ * FAIL-CLOSED, every arm. The panel may only take precedence when:
+ * - the applicant has an acknowledged, passing exact-packet audit, so the launch button behind the
+ *   panel is genuinely live rather than a "Review packet first" detour;
+ * - the required-question route is metadata_refresh, the one state whose only recovery is that run;
+ * - every attention category is "unknown". A captcha, a security code, a pending unverified
+ *   submission, a document ask, or any category naming real applicant work keeps its screen, and a
+ *   review that names no category at all is unreadable rather than supersedable;
+ * - no unresolved human-verification stall and no open unverified submission stand, whatever the
+ *   categories claim;
+ * - no direct question still awaits the applicant, and every standing non-question task is an
+ *   attention-sentence row. Document rows and the captcha row are never superseded, checked here by
+ *   the ids this module itself mints so a future row class fails closed.
+ */
+export function metadataRefreshOutranksStandingAttention(
+  review: Pick<
+    ApplicationReview,
+    | "attention_reason"
+    | "attention_categories"
+    | "attention_acknowledgements"
+    | "cover_letter_supported"
+    | "filled_fields"
+    | "questions"
+    | "question_metadata_blockers"
+    | "questions_reviewed_at"
+    | "required_documents"
+    | "transcript_supported"
+    | "stall"
+    | "status"
+    | "unverified_submission"
+  >,
+  packetAuditAcknowledged: boolean,
+  context: { company?: string; role?: string; documents?: ChecklistDocumentMarks } = {},
+): boolean {
+  if (!packetAuditAcknowledged) return false;
+  if (review.status !== "needs_attention") return false;
+  if (review.unverified_submission && !review.unverified_submission.resolution) return false;
+  if (review.stall && !review.stall.resolved_at) return false;
+  const categories = review.attention_categories ?? [];
+  if (categories.length === 0) return false;
+  if (categories.some((category) => category !== "unknown")) return false;
+  const route = requiredQuestionReviewRoute(review.questions ?? [], review.question_metadata_blockers ?? []);
+  if (route.kind !== "metadata_refresh") return false;
+  const plan = directInputTaskPlan(review, context);
+  if (plan.questionTasks.length > 0) return false;
+  return plan.nonQuestionTasks.every((task) => (
+    task.id.startsWith("blocker-")
+    && task.id !== "blocker-captcha-requires-your-attention"
+    && task.item.documentKind === undefined
+    && task.item.actionKind !== "attach"
+  ));
 }
 
 export function completedSubmissionItems(review: Pick<ApplicationReview, "attention_reason" | "filled_fields" | "questions" | "receipt" | "status">): SubmissionChecklistItem[] {

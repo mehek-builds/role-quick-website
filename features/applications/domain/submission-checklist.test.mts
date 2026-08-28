@@ -1304,3 +1304,125 @@ test("settled confirmations and ambiguous question identities never enter the di
   assert.deepEqual(plan.settled.map((item) => item.questionId), ["authorization"]);
   assert.equal(plan.remaining, 0);
 });
+
+/* The final flow occlusion on the Mytos Lever packet, 2026-08-28 (application
+   55de7c9e-13c0-44fd-8f78-0dee280dbd33). After the required-marker route fix, the unreadable
+   university combobox correctly demands metadata_refresh, but the attention screen still led with
+   the row's STANDING attention: a withheld press, "could not confirm one of the required answers
+   had been accepted", categories ["unknown"], written before the named answer (degree
+   classification) was re-answered with an exact employer option. That one task occluded the
+   metadata-refresh panel, the only control on the screen that starts the managed re-read, so every
+   save returned to a screen with no launch on it. metadataRefreshOutranksStandingAttention is the
+   fail-closed decision for when the panel may lead instead. */
+import { readFileSync } from "node:fs";
+import { metadataRefreshOutranksStandingAttention } from "./submission-checklist.ts";
+
+function mytosReview() {
+  return {
+    status: "needs_attention" as const,
+    attention_reason: "Litos could not confirm one of the required answers had been accepted, so it did not press submit.",
+    attention_categories: ["unknown" as const],
+    questions: [
+      {
+        id: "degree-classification",
+        question: "What classification did you achieve or are you expecting? ✱",
+        answer: "First-Class Honours",
+        kind: "required" as const,
+        required: true,
+        portal_input_type: "select-one",
+        portal_selector: '[name="cards[62541ff1][field2]"]',
+        options: ["First-Class Honours", "Upper Second-Class Honours", "Lower Second-Class Honours", "Other"],
+      },
+      {
+        id: "university",
+        question: "which was the most recent university you attended? ✱",
+        answer: "University of Southern California",
+        kind: "required" as const,
+        required: false,
+        portal_input_type: "combobox",
+        portal_selector: '[name="cards[62541ff1][field0]"]',
+        options: null,
+      },
+    ],
+  };
+}
+
+test("the Mytos stale withheld-press attention yields to the metadata-refresh launch once the audit is acknowledged", () => {
+  const review = mytosReview();
+  /* Prove the fixture is production-shaped first: without the yield, this exact state occludes the
+     launch, because the stale sentence stands as the one non-question task while the route demands
+     the managed re-read. */
+  const plan = directInputTaskPlan(review);
+  assert.deepEqual(plan.questionTasks, []);
+  assert.equal(plan.nonQuestionTasks.length, 1);
+  assert.ok(plan.nonQuestionTasks[0]?.id.startsWith("blocker-"), "the stale sentence must stand as an attention row");
+  assert.ok(plan.metadataBlockers.some((blocker) => blocker.required), "the unreadable university combobox must demand the re-read");
+
+  assert.equal(metadataRefreshOutranksStandingAttention(review, true), true);
+});
+
+test("without an acknowledged passing audit the standing attention keeps the screen", () => {
+  assert.equal(metadataRefreshOutranksStandingAttention(mytosReview(), false), false);
+});
+
+test("only unknown-category attention is supersedable, and no category at all is unreadable, not supersedable", () => {
+  assert.equal(metadataRefreshOutranksStandingAttention({ ...mytosReview(), attention_categories: ["unknown", "captcha"] }, true), false);
+  assert.equal(metadataRefreshOutranksStandingAttention({ ...mytosReview(), attention_categories: ["required_field"] }, true), false);
+  assert.equal(metadataRefreshOutranksStandingAttention({ ...mytosReview(), attention_categories: [] }, true), false);
+  assert.equal(metadataRefreshOutranksStandingAttention({ ...mytosReview(), attention_categories: undefined }, true), false);
+});
+
+test("an unresolved stall or an open unverified submission always keeps the screen", () => {
+  const stalled = {
+    ...mytosReview(),
+    stall: { kind: "human_verification" as const, stalled_at: "2026-08-28T09:00:00.000Z", surface: "server_run" as const, provider: "unknown" as const, stage: "at_submit" as const, source: "observed" as const },
+  };
+  assert.equal(metadataRefreshOutranksStandingAttention(stalled, true), false);
+  assert.equal(
+    metadataRefreshOutranksStandingAttention({ ...stalled, stall: { ...stalled.stall, resolved_at: "2026-08-28T10:00:00.000Z" } }, true),
+    false,
+    "even a resolved stall still renders the captcha row, and that row is never superseded",
+  );
+  const unverified = {
+    ...mytosReview(),
+    unverified_submission: { at: "2026-08-28T09:00:00.000Z", cause: "run_timed_out" as const },
+  };
+  assert.equal(metadataRefreshOutranksStandingAttention(unverified, true), false);
+});
+
+test("a document ask or a captcha sentence is never superseded", () => {
+  const withDocument = {
+    ...mytosReview(),
+    required_documents: [{ kind: "transcript", label: "Unofficial transcript", official_requested: false }],
+    transcript_supported: true,
+  };
+  assert.equal(metadataRefreshOutranksStandingAttention(withDocument, true), false);
+  const captchaSentence = {
+    ...mytosReview(),
+    /* The category classifier can miss a captcha the sentence still names. The row id this module
+       mints for it is excluded on its own, so the text alone keeps the screen. */
+    attention_reason: "reCAPTCHA requires your attention",
+  };
+  assert.equal(metadataRefreshOutranksStandingAttention(captchaSentence, true), false);
+});
+
+test("a blank required answer or a complete packet routes normally instead of outranking attention", () => {
+  const blankRequired = mytosReview();
+  blankRequired.questions[0]!.answer = "";
+  assert.equal(metadataRefreshOutranksStandingAttention(blankRequired, true), false, "an answer route belongs to the answers screen");
+  const readableUniversity = mytosReview();
+  readableUniversity.questions[1]!.options = ["University of Southern California", "Other"];
+  readableUniversity.questions[1]!.portal_input_type = "select-one";
+  assert.equal(metadataRefreshOutranksStandingAttention(readableUniversity, true), false, "a continue route has no re-read to launch");
+});
+
+test("only a needs_attention review is occluded at all", () => {
+  assert.equal(metadataRefreshOutranksStandingAttention({ ...mytosReview(), status: "ready_for_final_approval" as const }, true), false);
+});
+
+test("the attention screen resolves its occlusion through the domain decision, with the acknowledged-audit fact", () => {
+  const page = readFileSync("app/dashboard/applications/page.tsx", "utf8");
+  const site = page.indexOf("metadataRefreshOutranksStandingAttention(attentionReview, packetEvidenceReviewed");
+  assert.ok(site > 0, "the SubmissionScreen must route the occlusion through metadataRefreshOutranksStandingAttention");
+  assert.match(page.slice(site - 900, site + 900), /standingNonQuestionTask/);
+});
