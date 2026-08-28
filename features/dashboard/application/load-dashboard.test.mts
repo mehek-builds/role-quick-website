@@ -2,6 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { DashboardBootstrap } from "../../../lib/api.ts";
 import { dashboardStateFromBootstrap, loadDashboardInitialState } from "./load-dashboard.ts";
+/* A stub with the injected contract's shape. The REAL merge's semantics belong to
+ * canonical-tracker.test.mts; these tests own only the loader's plumbing: that the canonical list
+ * is fetched exactly when a merge is injected, that its output becomes Home's packets, and that a
+ * failed fetch keeps the plain history window. */
+const appendCanonicalStub = (
+  legacy: readonly { id: string }[],
+  canonical: readonly { id: string }[],
+) => [...legacy, ...canonical.map((application) => ({ id: `from-${application.id}` }))] as never[];
 
 const completeBootstrap: DashboardBootstrap = {
   schema_version: 1,
@@ -107,42 +115,69 @@ test("rejects bootstrap failures that do not indicate a compatibility gap", asyn
   );
 });
 
-test("a bootstrap history window at its cap is replaced by the full tracker window", async () => {
-  const cappedResumes = Array.from({ length: 50 }, (_, i) => ({ id: `capped-${i}` }));
-  const fullResumes = Array.from({ length: 100 }, (_, i) => ({ id: `full-${i}` }));
+test("bootstrap packets are completed with the canonical applications the Tracker merges", async () => {
+  const canonicalApplication = {
+    id: "canonical-1",
+    legacy_generated_resume_id: null,
+    job_id: null,
+    company: "Acme",
+    role: "Product Intern",
+    portal_url: "https://jobs.lever.co/acme/requisition-2",
+    tracker_state: "applying",
+    review_state: "filling",
+    submission_state: "not_started",
+    created_at: "2026-08-14T00:00:00.000Z",
+    updated_at: "2026-08-14T00:00:00.000Z",
+  };
   const paths: string[] = [];
   const state = await loadDashboardInitialState(async <T,>(path: string) => {
     paths.push(path);
-    if (path === "/dashboard/bootstrap") {
-      return { ...completeBootstrap, resume_history: { resumes: cappedResumes } } as T;
-    }
-    if (path === "/resume/history") return { resumes: fullResumes } as T;
+    if (path === "/dashboard/bootstrap") return completeBootstrap as T;
+    if (path === "/applications?limit=100") return { applications: [canonicalApplication] } as T;
     throw new Error(`unexpected request: ${path}`);
-  });
-  assert.deepEqual(paths, ["/dashboard/bootstrap", "/resume/history"]);
-  assert.equal(state.packets.length, 100);
+  }, appendCanonicalStub as never);
+  assert.deepEqual(paths, ["/dashboard/bootstrap", "/applications?limit=100"]);
+  assert.equal(state.packets.length, 1, "the canonical-only application joins Home's packets");
 });
 
-test("a bootstrap history window below the cap is trusted without a second request", async () => {
-  const paths: string[] = [];
+test("legacy-path packets get the same canonical merge", async () => {
+  const canonicalApplication = {
+    id: "canonical-legacy-1",
+    legacy_generated_resume_id: null,
+    job_id: null,
+    company: "Acme",
+    role: "Product Intern",
+    portal_url: "https://jobs.lever.co/acme/requisition-9",
+    tracker_state: "applying",
+    review_state: "filling",
+    submission_state: "not_started",
+    created_at: "2026-08-14T00:00:00.000Z",
+    updated_at: "2026-08-14T00:00:00.000Z",
+  };
   const state = await loadDashboardInitialState(async <T,>(path: string) => {
-    paths.push(path);
-    if (path === "/dashboard/bootstrap") {
-      return { ...completeBootstrap, resume_history: { resumes: [{ id: "only" }] } } as T;
-    }
+    if (path === "/dashboard/bootstrap") throw Object.assign(new Error("gone"), { status: 404 });
+    if (path === "/applications?limit=100") return { applications: [canonicalApplication] } as T;
+    if (path === "/resume/history") return { resumes: [] } as T;
+    if (path === "/me") return completeBootstrap.me as T;
+    if (path === "/jobs?offset=0") return completeBootstrap.jobs as T;
+    if (path === "/profile/targeting") return completeBootstrap.targeting as T;
+    if (path === "/profile") return completeBootstrap.profile as T;
+    if (path === "/profile/application") return {} as T;
+    if (path === "/track/events") return [] as T;
+    if (path === "/onboarding/state") return { automatic_submission_enabled: false } as T;
     throw new Error(`unexpected request: ${path}`);
-  });
-  assert.deepEqual(paths, ["/dashboard/bootstrap"]);
+  }, appendCanonicalStub as never);
   assert.equal(state.packets.length, 1);
 });
 
-test("a failed full-window refetch keeps the embedded copy instead of failing Home", async () => {
-  const cappedResumes = Array.from({ length: 50 }, (_, i) => ({ id: `capped-${i}` }));
+test("a failed canonical fetch keeps the history window instead of failing Home", async () => {
   const state = await loadDashboardInitialState(async <T,>(path: string) => {
     if (path === "/dashboard/bootstrap") {
-      return { ...completeBootstrap, resume_history: { resumes: cappedResumes } } as T;
+      return { ...completeBootstrap, resume_history: { resumes: [{ id: "only" }] } } as T;
     }
-    throw new Error("history endpoint down");
-  });
-  assert.equal(state.packets.length, 50);
+    if (path === "/applications?limit=100") throw new Error("canonical route down");
+    throw new Error(`unexpected request: ${path}`);
+  }, appendCanonicalStub as never);
+  assert.equal(state.packets.length, 1);
+  assert.equal(state.packets[0]?.id, "only");
 });
