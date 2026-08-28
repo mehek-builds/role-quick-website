@@ -192,8 +192,21 @@ async function openAPacket(page) {
   await page.goto(`${ORIGIN}/dashboard/applications?state=ready`, { waitUntil: "domcontentloaded" });
   const rows = page.locator('section[aria-labelledby="application-ledger-heading"] button[aria-pressed]:visible');
   await rows.first().waitFor({ state: "visible", timeout: 20_000 });
-  await rows.first().click();
-  await page.getByRole("button", { name: "Review and fill" }).waitFor({ state: "visible", timeout: 20_000 });
+  /* The row renders before React attaches its handler, and a click dispatched into that hydration
+     gap is swallowed with no error and no navigation: the one wait below then times out having
+     measured nothing. Seen on the slow CI runner at 1023x800, 2026-08-28, while every local run
+     passed. A successful click replaces the ledger with the review screen, so the row still being
+     visible is the tell that the click landed in the gap; only then is it clicked again. */
+  const action = page.getByRole("button", { name: "Review and fill" });
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (await rows.first().isVisible().catch(() => false)) await rows.first().click();
+    try {
+      await action.waitFor({ state: "visible", timeout: attempt < 2 ? 7_000 : 20_000 });
+      break;
+    } catch (reason) {
+      if (attempt === 2) throw reason;
+    }
+  }
   /* Any scroll the router or an anchor kicked off must SETTLE before anything is measured. See the
      smooth-scroll note in the header: measuring mid-animation is how this was mis-diagnosed. */
   await page.waitForTimeout(600);
