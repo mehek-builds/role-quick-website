@@ -29,6 +29,7 @@ import {
   AUTO_SUBMIT_PREPARED_LIMIT,
   MATCH_WEIGHTING_NOTE,
   jobSubmittedOnDay,
+  mergeCanonicalApplicationHistory,
   packetMatchesJob,
   rankJobs,
   reviewCanBeSent,
@@ -318,7 +319,7 @@ export default function Home() {
     }
 
     let cancelled = false;
-    loadDashboardInitialState(api)
+    loadDashboardInitialState(api, mergeCanonicalApplicationHistory)
       .then((initial) => {
         if (cancelled) return;
         setMe(initial.me);
