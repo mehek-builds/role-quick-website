@@ -15,7 +15,7 @@ export function Card({
   ...props
 }: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div {...props} className={`rounded-card border border-border bg-surface ${className}`}>
+    <div {...props} className={`min-w-0 rounded-card border border-border bg-surface [overflow-wrap:anywhere] ${className}`}>
       {children}
     </div>
   );
@@ -58,7 +58,7 @@ export function Chip({ label, kind }: { label: string; kind?: string }) {
   const style = CHIP_STYLES[kind ?? label.toLowerCase()] ?? "bg-surface-alt text-muted";
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2.5 py-0.5 font-mono text-[11px] font-medium uppercase tracking-[0.05em] ${style}`}
+      className={`inline-flex min-w-0 max-w-full items-center rounded-full px-2.5 py-0.5 text-center font-mono text-[11px] font-medium uppercase tracking-[0.05em] [overflow-wrap:anywhere] ${style}`}
     >
       {label}
     </span>
@@ -79,10 +79,10 @@ export function Meter({
   const unlimited = limit <= 0 || limit >= 100000;
   const pct = unlimited ? 0 : Math.min(100, Math.round((used / limit) * 100));
   return (
-    <div>
-      <div className="flex items-baseline justify-between">
-        <span className="text-sm font-medium text-ink">{label}</span>
-        <span className="font-mono text-xs text-muted">
+    <div className="min-w-0">
+      <div className="flex min-w-0 items-baseline justify-between gap-3">
+        <span className="min-w-0 text-sm font-medium text-ink [overflow-wrap:anywhere]">{label}</span>
+        <span className="shrink-0 font-mono text-xs text-muted">
           {used}
           {unlimited ? " used" : ` / ${limit}`}
         </span>
@@ -139,7 +139,7 @@ export function ScoreRing({
   );
 }
 
-/** Inline pending label: a small orb next to button/status text, never wraps.
+/** Inline pending label: a small orb next to button/status text, wrapping only when containment requires it.
    `onColor` is for white-text buttons on a solid brand background, where the
    orb must render light dots regardless of the page's own light/dark mode. */
 export function PendingLabel({
@@ -152,9 +152,9 @@ export function PendingLabel({
   onColor?: boolean;
 }) {
   return (
-    <span className="inline-flex min-w-0 items-center gap-1.5 whitespace-nowrap">
+    <span className="inline-flex min-w-0 max-w-full items-center gap-1.5">
       <ThinkingOrb state={state} size={20} theme={onColor ? "dark" : "auto"} />
-      <span className="whitespace-nowrap">{children}</span>
+      <span className="min-w-0 [overflow-wrap:anywhere]">{children}</span>
     </span>
   );
 }
@@ -168,9 +168,9 @@ export function LoadingOrb({
   state?: OrbState;
 }) {
   return (
-    <div className="flex items-center gap-2" role="status" aria-live="polite" aria-busy={state === "working" || state === "composing"}>
-      <span aria-hidden="true"><ThinkingOrb state={state} size={20} /></span>
-      <span className={label ? "text-sm text-muted" : "sr-only"}>{label ?? "Loading"}</span>
+    <div className="flex min-w-0 items-center gap-2" role="status" aria-live="polite" aria-busy={state === "working" || state === "composing"}>
+      <span aria-hidden="true" className="shrink-0"><ThinkingOrb state={state} size={20} /></span>
+      <span className={label ? "min-w-0 text-sm text-muted [overflow-wrap:anywhere]" : "sr-only"}>{label ?? "Loading"}</span>
     </div>
   );
 }
@@ -207,16 +207,16 @@ export function PageHeader({
   size?: "section" | "heading";
 }) {
   return (
-    <div className="flex items-start justify-between gap-4">
+    <div className="flex min-w-0 items-start justify-between gap-4">
       <div className="min-w-0">
         <h1
-          className={`font-normal leading-[1.15] tracking-[-0.02em] text-ink ${
+          className={`min-w-0 font-normal leading-[1.15] tracking-[-0.02em] text-ink [overflow-wrap:anywhere] ${
             size === "heading" ? "text-heading" : "text-section"
           }`}
         >
           {title}
         </h1>
-        {sub && <p className="mt-1 text-sm text-muted">{sub}</p>}
+        {sub && <p className="mt-1 min-w-0 text-sm text-muted [overflow-wrap:anywhere]">{sub}</p>}
       </div>
       {action && <div className="shrink-0">{action}</div>}
     </div>
@@ -238,10 +238,10 @@ export function EmptyState({
 }) {
   const Heading = headingLevel;
   return (
-    <div className="border-y border-border py-10 text-center">
+    <div className="min-w-0 border-y border-border py-10 text-center">
       <EmptyStateVisual kind={visual} />
-      <Heading className="text-base font-medium text-ink">{title}</Heading>
-      <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted">{body}</p>
+      <Heading className="text-base font-medium text-ink [overflow-wrap:anywhere]">{title}</Heading>
+      <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted [overflow-wrap:anywhere]">{body}</p>
       {children && <div className="mt-6 flex justify-center">{children}</div>}
     </div>
   );
@@ -418,12 +418,12 @@ export function Notice({ message, variant = "info" }: { message: string; variant
   const notice = NOTICE[variant];
   const text = variant === "error" ? userFacingError(message) : message;
   return (
-    <p role={notice.role} className={`flex items-start gap-2 rounded-inner px-4 py-3 text-sm ${notice.styles}`}>
-      <span aria-hidden="true" className="font-mono font-semibold">{notice.mark}</span>
+    <p role={notice.role} className={`flex min-w-0 items-start gap-2 rounded-inner px-4 py-3 text-sm ${notice.styles}`}>
+      <span aria-hidden="true" className="shrink-0 font-mono font-semibold">{notice.mark}</span>
       {/* The link sits INSIDE the alert element on purpose: it is part of the answer, so a screen
           reader hears "…then try again. Get the Litos extension" as one announcement rather than
           leaving her to discover the way forward only by tabbing past the alert. */}
-      <span>
+      <span className="min-w-0 [overflow-wrap:anywhere]">
         <span className="sr-only">{notice.label}: </span>{text}
         {messageAsksForTheExtension(text) && <> <ExtensionStoreLink /></>}
       </span>

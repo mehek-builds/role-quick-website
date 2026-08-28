@@ -148,7 +148,10 @@ test("the set of client files rendering the footer is written down, not discover
      footer was invisible to it and the set it claimed to write down was
      under-counted. There is no such component today; the point is that the list
      is now the real set rather than a subset that happened to match. */
-  const KNOWN_CLIENT_FILES_WITH_FOOTER = ["app/contact/page.tsx"];
+  const KNOWN_CLIENT_FILES_WITH_FOOTER = [
+    "app/contact/page.tsx",
+    "app/qa/component-stress-public/sandbox.tsx",
+  ];
 
   const candidates = [
     ...walk(join(ROOT, "app")),

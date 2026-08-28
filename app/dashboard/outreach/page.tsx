@@ -859,7 +859,7 @@ export default function Outreach() {
       {composeOpen && (
         <MotionPanel name="dashboard-outreach-composer">
         <Card id="outreach-composer" role="region" aria-labelledby="outreach-composer-title" className="p-6">
-          <div className="flex items-start justify-between gap-4"><div><p className="font-mono text-label uppercase tracking-[0.08em] text-coral-ink">Compose</p><h2 ref={composerTitleRef} id="outreach-composer-title" tabIndex={-1} className="mt-2 text-heading font-[450] text-ink outline-none">A note you choose to send.</h2></div><button type="button" onClick={closeComposer} className="min-h-11 px-3 text-small text-muted transition-colors hover:text-ink">Close</button></div>
+          <div className="flex items-start justify-between gap-4"><div><p className="font-mono text-label uppercase tracking-[0.08em] text-coral-ink">Compose</p><h2 ref={composerTitleRef} id="outreach-composer-title" tabIndex={-1} className="mt-2 text-heading font-[450] text-ink outline-none">A note you choose to send.</h2></div><button type="button" onClick={closeComposer} className="min-h-11 shrink-0 whitespace-nowrap px-3 text-small text-muted transition-colors hover:text-ink">Close</button></div>
           {/* This reserve is the tray's parking space. The negative margin below places the tray
               inside it at rest, while the remaining gap and scroll margins keep the last fields
               clear when the tray is parked against the viewport. */}

@@ -1,0 +1,131 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import test from "node:test";
+
+const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
+
+test("the shared button wraps content without expanding its viewport", async () => {
+  const source = await read("components/app/Button.tsx");
+
+  assert.match(source, /min-w-0 max-w-full/);
+  assert.match(source, /whitespace-normal/);
+  assert.match(source, /\[overflow-wrap:anywhere\]/);
+});
+
+test("the shared card can shrink around content without breakpoints", async () => {
+  const source = await read("components/app/ui.tsx");
+
+  assert.match(source, /className=\{`min-w-0 rounded-card[^`]+\[overflow-wrap:anywhere\]/);
+});
+
+test("the shared chip wraps labels inside its available width", async () => {
+  const source = await read("components/app/ui.tsx");
+
+  assert.match(source, /inline-flex min-w-0 max-w-full items-center rounded-full[^`]+\[overflow-wrap:anywhere\]/);
+});
+
+test("the shared meter gives dynamic labels a shrinkable column", async () => {
+  const source = await read("components/app/ui.tsx");
+
+  assert.match(source, /flex min-w-0 items-baseline justify-between gap-3/);
+  assert.match(source, /min-w-0 text-sm font-medium text-ink \[overflow-wrap:anywhere\]/);
+  assert.match(source, /shrink-0 font-mono text-xs text-muted/);
+});
+
+test("pending labels wrap only when their container runs out of room", async () => {
+  const source = await read("components/app/ui.tsx");
+
+  assert.match(source, /inline-flex min-w-0 max-w-full items-center gap-1\.5/);
+  assert.match(source, /<span className="min-w-0 \[overflow-wrap:anywhere\]">\{children\}<\/span>/);
+});
+
+test("loading cues reserve the orb and wrap a supplied label", async () => {
+  const source = await read("components/app/ui.tsx");
+
+  assert.match(source, /flex min-w-0 items-center gap-2/);
+  assert.match(source, /aria-hidden="true" className="shrink-0"/);
+  assert.match(source, /min-w-0 text-sm text-muted \[overflow-wrap:anywhere\]/);
+});
+
+test("empty and retry states wrap server supplied title and body text", async () => {
+  const source = await read("components/app/ui.tsx");
+
+  assert.match(source, /min-w-0 border-y border-border py-10 text-center/);
+  assert.match(source, /text-base font-medium text-ink \[overflow-wrap:anywhere\]/);
+  assert.match(source, /max-w-md text-sm leading-6 text-muted \[overflow-wrap:anywhere\]/);
+});
+
+test("notices keep their status mark visible while arbitrary messages wrap", async () => {
+  const source = await read("components/app/ui.tsx");
+
+  assert.match(source, /flex min-w-0 items-start gap-2 rounded-inner/);
+  assert.match(source, /shrink-0 font-mono font-semibold/);
+  assert.match(source, /<span className="min-w-0 \[overflow-wrap:anywhere\]">/);
+});
+
+test("page headers contain dynamic titles beside their primary action", async () => {
+  const source = await read("components/app/ui.tsx");
+
+  assert.match(source, /flex min-w-0 items-start justify-between gap-4/);
+  assert.match(source, /min-w-0 font-normal leading-\[1\.15\][^`]+\[overflow-wrap:anywhere\]/);
+  assert.match(source, /mt-1 min-w-0 text-sm text-muted \[overflow-wrap:anywhere\]/);
+});
+
+test("onboarding receipts wrap both machine keys and values", async () => {
+  const source = await read("components/start/ui.tsx");
+
+  assert.match(source, /grid min-w-0 grid-cols-\[52px_minmax\(0,1fr\)\]/);
+  assert.match(source, /text-\[11px\][^\n]+\[overflow-wrap:anywhere\]/);
+  assert.match(source, /col-span-2 min-w-0 \[overflow-wrap:anywhere\]/);
+});
+
+test("the founder note contains arbitrary child text beside its mark", async () => {
+  const source = await read("components/start/ui.tsx");
+
+  assert.match(source, /mt-1 min-w-0 text-\[13px\] leading-6 text-ink \[overflow-wrap:anywhere\]/);
+});
+
+test("onboarding choice chips contain long selectable labels", async () => {
+  const source = await read("components/start/ui.tsx");
+
+  assert.match(source, /min-h-11 min-w-0 max-w-full rounded-full[^`]+\[overflow-wrap:anywhere\]/);
+});
+
+test("onboarding shell titles wrap employer supplied content", async () => {
+  const source = await read("components/start/ui.tsx");
+
+  assert.match(source, /min-w-0 max-w-full text-section[^`]+\[overflow-wrap:anywhere\]/);
+});
+
+test("employer questions contain company, prompt, option, and explanation text", async () => {
+  const source = await read("components/start/QuestionsStep.tsx");
+
+  assert.match(source, /flex min-w-0 items-center justify-between gap-3/);
+  assert.match(source, /min-w-0 font-mono text-\[11px\][^\n]+\[overflow-wrap:anywhere\]/);
+  assert.match(source, /min-w-0 text-\[15px\] leading-6 text-ink \[overflow-wrap:anywhere\]/);
+  assert.match(source, /min-h-11 min-w-0 max-w-full items-center[^`]+\[overflow-wrap:anywhere\]/);
+  assert.match(source, /min-w-0 font-mono text-\[11px\] leading-5 text-muted \[overflow-wrap:anywhere\]/);
+});
+
+test("requirement text wraps decoded posting content without breakpoints", async () => {
+  const source = await read("components/app/RequirementText.tsx");
+
+  assert.match(source, /<span className="\[overflow-wrap:anywhere\]">\s*\{segments\.map/);
+});
+
+test("public job tiles contain unbreakable employer titles without changing the card action", async () => {
+  const source = await read("app/browse-jobs/page.tsx");
+  const tile = source.slice(source.indexOf("function Tile("), source.indexOf("function describeFilters("));
+
+  assert.match(tile, /href=\{`\/start\?job=\$\{encodeURIComponent\(job\.id\)\}`\}/);
+  assert.match(
+    tile,
+    /<p className="text-\[15px\] font-medium leading-snug text-ink \[overflow-wrap:anywhere\]"><Highlight text=\{job\.title\}/,
+  );
+});
+
+test("packet audit evidence wraps frozen resume quotes", async () => {
+  const source = await read("components/app/PacketAuditEvidence.tsx");
+
+  assert.match(source, /mt-2 min-w-0 space-y-1[^\n]+\[overflow-wrap:anywhere\]/);
+});

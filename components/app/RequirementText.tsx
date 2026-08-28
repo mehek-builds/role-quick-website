@@ -141,7 +141,7 @@ export const RequirementText = memo(function RequirementText({
     [decodedText, index, editedTerms],
   );
   return (
-    <>
+    <span className="[overflow-wrap:anywhere]">
       {segments.map((segment, i) =>
         segment.kind === "mark" && !(hideMissing && segment.tone === "missing") ? (
           <TermMark key={i} term={segment.term} tone={segment.tone}>
@@ -151,7 +151,7 @@ export const RequirementText = memo(function RequirementText({
           <span key={i}>{segment.text}</span>
         ),
       )}
-    </>
+    </span>
   );
 });
 
