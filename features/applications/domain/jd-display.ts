@@ -26,6 +26,9 @@
    gating on them keeps the field-label patterns below from eating a legitimate JD line that is
    exactly "Email" or "Cover Letter" (a how-to-apply heading, for example). */
 const STRONG_CHROME_MARKERS: readonly RegExp[] = [
+  /* Imperative form-UI strings only. "Application for Employment" stays OUT: it is a plausible
+     noun phrase inside a posting (a section heading, an attachment name), and a gate that opens
+     on it would turn the field-label patterns loose on a capture with no form at all. */
   /^submit your application$/i,
   /^apply for this job$/i,
   /^submit application$/i,
@@ -34,24 +37,38 @@ const STRONG_CHROME_MARKERS: readonly RegExp[] = [
   /^auto-?complete this form\.?\s*(learn more)?$/i,
 ];
 
+/* The strong markers are chrome themselves, so the removal list derives from them: one list to
+   edit, and a marker line can never open the gate yet survive inside the cleaned text. */
 const CHROME_LINE_PATTERNS: readonly RegExp[] = [
-  /^submit your application$/i,
-  /^apply for this job$/i,
+  ...STRONG_CHROME_MARKERS,
   /^apply now$/i,
-  /^submit application$/i,
   /^loading[.…\s]*$/i,
   /^[.…]+$/,
-  /^attach resume\/?cv$/i,
   /^resume\/?cv[\s*✱✲❋]*$/i,
   /^cover letter[\s*✱✲❋]*$/i,
   /^[*✱✲❋]+$/,
   /^(full name|first name|last name|email|e-mail|phone|phone number|current location|current company|pronouns)[\s*✱✲❋]*$/i,
   /^(linkedin|github|portfolio|twitter|x|website|other) (profile|url)[\s*✱✲❋]*$/i,
-  /^authorize sharing of selected$/i,
   /^linkedin profile details to$/i,
-  /^auto-?complete this form\.?\s*(learn more)?$/i,
   /^learn more$/i,
   /^required fields?[\s*✱✲❋]*$/i,
+  /* The Belvedere capture's SECOND form (an OCR'd employment application) surfaced these on the
+     live review screen, 2026-08-28, with the highlighter matching LINKS, OCR and Select as
+     requirement terms. All of them are gate-protected: none is removed unless a strong form
+     marker proves the capture holds a form. */
+  /^links$/i,
+  /^other website$/i,
+  /^(ocr\s+)?application for employment$/i,
+  /^street address( line \d)?$/i,
+  /^(city|state|country|zip ?code|postal code|province)[\s*✱✲❋]*$/i,
+  /^select[.…\s]*$/i,
+  /^how did you (hear|learn) about [^?\n]{0,80}\??$/i,
+  /* Referral options only where the whole line IS the option. Bare "Other", "Referral" and
+     "LinkedIn" stay out: a posting's own subsection heading or contact block can be exactly
+     those words, and losing a heading silently reparents everything under it. A leftover
+     company-name option line ("Belvedere Trading Website") is the accepted residue of the same
+     caution: no generic "... website" pattern, because short real prose ends in that word too. */
+  /^(handshake\/?campus job board|campus career fair|other campus event|glassdoor|indeed|built in [a-z ]{2,20})$/i,
 ];
 
 export type CleanedJdCapture = {

@@ -4637,11 +4637,13 @@ function Applications() {
           autopilot={Boolean(autopilot.enabled)}
           appliedToday={appliedToday}
           waiting={(() => {
-            /* The DOMAIN's own action membership, not a copied list, so this count, Home's tile
-               and the ?state=action list are one definition. The link is the real filter, not an
-               anchor: an anchor lands on whatever ledger filter is already active, which can be a
-               list holding none of the counted rows. */
-            const count = (packets ?? []).filter((packet) => (
+            /* The DOMAIN's own action membership over reviewablePackets, the rows the ledger
+               draws from, so this count equals what the ?state=action link opens (before any
+               search text typed there). Measured live 2026-08-28: 88 here, "88 of 100" on that
+               view. Home's tile can still read lower when the bootstrap's embedded
+               resume_history window is shorter than the tracker's; that is the loader's problem
+               (see load-dashboard.ts), not a different membership. */
+            const count = reviewablePackets.filter((packet) => (
               packet.spec._review != null && statusMatchesApplicationFilter(packet.spec._review, "action")
             )).length;
             return count > 0 ? { count, href: "/dashboard/applications?state=action" } : null;
