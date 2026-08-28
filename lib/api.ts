@@ -1723,14 +1723,23 @@ export async function uploadResume(file: File): Promise<ParsedProfile> {
   const token = getToken();
   const form = new FormData();
   form.append("resume", file);
-  const res = await fetch(`${API_URL}/profile`, {
-    method: "POST",
-    headers: {
-      ...litosClientHeaders(),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: form,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}/profile`, {
+      method: "POST",
+      headers: {
+        ...litosClientHeaders(),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: form,
+    });
+  } catch {
+    /* A fetch that rejects has no response at all - offline, a dropped connection, or a
+     * platform-level rejection served without CORS headers. The browser's own words here are
+     * "Failed to fetch", which the upload screen used to print verbatim as though it explained
+     * something. Say what the student can actually do instead. */
+    throw new Error("The upload did not reach us. Check your connection and try again.");
+  }
   const data = await res.json().catch(() => null);
   if (!res.ok) {
     throw new ApiError(res.status, (data as { error?: string } | null)?.error ?? "Could not read that resume.");

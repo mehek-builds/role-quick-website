@@ -14,6 +14,7 @@ import {
   putApplicationProfile,
   putTargeting,
   uploadResume,
+  MAX_APPLICATION_DOCUMENT_BYTES,
 } from "@/lib/api";
 import { captchaConsentedAt, captchaConsentCompletion, captchaConsentGranted } from "@/lib/captcha-consent";
 import { CaptchaConsentControl } from "@/components/app/CaptchaConsentControl";
@@ -670,6 +671,18 @@ export function ResumeStep({
       setError("Use a PDF or DOCX file.");
       return;
     }
+    /* THE CAP IS 4 MB AND THE CHECK MUST BE CLIENT-SIDE, because past it there is no readable
+     * error to show. The platform rejects a larger request body before the backend runs, as a
+     * plain-text 413 with no CORS headers, so the browser surfaces it as a bare "Failed to fetch"
+     * TypeError after the student has waited through the whole upload. Measured 2026-08-29 with a
+     * 6 MB PDF against production, and it is the same platform ceiling
+     * MAX_APPLICATION_DOCUMENT_BYTES documents for application documents. The old copy promised
+     * 10 MB, which was the backend's multipart limit: a number no upload could actually reach. */
+    if (f.size > MAX_APPLICATION_DOCUMENT_BYTES) {
+      const mb = (f.size / 1_000_000).toFixed(1);
+      setError(`That file is ${mb} MB and resumes upload up to 4 MB. Export a smaller PDF (most editors have a "reduce file size" option) and try again.`);
+      return;
+    }
     setError(null);
     setFile(f);
     setBusy(true);
@@ -843,7 +856,7 @@ export function ResumeStep({
             {/* Label removed 2026-07-28: the button below it said "Choose a
                 file" and the step title says "Start with your resume." */}
             <p className="shrink-0 text-right font-mono text-xs text-muted">
-              PDF or DOCX<br />10 MB max
+              PDF or DOCX<br />4 MB max
             </p>
           </>
         )}
