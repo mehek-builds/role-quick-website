@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, type ApplicationReview, type GeneratedResume, type ResumeSpec } from "@/lib/api";
 import { canonicalApplicationFromPacket, isStubPacketSpec, sectionHeading, startsNewSection, statusLabel, stripMetadata, withoutHistoricalPacketAuditStaleAttention } from "@/features/applications";
 import { cleanJdCapture, completedSubmissionGroups, displayQuestionLabel, humanInputItems, type SubmissionChecklistItem } from "@/features/applications";
@@ -407,7 +407,7 @@ export function ApplicationPacket({
   /* Display only: this modal never binds audit offsets to the text, so it can drop the captured
      form chrome ("SUBMIT YOUR APPLICATION", bare field labels, "Loading") that made the pane read
      as a broken scrape. The removal is announced below rather than silent. */
-  const cleanedJd = cleanJdCapture(contentReview.jd_text);
+  const cleanedJd = useMemo(() => cleanJdCapture(contentReview.jd_text), [contentReview.jd_text]);
   const jdParagraphs = cleanedJd.text
     .split(/\n{2,}/)
     .map((block) => block.trim())

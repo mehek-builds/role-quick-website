@@ -199,8 +199,11 @@ async function openAPacket(page) {
      visible is the tell that the click landed in the gap; only then is it clicked again. */
   const action = page.getByRole("button", { name: "Review and fill" });
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    if (await rows.first().isVisible().catch(() => false)) await rows.first().click();
     try {
+      /* A prior attempt's click may have landed just after its wait expired; re-clicking a
+         mid-unmount ledger is its own hang, so a visible action means done, no second click. */
+      if (await action.isVisible().catch(() => false)) break;
+      if (await rows.first().isVisible().catch(() => false)) await rows.first().click();
       await action.waitFor({ state: "visible", timeout: attempt < 2 ? 7_000 : 20_000 });
       break;
     } catch (reason) {

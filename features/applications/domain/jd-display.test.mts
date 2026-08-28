@@ -116,3 +116,16 @@ test("the second form section of an apply capture is cleaned too", () => {
     assert.ok(!cleaned.text.includes(gone), `${gone} should have been removed`);
   }
 });
+
+test("a posting that merely says Application for Employment never opens the gate", () => {
+  const prose = [
+    "Operations Associate",
+    "Download our Application for Employment from the careers page.",
+    "Application for Employment",
+    "Email",
+    "City",
+  ].join("\n");
+  const cleaned = cleanJdCapture(prose);
+  assert.equal(cleaned.text, prose);
+  assert.deepEqual(cleaned.removedLines, []);
+});

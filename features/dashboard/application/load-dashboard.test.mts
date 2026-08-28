@@ -106,3 +106,43 @@ test("rejects bootstrap failures that do not indicate a compatibility gap", asyn
     /service unavailable/,
   );
 });
+
+test("a bootstrap history window at its cap is replaced by the full tracker window", async () => {
+  const cappedResumes = Array.from({ length: 50 }, (_, i) => ({ id: `capped-${i}` }));
+  const fullResumes = Array.from({ length: 100 }, (_, i) => ({ id: `full-${i}` }));
+  const paths: string[] = [];
+  const state = await loadDashboardInitialState(async <T,>(path: string) => {
+    paths.push(path);
+    if (path === "/dashboard/bootstrap") {
+      return { ...completeBootstrap, resume_history: { resumes: cappedResumes } } as T;
+    }
+    if (path === "/resume/history") return { resumes: fullResumes } as T;
+    throw new Error(`unexpected request: ${path}`);
+  });
+  assert.deepEqual(paths, ["/dashboard/bootstrap", "/resume/history"]);
+  assert.equal(state.packets.length, 100);
+});
+
+test("a bootstrap history window below the cap is trusted without a second request", async () => {
+  const paths: string[] = [];
+  const state = await loadDashboardInitialState(async <T,>(path: string) => {
+    paths.push(path);
+    if (path === "/dashboard/bootstrap") {
+      return { ...completeBootstrap, resume_history: { resumes: [{ id: "only" }] } } as T;
+    }
+    throw new Error(`unexpected request: ${path}`);
+  });
+  assert.deepEqual(paths, ["/dashboard/bootstrap"]);
+  assert.equal(state.packets.length, 1);
+});
+
+test("a failed full-window refetch keeps the embedded copy instead of failing Home", async () => {
+  const cappedResumes = Array.from({ length: 50 }, (_, i) => ({ id: `capped-${i}` }));
+  const state = await loadDashboardInitialState(async <T,>(path: string) => {
+    if (path === "/dashboard/bootstrap") {
+      return { ...completeBootstrap, resume_history: { resumes: cappedResumes } } as T;
+    }
+    throw new Error("history endpoint down");
+  });
+  assert.equal(state.packets.length, 50);
+});

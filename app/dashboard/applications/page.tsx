@@ -4637,12 +4637,12 @@ function Applications() {
           autopilot={Boolean(autopilot.enabled)}
           appliedToday={appliedToday}
           waiting={(() => {
-            /* The DOMAIN's own action membership over the SAME rows the ?state=action ledger
-               shows (reviewablePackets, deduped), so the count, the tile and the list it links to
-               are one number. Counting raw `packets` printed 88 against a 44-row action view in
-               production (2026-08-28): the merged raw array holds the duplicates the ledger
-               collapses. The link is the real filter, not an anchor: an anchor lands on whatever
-               ledger filter is already active. */
+            /* The DOMAIN's own action membership over reviewablePackets, the rows the ledger
+               draws from, so this count equals what the ?state=action link opens (before any
+               search text typed there). Measured live 2026-08-28: 88 here, "88 of 100" on that
+               view. Home's tile can still read lower when the bootstrap's embedded
+               resume_history window is shorter than the tracker's; that is the loader's problem
+               (see load-dashboard.ts), not a different membership. */
             const count = reviewablePackets.filter((packet) => (
               packet.spec._review != null && statusMatchesApplicationFilter(packet.spec._review, "action")
             )).length;

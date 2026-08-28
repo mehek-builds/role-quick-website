@@ -67,7 +67,23 @@ export async function loadDashboardInitialState(request: DashboardRequester): Pr
     // Account saves targeting through a different URL. The aggregate endpoint is privately cached,
     // so a normal fetch here can legally replay the pre-save subtitle after navigating Home.
     const bootstrap = await request<unknown>("/dashboard/bootstrap", { cache: "no-store" });
-    if (isBootstrapV1(bootstrap)) return dashboardStateFromBootstrap(bootstrap);
+    if (isBootstrapV1(bootstrap)) {
+      const state = dashboardStateFromBootstrap(bootstrap);
+      /* The aggregate's embedded resume_history is a SHORTER window than the tracker's own
+         /resume/history: measured live 2026-08-28, the bootstrap carried 50 packets while the
+         tracker held 100, so Home's tiles read "44 need something from you" against an action
+         view showing 88. Every count Home derives from these packets undercounts on any account
+         past the embedded cap. When the embedded window is plausibly at that cap, the full
+         window is fetched and used; on failure the embedded copy stands, which is the same
+         fail-soft the legacy path below already chose. */
+      if (state.packets.length >= 50) {
+        const full = await request<{ resumes: GeneratedResume[] }>("/resume/history").catch(() => null);
+        if (full && Array.isArray(full.resumes) && full.resumes.length > state.packets.length) {
+          return { ...state, packets: full.resumes };
+        }
+      }
+      return state;
+    }
   } catch (error) {
     if (!supportsLegacyFallback(error)) throw error;
   }
