@@ -15,7 +15,9 @@ function safeReturnRoute(value: unknown): string | null {
   if (typeof value !== "string") return null;
   try {
     const url = new URL(value, "https://trylitos.com");
-    if (url.origin !== "https://trylitos.com" || !/^\/(dashboard|billing)(?:\/|$)/.test(url.pathname)) return null;
+    const isAllowedPath = url.pathname === "/start"
+      || /^\/(dashboard|billing)(?:\/|$)/.test(url.pathname);
+    if (url.origin !== "https://trylitos.com" || !isAllowedPath) return null;
     return `${url.pathname}${url.search}${url.hash}`;
   } catch {
     return null;

@@ -748,6 +748,19 @@ export type PostingPrescriptQuestion = {
   explanation?: string;
 };
 
+/** One value Litos can put on this employer's form without asking again. */
+export type PostingPrescriptFilledAnswer = {
+  question: string;
+  answer: string;
+  source: "applicant_review" | "saved_details";
+  /** Included by the exact-evidence backend. Optional so a rolling deploy can still render the
+   *  value and fall back to a text editor instead of hiding it. */
+  input_type?: string;
+  options?: string[] | null;
+  required?: boolean;
+  max_length?: number | null;
+};
+
 /**
  * What a posting's application form asks, known before she clicks Apply.
  *
@@ -765,6 +778,8 @@ export type PostingPrescript = {
   scanned_now: boolean;
   question_count: number;
   ask: PostingPrescriptQuestion[];
+  /** Optional during the backend rollout. Review fails closed if the count has no matching list. */
+  filled_answers?: PostingPrescriptFilledAnswer[];
   already_answered: number;
 };
 

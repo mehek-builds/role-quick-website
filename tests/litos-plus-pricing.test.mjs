@@ -45,6 +45,67 @@ test("server plan catalog requires explicit checkout availability", () => {
   assert.equal(verifiedPlanCatalog({ plans }).checkoutAvailable, false);
 });
 
+function checkoutTerms(plan, trialEligible) {
+  return {
+    schema_version: 1,
+    revision: "checkout_terms_v1_test123",
+    checkout_status: "available",
+    blocker_code: null,
+    payment_method_required: true,
+    trial_eligible: trialEligible,
+    trial_days: trialEligible ? 7 : 0,
+    due_at_checkout: {
+      amount_cents: trialEligible ? 0 : plan.amountCents,
+      currency: "USD",
+      amount_kind: trialEligible ? "exact" : "catalog_before_tax_and_promotions",
+    },
+    first_charge: {
+      regular_subtotal_cents: plan.amountCents,
+      currency: "USD",
+      timing: trialEligible
+        ? { kind: "days_after_checkout_completion", days: 7 }
+        : { kind: "at_checkout_completion" },
+    },
+    renewal: {
+      regular_subtotal_cents: plan.amountCents,
+      currency: "USD",
+      interval: plan.term === "week" ? "week" : "month",
+      interval_count: plan.term === "quarter" ? 3 : 1,
+    },
+    automatic_tax_enabled: true,
+    promotion_codes_allowed: true,
+    price_basis: "catalog_before_tax_and_promotions",
+  };
+}
+
+test("personalized catalog preserves eligible and returning checkout terms", () => {
+  for (const eligible of [true, false]) {
+    const plans = LITOS_PLUS_PLANS.map((plan) => ({
+      plan_id: plan.id,
+      amount_cents: plan.amountCents,
+      checkout_available: true,
+      checkout_terms: checkoutTerms(plan, eligible),
+    }));
+    const catalog = verifiedPlanCatalog({ checkout_available: true, plans });
+    assert.equal(catalog.checkoutAvailable, true);
+    assert.equal(Object.keys(catalog.checkoutTerms).length, 3);
+    assert.equal(catalog.checkoutTerms.litos_plus_month?.trialEligible, eligible);
+    assert.equal(catalog.checkoutTerms.litos_plus_month?.dueAtCheckout.amountCents, eligible ? 0 : 3999);
+  }
+});
+
+test("checkout stays locked when personalized terms are missing or inconsistent", () => {
+  const plans = LITOS_PLUS_PLANS.map((plan) => ({
+    plan_id: plan.id,
+    amount_cents: plan.amountCents,
+    checkout_available: true,
+    checkout_terms: { ...checkoutTerms(plan, true), trial_days: 6 },
+  }));
+  const catalog = verifiedPlanCatalog({ checkout_available: true, plans });
+  assert.equal(catalog.checkoutAvailable, true);
+  assert.deepEqual(catalog.checkoutTerms, {});
+});
+
 test("public pricing states the charge and the cancel window, and never promises Free", async () => {
   /* THE CONTRACT REVERSED, and the test changed with it rather than being deleted.
      It used to require "stay on Free unless you return and explicitly purchase" and
@@ -92,25 +153,23 @@ test("every plan is its own column, and the term is not a radio inside one card"
   assert.doesNotMatch(cards, /name="pricing-term"/);
 });
 
-test("no surface promises anything about a card", async () => {
-  /* Removed 2026-08-19 on Mehek's call: the terms of the trial changed and a
-     promise the product may no longer keep is worse than no promise at all. The
-     page still says what it charges and when, which is the part that has to be
-     true; it just no longer says what it collects to do it. Pinned across every
-     surface that carried the line, because it was written five separate times and
-     a sweep that misses one is the version students screenshot. */
-  const files = [
-    "../components/pricing/PlanCards.tsx",
-    "../components/cinema/CinematicHero.tsx",
-    "../components/start/TrialStep.tsx",
-    "../app/login/page.tsx",
-    "../app/for-career-centres/page.tsx",
-    "../lib/pricing.ts",
-  ];
-  for (const file of files) {
-    const source = await readFile(new URL(file, import.meta.url), "utf8");
-    assert.doesNotMatch(source, /no card|without a card|card is needed|card needed|card required/i, `${file} still promises something about a card`);
-  }
+test("onboarding and legal surfaces make the trial conditional on server-owned eligibility", async () => {
+  const [trial, plan, login, privacy, terms] = await Promise.all([
+    readFile(new URL("../components/start/TrialStep.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/start/PlanStep.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/login/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/privacy/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/terms/page.tsx", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(trial, /terms\?\.checkoutStatus === "available"/);
+  assert.match(trial, /terms\.trialEligible === true/);
+  assert.match(plan, /checkoutTermsRevision: terms\.revision/);
+  assert.match(plan, /terms\.checkoutStatus !== "available"/);
+  assert.match(login, /Eligible first-time accounts can start a 7-day Litos\+ trial/);
+  assert.match(privacy, /Eligible first-time accounts may receive a seven-day Litos\+/);
+  assert.match(terms, /Eligible first-time accounts may start a seven-day Litos\+ trial/);
+  assert.doesNotMatch(`${login}\n${privacy}\n${terms}`, /no-card trial|trial without adding a card|trial starts now/i);
 });
 
 test("extension-origin pricing keeps checkout on the extension account", async () => {
@@ -163,8 +222,13 @@ test("the plan step has no way past it except paying", async () => {
   ]);
   assert.doesNotMatch(step, /Continue on Free/);
   assert.doesNotMatch(step, /onboarding_plan_declined/);
+  assert.match(step, /useState<LitosPlusPlanId \| null>\(null\)/);
+  assert.match(step, /disabled=\{busy \|\| !plan \|\| \(!canCheckout && !needsClaim\)\}/);
+  assert.match(step, /aria-describedby="onboarding-plan-terms"/);
+  assert.match(step, /Add payment method and start trial/);
   assert.match(step, /\{ onSettled \}: \{ onSettled: \(\) => void \}/);
-  assert.match(step, /isPaidAccess\(access\)[\s\S]{0,600}?onSettled\(\);/);
+  assert.match(step, /isPaidAccess\(access\) \|\| access\.access_class === "trial_plus"/);
+  assert.match(step, /checkoutTermsRevision: terms\.revision/);
   // The caller must always supply it, so a paid return is never stranded.
   assert.match(start, /<PlanStep onSettled=\{\(\) => \{ stepDone\("plan"\)/);
   assert.doesNotMatch(start, /requires_payment_method\s*\?/);

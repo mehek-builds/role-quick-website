@@ -58,8 +58,14 @@ import { ReviewStep } from "@/components/start/ReviewStep";
 import { TrialStep } from "@/components/start/TrialStep";
 import { NotificationsStep } from "@/components/start/NotificationsStep";
 import { PlanStep } from "@/components/start/PlanStep";
+import { resumeContactHeader } from "@/components/start/ResumePaper";
 import { freshnessOf, hoursSinceSeen, type OnboardingMatch } from "@/lib/onboarding-match";
-import type { BuildResult } from "@/lib/onboarding-build";
+import {
+  editableOnboardingQuestions,
+  reviewableOnboardingAnswers,
+  type BuildResult,
+} from "@/lib/onboarding-build";
+import { currentKeyboardInset } from "@/lib/keyboard-inset";
 
 /* Whether this account's flow is one the acknowledgement ledger exists for.
  *
@@ -146,6 +152,23 @@ export default function Start() {
       setProfileLoadError(reason instanceof Error ? reason.message : "Could not load your application details.");
       setAppProfileStatus("error");
     }
+  }, []);
+
+  /* Mobile sticky actions use the visual viewport so the software keyboard cannot cover the next
+     decision. Browsers that resize the layout viewport keep this value at zero. */
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+    const root = document.documentElement;
+    const apply = () => root.style.setProperty("--keyboard-inset", `${currentKeyboardInset()}px`);
+    apply();
+    viewport.addEventListener("resize", apply);
+    viewport.addEventListener("scroll", apply);
+    return () => {
+      viewport.removeEventListener("resize", apply);
+      viewport.removeEventListener("scroll", apply);
+      root.style.removeProperty("--keyboard-inset");
+    };
   }, []);
 
   /* The synchronous setters in this effect construct a localhost-only QA fixture after inspecting
@@ -619,7 +642,13 @@ export default function Start() {
                 if (!cameBack && hasFlowLedger(state)) await acknowledgeOnboardingFlowStep("resume", "continued", state.flow_version);
                 const s = await refresh();
                 if (s.has_resume) await loadProfile();
-                if (cameBack) { track("onboarding_revisit_saved", { step: "resume" }); setRevisiting(null); }
+                if (cameBack) {
+                  /* A new source resume invalidates the tailored packet already in memory. Clearing
+                     it forces the review route through BuildStep before anything can be sent. */
+                  setBuilt(null);
+                  track("onboarding_revisit_saved", { step: "resume" });
+                  setRevisiting(null);
+                }
               })().catch((reason) => setError(reason instanceof Error ? reason.message : "Could not continue."));
             }}
           />
@@ -766,20 +795,26 @@ export default function Start() {
           />
         );
 
-      case "questions":
+      case "questions": {
         /* Both halves matter, and getting this wrong was a trap worth naming. Falling back to the
            match screen whenever `built` was missing produced a loop with no exit: picking a match
            sets `chosenMatch` and leaves `built` null, so the very next render fell back to the
            match screen again, forever. `resumeSequence` routes on what is actually missing. */
         if (!built || !chosenMatch) return resumeSequence();
+        const editingReviewAnswers = revisiting === "questions";
+        const questions = editingReviewAnswers
+          ? editableOnboardingQuestions(built.filledAnswers, answersGiven, built.ask)
+          : built.ask;
         return (
           <QuestionsStep
             company={chosenMatch.job.company_name}
-            questions={built.ask}
+            questions={questions}
             /* What they answered last time, replayed onto the employer's questions. Only matters on
                a revisit: the first time through this is empty and the screen is the blank form it
                has always been. */
-            given={answersGiven}
+            given={editingReviewAnswers
+              ? questions.map((question) => ({ question: question.question, answer: question.answer }))
+              : answersGiven}
             alreadyAnswered={built.alreadyAnswered}
             onLater={later}
             onSaved={async (answers) => {
@@ -788,30 +823,66 @@ export default function Start() {
                  decides whether the work-visa screen appears at all: when the posting asked both
                  halves, the server records the declaration for that posting's country and the
                  refresh below returns a flow without that step. */
-              await saveOnboardingAnswers({
-                job_id: chosenMatch.job.id,
-                company: chosenMatch.job.company_name,
-                answers,
-              });
+              if (!editingReviewAnswers) {
+                await saveOnboardingAnswers({
+                  job_id: chosenMatch.job.id,
+                  company: chosenMatch.job.company_name,
+                  answers,
+                });
+              }
               setAnswersGiven(answers);
+              setBuilt((current) => current ? { ...current, outstandingQuestions: 0 } : current);
               stepDone("questions");
               if (completedRevisit()) return;
               await ack("questions");
               await refresh();
             }}
+            reviewMode={editingReviewAnswers}
           />
         );
+      }
 
       case "review":
         if (!chosenMatch || !built) return resumeSequence();
+        /* A rebuild can discover questions after the server has already advanced its ledger to
+           review. The client holds the fresh scan, so it must route through those questions before
+           exposing the irreversible send control. */
+        if (built.outstandingQuestions > 0) {
+          return (
+            <QuestionsStep
+              company={chosenMatch.job.company_name}
+              questions={built.ask}
+              given={answersGiven}
+              alreadyAnswered={built.alreadyAnswered}
+              onLater={later}
+              onSaved={async (answers) => {
+                await saveOnboardingAnswers({
+                  job_id: chosenMatch.job.id,
+                  company: chosenMatch.job.company_name,
+                  answers,
+                });
+                setAnswersGiven(answers);
+                setBuilt((current) => current ? { ...current, outstandingQuestions: 0 } : current);
+                stepDone("questions");
+              }}
+            />
+          );
+        }
         return (
           <ReviewStep
             posting={chosenMatch.job}
             applicationId={built?.applicationId ?? null}
             resumeSpec={built?.resumeSpec ?? null}
+            resumeContact={resumeContactHeader(built.resumeSpec ?? {}, {
+              full_name: profile?.full_name ?? "",
+              email: profile?.resume_email ?? undefined,
+            })}
             educationProfile={profile}
-            answersSaved={answersGiven.length}
+            answers={reviewableOnboardingAnswers(built.filledAnswers, answersGiven, built.ask)}
+            answerEvidenceComplete={built.filledAnswers.length === built.alreadyAnswered}
             fieldsAnswered={built?.totalQuestions ?? 0}
+            onEditResume={() => setRevisiting("resume")}
+            onEditAnswers={() => setRevisiting("questions")}
             onSent={() => { setApplicationSent(true); stepDone("review"); void ack("review").then(refresh).catch(fail); }}
             onSaveForLater={() => { setApplicationSent(false); stepDone("review"); void ack("review").then(refresh).catch(fail); }}
           />

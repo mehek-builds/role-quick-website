@@ -33,7 +33,7 @@ test("the trial screen mirrors the backend's trial limits exactly", async () => 
   }
 });
 
-test("the screen never claims the account already holds a trial it has not started", async () => {
+test("the screen never claims a trial before personalized eligibility is known", async () => {
   const source = await read("components/start/TrialStep.tsx");
 
   /* The line this replaced said "Nothing to confirm. Already on your account." for everyone. It was
@@ -45,8 +45,13 @@ test("the screen never claims the account already holds a trial it has not start
     !/Nothing to confirm\. Already on your account\./.test(rendered),
     "the screen tells every student the trial is already on their account",
   );
-  assert.match(source, /holdsTrial \? "Already on your account\."/, "the held-trial claim is no longer conditional");
-  assert.match(source, /Nothing is charged for the first seven days\./, "the honest line for an account with no trial is gone");
+  assert.match(source, /access\?\.access_class === "trial_plus" && access\.trial\?\.active === true/);
+  assert.match(source, /terms\?\.checkoutStatus === "available"/);
+  assert.match(source, /terms\.trialEligible === true/);
+  assert.match(source, /status === "loading"/);
+  assert.match(source, /status === "error"/);
+  assert.doesNotMatch(rendered, /\$0 today/);
+  assert.match(source, /<PrimaryButton onClick=\{onContinue\}>Continue<\/PrimaryButton>/, "the trial screen claims this click starts the trial");
 });
 
 test("the title reports the student's own last action rather than assuming it", async () => {
@@ -54,8 +59,8 @@ test("the title reports the student's own last action rather than assuming it", 
   const page = await read("app/start/page.tsx");
 
   // Review offers "Save it and send later", so "Sent." was false whenever a student took it.
-  assert.match(source, /sent \? "Sent\./, "the title asserts a send again");
-  assert.match(source, /"Saved\. And here's something from us\."/, "there is no title for the save path");
+  assert.match(source, /const action = sent \? "Sent\." : "Saved\."/);
+  assert.match(source, /\$\{action\} Here is your \$\{terms\.trialDays\}-day trial\./);
   assert.match(page, /onSent=\{\(\) => \{ setApplicationSent\(true\)/, "the send no longer records itself");
   assert.match(page, /onSaveForLater=\{\(\) => \{ setApplicationSent\(false\)/, "the save no longer records itself");
 });

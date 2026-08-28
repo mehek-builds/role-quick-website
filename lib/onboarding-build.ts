@@ -1,4 +1,4 @@
-import type { PostingPrescriptQuestion } from "./api";
+import type { PostingPrescriptFilledAnswer, PostingPrescriptQuestion } from "./api";
 import type { ResumeSpec } from "@/lib/api";
 
 /* 04 WATCH IT BUILD: the sequence, as a decision that can be tested without spending a generation.
@@ -53,6 +53,8 @@ export type BuildResult = {
   /** The questions that need the applicant, passed straight through to screen 05 rather than
    *  re-fetched: the scan is the expensive half and it has already been paid for here. */
   ask: PostingPrescriptQuestion[];
+  /** Exact values behind `alreadyAnswered`, required by the irreversible review screen. */
+  filledAnswers: PostingPrescriptFilledAnswer[];
   /** How many Litos already answered. The counterweight that makes a short screen read as
    *  progress rather than as a form. */
   alreadyAnswered: number;
@@ -83,6 +85,7 @@ export type BuildDeps = {
     total: number;
     alreadyAnswered: number;
     ask: PostingPrescriptQuestion[];
+    filledAnswers: PostingPrescriptFilledAnswer[];
   }>;
 };
 
@@ -191,12 +194,67 @@ export async function runOnboardingBuild(
     applicationId: generated.applicationId,
     resumeSpec: generated.resumeSpec,
     ask: questions.ask,
+    filledAnswers: questions.filledAnswers,
     alreadyAnswered: questions.alreadyAnswered,
     /* Derived from the ask list rather than sent separately, so the count on the button and the
        list on the next screen can never disagree about how many questions there are. */
     outstandingQuestions: questions.ask.length,
     totalQuestions: questions.total,
   };
+}
+
+/**
+ * One visible list for Review. Answers confirmed in this sitting replace an older value with the
+ * same employer wording, and no sensitive value is written to browser storage.
+ */
+export function reviewableOnboardingAnswers(
+  filled: readonly PostingPrescriptFilledAnswer[],
+  confirmed: readonly { question: string; answer: string }[],
+  asked: readonly PostingPrescriptQuestion[] = [],
+): PostingPrescriptFilledAnswer[] {
+  const rows = new Map<string, PostingPrescriptFilledAnswer>();
+  for (const item of filled) {
+    const key = item.question.trim().toLowerCase();
+    if (key && item.answer.trim()) rows.set(key, item);
+  }
+  for (const item of confirmed) {
+    const key = item.question.trim().toLowerCase();
+    if (!key || !item.answer.trim()) continue;
+    const existing = rows.get(key);
+    const question = asked.find((candidate) => candidate.question.trim().toLowerCase() === key);
+    rows.set(key, {
+      ...existing,
+      question: item.question,
+      answer: item.answer,
+      source: "applicant_review",
+      input_type: existing?.input_type ?? question?.input_type ?? "text",
+      options: existing?.options !== undefined ? existing.options : question?.options ?? null,
+      required: existing?.required ?? question?.required ?? true,
+      max_length: existing?.max_length !== undefined ? existing.max_length : question?.max_length ?? null,
+    });
+  }
+  return [...rows.values()];
+}
+
+/**
+ * The values on Review as editable employer controls. Saved profile values remain application-only
+ * overrides here: the student can correct this packet without silently rewriting account facts.
+ */
+export function editableOnboardingQuestions(
+  filled: readonly PostingPrescriptFilledAnswer[],
+  confirmed: readonly { question: string; answer: string }[],
+  asked: readonly PostingPrescriptQuestion[],
+): PostingPrescriptQuestion[] {
+  return reviewableOnboardingAnswers(filled, confirmed, asked).map((item) => ({
+    question: item.question,
+    input_type: item.input_type ?? "text",
+    options: item.options ?? null,
+    required: item.required ?? true,
+    max_length: item.max_length ?? null,
+    answer: item.answer,
+    reusable: false,
+    remembered: item.source === "applicant_review",
+  }));
 }
 
 /**

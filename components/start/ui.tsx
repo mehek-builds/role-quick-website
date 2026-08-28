@@ -193,7 +193,12 @@ export function StartShell({
           {title}
         </h1>
       )}
-      <div className={`min-w-0 ${title ? (wide ? "mt-6" : "mt-8") : "mt-7"}`}>{children}</div>
+      <div
+        key={step}
+        className={`rq-onboarding-step min-w-0 ${title ? (wide ? "mt-6" : "mt-8") : "mt-7"}`}
+      >
+        {children}
+      </div>
       {aside && <div className="mt-8">{aside}</div>}
     </main>
   );

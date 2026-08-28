@@ -4,7 +4,9 @@ import {
   BUILD_STAGES,
   BuildPreconditionError,
   buildActionLabel,
+  editableOnboardingQuestions,
   initialStages,
+  reviewableOnboardingAnswers,
   runOnboardingBuild,
   stagesAt,
   type BuildDeps,
@@ -25,9 +27,13 @@ function deps(overrides: Partial<BuildDeps> = {}): BuildDeps {
     loadIdentity: async () => ({ fullName: "A Candidate", resumeEmail: "a@example.com" }),
     generateResume: async () => ({ applicationId: "app-1", resumeSpec: { school: "USC", degree: "BS", grad_date: "May 2027", coursework: "", experience: [], skills: [] } }),
     loadQuestions: async () => ({
-      total: 17,
-      alreadyAnswered: 14,
+      total: 5,
+      alreadyAnswered: 2,
       ask: [ask("Sponsorship?"), ask("GPA?"), ask("Anything else?")],
+      filledAnswers: [
+        { question: "Legal name?", answer: "A Candidate", source: "saved_details", input_type: "text", options: null, required: true, max_length: null },
+        { question: "Portfolio?", answer: "https://example.com", source: "applicant_review", input_type: "url", options: null, required: true, max_length: null },
+      ],
     }),
     ...overrides,
   };
@@ -97,11 +103,38 @@ test("the stages are reported in order and never go backwards", async () => {
 test("the result carries the real counts, not a rounded promise", async () => {
   const result = await runOnboardingBuild(deps(), "job-1", record().onStages);
   assert.equal(result.outstandingQuestions, 3);
-  assert.equal(result.totalQuestions, 17);
-  assert.equal(result.alreadyAnswered, 14);
+  assert.equal(result.totalQuestions, 5);
+  assert.equal(result.alreadyAnswered, 2);
+  assert.equal(result.filledAnswers.length, 2);
   assert.equal(result.applicationId, "app-1");
   // Derived from the ask list, so the button's count and the next screen's list cannot disagree.
   assert.equal(result.outstandingQuestions, result.ask.length);
+});
+
+test("review answers combine saved details with answers confirmed in this sitting", () => {
+  const asked = [ask("GPA?"), ask("Sponsorship?")];
+  const filled = [
+    { question: "GPA?", answer: "3.6", source: "saved_details" as const, input_type: "text", options: null, required: true, max_length: null },
+    { question: "Portfolio?", answer: "https://example.com", source: "saved_details" as const, input_type: "url", options: null, required: true, max_length: null },
+  ];
+  const confirmed = [
+    { question: "GPA?", answer: "3.89" },
+    { question: "Sponsorship?", answer: "No" },
+  ];
+  assert.deepEqual(reviewableOnboardingAnswers(
+    filled,
+    confirmed,
+    asked,
+  ), [
+    { question: "GPA?", answer: "3.89", source: "applicant_review", input_type: "text", options: null, required: true, max_length: null },
+    { question: "Portfolio?", answer: "https://example.com", source: "saved_details", input_type: "url", options: null, required: true, max_length: null },
+    { question: "Sponsorship?", answer: "No", source: "applicant_review", input_type: "select", options: ["Yes", "No"], required: true, max_length: null },
+  ]);
+
+  const editable = editableOnboardingQuestions(filled, confirmed, asked);
+  assert.equal(editable.length, 3);
+  assert.equal(editable[0].answer, "3.89");
+  assert.deepEqual(editable[2].options, ["Yes", "No"]);
 });
 
 test("the full posting is what gets tailored against, never the board preview", async () => {

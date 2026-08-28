@@ -23,6 +23,7 @@ export type CheckoutContext = {
   trigger?: string;
   actionNonce?: string;
   idempotencyKey?: string;
+  checkoutTermsRevision?: string;
 };
 
 export type CheckoutResponse = {
@@ -33,6 +34,7 @@ export type CheckoutResponse = {
   url?: string;
   status_url?: string;
   expires_at: string;
+  checkout_terms?: unknown;
 };
 
 export type BillingOffer = {
@@ -75,7 +77,7 @@ export async function getPlanCatalog(): Promise<PlanCatalog> {
   try {
     return verifiedPlanCatalog(await api<unknown>("/billing/plans", { cache: "no-store" }));
   } catch {
-    return { plans: [...LITOS_PLUS_PLANS], checkoutAvailable: false, source: "fallback" };
+    return { plans: [...LITOS_PLUS_PLANS], checkoutAvailable: false, source: "fallback", checkoutTerms: {} };
   }
 }
 
@@ -129,6 +131,14 @@ export async function createLitosPlusCheckout(
   context: CheckoutContext,
 ): Promise<CheckoutResponse & { checkoutUrl: string }> {
   const idempotencyKey = context.idempotencyKey ?? crypto.randomUUID();
+  /* Older purchase surfaces share this function but do not yet hold the personalized preview in
+     component state. Fetching it here keeps those callers compatible with the server's stale-terms
+     guard while onboarding passes the exact revision the applicant already reviewed. */
+  const checkoutTermsRevision = context.checkoutTermsRevision
+    ?? (await getPlanCatalog()).checkoutTerms[planId]?.revision;
+  if (!checkoutTermsRevision) {
+    throw new Error("Litos could not verify the current checkout terms.");
+  }
   const response = await api<CheckoutResponse>("/billing/checkout", {
     method: "POST",
     headers: { "Idempotency-Key": idempotencyKey },
@@ -139,6 +149,7 @@ export async function createLitosPlusCheckout(
       trigger: context.trigger,
       action_nonce: context.actionNonce,
       idempotency_key: idempotencyKey,
+      checkout_terms_revision: checkoutTermsRevision,
     }),
   });
   const checkoutUrl = response.checkout_url ?? response.url;

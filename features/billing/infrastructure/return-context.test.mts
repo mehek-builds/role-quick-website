@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   billingReturnContext,
+  currentBillingReturnRoute,
   rememberBillingReturnContext,
 } from "./return-context.ts";
 
@@ -29,6 +30,43 @@ function installWindowStorage() {
     },
   });
 }
+
+test("the onboarding checkout can return to the exact start route", () => {
+  installWindowStorage();
+  try {
+    window.location.pathname = "/start";
+    window.location.search = "?from=plan";
+    window.location.hash = "#checkout";
+    assert.equal(currentBillingReturnRoute(), "/start?from=plan#checkout");
+
+    rememberBillingReturnContext(OFFER_ID, {
+      accountId: ACCOUNT_ID,
+      returnRoute: "/start?from=plan#checkout",
+      expiresAt: "2099-01-01T00:00:00.000Z",
+    });
+    assert.deepEqual(billingReturnContext(OFFER_ID), {
+      accountId: ACCOUNT_ID,
+      returnRoute: "/start?from=plan#checkout",
+      expiresAt: "2099-01-01T00:00:00.000Z",
+    });
+  } finally {
+    Reflect.deleteProperty(globalThis, "window");
+  }
+});
+
+test("a start subpath is not accepted as a checkout return route", () => {
+  installWindowStorage();
+  try {
+    rememberBillingReturnContext(OFFER_ID, {
+      accountId: ACCOUNT_ID,
+      returnRoute: "/start/internal",
+      expiresAt: "2099-01-01T00:00:00.000Z",
+    });
+    assert.equal(billingReturnContext(OFFER_ID), null);
+  } finally {
+    Reflect.deleteProperty(globalThis, "window");
+  }
+});
 
 test("the exact provider expiry keeps a late checkout return recoverable", () => {
   const originalNow = Date.now;

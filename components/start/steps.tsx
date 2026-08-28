@@ -157,12 +157,20 @@ function FocusForm({
   const [selectedTitles, setSelectedTitles] = useState<string[]>(() => seed.titles);
   const [roleTypes, setRoleTypes] = useState<RoleType[]>(() => seed.roleTypes);
   const [categories, setCategories] = useState<string[]>(() => saved?.categories?.length ? saved.categories : guess?.categories ?? []);
+  const savedFields = useMemo(() => fieldsForCategories(saved?.categories), [saved?.categories]);
   /* The field selection, which is the screen's new first question.
      Seeded from SAVED CATEGORIES first and from the resume guess only where nothing is stored,
      which is the same direction focusSeed takes for titles: a stated answer outranks a guess. */
   const [fields, setFields] = useState<string[]>(() => {
-    const stored = fieldsForCategories(saved?.categories);
-    return stored.length > 0 ? stored : fieldsForCategories(guess?.categories);
+    return savedFields.length > 0 ? savedFields : fieldsForCategories(guess?.categories);
+  });
+  /* Disclosure only moves forward during a visit. Clearing an earlier answer disables Continue,
+     but it does not yank later controls away or make already entered state look lost. */
+  const [revealedThrough, setRevealedThrough] = useState(() => {
+    if ((saved?.locations?.length ?? 0) > 0 || saved?.remote_only || (saved?.titles?.length ?? 0) > 0) return 3;
+    if ((saved?.role_types?.length ?? 0) > 0) return 2;
+    if (savedFields.length > 0) return 1;
+    return 0;
   });
   /* A LIST, NOT A COMMA-SEPARATED STRING, and that is a correctness fix rather than a nicety.
      Splitting the field on commas made the two halves of this control contradict each other: 122
@@ -203,6 +211,7 @@ function FocusForm({
   const [primaryPeriod, setPrimaryPeriod] = useState<string | null>(() => saved?.primary_period ?? defaultPrimary(gradYear));
   const [backupPeriod, setBackupPeriod] = useState<string | null>(() => saved?.backup_period ?? defaultBackup(gradYear));
   const [newTitle, setNewTitle] = useState("");
+  const [showAllTitles, setShowAllTitles] = useState(false);
   const [roleMenuOpen, setRoleMenuOpen] = useState(false);
   const [activeMatchIndex, setActiveMatchIndex] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -249,6 +258,23 @@ function FocusForm({
     return [...derived, ...extra];
   }, [ready, fields, selectedTitles]);
 
+  /* Three strong suggestions keep the first pass scannable. Any selected title stays visible even
+     if it falls outside that first set, so collapsing the list can never hide committed state. */
+  const visibleOffered = useMemo(() => {
+    if (showAllTitles) return offered;
+    const first = offered.slice(0, 3);
+    const selectedOutsideFirst = selectedTitles.filter((title) =>
+      offered.some((item) => item.toLowerCase() === title.toLowerCase())
+      && !first.some((item) => item.toLowerCase() === title.toLowerCase()),
+    );
+    return [...first, ...selectedOutsideFirst];
+  }, [offered, selectedTitles, showAllTitles]);
+
+  const canContinue = ready
+    && selectedTitles.length > 0
+    && effectiveCategories.length > 0
+    && hasPlace;
+
   const customMatches = useMemo(() => {
     const needle = newTitle.trim().toLowerCase();
     return JOB_TITLES
@@ -258,10 +284,12 @@ function FocusForm({
   }, [offered, newTitle]);
 
   function toggleField(id: string) {
+    setRevealedThrough((current) => Math.max(current, 1));
     setFields((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
   }
 
   function toggleTitle(title: string) {
+    setRevealedThrough((current) => Math.max(current, 3));
     setSelectedTitles((current) =>
       current.includes(title)
         ? current.filter((item) => item !== title)
@@ -272,6 +300,7 @@ function FocusForm({
   function addTitle(title: string) {
     const clean = title.trim();
     if (!clean) return;
+    setRevealedThrough((current) => Math.max(current, 3));
     setSelectedTitles((current) =>
       current.some((item) => item.toLowerCase() === clean.toLowerCase()) || current.length >= 12
         ? current
@@ -320,8 +349,18 @@ function FocusForm({
 
       {error && <div className="mb-4"><ErrorNote message={error} /></div>}
 
-      <div className="mb-7">
-        <p className="text-sm text-ink">Field</p>
+      <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {revealedThrough === 1
+          ? "Stage choices are now available."
+          : revealedThrough === 2
+            ? "Job title choices are now available."
+            : revealedThrough >= 3
+              ? "Location choices are now available."
+              : ""}
+      </p>
+
+      <section aria-labelledby="focus-field-heading" className="mb-7">
+        <h2 id="focus-field-heading" className="text-sm text-ink">Field</h2>
         <div className="mt-2.5 flex flex-wrap gap-2">
           {FIELDS.map((field) => (
             <Chip
@@ -332,10 +371,11 @@ function FocusForm({
             />
           ))}
         </div>
-      </div>
+      </section>
 
-      <div className="mb-7">
-        <p className="text-sm text-ink">Stage</p>
+      {revealedThrough >= 1 && (
+      <section aria-labelledby="focus-stage-heading" className="rq-onboarding-reveal mb-7">
+        <h2 id="focus-stage-heading" className="text-sm text-ink">Stage</h2>
         <div className="mt-2.5 flex flex-wrap gap-2">
           {ROLE_TYPES.map((r) => {
             const slug = r.slug as RoleType;
@@ -346,29 +386,23 @@ function FocusForm({
                 label={r.label}
                 on={on}
                 derived={slug === guess?.roleType}
-                onClick={() => setRoleTypes(on ? [] : [slug])}
+                onClick={() => {
+                  setRevealedThrough((current) => Math.max(current, selectedTitles.length > 0 ? 3 : 2));
+                  setRoleTypes(on ? [] : [slug]);
+                }}
               />
             );
           })}
         </div>
-      </div>
+      </section>
+      )}
 
-      <div className="mb-7">
-        <p className="text-sm text-ink">Jobs that fit</p>
-        {!ready ? (
-          /* Not a disabled control and not an empty gap: a sentence saying which answer is still
-             missing. The screen asks in an order, so it owes the student the reason it is waiting. */
-          <p className="mt-2.5 text-sm text-muted">
-            {fields.length === 0 && roleTypes.length === 0
-              ? "Pick a field and a stage and Litos will suggest the titles that fit."
-              : fields.length === 0
-                ? "Pick a field and Litos will suggest the titles that fit."
-                : "Pick a stage and Litos will suggest the titles that fit."}
-          </p>
-        ) : (
+      {revealedThrough >= 2 && (
+      <section aria-labelledby="focus-jobs-heading" className="rq-onboarding-reveal mb-7">
+        <h2 id="focus-jobs-heading" className="text-sm text-ink">Jobs that fit</h2>
         <>
-        <div className="mt-2.5 flex flex-wrap gap-2">
-          {offered.map((title) => (
+        <div id="focus-title-options" className="mt-2.5 flex flex-wrap gap-2">
+          {visibleOffered.map((title) => (
             <Chip
               key={title}
               label={title}
@@ -377,6 +411,18 @@ function FocusForm({
             />
           ))}
         </div>
+
+        {offered.length > 3 && (
+          <button
+            type="button"
+            aria-expanded={showAllTitles}
+            aria-controls="focus-title-options"
+            onClick={() => setShowAllTitles((current) => !current)}
+            className="mt-3 min-h-11 text-sm text-muted underline underline-offset-4 hover:text-ink"
+          >
+            {showAllTitles ? "Show fewer" : `Show all ${offered.length}`}
+          </button>
+        )}
 
         <div
           className="relative mt-4 max-w-sm"
@@ -458,8 +504,8 @@ function FocusForm({
             `offered` is already the union of the derived list and the selection, so a second row
             would draw every one of them twice. */}
         </>
-        )}
-      </div>
+      </section>
+      )}
 
       {/* WHERE IS NOT OPTIONAL, and it sat behind a closed disclosure labelled "Optional" until
           2026-08-19. Location is a hard filter on the board - the matcher tests it against the
@@ -473,15 +519,17 @@ function FocusForm({
           correct way out. */}
       {/* Held behind the same gate as the titles: the screen asks what before it asks where, and
           on arrival it is still taps only. */}
-      {ready && (
-      <div className="mb-7">
+      {revealedThrough >= 3 && (
+      <section aria-labelledby="focus-location-heading" className="rq-onboarding-reveal mb-7">
         {/* htmlFor + aria-describedby rather than a wrapping label with an aria-label on the input.
             An aria-label REPLACES the accessible name, so naming this "Preferred locations" while
             the student reads "Where do you want to work?" leaves a voice-control user saying the
             words on screen and matching nothing (WCAG 2.5.3), and hands VoiceOver a name that
             appears nowhere. The hint is a description, not part of the name, which is the split
             ACCESSIBILITY.md asks every control to state. */}
-        <label htmlFor="preferred-locations" className="block text-sm text-ink">Where do you want to work?</label>
+        <h2 id="focus-location-heading" className="text-sm text-ink">
+          <label htmlFor="preferred-locations">Where do you want to work?</label>
+        </h2>
         <p id="preferred-locations-hint" className="mt-1 text-xs leading-5 text-muted">Add as many cities, countries or regions as you want. Anywhere in the world works, and so does &quot;{REMOTE_LOCATION}&quot;.</p>
 
         {/* Chosen places, one chip each. Click removes. */}
@@ -560,10 +608,11 @@ function FocusForm({
         <datalist id="start-location-options">
           {LOCATION_OPTIONS.map((location) => <option key={location} value={location} />)}
         </datalist>
-      </div>
+      </section>
       )}
 
-      <details className="mb-7 overflow-hidden rounded-card border border-border bg-surface">
+      {revealedThrough >= 3 && hasPlace && (
+      <details className="rq-onboarding-reveal mb-7 overflow-hidden rounded-card border border-border bg-surface">
         <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-4 px-4 py-3 marker:text-muted sm:px-5">
           <span>
             <span className="block text-sm font-medium text-ink">More job preferences</span>
@@ -611,22 +660,23 @@ function FocusForm({
           </div>
         </div>
       </details>
+      )}
 
       {ready && effectiveCategories.length === 0 && (
         <p role="status" className="mb-4 text-xs leading-5 text-warn">Choose at least one job category to continue.</p>
       )}
 
-      {ready && !hasPlace && (
+      {revealedThrough >= 3 && !hasPlace && (
         <p role="status" className="mb-4 text-xs leading-5 text-warn">Add at least one place. Pick &quot;{REMOTE_LOCATION}&quot; if you want to work from anywhere.</p>
       )}
 
-      <div className="flex items-center gap-3">
+      <div data-focus-actions className="sticky bottom-[var(--keyboard-inset)] z-20 -mx-4 flex items-center gap-3 border-t border-border bg-white/95 px-4 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))] backdrop-blur-sm sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:p-0 sm:backdrop-blur-none">
         {/* `!ready` is in here for a reason a browser found and no unit test would have.
             Deselecting every field hides the title list but does NOT clear `selectedTitles`, so a
             student who changed their mind about the field could press Continue and commit titles
             the screen had stopped drawing. Continue never commits anything invisible: while the
             offer is withheld, so is the button. */}
-        <PrimaryButton onClick={() => void save()} disabled={busy || !ready || selectedTitles.length === 0 || roleTypes.length === 0 || effectiveCategories.length === 0 || !hasPlace}>
+        <PrimaryButton onClick={() => void save()} disabled={busy || !canContinue} className="max-sm:flex-1">
           {busy ? <PendingLabel onColor>Saving...</PendingLabel> : "Continue"}
         </PrimaryButton>
         <LaterLink onClick={onLater} />

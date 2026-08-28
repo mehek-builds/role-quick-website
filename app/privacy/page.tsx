@@ -34,12 +34,12 @@ export default function Privacy() {
           What we do with your data.
         </h1>
         <p className="mt-3 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
-          Last updated: August 14, 2026
+          Last updated: August 28, 2026
         </p>
         <p className="mt-3 text-sm leading-6 text-muted">
           This update explains the optional LinkedIn connections import, the
-          seven-day no-card trial, and which plans may use opt-in automatic
-          submission.
+          payment-backed seven-day trial for eligible accounts, and which plans may send an application
+          without asking you again after you opt in.
         </p>
         <p className="mt-6 text-sm leading-6 text-muted">
           Litos is a Chrome extension and web dashboard. Open a job posting
@@ -54,6 +54,7 @@ export default function Privacy() {
 
         <Section title="Policy history">
           <ul className="ml-5 list-disc space-y-1">
+            <li><strong className="font-medium text-ink">August 28, 2026:</strong> corrected the trial billing disclosure to match account eligibility, payment-backed checkout, and automatic renewal.</li>
             <li><strong className="font-medium text-ink">August 14, 2026:</strong> added LinkedIn connections import, trial and Litos+ billing behavior, and paid automatic-submission access.</li>
             <li><strong className="font-medium text-ink">August 11, 2026:</strong> disclosed the filled-form and confirmation-page pictures, and set a 7-day window for the filled-form one.</li>
             <li><strong className="font-medium text-ink">August 10, 2026:</strong> added the cookie inventory and control path.</li>
@@ -287,12 +288,14 @@ export default function Privacy() {
 
         <Section title="Billing">
           <p>
-            Stripe handles payments. We never see or keep your card
-            number. A new account&apos;s seven-day Litos+ trial does not require a
-            card and does not schedule a charge. Paid Litos+ renews for the
-            selected one-week, one-month, or three-month period until you
-            cancel. Cancelling takes the same number of clicks as signing up.
-            The link is in Account.
+            Stripe handles payments. We never see or keep your full payment
+            details. Eligible first-time accounts may receive a seven-day Litos+
+            trial after adding a supported payment method. Before Stripe opens,
+            Litos shows whether a trial applies, the amount due at checkout, and
+            the regular renewal price. Returning accounts may owe the selected
+            price immediately. Unless you cancel before an eligible trial ends,
+            the selected one-week, one-month, or three-month subscription begins
+            and renews until you cancel. The cancellation link is in Account.
           </p>
         </Section>
 

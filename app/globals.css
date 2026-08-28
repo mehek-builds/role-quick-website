@@ -193,6 +193,34 @@ summary:focus-visible,
 .rq-skeleton { animation: rq-content-arrive 180ms ease-out; }
 @keyframes rq-content-arrive { from { opacity: 0; } to { opacity: 1; } }
 
+@keyframes rq-onboarding-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes rq-question-forward {
+  from { opacity: 0; transform: translateX(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes rq-question-back {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: none; }
+}
+
+.rq-onboarding-step,
+.rq-onboarding-reveal {
+  animation: rq-onboarding-enter var(--motion-enter) var(--motion-ease-out) both;
+}
+
+.rq-question-forward {
+  animation: rq-question-forward 200ms var(--motion-ease-out) both;
+}
+
+.rq-question-back {
+  animation: rq-question-back 200ms var(--motion-ease-out) both;
+}
+
 /* Shimmer loading state, per brand deck section 07 (review view). Color never
    encodes urgency; loading is a neutral surface sweep. */
 @keyframes rq-shimmer {
@@ -563,6 +591,12 @@ dialog.rq-dashboard-dialog-exit::backdrop {
     scroll-behavior: auto;
   }
   .rq-skeleton { animation: none; }
+  .rq-onboarding-step,
+  .rq-onboarding-reveal,
+  .rq-question-forward,
+  .rq-question-back {
+    animation: none;
+  }
   /* The film collapses to one static viewport: hero card on the poster
      frame, no pin, no chapters, no grain movement, no dust. */
   .rq-cine {
