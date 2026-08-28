@@ -27,16 +27,28 @@ const FAVICON_ENDPOINT = "https://www.google.com/s2/favicons";
 /** 2x the 24px render, so the icon is sharp on a retina screen. */
 const FAVICON_PX = 64;
 
+/* Two sizes, because the same identity has to work in a card and in a dense table row. The 48px
+   circle is right beside a two-line job card and far too heavy in a 56px ledger row, where it would
+   set the row height on its own. Both keep the circle, the border and the monogram fallback, so a
+   row reads as the same object at either size. */
+const LOGO_SIZE = {
+  md: { frame: "h-12 w-12", image: "h-6 w-6", monogram: "text-sm", px: 24 },
+  sm: { frame: "h-7 w-7", image: "h-4 w-4", monogram: "text-[10px]", px: 16 },
+} as const;
+
 export function CompanyLogo({
   company,
   careerUrl,
   companyDomain,
+  size = "md",
 }: {
   company: string;
   careerUrl: string | null | undefined;
   /** The employer's domain as resolved by the backend. Preferred over the careers URL. */
   companyDomain?: string | null;
+  size?: keyof typeof LOGO_SIZE;
 }) {
+  const scale = LOGO_SIZE[size];
   const domain = companyDomainForRow({ company_domain: companyDomain, career_url: careerUrl });
   // Reset by key at the call site is unnecessary: a row is keyed by job id and a job's company
   // does not change under it.
@@ -46,15 +58,15 @@ export function CompanyLogo({
   return (
     <span
       aria-hidden="true"
-      className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-surface"
+      className={`flex ${scale.frame} shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-surface`}
     >
       {showIcon ? (
         /* eslint-disable-next-line @next/next/no-img-element */
         <img
           src={`${FAVICON_ENDPOINT}?domain=${encodeURIComponent(domain)}&sz=${FAVICON_PX}`}
           alt=""
-          width={24}
-          height={24}
+          width={scale.px}
+          height={scale.px}
           /* NOT lazy, and this is load-bearing. Measured on trylitos.com 2026-07-29: with
              loading="lazy" not one of the 41 logos on the first page ever loaded, every circle
              rendered empty, including rows sitting in the viewport. Because the image never
@@ -67,10 +79,10 @@ export function CompanyLogo({
              entire feature. tests/company-logo.test.mjs keeps it that way. */
           referrerPolicy="no-referrer"
           onError={() => setBroken(true)}
-          className="h-6 w-6 object-contain"
+          className={`${scale.image} object-contain`}
         />
       ) : (
-        <span className="font-mono text-sm font-medium text-muted">
+        <span className={`font-mono ${scale.monogram} font-medium text-muted`}>
           {company.trim().charAt(0).toUpperCase() || "?"}
         </span>
       )}
