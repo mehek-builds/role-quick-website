@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
+import { validateApplicationDocument } from "@/lib/document-size";
 import { Button } from "@/components/app/Button";
 import { Card, DataErrorState, EmptyState, ErrorNote, PendingLabel, ShimmerRows } from "@/components/app/ui";
 import { MotionPanel, runDashboardTransition } from "@/components/app/Motion";
@@ -320,9 +321,17 @@ export default function NetworkPage() {
     setPreview(null);
     setError(null);
     if (!next) return;
-    if (next.size > 20 * 1024 * 1024 || !/\.csv$/i.test(next.name)) {
+    /* The shared gate (document-size.ts), not the backend route's own 20 MB allowance: this
+       import rides the same serverless function as every other upload, so the platform rejects a
+       body past the shared cap as an unreadable 413 before the backend's larger limit is ever
+       reached. Promising 20 MB here was promising a number no request could deliver. */
+    const problem = validateApplicationDocument(next, {
+      accept: "csv",
+      typeMessage: "Choose LinkedIn's Connections.csv file.",
+    });
+    if (problem) {
       setFile(null);
-      setError("Choose LinkedIn's Connections.csv file, no larger than 20 MB.");
+      setError(problem);
       return;
     }
     setFile(next);

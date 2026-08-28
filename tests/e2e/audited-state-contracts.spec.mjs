@@ -501,11 +501,18 @@ test("resume upload validates PDF input before making a request", async () => {
   await page.getByRole("button", { name: "Upload resume PDF" }).waitFor();
   await page.locator('input[type="file"]').setInputFiles({ name: "resume.txt", mimeType: "text/plain", buffer: Buffer.from("not a pdf") });
   await page.getByRole("alert").filter({ hasText: "Choose one PDF file." }).waitFor();
-  assert.equal(await page.getByRole("button", { name: "Retry" }).isVisible(), true);
+  /* Retrying a client-rejected file re-runs a check that can only fail again, so that state
+     offers the picker instead. Clicking it must actually open the file chooser. */
+  const chooseAnother = page.getByRole("button", { name: "Choose another file" });
+  assert.equal(await chooseAnother.isVisible(), true);
+  const chooserOpened = page.waitForEvent("filechooser");
+  await chooseAnother.click();
+  await chooserOpened;
   /* The size gate is client-side because past it the platform rejects the body with no readable
      error, so the request count staying at zero IS the contract under test. */
   await page.locator('input[type="file"]').setInputFiles({ name: "resume.pdf", mimeType: "application/pdf", buffer: Buffer.alloc(4_100_000) });
-  await page.getByRole("alert").filter({ hasText: "resumes upload up to 4 MB" }).waitFor();
+  await page.getByRole("alert").filter({ hasText: "over the 4 MB limit" }).waitFor();
+  assert.equal(await chooseAnother.isVisible(), true);
   assert.equal(traffic.profileUploads, 0);
   assert.deepEqual(traffic.unknown, []);
   await context.close();
@@ -545,9 +552,9 @@ test("resume upload waits for work-history drafts, then keeps file retry availab
   await page.getByRole("button", { name: "Remove entry", exact: true }).click();
   await page.waitForFunction(() => !document.querySelector('input[type="file"]')?.disabled);
   await input.setInputFiles({ name: "resume.txt", mimeType: "text/plain", buffer: Buffer.from("not a pdf") });
-  const retry = page.getByRole("button", { name: "Retry", exact: true });
-  await retry.waitFor({ state: "visible" });
-  assert.equal(await retry.isDisabled(), false, "resolving the draft did not restore failed-file retry");
+  const chooseAnother = page.getByRole("button", { name: "Choose another file", exact: true });
+  await chooseAnother.waitFor({ state: "visible" });
+  assert.equal(await chooseAnother.isDisabled(), false, "resolving the draft did not restore the failed-file affordance");
   assert.equal(traffic.profileUploads, 0);
   assert.deepEqual(traffic.unknown, []);
   await context.close();

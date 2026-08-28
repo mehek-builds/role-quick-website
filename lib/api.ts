@@ -1751,26 +1751,9 @@ export async function uploadResume(file: File): Promise<ParsedProfile> {
   return data as ParsedProfile;
 }
 
-/**
- * THE CAP IS 4 MB, and the number in the modal's copy is this constant.
- *
- * The backend's global multipart limit is two and a half times that, and its number is the one a
- * file picker would naturally promise. It is not a number this product can keep. The managed sandbox
- * carries an upload to the browser as base64 and refuses any file over 6,000,000 characters, about
- * 4.29 MiB decoded, per file, before a browser opens; and there is no request-body limit in front of
- * that check, so a larger body may instead be rejected by the platform with no error envelope at
- * all, which is indistinguishable from an outage. Promising the multipart limit would be true on
- * direct-Playwright portals and false on managed ones, which is the worst of the three available
- * options.
- *
- * The multipart figure is described rather than written out because it is the wrong number for this
- * product to carry in any searchable form: a later grep for it, hunting stale copy, should not find
- * a hit in the comment that exists to say it is not the cap.
- *
- * Checked here as well as server-side so a student who picks a 9 MB scan is told in the modal
- * rather than after an upload she waited through.
- */
-export const MAX_APPLICATION_DOCUMENT_BYTES = 4_000_000;
+/* The upload cap and its rationale live in document-size.ts, next to the shared gate and the
+   formatter, so the byte count, the prose label, and the refusal sentence cannot drift apart. */
+export { MAX_APPLICATION_DOCUMENT_BYTES } from "./document-size";
 
 /**
  * Attach a file the student chose to one application, and keep it for the next employer that asks.

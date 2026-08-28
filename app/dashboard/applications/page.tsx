@@ -66,6 +66,7 @@ import { prescriptEditableQuestions, prescriptNeedsHer, prescriptSummary } from 
 import { answerWithExactOptionToggled, exactQuestionOption, exactSelectedQuestionOptions, questionAcceptsMultipleOptions, questionReviewPresentation, requiredQuestionReviewRoute } from "@/features/applications";
 import type { JdMatchResponse, JobMatch } from "@/features/applications";
 import { userFacingError } from "@/lib/user-facing-error";
+import { validateApplicationDocument } from "@/lib/document-size";
 import { messageAsksForTheExtension } from "@/lib/extension-store-link";
 import { track } from "@/lib/analytics";
 import { replaceClosedComposerUrl } from "./composer-url";
@@ -3225,6 +3226,18 @@ function Applications() {
   async function uploadCanonicalCoverLetter(file: File): Promise<void> {
     const applicationId = canonicalSelected?.id;
     if (!applicationId) return;
+    /* The shared client-side gate (document-size.ts): past the cap the platform rejects the body
+       as an unreadable 413 that surfaces only as "Failed to fetch", so an oversize cover letter
+       must be refused with a sentence before any bytes move. */
+    const problem = validateApplicationDocument(file, {
+      accept: "pdf-or-txt",
+      typeMessage: "Upload the cover letter as a PDF or plain-text (.txt) file.",
+      oversizeHint: "Export a smaller file and try again.",
+    });
+    if (problem) {
+      setCanonicalFillError(problem);
+      return;
+    }
     const requestScope = beginCanonicalRequest(applicationId, "cover-letter");
     setCoverLetterBusy(true);
     setCanonicalFillError(null);

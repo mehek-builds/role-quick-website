@@ -5,7 +5,6 @@ import { Button } from "@/components/app/Button";
 import { Chip } from "@/components/app/ui";
 import { useDashboardOverlayExit } from "@/components/app/useDashboardOverlayExit";
 import {
-  MAX_APPLICATION_DOCUMENT_BYTES,
   attachApplicationDocument,
   deleteUserDocument,
   detachApplicationDocument,
@@ -13,7 +12,11 @@ import {
   type AttachedDocument,
   type RequiredDocumentAsk,
 } from "@/lib/api";
-import { formatDocumentBytes } from "@/lib/document-size";
+import {
+  APPLICATION_DOCUMENT_SIZE_LIMIT_LABEL,
+  formatDocumentBytes,
+  validateApplicationDocument,
+} from "@/lib/document-size";
 import {
   DOCUMENT_REMOVAL_BUSY_LABEL,
   DOCUMENT_REMOVAL_CONFIRM_LABEL,
@@ -56,7 +59,7 @@ type Stage = "ask" | "official" | "attached";
    why the scale is decimal. */
 const formatBytes = formatDocumentBytes;
 
-const SIZE_LIMIT_LABEL = `${Math.floor(MAX_APPLICATION_DOCUMENT_BYTES / 1_000_000)} MB`;
+const SIZE_LIMIT_LABEL = APPLICATION_DOCUMENT_SIZE_LIMIT_LABEL;
 
 export function TranscriptModal({
   applicationId,
@@ -221,18 +224,16 @@ export function TranscriptModal({
 
   function choose(file: File | null | undefined) {
     if (!file) return;
-    /* PDF checked on the media type OR the extension. A file dragged out of some file managers
-       arrives with an empty `type`, and refusing it here would be refusing a valid transcript for a
-       reason the student cannot see. The server checks all three ways again, so this is only about
-       telling her before an upload she waited through. */
-    if (file.type !== "application/pdf" && !/\.pdf$/i.test(file.name)) {
+    /* Type check, cap, and refusal copy are the shared gate's (document-size.ts): the same reasons
+       the other upload surfaces have them, told before an upload she waited through. */
+    const problem = validateApplicationDocument(file, {
+      accept: "pdf",
+      typeMessage: "Litos takes a PDF here. Save the transcript as a PDF from your student portal, then add it.",
+      oversizeHint: "A transcript exported from your portal is usually well under it.",
+    });
+    if (problem) {
       setChosen(null);
-      setError("Litos takes a PDF here. Save the transcript as a PDF from your student portal, then add it.");
-      return;
-    }
-    if (file.size > MAX_APPLICATION_DOCUMENT_BYTES) {
-      setChosen(null);
-      setError(`That file is ${formatBytes(file.size)} and the limit is ${SIZE_LIMIT_LABEL}. A transcript exported from your portal is usually well under it.`);
+      setError(problem);
       return;
     }
     setError(null);

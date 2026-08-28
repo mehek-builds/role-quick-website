@@ -14,8 +14,8 @@ import {
   putApplicationProfile,
   putTargeting,
   uploadResume,
-  MAX_APPLICATION_DOCUMENT_BYTES,
 } from "@/lib/api";
+import { APPLICATION_DOCUMENT_SIZE_LIMIT_LABEL, validateApplicationDocument } from "@/lib/document-size";
 import { captchaConsentedAt, captchaConsentCompletion, captchaConsentGranted } from "@/lib/captcha-consent";
 import { CaptchaConsentControl } from "@/components/app/CaptchaConsentControl";
 import { ConsentAcknowledgementControl } from "@/components/app/ConsentAcknowledgementControl";
@@ -663,24 +663,16 @@ export function ResumeStep({
 
   async function upload(f: File) {
     if (busy) return;
-    const isPdf = f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf");
-    const isDocx =
-      f.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
-      f.name.toLowerCase().endsWith(".docx");
-    if (!isPdf && !isDocx) {
-      setError("Use a PDF or DOCX file.");
-      return;
-    }
-    /* THE CAP IS 4 MB AND THE CHECK MUST BE CLIENT-SIDE, because past it there is no readable
-     * error to show. The platform rejects a larger request body before the backend runs, as a
-     * plain-text 413 with no CORS headers, so the browser surfaces it as a bare "Failed to fetch"
-     * TypeError after the student has waited through the whole upload. Measured 2026-08-29 with a
-     * 6 MB PDF against production, and it is the same platform ceiling
-     * MAX_APPLICATION_DOCUMENT_BYTES documents for application documents. The old copy promised
-     * 10 MB, which was the backend's multipart limit: a number no upload could actually reach. */
-    if (f.size > MAX_APPLICATION_DOCUMENT_BYTES) {
-      const mb = (f.size / 1_000_000).toFixed(1);
-      setError(`That file is ${mb} MB and resumes upload up to 4 MB. Export a smaller PDF (most editors have a "reduce file size" option) and try again.`);
+    /* The type check, the cap, and the refusal sentence are the shared gate's: past the cap the
+       platform rejects the body as an unreadable 413, so the check must happen before any bytes
+       move, and the copy must be the one every upload surface shows. See document-size.ts. */
+    const problem = validateApplicationDocument(f, {
+      accept: "pdf-or-docx",
+      typeMessage: "Use a PDF or DOCX file.",
+      oversizeHint: 'Export a smaller PDF (most editors have a "reduce file size" option) and try again.',
+    });
+    if (problem) {
+      setError(problem);
       return;
     }
     setError(null);
@@ -856,7 +848,7 @@ export function ResumeStep({
             {/* Label removed 2026-07-28: the button below it said "Choose a
                 file" and the step title says "Start with your resume." */}
             <p className="shrink-0 text-right font-mono text-xs text-muted">
-              PDF or DOCX<br />4 MB max
+              PDF or DOCX<br />{APPLICATION_DOCUMENT_SIZE_LIMIT_LABEL} max
             </p>
           </>
         )}

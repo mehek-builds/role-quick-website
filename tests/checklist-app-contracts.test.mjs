@@ -42,16 +42,32 @@ test("loading and notices have shared accessible semantics", () => {
 test("resume upload supports drop, file limits, progress, and retry", () => {
   const page = read("app/dashboard/resume/page.tsx");
   assert.match(page, /onDrop=/);
-  /* The cap the copy promises must be the cap the gate enforces. 10 MB was the backend's
-     multipart limit, which no upload could reach: the platform rejects the request body at
-     MAX_APPLICATION_DOCUMENT_BYTES first, with no readable error. Same contract as the
-     onboarding upload in steps.tsx. */
-  assert.match(page, /Maximum 4 MB/);
-  assert.match(page, /file\.size > MAX_APPLICATION_DOCUMENT_BYTES/);
-  assert.doesNotMatch(page, /10 \* 1024 \* 1024/);
-  assert.doesNotMatch(page, /10 MB\?"/);
+  /* The cap the copy promises must be the cap the gate enforces, and the way both are held to
+     that is one shared source: the gate is validateApplicationDocument and the number in the
+     prose is the label derived from the same constant. The behavior of the gate itself is pinned
+     where it lives, in lib/document-size.test.mts. */
+  assert.match(page, /validateApplicationDocument\(/);
+  assert.match(page, /Maximum \{APPLICATION_DOCUMENT_SIZE_LIMIT_LABEL\}/);
   assert.match(page, /Reading the PDF/);
-  assert.match(page, />Retry</);
+  /* A client-rejected file cannot succeed by retrying, so that state must offer the picker
+     instead of re-running the same File. Genuine request failures keep Retry. */
+  assert.match(page, /"Choose another file" : "Retry"/);
+});
+
+test("every upload surface refuses files through the one shared gate", () => {
+  /* Four surfaces send a student's file toward the API, and each one used to hand-roll the type
+     check, the byte cap, and the oversize sentence; the copies drifted (hand-rolled MB math on
+     one, an unreachable 20 MB promise on another). The contract is that they all call the shared
+     gate, so the cap and its copy can only change in one place. */
+  for (const surface of [
+    "components/start/steps.tsx",
+    "app/dashboard/resume/page.tsx",
+    "components/app/TranscriptModal.tsx",
+    "app/dashboard/applications/page.tsx",
+    "app/dashboard/network/page.tsx",
+  ]) {
+    assert.match(read(surface), /validateApplicationDocument\(/, `${surface} bypasses the shared upload gate`);
+  }
 });
 
 test("contact fields validate on blur and clear field errors on edit", () => {

@@ -110,7 +110,11 @@ test("resume upload waits until both editors have settled without breaking retry
   assert.match(source, /Save or cancel profile edits before replacing your resume\./);
   assert.match(source, /Save work history changes before replacing your resume\./);
   assert.match(source, /aria-describedby=\{uploadBlockedReason \? "resume-upload-blocked-reason" : undefined\}/);
-  assert.match(source, /onClick=\{\(\) => chooseUpload\(selectedFile\)\}[\s\S]{0,180}?disabled=\{!uploadReady\}/);
+  /* Retry re-runs chooseUpload only for a request that genuinely failed; a client-rejected file
+     re-opens the picker instead, because revalidating the same File can only fail again. Both
+     arms stay behind the uploadReady disable. */
+  assert.match(source, /chooseUpload\(selectedFile\);[\s\S]{0,220}?disabled=\{!uploadReady\}/);
+  assert.match(source, /selectedFileRejected[\s\S]{0,80}?fileRef\.current\?\.click\(\)/);
 });
 
 test("revision guards retain the exclusive resume mutation boundary across tab and route remounts", () => {
