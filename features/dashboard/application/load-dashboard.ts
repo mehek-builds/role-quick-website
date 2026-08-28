@@ -83,25 +83,33 @@ export type CanonicalHistoryMerge = (
 ) => GeneratedResume[];
 
 async function withCanonicalApplications(
-  request: DashboardRequester,
   packets: GeneratedResume[],
   merge: CanonicalHistoryMerge | undefined,
+  canonicalRequest: Promise<{ applications: CanonicalApplication[] } | null> | null,
 ): Promise<GeneratedResume[]> {
-  if (!merge) return packets;
-  const canonical = await request<{ applications: CanonicalApplication[] }>("/applications?limit=100").catch(() => null);
+  if (!merge || !canonicalRequest) return packets;
+  const canonical = await canonicalRequest;
   if (!canonical || !Array.isArray(canonical.applications)) return packets;
   return merge(packets, canonical.applications);
 }
 
 /** Keep the web deploy reversible while the aggregate endpoint rolls out independently. */
 export async function loadDashboardInitialState(request: DashboardRequester, mergeCanonicalHistory?: CanonicalHistoryMerge): Promise<DashboardInitialState> {
+  /* Started before anything is awaited: the canonical list depends on nothing above it, and
+     serializing it behind the bootstrap cost every Home load a full round trip. The LIMIT MUST
+     STAY IN LOCKSTEP with the Tracker's own fetch or Home's counts drift from the board again;
+     tests/home-tracker-canonical-limit.test.mjs pins the two literals together. Both surfaces
+     truncate at the same 100, so past that they undercount together rather than disagree. */
+  const canonicalRequest = mergeCanonicalHistory
+    ? request<{ applications: CanonicalApplication[] }>("/applications?limit=100").catch(() => null)
+    : null;
   try {
     // Account saves targeting through a different URL. The aggregate endpoint is privately cached,
     // so a normal fetch here can legally replay the pre-save subtitle after navigating Home.
     const bootstrap = await request<unknown>("/dashboard/bootstrap", { cache: "no-store" });
     if (isBootstrapV1(bootstrap)) {
       const state = dashboardStateFromBootstrap(bootstrap);
-      return { ...state, packets: await withCanonicalApplications(request, state.packets, mergeCanonicalHistory) };
+      return { ...state, packets: await withCanonicalApplications(state.packets, mergeCanonicalHistory, canonicalRequest) };
     }
   } catch (error) {
     if (!supportsLegacyFallback(error)) throw error;
@@ -124,7 +132,7 @@ export async function loadDashboardInitialState(request: DashboardRequester, mer
     jobs,
     targeting,
     profile,
-    resume_history: { resumes: await withCanonicalApplications(request, resumeHistory.resumes ?? [], mergeCanonicalHistory) },
+    resume_history: { resumes: await withCanonicalApplications(resumeHistory.resumes ?? [], mergeCanonicalHistory, canonicalRequest) },
     application_profile: applicationProfile,
     outreach,
     onboarding: { automatic_submission_enabled: onboarding.automatic_submission_enabled === true },

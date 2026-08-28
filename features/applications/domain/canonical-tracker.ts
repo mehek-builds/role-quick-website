@@ -356,6 +356,12 @@ export function canonicalTrackerPacket(
       skipped_reasons: [],
       updated_at: updatedAt,
       portal_supported: false,
+      /* A canonical-only submitted row has no packet to carry submitted_at, and jobSubmittedOnDay
+         keys on that field: without it, Home's Sent tile counted the row while the day queue kept
+         offering the same job as "Continue application". The row's own updated_at is the closest
+         stored moment to the submission transition, and being wrong by an edit is cheaper than a
+         queue that invites a second application to a filed one. */
+      ...(canonicalStatus(application) === "submitted" ? { submitted_at: updatedAt } : {}),
     };
   return {
     ...linkedPacket,

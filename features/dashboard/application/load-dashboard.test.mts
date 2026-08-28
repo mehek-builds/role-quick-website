@@ -136,7 +136,9 @@ test("bootstrap packets are completed with the canonical applications the Tracke
     if (path === "/applications?limit=100") return { applications: [canonicalApplication] } as T;
     throw new Error(`unexpected request: ${path}`);
   }, appendCanonicalStub as never);
-  assert.deepEqual(paths, ["/dashboard/bootstrap", "/applications?limit=100"]);
+  /* Canonical first: the request is issued before the bootstrap await so the two run in
+     parallel instead of costing Home a serial round trip. */
+  assert.deepEqual(paths, ["/applications?limit=100", "/dashboard/bootstrap"]);
   assert.equal(state.packets.length, 1, "the canonical-only application joins Home's packets");
 });
 
