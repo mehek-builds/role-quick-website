@@ -87,6 +87,36 @@ export function exactSelectedQuestionOptions(
   return solutions.length === 1 ? solutions[0] : null;
 }
 
+/**
+ * The employer's canonical option a stored single-choice answer names, or null when it names none.
+ *
+ * The backend fills and validates a closed single-choice answer under trimmed, case-insensitive
+ * equivalence (portalSubmission's select match, and the unfit-answer re-open PR #763 put beside
+ * it), so an answer it stores and keeps can differ from the offered label by edge whitespace or
+ * letter case while still being, to every server reader, that exact option. The dashboard's
+ * closed-choice controls bind by byte equality, so that same stored answer used to render as
+ * unanswered: measured live on the Mytos Lever packet (application 55de7c9e / packet 16f1c744,
+ * 2026-08-28), the degree-classification select held the stored, server-accepted answer
+ * "GPA 3.5-3.8" and still opened on "Choose an answer" every visit, so the applicant re-picked
+ * the value she had already saved, which changed the answer bytes and voided her acknowledged
+ * exact-packet audit.
+ *
+ * Returns the OFFERED label rather than the answer, so a control can bind it as its value. The
+ * equivalence is exactly the fill's own, trim plus case fold, and nothing looser: interior
+ * whitespace and different characters still refuse, and a blank answer names nothing, so the
+ * off-list rule (an answer on no employer list must read as unanswered, never as option one,
+ * measured on Five Rings 2026-08-27) is unchanged. `answer_draft`, the display-only field the
+ * backend's re-open writes, is deliberately not an input here: a draft can never name a choice.
+ */
+export function exactQuestionOption(
+  answer: string,
+  options: readonly string[] | null | undefined,
+): string | null {
+  const target = answer.trim().toLowerCase();
+  if (!target) return null;
+  return usableQuestionOptions(options).find((option) => option.toLowerCase() === target) ?? null;
+}
+
 export function answerWithExactOptionToggled(
   answer: string,
   options: readonly string[] | null | undefined,

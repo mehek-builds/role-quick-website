@@ -62,7 +62,7 @@ import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX, exactPacketAuditClauses
 import { educationDrift, educationDriftMessage, type EducationProfile } from "@/features/applications";
 import { checklistRowControl, completedSubmissionGroups, directInputTaskPlan, directQuestionPromptFingerprint, directQuestionTaskFingerprint, displayQuestionLabel, documentAsksByKind, documentControls, humanInputItems, metadataRefreshOutranksStandingAttention, QUESTION_CHOICE_LIST_LIMIT, reviewedAnswersSaveLanding, type DirectQuestionTask, type DirectQuestionTaskIntent, type SubmissionChecklistAction, type SubmissionChecklistItem } from "@/features/applications";
 import { prescriptEditableQuestions, prescriptNeedsHer, prescriptSummary } from "@/features/applications";
-import { answerWithExactOptionToggled, exactSelectedQuestionOptions, questionAcceptsMultipleOptions, questionReviewPresentation, requiredQuestionReviewRoute } from "@/features/applications";
+import { answerWithExactOptionToggled, exactQuestionOption, exactSelectedQuestionOptions, questionAcceptsMultipleOptions, questionReviewPresentation, requiredQuestionReviewRoute } from "@/features/applications";
 import type { JdMatchResponse, JobMatch } from "@/features/applications";
 import { userFacingError } from "@/lib/user-facing-error";
 import { messageAsksForTheExtension } from "@/lib/extension-store-link";
@@ -3962,7 +3962,11 @@ function Applications() {
       || (safeDirectTask.question.options?.length
         && (questionAcceptsMultipleOptions(safeDirectTask.question)
           ? exactSelectedQuestionOptions(direct.answer, safeDirectTask.question.options) === null
-          : !safeDirectTask.question.options.includes(direct.answer)))
+          /* The fill path's own equivalence, not byte equality. A stored answer the backend
+             accepted and keeps can differ from the offered label by edge whitespace or case
+             (the Mytos degree classification), and refusing it here forced a re-pick that
+             changed the answer bytes for nothing. An answer naming no option still refuses. */
+          : exactQuestionOption(direct.answer, safeDirectTask.question.options) === null))
     )) {
       const message = "The employer's question changed while you were answering. Your answer is still here. Review the current field and try again.";
       rememberDirectFailure(message);
@@ -6330,13 +6334,18 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, metad
               </fieldset>
             ) : question.options.length <= QUESTION_CHOICE_LIST_LIMIT ? (
               <div id={`question-${question.id}`} role="radiogroup" aria-label={displayQuestionLabel(question.question)} data-choice-list className="mt-4 space-y-2">
+                {/* Checked under the fill path's own equivalence (exactQuestionOption), not byte
+                    equality. The backend stores and keeps an answer that can differ from the
+                    offered label by edge whitespace or case; rendering that stored choice
+                    unchecked told the applicant she had not answered and made her re-pick, which
+                    changed the answer bytes and voided her acknowledged exact-packet audit. */}
                 {question.options.map((option) => (
-                  <label key={option} className={`flex min-h-11 cursor-pointer items-start gap-3 rounded-inner border bg-surface px-4 py-3 text-sm leading-6 text-ink ${question.answer === option ? "border-brand" : "border-control-border hover:border-ink"}`}>
+                  <label key={option} className={`flex min-h-11 cursor-pointer items-start gap-3 rounded-inner border bg-surface px-4 py-3 text-sm leading-6 text-ink ${exactQuestionOption(question.answer, question.options) === option ? "border-brand" : "border-control-border hover:border-ink"}`}>
                     <input
                       type="radio"
                       name={`question-choice-${question.id}`}
                       value={option}
-                      checked={question.answer === option}
+                      checked={exactQuestionOption(question.answer, question.options) === option}
                       onChange={() => onChange(questions.map((item) => item.id === question.id ? { ...item, answer: option } : item))}
                       className="mt-1 h-4 w-4 shrink-0 border-control-border text-brand-ink focus:ring-brand/30"
                     />
@@ -6347,7 +6356,23 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, metad
             ) : (
               <select
                 id={`question-${question.id}`}
-                value={question.answer}
+                /* THE STORED ANSWER MUST RENDER AS THE CHOICE IT NAMES. The backend accepts and
+                   keeps a closed single-choice answer under trimmed case-insensitive equivalence
+                   (its own fill match), so the stored bytes can differ from the offered label by
+                   edge whitespace or case. Binding those bytes raw meant a <select> whose value
+                   matched no <option>: measured live on the Mytos Lever packet (application
+                   55de7c9e, 2026-08-28), the degree-classification select held the stored,
+                   repeatedly re-saved answer "GPA 3.5-3.8" and still opened on "Choose an answer"
+                   every visit. Re-picking the same value counted as an edit and voided the
+                   acknowledged exact-packet audit; saving untouched read as a blank required
+                   answer. Either way the launch was unreachable.
+
+                   exactQuestionOption returns the OFFERED label when the stored answer names one,
+                   and null otherwise, so an off-list answer still falls back to the placeholder
+                   rather than landing on option one (the Five Rings rule). Display only: the
+                   underlying answer bytes are untouched until she actually picks, so an untouched
+                   Save still posts the exact stored bytes and the audit survives it. */
+                value={exactQuestionOption(question.answer, question.options) ?? ""}
                 onChange={(event) => onChange(questions.map((item) => item.id === question.id ? { ...item, answer: event.target.value } : item))}
                 className="mt-4 w-full rounded-inner border border-control-border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand"
               >
@@ -6560,9 +6585,17 @@ function DirectApplicationQuestion({ task, position, total, saving, saved, focus
   const selectedExactOptions = acceptsMultipleOptions
     ? exactSelectedQuestionOptions(answer, exactOptions)
     : null;
+  /* The employer's own label for the single choice the answer names, under the fill path's trimmed
+     case-insensitive equivalence, or null when it names none. Byte equality here is the measured
+     Mytos defect: the stored, server-accepted "GPA 3.5-3.8" read as no choice at all, so the
+     select opened on the placeholder and the save was refused until she re-picked her own answer,
+     which changed its bytes and voided the acknowledged exact-packet audit. */
+  const selectedExactOption = !acceptsMultipleOptions && exactOptions.length > 0
+    ? exactQuestionOption(answer, exactOptions)
+    : null;
   const choiceMissing = exactOptions.length > 0 && (acceptsMultipleOptions
     ? selectedExactOptions === null
-    : !exactOptions.includes(answer));
+    : selectedExactOption === null);
   const choiceErrorVisible = choiceMissing && (choiceTouched || Boolean(answer.trim()));
   const answerBlocked = requiredBlank || choiceMissing;
   const headingId = `direct-application-question-${encodeURIComponent(task.question.id)}`;
@@ -6679,12 +6712,12 @@ function DirectApplicationQuestion({ task, position, total, saving, saved, focus
             ) : task.question.options.length <= QUESTION_CHOICE_LIST_LIMIT ? (
               <fieldset aria-labelledby={headingId} aria-describedby={answerDescribedBy} aria-invalid={visibleError ? true : undefined} className="space-y-2">
                 {task.question.options.map((option) => (
-                  <label key={option} className={`flex min-h-11 cursor-pointer items-start gap-3 rounded-inner border px-4 py-3 text-small leading-6 text-ink transition-colors ${answer === option ? "border-brand bg-brand-soft" : "border-control-border bg-surface hover:border-ink"} ${busy ? "cursor-not-allowed opacity-60" : ""}`}>
+                  <label key={option} className={`flex min-h-11 cursor-pointer items-start gap-3 rounded-inner border px-4 py-3 text-small leading-6 text-ink transition-colors ${selectedExactOption === option ? "border-brand bg-brand-soft" : "border-control-border bg-surface hover:border-ink"} ${busy ? "cursor-not-allowed opacity-60" : ""}`}>
                     <input
                       type="radio"
                       name={`direct-question-choice-${task.question.id}`}
                       value={option}
-                      checked={answer === option}
+                      checked={selectedExactOption === option}
                       disabled={busy}
                       aria-disabled={busy}
                       required={task.question.required}
@@ -6710,8 +6743,20 @@ function DirectApplicationQuestion({ task, position, total, saving, saved, focus
                    this is not a cosmetic default.
 
                    Falling back to "" shows the disabled placeholder instead, and the required
-                   attribute then does its job: the question cannot be saved until she picks. */
-                value={task.question.options.includes(answer) ? answer : ""}
+                   attribute then does its job: the question cannot be saved until she picks.
+
+                   MEMBERSHIP IS THE FILL PATH'S OWN EQUIVALENCE, trim plus case fold, not byte
+                   equality. The converse defect to Five Rings was measured live on the Mytos
+                   Lever packet (application 55de7c9e, 2026-08-28): the stored, server-accepted
+                   answer "GPA 3.5-3.8" names one of the nine offered options to every backend
+                   reader, but byte-strict membership refused it, so the select opened on the
+                   placeholder and the save stayed blocked until she re-picked her own saved
+                   answer - and that re-pick changed the answer bytes, which voided the
+                   acknowledged exact-packet audit. selectedExactOption is the OFFERED label the
+                   answer names (null for off-list, so the Five Rings fallback is unchanged), and
+                   it is display-only: the answer bytes she saved stay untouched until she
+                   actually picks something. */
+                value={selectedExactOption ?? ""}
                 disabled={busy}
                 aria-disabled={busy}
                 required={task.question.required}

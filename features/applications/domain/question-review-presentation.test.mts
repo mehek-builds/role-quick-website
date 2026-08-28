@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   answerWithExactOptionToggled,
+  exactQuestionOption,
   exactSelectedQuestionOptions,
   questionReviewPresentation,
   requiredQuestionReviewRoute,
@@ -317,4 +318,123 @@ test("a stored required flag still marks the blocker required without any label 
     }),
   ]);
   assert.equal(result.metadataBlockers[0]?.required, true);
+});
+
+/* ---- exactQuestionOption: the stored answer binds the choice it names ----
+ *
+ * Production shape, measured live 2026-08-28 on the Mytos Lever packet (application 55de7c9e /
+ * packet 16f1c744): the required degree-classification select carries nine exact discovered
+ * options, and the stored answer "GPA 3.5-3.8" was accepted and kept by the backend, which
+ * matches a closed single choice under trimmed case-insensitive equivalence. Byte-strict
+ * membership on the dashboard rendered that stored answer as "Choose an answer" on every visit. */
+
+const MYTOS_DEGREE_OPTIONS = [
+  "First-Class Honours",
+  "Upper Second-Class Honours",
+  "Lower Second-Class Honours",
+  "Third-Class Honours",
+  "GPA 3.8-4.0",
+  "GPA 3.5-3.8",
+  "GPA 3.0-3.5",
+  "GPA below 3.0",
+  "Other",
+];
+
+test("a stored answer that is byte-identical to an offered option binds that option", () => {
+  assert.equal(exactQuestionOption("GPA 3.5-3.8", MYTOS_DEGREE_OPTIONS), "GPA 3.5-3.8");
+});
+
+test("edge whitespace on the stored answer still binds the offered label, byte for byte", () => {
+  assert.equal(exactQuestionOption("GPA 3.5-3.8\n", MYTOS_DEGREE_OPTIONS), "GPA 3.5-3.8");
+  assert.equal(exactQuestionOption("  GPA 3.5-3.8  ", MYTOS_DEGREE_OPTIONS), "GPA 3.5-3.8");
+});
+
+test("a case-folded stored answer binds the offered label, not its own bytes", () => {
+  assert.equal(exactQuestionOption("gpa 3.5-3.8", MYTOS_DEGREE_OPTIONS), "GPA 3.5-3.8");
+  assert.equal(exactQuestionOption("GPA 3.5-3.8", ["gpa 3.5-3.8", "Other"]), "gpa 3.5-3.8");
+});
+
+test("an offered list with edge whitespace resolves to the same trimmed label the editor renders", () => {
+  /* usableQuestionOptions is the canonicalisation the presentation applies before rendering, so
+     the value returned here is exactly the <option> string on screen. */
+  assert.equal(exactQuestionOption("GPA 3.5-3.8", ["  GPA 3.5-3.8  ", "Other"]), "GPA 3.5-3.8");
+});
+
+test("the Five Rings rule is unchanged: an off-list answer names nothing", () => {
+  assert.equal(exactQuestionOption("Job board", ["Coffee Chat", "Conference", "Other"]), null);
+  assert.equal(exactQuestionOption("3.89/4.00 (US 4.0 scale)", MYTOS_DEGREE_OPTIONS), null);
+});
+
+test("a blank answer names nothing, so a genuinely blank required question stays fail-closed", () => {
+  assert.equal(exactQuestionOption("", MYTOS_DEGREE_OPTIONS), null);
+  assert.equal(exactQuestionOption("   ", MYTOS_DEGREE_OPTIONS), null);
+});
+
+test("the equivalence is exactly the fill path's: trim plus case fold, nothing looser", () => {
+  /* Interior whitespace, punctuation, and different characters still refuse, mirroring the
+     backend's own select match (value.trim().toLowerCase() equality). */
+  assert.equal(exactQuestionOption("GPA  3.5-3.8", MYTOS_DEGREE_OPTIONS), null);
+  assert.equal(exactQuestionOption("GPA 3.5 - 3.8", MYTOS_DEGREE_OPTIONS), null);
+  assert.equal(exactQuestionOption("GPA 3.5-3.9", MYTOS_DEGREE_OPTIONS), null);
+});
+
+test("no offered options means no choice to bind", () => {
+  assert.equal(exactQuestionOption("GPA 3.5-3.8", null), null);
+  assert.equal(exactQuestionOption("GPA 3.5-3.8", undefined), null);
+  assert.equal(exactQuestionOption("GPA 3.5-3.8", []), null);
+});
+
+/* ---- answer_draft never outranks a valid stored answer ----
+ *
+ * The backend's re-open (its PR #763) blanks an unfit closed-choice answer and preserves the
+ * removed text on the display-only answer_draft field. A question that carries BOTH a valid
+ * stored answer and a lingering draft must present the answer: the draft is her old words, not
+ * the application's state. */
+
+test("a valid stored answer beside a display-only draft presents the answer, and the draft changes nothing", () => {
+  const reopenedThenAnswered = question({
+    id: "degree-classification",
+    question: "what was your degree classification? ✱",
+    answer: "GPA 3.5-3.8",
+    answer_draft: "3.89/4.00 (US 4.0 scale)",
+    required: true,
+    portal_input_type: "select-one",
+    portal_selector: '[name="cards[16f1c744][field3]"]',
+    options: MYTOS_DEGREE_OPTIONS,
+  });
+  const presentation = questionReviewPresentation([reopenedThenAnswered]);
+
+  assert.equal(presentation.editableQuestions.length, 1);
+  const editable = presentation.editableQuestions[0]!;
+  assert.equal(editable.answer, "GPA 3.5-3.8", "the stored answer is untouched by the draft");
+  assert.equal(
+    exactQuestionOption(editable.answer, editable.options),
+    "GPA 3.5-3.8",
+    "the select binds the stored answer's own choice; the draft never feeds a control's value",
+  );
+  assert.deepEqual(
+    requiredQuestionReviewRoute([reopenedThenAnswered]),
+    { kind: "continue" },
+    "a valid stored answer is not a blank required answer, so the save must not land back on the answers screen",
+  );
+});
+
+test("a genuinely re-opened question stays fail-closed: the draft cannot satisfy the required blank", () => {
+  const reopened = question({
+    id: "degree-classification",
+    question: "what was your degree classification? ✱",
+    answer: "",
+    answer_draft: "3.89/4.00 (US 4.0 scale)",
+    required: true,
+    portal_input_type: "select-one",
+    portal_selector: '[name="cards[16f1c744][field3]"]',
+    options: MYTOS_DEGREE_OPTIONS,
+  });
+
+  assert.equal(exactQuestionOption("", MYTOS_DEGREE_OPTIONS), null, "the select shows the placeholder, never the draft");
+  assert.deepEqual(
+    requiredQuestionReviewRoute([reopened]),
+    { kind: "answer", questionId: "degree-classification" },
+    "a blank required answer keeps the answers screen even while a draft is present",
+  );
 });

@@ -708,6 +708,13 @@ export type ApplicationQuestion = {
   options?: string[] | null;
   /** One line under the label saying why Litos did not answer this. */
   explanation?: string;
+  /* Her own removed words, preserved when the backend re-opened a closed-choice question whose
+     stored answer fit none of the employer's exact options (backend PR #763, the Mytos degree
+     classification). DISPLAY-ONLY BY CONTRACT: it exists so a screen can show her what she had
+     typed, it is never sent back, and it must never feed a control's value or stand in for
+     `answer` - a re-opened question's answer is genuinely blank, and a question with a valid
+     stored `answer` never carries a draft the server intends anything by. */
+  answer_draft?: string;
   /** True when the answer shown is one she gave on an earlier posting. */
   remembered?: boolean;
   /* ---- the server's word on who put this answer here ----

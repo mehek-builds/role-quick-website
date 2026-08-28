@@ -61,7 +61,12 @@ test("Applications asks one trusted employer question at a time with explicit sa
   assert.match(prompt, /const requiredBlank = task\.question\.required && !answer\.trim\(\);/);
   assert.match(prompt, /const acceptsMultipleOptions = questionAcceptsMultipleOptions\(task\.question\);/);
   assert.match(prompt, /const selectedExactOptions = acceptsMultipleOptions[\s\S]*?exactSelectedQuestionOptions\(answer, exactOptions\)/);
-  assert.match(prompt, /const choiceMissing = exactOptions\.length > 0 && \(acceptsMultipleOptions[\s\S]*?selectedExactOptions === null[\s\S]*?: !exactOptions\.includes\(answer\)\);/);
+  /* Single-choice membership resolves through exactQuestionOption, the fill path's own trimmed
+     case-insensitive equivalence: a stored, server-accepted answer whose bytes differ from the
+     offered label by edge whitespace or case is a choice, not a missing answer (the Mytos degree
+     classification, 2026-08-28). An answer naming no option is still missing. */
+  assert.match(prompt, /const selectedExactOption = !acceptsMultipleOptions && exactOptions\.length > 0[\s\S]*?exactQuestionOption\(answer, exactOptions\)[\s\S]*?: null;/);
+  assert.match(prompt, /const choiceMissing = exactOptions\.length > 0 && \(acceptsMultipleOptions[\s\S]*?selectedExactOptions === null[\s\S]*?: selectedExactOption === null\);/);
   assert.match(prompt, /const choiceErrorVisible = choiceMissing && \(choiceTouched \|\| Boolean\(answer\.trim\(\)\)\);/);
   assert.match(prompt, /const answerBlocked = requiredBlank \|\| choiceMissing/);
   assert.doesNotMatch(prompt, /const answerBlocked[^;]*choiceErrorVisible/);
@@ -77,16 +82,19 @@ test("Applications asks one trusted employer question at a time with explicit sa
   assert.match(prompt, /<form onSubmit=\{submitAnswer\} aria-busy=\{busy\}/);
   assert.match(prompt, /if \(busy \|\| answerBlocked\) return;/);
   assert.match(prompt, /function updateAnswer\(next: string\) \{[\s\S]*?if \(busy\) return;/);
-  assert.match(prompt, /checked=\{answer === option\}\s+disabled=\{busy\}\s+aria-disabled=\{busy\}/);
+  assert.match(prompt, /checked=\{selectedExactOption === option\}\s+disabled=\{busy\}\s+aria-disabled=\{busy\}/);
   assert.match(prompt, /type="checkbox"[\s\S]*?checked=\{selectedExactOptions\?\.includes\(option\) === true\}[\s\S]*?answerWithExactOptionToggled\(answer, exactOptions, option, event\.target\.checked\)/);
-  /* The select stays controlled by `answer`, disabled by `busy`, and blurs to setChoiceTouched -
-     all of which this line has always been about. What is no longer pinned is `value={answer}`
+  /* The select stays controlled, disabled by `busy`, and blurs to setChoiceTouched - all of which
+     this line has always been about. What is pinned is the resolved binding, not `value={answer}`
      BARE: an answer that is on no employer option list must render as the placeholder, because
      a <select> with an unmatched value silently selects its first option and reports that as
      its value (measured on Five Rings, 2026-08-27: stored "Job board" displayed and submitted
-     as "Coffee Chat"). See tests/off-list-answer-reads-as-unanswered.test.mjs, which owns that
-     rule; the wiring this test is about is unchanged. */
-  assert.match(prompt, /<select[\s\S]{0,1600}?value=\{task\.question\.options\.includes\(answer\) \? answer : ""\}\s+disabled=\{busy\}\s+aria-disabled=\{busy\}[\s\S]*?onBlur=\{\(\) => setChoiceTouched\(true\)\}/);
+     as "Coffee Chat"), while a stored answer that NAMES an option under the fill path's own
+     trim-plus-case equivalence must render as that option (measured on Mytos, 2026-08-28:
+     stored "GPA 3.5-3.8" opened on the placeholder and re-picking it voided the audit). See
+     tests/off-list-answer-reads-as-unanswered.test.mjs, which owns both rules; the wiring this
+     test is about is unchanged. */
+  assert.match(prompt, /<select[\s\S]{0,2400}?value=\{selectedExactOption \?\? ""\}\s+disabled=\{busy\}\s+aria-disabled=\{busy\}[\s\S]*?onBlur=\{\(\) => setChoiceTouched\(true\)\}/);
   assert.match(prompt, /<option value="" disabled>Choose an answer<\/option>/);
   assert.match(prompt, /<textarea\s+value=\{answer\}\s+readOnly=\{busy\}\s+aria-disabled=\{busy\}/);
   assert.match(prompt, /<Button type="submit" block className="sm:w-auto" disabled=\{busy \|\| answerBlocked\}>/);
@@ -210,7 +218,7 @@ test("direct answer saves revalidate the latest server question and exact choice
   assert.match(save, /directInputTaskPlan\(activeSubmission\.review/);
   assert.match(save, /safeDirectTask\.intent !== direct\.intent/);
   assert.match(save, /directQuestionTaskFingerprint\(safeDirectTask\) !== direct\.taskFingerprint/);
-  assert.match(save, /!safeDirectTask\.question\.options\.includes\(direct\.answer\)/);
+  assert.match(save, /exactQuestionOption\(direct\.answer, safeDirectTask\.question\.options\) === null/);
   assert.match(save, /activeSubmission\.review\.questions\.map/);
   assert.doesNotMatch(save, /mergeDiscoveredQuestions\(questions, activeSubmission\.review\.questions\)/);
 });

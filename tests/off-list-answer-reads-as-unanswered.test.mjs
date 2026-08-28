@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, test } from "node:test";
+import { exactQuestionOption } from "../features/applications/domain/question-review-presentation.ts";
 
 /* A STORED ANSWER THAT IS NOT ON THE EMPLOYER'S LIST MUST READ AS UNANSWERED.
  *
@@ -19,6 +20,14 @@ import { describe, test } from "node:test";
  * almost always a relationship claim: a coffee chat, a referral, a recruiter, a career fair. The
  * product rule is that Litos never auto-picks one of those, and the resolver honours it - this was
  * the one place the rule could be broken without any code choosing to break it.
+ *
+ * MEMBERSHIP IS THE FILL PATH'S EQUIVALENCE, NOT BYTE EQUALITY. The converse defect was measured
+ * on the Mytos Lever packet (application 55de7c9e, 2026-08-28): the stored answer "GPA 3.5-3.8"
+ * names one of the nine offered options to every backend reader (which matches trimmed and
+ * case-insensitively), but byte-strict membership refused it, so the select opened on the
+ * placeholder every visit and re-picking her own saved answer counted as an edit that voided the
+ * acknowledged exact-packet audit. exactQuestionOption resolves the stored answer to the OFFERED
+ * label it names, and still resolves an off-list answer to nothing.
  */
 const page = readFileSync(new URL("../app/dashboard/applications/page.tsx", import.meta.url), "utf8");
 
@@ -26,8 +35,13 @@ describe("an off-list answer cannot impersonate the first option", () => {
   test("the select falls back to the placeholder rather than to the answer", () => {
     assert.match(
       page,
-      /value=\{task\.question\.options\.includes\(answer\) \? answer : ""\}/,
-      "the question-card select must render '' when the answer is not one of the options",
+      /value=\{selectedExactOption \?\? ""\}/,
+      "the question-card select must render '' when the answer names no offered option",
+    );
+    assert.match(
+      page,
+      /const selectedExactOption = !acceptsMultipleOptions && exactOptions\.length > 0\s*\n\s*\? exactQuestionOption\(answer, exactOptions\)\s*\n\s*: null;/,
+      "the displayed choice must resolve through the fill path's own equivalence",
     );
     assert.doesNotMatch(
       page,
@@ -41,15 +55,22 @@ describe("an off-list answer cannot impersonate the first option", () => {
   });
 
   test("the behaviour is exercised, not just pinned", () => {
-    // The predicate itself, lifted out and run: this is the whole fix, and it is small enough that
-    // reading it back as text would prove nothing about what it does.
-    const match = page.match(/value=\{(task\.question\.options\.includes\(answer\) \? answer : "")\}/);
-    assert.ok(match, "the fallback expression must still be findable");
-    const choose = new Function("task", "answer", `return ${match[1]};`);
-    const task = { question: { options: ["Coffee Chat", "Conference", "Other"] } };
-    assert.equal(choose(task, "Job board"), "", "an off-list answer reads as unanswered");
-    assert.equal(choose(task, ""), "", "an empty answer stays empty");
-    assert.equal(choose(task, "Other"), "Other", "an on-list answer is still shown");
-    assert.equal(choose(task, "Coffee Chat"), "Coffee Chat", "including one she really did pick");
+    // The real resolver, run against the live Five Rings values: off-list still reads as
+    // unanswered, and an on-list answer still shows.
+    const options = ["Coffee Chat", "Conference", "Other"];
+    assert.equal(exactQuestionOption("Job board", options), null, "an off-list answer reads as unanswered");
+    assert.equal(exactQuestionOption("", options), null, "an empty answer stays empty");
+    assert.equal(exactQuestionOption("Other", options), "Other", "an on-list answer is still shown");
+    assert.equal(exactQuestionOption("Coffee Chat", options), "Coffee Chat", "including one she really did pick");
+  });
+
+  test("the stored Mytos answer reads as the choice it names, never as unanswered", () => {
+    // The converse case, with the production option list shape: the stored, server-accepted
+    // answer binds its offered label even when the bytes differ by edge whitespace or case.
+    const options = ["First-Class Honours", "GPA 3.8-4.0", "GPA 3.5-3.8", "GPA 3.0-3.5", "Other"];
+    assert.equal(exactQuestionOption("GPA 3.5-3.8", options), "GPA 3.5-3.8");
+    assert.equal(exactQuestionOption("gpa 3.5-3.8", options), "GPA 3.5-3.8", "case skew still names the option");
+    assert.equal(exactQuestionOption("GPA 3.5-3.8\n", options), "GPA 3.5-3.8", "edge whitespace still names the option");
+    assert.equal(exactQuestionOption("3.89/4.00 (US 4.0 scale)", options), null, "the unfit draft text stays off-list");
   });
 });
