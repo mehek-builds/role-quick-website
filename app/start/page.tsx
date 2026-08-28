@@ -28,6 +28,7 @@ import {
   ParsedProfile,
   api,
   acknowledgeOnboardingFlowStep,
+  attachMonitoredJob,
   completeOnboarding,
   completeOnboardingFlow,
   createGuestSession,
@@ -115,6 +116,10 @@ export default function Start() {
   // mounts, tears down, and re-mounts effects, and getToken() still reads null on the second
   // mount because the first createGuestSession call has not resolved yet.
   const guestBootstrapStarted = useRef(false);
+  // The signed-in twin of guestBootstrapStarted, and a separate ref on purpose: the two branches
+  // guard different requests, and sharing one flag would let a StrictMode re-mount that took the
+  // guest path first silently swallow the signed-in attach (or the reverse).
+  const jobAttachStarted = useRef(false);
   const refresh = useCallback(async () => {
     const s = await getOnboardingState();
     setState(s);
@@ -307,6 +312,33 @@ export default function Start() {
       }
       router.replace(loginRedirectPath(LOGIN_REDIRECT_REASON.SIGNIN_REQUIRED));
       return;
+    }
+    /* JOB-FIRST ENTRY, SIGNED IN. The same /start?job=<id> click as the guest branch above, from
+       an account that already has a session - the strong-match email lands here too, and its
+       promise is the full posting and an apply-ready packet. Until this branch existed the param
+       was simply dropped: the ordinary flow below bounced a finished account to /dashboard and
+       the job in the link was lost (measured live 2026-08-28). The backend attaches the posting
+       to the account - the existing application for it when one exists, otherwise a new one built
+       through the same pipeline as onboarding's build step - and the student lands selected on
+       exactly that application. Same one-shot ref guard and same cancellation rule as the guest
+       branch, for the same StrictMode and unmount reasons recorded there. */
+    const attachJobId = new URLSearchParams(window.location.search).get("job");
+    if (attachJobId) {
+      let cancelled = false;
+      if (!jobAttachStarted.current) {
+        jobAttachStarted.current = true;
+        void attachMonitoredJob(attachJobId).then((result) => {
+          if (cancelled) return;
+          if (!result.ok) {
+            setError(result.error);
+            return;
+          }
+          router.replace(`/dashboard/applications?application=${encodeURIComponent(result.applicationId)}&intent=apply`);
+        });
+      }
+      return () => {
+        cancelled = true;
+      };
     }
     (async () => {
       try {

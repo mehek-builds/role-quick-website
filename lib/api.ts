@@ -162,6 +162,37 @@ export async function createGuestSession(
   }
 }
 
+/** SIGNED-IN JOB-FIRST ENTRY: the one call site for POST /applications/from-job.
+ *
+ *  The signed-in half of the /start?job=<id> click. The guest half above opens a session and pins
+ *  the posting for onboarding's build step to turn into an application; a signed-in account
+ *  already carries everything onboarding would have collected, so the backend attaches the
+ *  posting directly instead: it answers with the account's EXISTING application for that posting
+ *  when one exists, and otherwise creates one through the same resume-generation pipeline the
+ *  build step uses. Either way the id that comes back is the one to select on the tracker.
+ *
+ *  Same result shape as createGuestSession, for the same reason: /start routes on the outcome,
+ *  and a thrown ApiError would reach the student as an unhandled rejection rather than as the
+ *  sentence the server wrote about what to fix (a 402 entitlement denial, a 422 profile gap). */
+export async function attachMonitoredJob(
+  jobId: string,
+): Promise<{ ok: true; applicationId: string } | { ok: false; error: string }> {
+  try {
+    const attached = await api<{ application_id: string }>("/applications/from-job", {
+      method: "POST",
+      body: JSON.stringify({ job_id: jobId }),
+    });
+    return { ok: true, applicationId: attached.application_id };
+  } catch (reason) {
+    return {
+      ok: false,
+      error: reason instanceof Error && reason.message
+        ? reason.message
+        : "We could not add this job to your tracker. Try again.",
+    };
+  }
+}
+
 export class ApiError extends Error {
   status: number;
   issues: string[];
