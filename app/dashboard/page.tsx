@@ -685,6 +685,19 @@ export default function Home() {
         stage: "saved",
         sent: false,
         updatedAt: null,
+        /* Home holds the whole review, so it can answer "has anything actually happened here"
+           from evidence rather than from a status word. canonicalStatus returns needs_attention
+           for a canonical row that was only ever recorded, and these cards were offering "Finish
+           application" over postings never opened (2026-08-29). A run leaves traces: questions it
+           discovered, fields it filled, a reason it stopped, or a run id. None of those means
+           nothing has been started, whatever the status says. */
+        started: Boolean(
+          (review?.questions?.length ?? 0) > 0
+          || (review?.filled_fields?.length ?? 0) > 0
+          || review?.attention_reason?.trim()
+          || review?.submission_run_id?.trim()
+          || review?.submitted_at?.trim(),
+        ),
       } as JobApplicationMatch),
     };
   }

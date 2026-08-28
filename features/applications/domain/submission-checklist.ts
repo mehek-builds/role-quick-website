@@ -1,6 +1,7 @@
 import type { ApplicationQuestion, ApplicationReview, RequiredDocumentAsk } from "@/lib/api";
 import { screenForStatus, type ReviewScreen } from "./application-review.ts";
 import { questionReviewPresentation, requiredQuestionReviewRoute } from "./question-review-presentation.ts";
+import { withRequiredParentQuestionIds } from "./dependent-questions.ts";
 
 /**
  * What the row's control DOES, as opposed to what it says.
@@ -104,6 +105,16 @@ export type DirectQuestionTask = {
   item: SubmissionChecklistItem;
   question: ApplicationQuestion;
   intent: DirectQuestionTaskIntent;
+  /**
+   * True for a question in the queue only because the question after it refers back to it.
+   *
+   * Its answer already stands. It is here so a follow-up is never asked about an answer the
+   * applicant was not shown (see dependent-questions.ts), which means it must NOT behave like
+   * outstanding work: it does not count toward `remaining`, and the renderer navigates past an
+   * unedited one instead of re-saving an answer nothing changed. Editing it is still allowed and
+   * still saves - it is her answer, and the follow-up beneath it is the reason she is looking.
+   */
+  context?: true;
 };
 
 export type DirectNonQuestionTask = {
@@ -251,6 +262,10 @@ function displayField(field: string): string {
   const display = label.replaceAll("_", " ").replace(/\s+/g, " ").trim();
   return display ? display.charAt(0).toUpperCase() + display.slice(1) : "";
 }
+
+/* What a question re-admitted to the queue for its dependent says about itself. It is not a new
+   ask: her answer stands, and it is on screen so the follow-up underneath it can be read. */
+const PARENT_CONTEXT_DETAIL = "The next question refers back to this one";
 
 const DISPLAY_ACRONYMS: Record<string, string> = {
   act: "ACT",
@@ -961,23 +976,65 @@ export function directInputTaskPlan(
     questionItemsById.set(item.questionId, item);
   }
 
+  /* A question is ANSWERABLE HERE when its label, control and options were all read well enough to
+     render a control for it. Separated from the outstanding decision below because the parent of a
+     dependent question has to pass this test even when nothing is outstanding about it: it is being
+     re-admitted as context, not as work. */
+  const answerable = (question: ApplicationQuestion): boolean => (
+    Boolean(question.id.trim())
+    && Boolean(question.question.trim())
+    && questionIdCounts.get(question.id) === 1
+  );
+  const outstandingQuestionIds = new Set(
+    presentation.editableQuestions
+      .filter((question) => {
+        const item = questionItemsById.get(question.id);
+        return answerable(question)
+          && Boolean(item)
+          && item?.settled !== true
+          && (item?.actionKind === "answer" || item?.actionKind === "review" || item?.actionKind === "confirm");
+      })
+      .map((question) => question.id),
+  );
+  /* THE QUEUE IS CLOSED UNDER THE PARENT RELATION. See dependent-questions.ts for the measurement:
+     one URL, nothing answered, "1 of 2" opening on the U.S. sanctions question became "1 of 1"
+     opening on "If you selected a response to the prior question..." with that question nowhere on
+     screen. A background run had settled the parent between two page loads, the queue dropped it,
+     and the follow-up was left asking about an answer the applicant had never been shown, while
+     the count moved under her.
+
+     Re-admitting the parent fixes both halves with one property. It is not re-asking work that is
+     done: the parent comes back at intent "review", which is the same intent the plan already uses
+     for a question whose answer stands and wants looking at, so nothing is blanked and no stored
+     answer is touched. */
+  const requiredQuestionIds = withRequiredParentQuestionIds(
+    presentation.editableQuestions,
+    outstandingQuestionIds,
+  );
+
   const questionTasks = presentation.editableQuestions.flatMap((question): DirectQuestionTask[] => {
+    if (!requiredQuestionIds.has(question.id) || !answerable(question)) return [];
     const item = questionItemsById.get(question.id);
-    if (
-      !item
-      || item.settled === true
-      || !question.id.trim()
-      || !question.question.trim()
-      || questionIdCounts.get(question.id) !== 1
-      || (item.actionKind !== "answer" && item.actionKind !== "review" && item.actionKind !== "confirm")
-    ) return [];
-    return [{
-      kind: "question",
-      id: item.id,
-      item,
-      question,
-      intent: item.actionKind,
-    }];
+    if (outstandingQuestionIds.has(question.id)) {
+      /* Narrowed by the outstanding filter above, which already proved both of these. */
+      if (!item || (item.actionKind !== "answer" && item.actionKind !== "review" && item.actionKind !== "confirm")) return [];
+      return [{ kind: "question", id: item.id, item, question, intent: item.actionKind }];
+    }
+    /* A parent pulled back in for its dependent. It carries the settled item's own identity when
+       there is one, so navigation fingerprints and drafts keep pointing at the same row; a parent
+       with no checklist item at all gets a synthetic one rather than being dropped, because
+       dropping it is the defect. */
+    const contextItem: SubmissionChecklistItem = item
+      ? { ...item, settled: undefined, action: "Review", actionKind: "review", detail: PARENT_CONTEXT_DETAIL }
+      : {
+        id: `context-${question.id}`,
+        label: displayQuestionLabel(question.question),
+        detail: PARENT_CONTEXT_DETAIL,
+        action: "Review",
+        actionKind: "review",
+        questionId: question.id,
+      };
+    return [{ kind: "question", id: contextItem.id, item: contextItem, question, intent: "review", context: true }];
   });
 
   const editableQuestionIds = new Set(
@@ -985,8 +1042,16 @@ export function directInputTaskPlan(
       .filter((question) => question.id.trim() && question.question.trim() && questionIdCounts.get(question.id) === 1)
       .map((question) => question.id),
   );
+  /* A parent re-admitted for its dependent is ON SCREEN in the queue, so it must not also be
+     listed as settled work: one question cannot be both the thing being looked at and an entry in
+     the record of what is already done. */
+  const contextQuestionIds = new Set(
+    questionTasks.filter((task) => task.context === true).map((task) => task.question.id),
+  );
   const settled = items.filter((item) => (
-    item.settled === true && (!item.questionId || editableQuestionIds.has(item.questionId))
+    item.settled === true
+    && (!item.questionId || editableQuestionIds.has(item.questionId))
+    && (!item.questionId || !contextQuestionIds.has(item.questionId))
   ));
   const nonQuestionTasks = items.flatMap((item): DirectNonQuestionTask[] => (
     item.settled !== true
@@ -1005,7 +1070,10 @@ export function directInputTaskPlan(
     settled,
     metadataBlockers: presentation.metadataBlockers,
     current,
-    remaining: questionTasks.length + nonQuestionTasks.length,
+    /* Context parents are excluded: this field is the amount of WORK outstanding, and a question
+       whose answer already stands is not work. The one-at-a-time navigator counts its own steps
+       (which do include the parent, and must, or the count moves between visits again). */
+    remaining: questionTasks.filter((task) => task.context !== true).length + nonQuestionTasks.length,
   };
 }
 

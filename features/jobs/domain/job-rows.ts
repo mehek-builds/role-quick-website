@@ -186,6 +186,14 @@ export type JobApplicationMatch = {
   stage: string;
   sent: boolean;
   updatedAt: string | null;
+  /**
+   * Whether anything has actually been built or run for this application yet.
+   *
+   * Undefined means the caller cannot tell, and the labels below then behave exactly as they did
+   * before this field existed. It is not defaulted to true or false: guessing here is how the row
+   * came to promise finishing something that was never begun.
+   */
+  started?: boolean;
 };
 
 export type JobApplicationIndex = {
@@ -209,7 +217,26 @@ function applicationMatch(card: AppliedCard): JobApplicationMatch {
       ? card.submission_status === "submitted"
       : isAppliedStage(card.stage),
     updatedAt: card.moved_at ?? card.created_at ?? null,
+    started: cardHasStarted(card),
   };
+}
+
+/**
+ * Has any work actually happened on this application?
+ *
+ * `reviewable` is the strong evidence: it means a prepared packet exists to open, which only a run
+ * produces. Without it, the status has to prove work by itself - and "needs_attention" cannot,
+ * because canonicalStatus (canonical-tracker.ts) returns exactly that for ANY canonical row outside
+ * the legacy send workflow, including a row that was only ever recorded. That is how "Finish
+ * application" came to be offered on jobs the student had never started, measured 2026-08-29.
+ *
+ * Fails toward "started" for anything unrecognised: over-promising once is recoverable, and telling
+ * a student to start an application that is already half sent is not.
+ */
+function cardHasStarted(card: AppliedCard): boolean {
+  if (card.reviewable === true) return true;
+  const status = card.submission_status?.trim() ?? "";
+  return status !== "" && status !== "not_started" && status !== "needs_attention";
 }
 
 function keepMoreRelevant(
@@ -313,13 +340,20 @@ export function jobApplicationFor(
 /** The next honest action for an unsent packet. */
 export function jobApplicationActionLabel(application: JobApplicationMatch): string {
   if (application.submissionStatus === "awaiting_security_code") return "Enter code";
-  /* "Finish", not "Fix": these rows are healthy applications waiting on one human step, and an
-     error verb on the only visible control made the whole board read as broken. */
-  if (["needs_attention", "failed"].includes(application.submissionStatus ?? "")) return "Finish application";
   if (application.submissionStatus === "ready_for_final_approval") return "Review and send";
   if (["resume_ready", "questions_ready", "ready_to_submit"].includes(application.submissionStatus ?? "")) {
     return "Review and fill";
   }
+  /* NOTHING HAS BEEN BEGUN, so nothing can be finished or continued. Every row and card on Jobs and
+     Home offered "Finish application" over postings the student had never opened (measured
+     2026-08-29): canonicalStatus returns "needs_attention" for any canonical row outside the legacy
+     send workflow, and the two labels below could not tell that apart from a run that genuinely
+     stopped. The three statuses above prove work exists and keep their own words; this branch only
+     catches the ones that never could. */
+  if (application.started === false) return "Start application";
+  /* "Finish", not "Fix": these rows are healthy applications waiting on one human step, and an
+     error verb on the only visible control made the whole board read as broken. */
+  if (["needs_attention", "failed"].includes(application.submissionStatus ?? "")) return "Finish application";
   return "Continue application";
 }
 

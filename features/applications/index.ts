@@ -11,6 +11,7 @@ export * from "./domain/apply-variant";
 export * from "./domain/audit-refusal";
 export * from "./domain/board-stages";
 export * from "./domain/canonical-tracker";
+export * from "./domain/dependent-questions";
 export * from "./domain/duplicate-postings";
 export * from "./domain/education-drift";
 export * from "./domain/jd-display";

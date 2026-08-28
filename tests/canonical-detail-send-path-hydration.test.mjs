@@ -171,10 +171,51 @@ describe("send eligibility discovered by hydration is offered, never forced", ()
   });
 
   test("a ready row gets an explicit button to press, not an automatic screen change", () => {
+    /* Still one button, still only on an explicit press, still the same handler. What changed on
+       2026-08-29 is the WORDS: readyToSend means "a sendable packet exists on a supported portal",
+       which is not the same claim as "nothing is waiting on you", and the button saying "Continue
+       to send" was landing on unanswered required employer questions. */
     assert.match(
       applications,
-      /!submitted && !checkingSendPath && readyToSend && \(\s*\n\s*<Button type="button" onClick=\{onContinueToSend\}>Continue to send<\/Button>/,
+      /!submitted && !checkingSendPath && readyToSend && \(\s*\n\s*<Button type="button" onClick=\{onContinueToSend\}>/,
     );
+    assert.doesNotMatch(applications, /onClick=\{onContinueToSend\}>Continue to send<\/Button>/);
+  });
+
+  test("\"Continue to send\" is reserved for a packet that can actually be sent", () => {
+    /* The gate, and the count that makes the alternative label say something. Both arms reach the
+       same managed screens through the same handler: the destination was never wrong. */
+    assert.match(applications, /const sendable = readyToSend && questionsRemaining === 0;/);
+    assert.match(applications, /const answersOutstanding = readyToSend && questionsRemaining > 0;/);
+    assert.match(
+      applications,
+      /answersOutstanding\s*\n\s*\? questionsRemaining === 1 \? "Answer 1 question" : `Answer \$\{questionsRemaining\} questions`\s*\n\s*: "Continue to send"/,
+    );
+    assert.match(
+      applications,
+      /requiredQuestionsRemaining=\{canonicalRequiredQuestionsRemaining\}/,
+      "and the count comes from the packet's own unanswered required questions",
+    );
+  });
+
+  test("the chip and the copy agree with the button instead of contradicting it", () => {
+    /* The measured contradiction: a "Needs you" chip over "Litos can send this application for
+       you" over a button that led to a questionnaire. All three now read one state. */
+    assert.match(applications, /label=\{submitted \? "Sent" : sendable \? "Ready" : "Needs you"\}/);
+    assert.match(applications, /\? `\$\{questionsPhrase\} before Litos can send this\.`/);
+  });
+
+  test("the unlabelled three-colour bar is off the card that reports state", () => {
+    /* A segmented horizontal bar at the top of the one card whose job is reporting how far an
+       application has got reads as a progress meter, and it had no labels and no relationship to
+       state. It stays on the fill receipt, which reports a finished handoff. */
+    const card = applications.slice(
+      applications.indexOf("function CanonicalApplicationDetail("),
+      applications.indexOf("function ApplicationFillReceipt("),
+    );
+    assert.ok(card.length > 0, "CanonicalApplicationDetail must still precede ApplicationFillReceipt");
+    assert.doesNotMatch(card, /grid h-1 grid-cols-3/);
+    assert.match(applications, /grid h-1 grid-cols-3/, "the motif itself is not deleted from the file");
   });
 });
 

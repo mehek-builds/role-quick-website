@@ -196,6 +196,10 @@ describe("buildAppliedIndex / isJobApplied", () => {
       stage: "applied",
       sent: false,
       updatedAt: "2026-08-14T10:00:00.000Z",
+      /* A status that only a run can produce is itself the evidence that one did. See
+         cardHasStarted: the field exists so "Finish application" is never offered over a posting
+         the student has not opened. */
+      started: true,
     });
     assert.equal(jobApplicationActionLabel(application!), "Review and fill");
     assert.equal(
