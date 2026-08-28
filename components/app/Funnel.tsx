@@ -126,7 +126,7 @@ export function Funnel({ stopped }: { stopped?: FunnelStopped | null } = {}) {
             thing, under a card headed LAST 14 DAYS, so the card argued with itself. The backend
             builds this field as submittedAt.length, every application ever sent with no window on
             it at all, so the label has to say the span out loud or the header speaks for it. */}
-        <Stat value={f.applications_submitted} label="sent since you started" />
+        <Stat value={f.applications_submitted} label="sent in total" />
         <Stat value={f.submitted_this_week} label="in the last 7 days" />
         {/* "prepared for you", not "you tailored": the dashboard prewarms resumes for the day's
             top matches before the student opens any of them, so this count grows just by visiting.

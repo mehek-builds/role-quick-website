@@ -443,7 +443,7 @@ test("overview keeps three application states and sends matches to the review sc
      the number.
 
      Review is a link now. That is the whole contract on this page. */
-  assert.match(overview, /reviewHref=\{reviewHrefFor\(job\)\}/);
+  assert.match(overview, /packetAction=\{packetActionFor\(job\)\}/);
   assert.match(overview, /<Link href=\{reviewHref\}[\s\S]*?Review\s*<\/Link>/);
   assert.match(overview, /\/dashboard\/applications\?application=\$\{packet\.id\}/);
   assert.match(overview, /\{status === "failed" \? "Try tailoring again" : "Tailor resume"\}/);

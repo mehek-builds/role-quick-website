@@ -32,6 +32,7 @@ import {
   packetMatchesJob,
   rankJobs,
   reviewCanBeSent,
+  statusMatchesApplicationFilter,
   resumeGenerationBody,
   useJobMatchScores,
   visibleMatches,
@@ -40,7 +41,7 @@ import {
   type RankedJob,
   type ResumeGenerationInitiation,
 } from "@/features/applications";
-import { formatPay, jobTypeLabel, type PayFacts } from "@/features/jobs";
+import { formatPay, jobApplicationActionLabel, jobTypeLabel, type JobApplicationMatch, type PayFacts } from "@/features/jobs";
 import { loadDashboardInitialState } from "@/features/dashboard";
 import { localDayKey } from "@/lib/local-day";
 import { targetingHeadline } from "@/lib/periods";
@@ -662,9 +663,29 @@ export default function Home() {
   /* Where a card's Review goes, or null when there is nothing built to review yet.
      The same packet lookup the card used to decide "prepared", now returning the packet so the
      link can carry its id: the card is Ready exactly when this is non-null. */
-  function reviewHrefFor(job: RankedJob): string | null {
+  /* One lookup carrying everything the card needs to agree with the rest of the product: the
+     link, whether the packet is stopped on the applicant, and the SAME action words the Jobs list
+     prints (jobApplicationActionLabel). Measured 2026-08-28: three Home cards chipped READY over
+     rows the Jobs page offered "Finish application" for, because the chip and the CTA were derived
+     here from packet existence alone. "Stopped" is the tile's own membership
+     (statusMatchesApplicationFilter "action") plus awaiting_security_code, which the tile keeps in
+     its separate waiting block but which is still the applicant's turn. */
+  function packetActionFor(job: RankedJob): { href: string; stopped: boolean; label: string } | null {
     const packet = packets.find((candidate) => packetMatchesJob(candidate, job));
-    return packet ? `/dashboard/applications?application=${packet.id}` : null;
+    if (!packet) return null;
+    const review = packet.spec._review;
+    const status = review?.status ?? "";
+    return {
+      href: `/dashboard/applications?application=${packet.id}`,
+      stopped: status === "awaiting_security_code" || (review != null && statusMatchesApplicationFilter(review, "action")),
+      label: jobApplicationActionLabel({
+        packetId: packet.id,
+        submissionStatus: status,
+        stage: "saved",
+        sent: false,
+        updatedAt: null,
+      } as JobApplicationMatch),
+    };
   }
 
   /* Retry is the same request, not a nudge to the prewarm loop. It used to clear the lock and bump
@@ -776,8 +797,10 @@ export default function Home() {
                 { label: "Sent", value: applicationSummary.submitted, href: "/dashboard/applications?state=submitted" },
               ]}
               action={applicationSummary.needsAction > 0 ? {
-                label: `${applicationSummary.needsAction} stopped for you`,
-                detail: "Review the stopped applications",
+                label: applicationSummary.needsAction === 1
+                  ? "1 needs something from you"
+                  : `${applicationSummary.needsAction} need something from you`,
+                detail: "Finish what each one is waiting on",
                 href: "/dashboard/applications?state=action",
               } : undefined}
             />
@@ -847,7 +870,7 @@ export default function Home() {
                  duplicate behind. Addressing the packet directly cannot generate anything: the
                  worst case is that nothing is selected. Both screens read the same history
                  endpoint, so a packet the card can see is one that screen can find. */
-              reviewHref={reviewHrefFor(job)}
+              packetAction={packetActionFor(job)}
               preparing={preparingJobs.includes(job.id)}
               preparationFailed={prewarmFailures.includes(job.id)}
               /* Generating needs a name and an application profile. Without them the request is a
@@ -1001,7 +1024,7 @@ function PayLine({ job }: { job: Pick<MonitoredJob, "employment_type"> & PayFact
 function JobMatchCard({
   job,
   match,
-  reviewHref,
+  packetAction,
   preparing,
   preparationFailed,
   preparationError,
@@ -1015,7 +1038,10 @@ function JobMatchCard({
 }: {
   job: RankedJob;
   match: JobMatch | null | undefined;
-  reviewHref: string | null;
+  /** The existing packet's link, stopped-on-applicant fact, and Jobs-list action words, or null
+      when nothing is built yet. One object so the chip, the Review link and the primary CTA can
+      never disagree about the same packet. */
+  packetAction: { href: string; stopped: boolean; label: string } | null;
   preparing: boolean;
   preparationFailed: boolean;
   preparationError?: string;
@@ -1027,7 +1053,8 @@ function JobMatchCard({
   onHoverPrepare: () => void;
   onRetry: (upgradeTrigger: HTMLButtonElement) => void;
 }) {
-  const status = reviewHref ? "ready" : preparing ? "preparing" : preparationFailed ? "failed" : "idle";
+  const reviewHref = packetAction?.href ?? null;
+  const status = packetAction ? (packetAction.stopped ? "needs-you" : "ready") : preparing ? "preparing" : preparationFailed ? "failed" : "idle";
   return (
     <Card
       className="h-full overflow-hidden shadow-rest transition-[border-color,box-shadow] hover:border-ink/30 hover:shadow-raised"
@@ -1045,8 +1072,8 @@ function JobMatchCard({
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <Chip
-                  label={status === "ready" ? "Ready" : status === "preparing" ? "Getting ready" : status === "failed" ? "Paused" : "Not started"}
-                  kind={status === "ready" ? "ready" : "generating"}
+                  label={status === "ready" ? "Ready" : status === "needs-you" ? "Needs you" : status === "preparing" ? "Getting ready" : status === "failed" ? "Paused" : "Not started"}
+                  kind={status === "ready" ? "ready" : status === "needs-you" ? "warn" : "generating"}
                 />
                 <span className="text-small text-muted">Found {formatRelativeDate(job.first_seen_at)}</span>
               </div>
@@ -1137,7 +1164,13 @@ function JobMatchCard({
               {status === "failed" ? "Try tailoring again" : "Tailor resume"}
             </button>
           )}
-          <Link href={`/dashboard/applications?job=${job.id}&intent=fill`} aria-label={`Fill an application for ${job.title} at ${job.company_name}`} className="flex min-h-11 items-center rounded-full bg-action px-5 text-center text-sm font-medium text-action-ink transition-colors hover:bg-brand-ink">Fill application</Link>
+          {packetAction ? (
+            /* The packet's own action, in the Jobs list's words, into the existing packet: a card
+               with a stopped or half-done application must not offer to start a second one. */
+            <Link href={`${packetAction.href}&intent=apply`} aria-label={`${packetAction.label}: ${job.title} at ${job.company_name}`} className="flex min-h-11 items-center rounded-full bg-action px-5 text-center text-sm font-medium text-action-ink transition-colors hover:bg-brand-ink">{packetAction.label}</Link>
+          ) : (
+            <Link href={`/dashboard/applications?job=${job.id}&intent=fill`} aria-label={`Fill an application for ${job.title} at ${job.company_name}`} className="flex min-h-11 items-center rounded-full bg-action px-5 text-center text-sm font-medium text-action-ink transition-colors hover:bg-brand-ink">Fill application</Link>
+          )}
         </div>
       </div>
     </Card>

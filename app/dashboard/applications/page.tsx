@@ -28,7 +28,7 @@ import {
 import { Card, Chip, EmptyState, ErrorNote, ExtensionStoreLink, PendingLabel, ShimmerRows, TerminalActionBar, formatRelativeDate } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
 import { canonicalApplicationFromPacket, canonicalEnvelopeLegacyHydrationId, canonicalEnvelopeWithMissingLegacyHydration, canonicalTrackerPacket, explicitTerms, sendableLinkedPacketFromCanonicalEnvelope, withRestoredLinkedPackets, linkedLegacyPacketFromCanonicalTrackerPacket, mergeCanonicalApplicationHistory, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, reviewWithLists, screenForStatus, sectionHeading, selectedPacketForRequest, startsNewSection, statusLabel, stripMetadata, upsertCanonicalApplicationHistory } from "@/features/applications";
-import { applicationFilterFromSearch, applicationFilterHeading, ledgerRendersOnLanding, reviewCanBeSent, statusMatchesApplicationFilter, type ApplicationFilter } from "@/features/applications";
+import { applicationFilterFromSearch, applicationFilterHeading, cleanJdCapture, ledgerRendersOnLanding, reviewCanBeSent, statusMatchesApplicationFilter, type ApplicationFilter } from "@/features/applications";
 import { nextPreferredReadyPacket, packetMatchesJob } from "@/features/applications";
 import { auditAnswerWrite, reviewAnswersNeedSave, saveReviewAnswers, type ReviewAnswerSaveResponse } from "@/features/applications";
 import { saveAttentionAcknowledgement, type AttentionAcknowledgementResponse } from "@/features/applications";
@@ -2486,6 +2486,12 @@ function Applications() {
         || auditedUnscoreableCount > 0),
     )
     : requirementIndex.tone.size > 0;
+  /* The draft (unaudited) surfaces render and score a cleaned capture: the stored jd_text on an
+     apply-page capture carries the employer's FORM (field labels, "SUBMIT YOUR APPLICATION",
+     "Loading"), which read as a broken scrape under the Job description heading and put junk terms
+     like "loading" into the match. The audited path keeps the raw text: its clause ranges are
+     offsets into the exact stored capture. */
+  const draftJd = useMemo(() => cleanJdCapture(review?.jd_text), [review?.jd_text]);
   const packetEvidenceBlocker = !review?.jd_text?.trim()
     ? "The saved job description is missing, so Litos cannot prove what this resume was written against."
     : packetDraftChanged || deferredSpec !== spec
@@ -4630,6 +4636,16 @@ function Applications() {
           searching={currentMatches === null}
           autopilot={Boolean(autopilot.enabled)}
           appliedToday={appliedToday}
+          waiting={(() => {
+            /* The DOMAIN's own action membership, not a copied list, so this count, Home's tile
+               and the ?state=action list are one definition. The link is the real filter, not an
+               anchor: an anchor lands on whatever ledger filter is already active, which can be a
+               list holding none of the counted rows. */
+            const count = (packets ?? []).filter((packet) => (
+              packet.spec._review != null && statusMatchesApplicationFilter(packet.spec._review, "action")
+            )).length;
+            return count > 0 ? { count, href: "/dashboard/applications?state=action" } : null;
+          })()}
           onSend={(id) => void sendWithoutAsking(id)}
           onOpen={(id) => {
             const packet = (packets ?? []).find((item) => item.id === id);
@@ -4715,7 +4731,9 @@ function Applications() {
           ) : (
             <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 py-3">
               <h2 id="application-ledger-heading" tabIndex={-1} className="text-sm font-medium text-ink outline-none">{applicationFilterHeading(applicationFilter)}</h2>
-              <span data-testid="application-ledger-count" className="shrink-0 whitespace-nowrap font-mono text-[11px] text-muted">{visiblePackets.length} of {reviewablePackets.length}</span>
+              <span data-testid="application-ledger-count" className="shrink-0 whitespace-nowrap font-mono text-[11px] text-muted">{visiblePackets.length === reviewablePackets.length
+                ? `${reviewablePackets.length}`
+                : `${visiblePackets.length} of ${reviewablePackets.length}`}</span>
               {duplicatePostingNote(duplicateMarks) && (
                 <span className="basis-full text-xs text-muted">{duplicatePostingNote(duplicateMarks)}</span>
               )}
@@ -5161,7 +5179,7 @@ function Applications() {
                   {activePacketEvidence
                     ? <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-positive">Exact packet checked</p>
                     : <MatchScore
-                      jdText={review.jd_text}
+                      jdText={draftJd.text}
                       spec={deferredSpec ?? spec}
                       jobContext={selected.job_context}
                       onResult={setMatchResult}
@@ -5195,8 +5213,18 @@ function Applications() {
                   <div className="prose-copy whitespace-pre-line text-sm leading-6 text-ink">
                     {activePacketEvidence
                       ? <AuditedJobDescription jdText={review.jd_text} audit={activePacketEvidence.response.packet_audit} />
-                      : <RequirementText text={review.jd_text} />}
+                      : <RequirementText text={draftJd.text} />}
                   </div>
+                  {!activePacketEvidence && draftJd.removedLines.length > 0 && (
+                    /* Never hide text silently: the capture's form chrome is cleaned out of the
+                       pane above, and this is the way to read exactly what was stored. */
+                    <details className="mt-3">
+                      <summary className="cursor-pointer text-[11px] text-muted underline underline-offset-2">
+                        {draftJd.removedLines.length} form line{draftJd.removedLines.length === 1 ? "" : "s"} from the page capture hidden. Show the raw capture
+                      </summary>
+                      <p className="mt-2 whitespace-pre-line text-xs leading-5 text-muted">{review.jd_text}</p>
+                    </details>
+                  )}
                   {/* Every requirement the posting states, met or not, with the student's own
                       bullet as the reason. Collapsed behind a click because it costs a model call
                       the first time: opening it is the student asking. Sits directly under the
@@ -5205,7 +5233,7 @@ function Applications() {
                     {activePacketEvidence
                       ? <PacketAuditBreakdown jdText={review.jd_text} audit={activePacketEvidence.response.packet_audit} />
                       : <RequirementBreakdown
-                        jdText={review.jd_text}
+                        jdText={draftJd.text}
                         spec={deferredSpec ?? spec}
                         jobContext={selected.job_context}
                         disabled={qaMode !== false}
@@ -5214,7 +5242,7 @@ function Applications() {
                   {/* Preparation for later, under the posting it comes from. Collapsed by default:
                       expanding it is the student saying they are at that stage. */}
                   <div className="mt-5 border-t border-border pt-4">
-                    <InterviewPrep jdText={review.jd_text} spec={deferredSpec ?? spec} jobContext={selected.job_context} />
+                    <InterviewPrep jdText={draftJd.text} spec={deferredSpec ?? spec} jobContext={selected.job_context} />
                   </div>
                   {!activePacketEvidence && matchResult && matchResult.missing.length > 0 && (
                     <div className="mt-5 border-t border-border pt-4">
@@ -6753,6 +6781,10 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
     && review.unverified_submission?.challenge_on_screen === true;
   const attendedHandoffUrl = awaitingUnverifiedSubmission ? null : exactAttendedHandoffUrl(review);
   const canFinishInDashboard = Boolean(handoffUrl) && !attendedHandoffUrl;
+  /* An external-recovery control (Finish in this dashboard / Open exact company form / Open in
+     new tab) is on the action row, and each of those defaults to the primary variant. While one
+     is present, the review controls demote so the row keeps exactly one filled button. */
+  const rowExternalPrimary = canFinishInDashboard || Boolean(attendedHandoffUrl);
   const [attendedHandoffState, setAttendedHandoffState] = useState<"idle" | "preparing" | "failed">("idle");
   const [attendedHandoffError, setAttendedHandoffError] = useState<string | null>(null);
 
@@ -7013,6 +7045,9 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
   const educationProfilePending = educationProfileStatus !== "ready";
   const sensitiveQuestionPresent = review.questions.some((question) => requiresSensitiveQuestionReview(question.question, question.answer));
   const [previewState, setPreviewState] = useState<{ url: string; loaded: boolean; failed: boolean } | null>(null);
+  /* Bumps the screenshot URL past the browser's cached failure, so Try loading it again is a real
+     retry rather than an instant replay of the same error. */
+  const [previewAttempt, setPreviewAttempt] = useState(0);
   const previewUrl = review.preview_screenshot_url ?? "";
   const previewLoaded = Boolean(previewUrl) && previewState?.url === previewUrl && previewState.loaded;
   const previewFailed = Boolean(previewUrl) && previewState?.url === previewUrl && previewState.failed;
@@ -7062,9 +7097,27 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
         />
       ) : review.preview_screenshot_url ? (
         previewFailed ? (
-          <div className="p-10 text-center text-sm text-warn">Litos could not load the filled form preview. Try filling the form again before sending.</div>
+          <div className="p-10 text-center">
+            <p className="text-sm text-warn">The preview of the filled form did not load.</p>
+            {/* If it keeps failing, the screenshot itself is gone and only a fresh fill
+                regenerates it, so the recovery path stays stated. */}
+            <p className="mt-1 text-xs text-muted">If it will not load, fill the form again to take a new picture.</p>
+            <Button
+              className="mt-3"
+              variant="secondary"
+              onClick={() => {
+                setPreviewAttempt((attempt) => attempt + 1);
+                setPreviewState(null);
+              }}
+            >
+              Try loading it again
+            </Button>
+          </div>
         ) : (
           <img
+            /* Remounting is the retry: the key change forces a fresh request without touching the
+               URL, which may be signature-protected and must be replayed byte-identical. */
+            key={`${previewUrl}:${previewAttempt}`}
             src={review.preview_screenshot_url}
             alt="The company's application page after Litos filled it in"
             className="h-auto w-full"
@@ -7393,7 +7446,7 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
             <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">{staysInsideLitos ? "Restart inside Litos" : "No live browser to reopen"}</p>
             <p className="mt-1 text-xs leading-5 text-muted">
               {staysInsideLitos
-                ? "Litos can start this company form again from the saved packet and answers. Open packet review, then audit the saved packet there. You do not need the company site."
+                ? "Litos can run this company form again from your saved resume and answers. Open packet review to check them and start the fill again. You do not need the company site."
                 : "This stop came from a managed run or a pre-fill gate, so Litos only has the filled preview and the blocker list here. Open the company page once, finish the check, then mark it done."}
             </p>
           </div>
@@ -7414,7 +7467,12 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
           )}
           {needsAttention && !staysInsideLitos && handoffUrl && !attendedHandoffUrl && <ButtonLink href={handoffUrl} target="_blank" rel="noreferrer" variant={canFinishInDashboard ? "secondary" : "primary"}>Open in new tab</ButtonLink>}
           {needsAttention && !staysInsideLitos && !handoffUrl && !attendedHandoffUrl && portalUrl && <ButtonLink href={portalUrl} target="_blank" rel="noreferrer" variant="secondary">Open company page</ButtonLink>}
-          {hasQuestionsToReview && <Button onClick={onReviewQuestions} >Check the answers</Button>}
+          {/* ONE primary in this row, counted across every control the row can render. The
+              external-recovery controls above (Finish in this dashboard, Open exact company form,
+              Open in new tab) default to primary, so whenever one of them is present the two
+              review controls both demote; otherwise the primary is the control the current task
+              resolves through. */}
+          {hasQuestionsToReview && <Button onClick={onReviewQuestions} variant={rowExternalPrimary || (needsAttention && currentNonQuestionTask) ? "secondary" : "primary"}>Check the answers</Button>}
           {/* The audited re-run. "Try again" replays submit-request against the LAST acknowledged
               packet, and any saved answer since then changes packet_version, so on exactly the rows
               this screen exists for it answers 409 packet_stale forever. The review screen owns the
@@ -7424,7 +7482,7 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
           {/* None of these four replay or resolve anything while the claim is still on the row for
               an unverified send - submit-request would just answer the same 409 again - so they wait
               for UnverifiedSubmissionCard's yes/no to release it first. */}
-          {needsAttention && !awaitingUnverifiedSubmission && <Button onClick={onReviewPacket}>Open packet review</Button>}
+          {needsAttention && !awaitingUnverifiedSubmission && <Button onClick={onReviewPacket} variant={!rowExternalPrimary && (!hasQuestionsToReview || currentNonQuestionTask) ? "primary" : "secondary"}>Open packet review</Button>}
           {needsAttention && !awaitingUnverifiedSubmission && <Button onClick={onRetry} variant="secondary">Try again</Button>}
           {/* The synced-fill recovery: the extension reads the SAME reviewed answers this managed
               run already produced (handoff-packet.ts on the extension side), so nothing here

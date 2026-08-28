@@ -720,6 +720,6 @@ test("a direct answer owns the screen and invalidates an older poll snapshot", (
   assert.match(save, /if \(!result\.saved\)[\s\S]*?const refusalStillOwnsApplication[\s\S]*?if \(result\.review && refusalStillOwnsApplication\) \{[\s\S]*?submissionMutationGenerationRef\.current \+= 1;[\s\S]*?publishSubmissionEnvelope\(submissionRef, reconciled, "direct"\)/);
   assert.match(save, /submissionMutationGenerationRef\.current \+= 1;[\s\S]*?const acceptedCandidate: SubmissionResponse/);
   assert.match(screen, /const directAnswerActive = needsAttention && !awaitingUnverifiedSubmission && currentDirectQuestion !== null/);
-  assert.match(screen, /\{!directAnswerActive && <>[\s\S]*?<Button onClick=\{onReviewPacket\}>Open packet review<\/Button>[\s\S]*?<Button onClick=\{onRetry\} variant="secondary">Try again<\/Button>/);
+  assert.match(screen, /\{!directAnswerActive && <>[\s\S]*?<Button onClick=\{onReviewPacket\}[^>]*>Open packet review<\/Button>[\s\S]*?<Button onClick=\{onRetry\} variant="secondary">Try again<\/Button>/);
   assert.match(screen, /!awaitingUnverifiedSubmission && !directAnswerActive && filledFormEvidence/);
 });

@@ -201,6 +201,7 @@ export function NextMatchCard({
   searching,
   autopilot,
   appliedToday,
+  waiting,
   onSend,
   onOpen,
 }: {
@@ -221,6 +222,13 @@ export function NextMatchCard({
   searching: boolean;
   autopilot: boolean;
   appliedToday: number | null;
+  /**
+   * How many applications are stopped on the applicant, and where that list is. Optional because
+   * only the Tracker can count it; without it the empty state stays a bare fact. With it, "No
+   * ready match." stops reading as "nothing to do" on an account where dozens of rows are one
+   * human step from ready - the live 2026-08-28 account showed this card over 44 such rows.
+   */
+  waiting?: { count: number; href: string } | null;
   onSend: (id: string) => void;
   onOpen: (id: string) => void;
 }) {
@@ -290,6 +298,15 @@ export function NextMatchCard({
         {header}
         <div className="rounded-card border border-border bg-surface px-5 py-4">
           <p className="text-sm text-ink">No ready match.</p>
+          {waiting && waiting.count > 0 && (
+            <p className="mt-1 text-sm text-muted">
+              {waiting.count === 1 ? "1 application is" : `${waiting.count} applications are`} one step from
+              ready and waiting on you.{" "}
+              <a href={waiting.href} className="font-medium text-ink underline underline-offset-4">
+                Open them
+              </a>
+            </p>
+          )}
         </div>
       </div>
     );

@@ -247,7 +247,7 @@ test("crash 1: /metrics/funnel answering {} no longer takes the Home Overview ba
   );
   /* Specifically not the confident zero. "0 sent since you started" on an account with a submitted
      application is the ISSUE-014 defect, and it is what defaulting the counters would have shipped. */
-  assert.equal(await page.getByText("sent since you started").count(), 0);
+  assert.equal(await page.getByText("sent in total").count(), 0);
 
   assert.deepEqual(blockedExternal, []);
   await page.close();
@@ -285,7 +285,7 @@ test("a well-formed response still renders exactly as before", async () => {
   await momentum.waitFor({ state: "visible" });
   const text = await momentum.innerText();
   assert.match(text, /Momentum/);
-  assert.match(text, /sent since you started/);
+  assert.match(text, /sent in total/);
   /* Case-insensitive: the caption is uppercased in CSS, so innerText reports it as typed by the
      renderer rather than as written in the source. */
   assert.match(text, /last 14 days/i, "the sparkline caption renders when days actually arrived");
@@ -318,7 +318,7 @@ test("a partial but usable funnel degrades the sparkline only, and never invents
   await momentum.waitFor({ state: "visible", timeout: 15000 });
   const text = await momentum.innerText();
   assert.match(text, /Momentum/);
-  assert.match(text, /sent since you started/, "the counters that WERE measured still render");
+  assert.match(text, /sent in total/, "the counters that WERE measured still render");
   assert.equal(/Could not load/.test(text), false, "measured counters are not thrown away with the series");
   assert.equal(/last 14 days/i.test(text), false, "no caption over bars that were never sent");
   assert.equal(await page.locator('figure div[role="img"]').count(), 0, "and no bar row at all");

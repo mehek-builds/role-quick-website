@@ -48,5 +48,5 @@ export function boardCoverageNote(coverage: { total: number; onBoard: number; of
       ? "1 application, not sent yet. A card reaches Applied once Litos sends it."
       : `${coverage.total} applications, none sent yet. A card reaches Applied once Litos sends it.`;
   }
-  return `${coverage.offBoard} of ${coverage.total} are not on the board yet: Litos has not sent them.`;
+  return `${coverage.offBoard} of ${coverage.total} have not been sent yet. A card reaches Applied once Litos sends it.`;
 }
