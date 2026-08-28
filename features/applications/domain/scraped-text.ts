@@ -69,6 +69,11 @@ const DOTTED_INITIALISMS: readonly { pattern: RegExp; display: string }[] = [
   { pattern: /\bu\.k\./gi, display: "U.K." },
 ];
 
+/* A token that is part of a stored VALUE rather than part of a label: digits and the punctuation a
+   phone number, postcode, date or amount is written with. Deliberately a positive test - see
+   cleanScrapedLabel's bracketing rule for why "contains no English letters" was not good enough. */
+const VALUE_TOKEN = /^[\d+()\-./,:#*]+$/;
+
 /** Required markers an ATS appends to a visible label. Same two characters the question-metadata
  *  reader recognises (question-review-presentation.ts REQUIRED_MARKER), plus their siblings. */
 const TRAILING_REQUIRED_MARKER = /[\s*✱✲❋]+$/;
@@ -83,7 +88,12 @@ const TRAILING_REQUIRED_MARKER = /[\s*✱✲❋]+$/;
  * and does not rely on this.
  */
 function fragmentKey(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  /* LETTERS AND DIGITS OF ANY SCRIPT, not just ASCII. Stripping to [a-z0-9] erased non-Latin text
+     from the key entirely, and the duplicate rules below act on key equality - so "Address العنوان
+     address" keyed as "addressaddress", the suffix test matched, and the Arabic half of a bilingual
+     label was silently deleted. Anything this cannot see, it deletes; so it has to see everything
+     that is not punctuation. */
+  return value.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
 }
 
 /* Parenthetical form chrome. An ATS prints these beside a label to describe the CONTROL, not the
@@ -174,7 +184,35 @@ export function cleanScrapedLabel(value: string | null | undefined): string {
     index === 0 || fragmentKey(word) === "" || fragmentKey(word) !== fragmentKey(kept[index - 1])
   ));
 
-  const cleaned = deduped.join(" ").replace(TRAILING_REQUIRED_MARKER, "").trim();
+  /* THE SAME NAME ON BOTH SIDES OF A VALUE. The DOM read can emit the visible label, then the
+     field's CURRENT VALUE, then the accessible name - so the two copies of the label are not
+     adjacent and nothing above reaches them. Measured live on the snapAddy packet, 2026-08-29:
+     "phone* (required) +49 176 123 4455 phone field-phone" rendered as a question prompt with the
+     applicant's own phone number inside it.
+
+     Gated on the middle POSITIVELY LOOKING LIKE A VALUE, not merely on it lacking English words.
+     Every token between the two copies must be digits and value punctuation only, and at least one
+     of them must actually carry a digit. "no ASCII letters" was the first draft of this test and it
+     was wrong in a way that deletes evidence: a middle token in any non-Latin script contains no
+     [a-z] either, so a Japanese or Arabic label sitting between two copies of an English field name
+     would have been read as a value and dropped. Requiring the shape of a value instead means
+     anything this cannot positively identify is left alone.
+
+     "Phone (mobile) 555 1234 phone" does not collapse, nor does any label whose repeated word has
+     real words between the copies. Only the first copy survives, because it is the one a person
+     wrote. */
+  const first = deduped[0];
+  const last = deduped[deduped.length - 1];
+  const bracketsAValue = deduped.length > 2
+    && first !== undefined
+    && last !== undefined
+    && fragmentKey(first).length > 0
+    && fragmentKey(first) === fragmentKey(last)
+    && deduped.slice(1, -1).every((word) => VALUE_TOKEN.test(word))
+    && deduped.slice(1, -1).some((word) => /\d/.test(word));
+  const unwrapped = bracketsAValue ? [first] : deduped;
+
+  const cleaned = unwrapped.join(" ").replace(TRAILING_REQUIRED_MARKER, "").trim();
   /* NEVER CLEAN TO EMPTY, and never hand back something shorter than the evidence justifies. */
   if (!cleaned) return collapsed;
   return cleaned;

@@ -121,6 +121,45 @@ test("only ADJACENT repeats collapse, so a label may use a word twice", () => {
   );
 });
 
+test("a label wrapped around its own value keeps only the name", () => {
+  /* Read off the snapAddy packet 2026-08-29, and the worst of the three: this one rendered as a
+     question prompt with the applicant's own phone number inside it. */
+  assert.equal(cleanScrapedLabel("phone* (required) +49 176 123 4455 phone field-phone"), "phone");
+  assert.equal(cleanScrapedLabel("Zip* 90007 zip"), "Zip");
+});
+
+test("the value gate is letters, so prose between two copies of a word is never collapsed", () => {
+  /* If any token between the two copies carries a letter, the middle is not a value and the label
+     is left exactly as the employer wrote it. */
+  assert.equal(cleanScrapedLabel("Phone (mobile) 555 1234 phone"), "Phone (mobile) 555 1234 phone");
+  assert.equal(
+    cleanScrapedLabel("Name of the school and the name it is known by"),
+    "Name of the school and the name it is known by",
+  );
+  // Two different words with a value between them are two different words.
+  assert.equal(cleanScrapedLabel("Phone* +49 176 123 4455 fax"), "Phone* +49 176 123 4455 fax");
+});
+
+test("a bilingual label keeps both halves", () => {
+  /* The comparison key used to strip to [a-z0-9], which erased non-Latin text from it entirely, so
+     "Address العنوان address" keyed as "addressaddress", the suffix rule matched, and the Arabic
+     half was deleted. Every rule in this module acts on key equality, so anything the key cannot
+     see, the module deletes. */
+  assert.equal(cleanScrapedLabel("Address العنوان address"), "Address العنوان address");
+  assert.equal(cleanScrapedLabel("お名前 name"), "お名前 name");
+  assert.equal(cleanScrapedLabel("Nom complet nom complet"), "Nom complet");
+});
+
+test("the middle has to look like a value, not merely lack English letters", () => {
+  /* "no [a-z]" was the first draft of the gate and it deletes evidence: a non-Latin token contains
+     no ASCII letters either, so a Japanese or Arabic label between two copies of an English field
+     name would have been read as a value and dropped. */
+  assert.equal(cleanScrapedLabel("Name 名前 name"), "Name 名前 name");
+  assert.equal(cleanScrapedLabel("Address العنوان address"), "Address العنوان address");
+  /* And a middle with no digit at all is not a value either, whatever punctuation it carries. */
+  assert.equal(cleanScrapedLabel("Notes --- notes"), "Notes --- notes");
+});
+
 test("a short echo cannot truncate a real question", () => {
   /* The duplicate rule has a six-character floor precisely so a coincidental repeat does not eat
      the rest of a prompt. */

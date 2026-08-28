@@ -22,9 +22,11 @@ import { statusMatchesApplicationFilter } from "./application-filter.ts";
  * with itself about how many went out is not a rounding problem, it is the whole claim.
  *
  * THE FOUR CAUSES, none of which was a bug in any single number:
- *   1. TWO INVENTORIES. The ledger merges /applications?limit=100 with /resume/history; the board
+ *   1. TWO INVENTORIES. The ledger merged /applications?limit=100 with /resume/history; the board
  *      fetched /applications/board separately, which caps at 200. 100 and 200 were both honest
- *      counts of two different universes drawn six pixels apart.
+ *      counts of two different universes drawn six pixels apart. Both windows are 200 now, and the
+ *      server enforces one ceiling for them (INVENTORY_LIMIT, volley-backend #768), so the board is
+ *      a subset of the merged inventory rather than a fifth view onto it.
  *   2. TWO SENT COUNTS. Home counted `_review.status === "submitted"` over the merged inventory;
  *      Momentum printed the backend's own all-time `applications_submitted`. 12 and 13.
  *   3. STAGE READ AS STATUS. The board's Applied column is the STUDENT's axis (see Board.tsx) and
