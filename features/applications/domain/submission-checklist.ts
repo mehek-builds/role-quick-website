@@ -1,4 +1,5 @@
 import type { ApplicationQuestion, ApplicationReview, RequiredDocumentAsk } from "@/lib/api";
+import { screenForStatus, type ReviewScreen } from "./application-review.ts";
 import { questionReviewPresentation, requiredQuestionReviewRoute } from "./question-review-presentation.ts";
 
 /**
@@ -1076,6 +1077,70 @@ export function metadataRefreshOutranksStandingAttention(
     && task.item.documentKind === undefined
     && task.item.actionKind !== "attach"
   ));
+}
+
+/**
+ * Where the dashboard lands after the answers screen's Save persists a stalled run's answers.
+ *
+ * The last leg of the Mytos Lever loop (application 55de7c9e-13c0-44fd-8f78-0dee280dbd33,
+ * 2026-08-28). PR #438 made the unreadable required combobox demand metadata_refresh and PR #440
+ * let the launch panel outrank the row's stale unknown-category attention sentence, but the save
+ * handler still routed on the bare status: every Save landed the applicant back on whichever view
+ * the attention state produced, with no statement anywhere of which screen actually holds the one
+ * control that starts the managed re-read. The applicant cycled answers screen to attention screen
+ * indefinitely, saving answers into a packet whose launch was never on screen.
+ *
+ * This is that statement, as one domain decision the save handler routes through:
+ *
+ * - "unanswered_required": the saved packet still holds a blank required answer the applicant can
+ *   edit, so the answers screen KEEPS her. Fail-closed: a save must never route past a screen that
+ *   still needs her typing, and the attention screen's one-question flow would re-ask what the list
+ *   in front of her already shows.
+ * - "metadata_refresh_launch": the saved answers leave nothing unanswered, the required-question
+ *   route is metadata_refresh, and the applicant's acknowledged exact-packet audit survived the
+ *   save, so metadataRefreshOutranksStandingAttention holds and the attention screen provably leads
+ *   with the launch panel (the binding SubmissionScreen resolves through that same decision). The
+ *   save lands there, where "Review and fill again" is on screen.
+ * - "status": everything else keeps the exact status routing the save has always had, including
+ *   every fail-closed arm of the launch decision: no acknowledged audit, a captcha or document row,
+ *   an unresolved stall, an open unverified submission, or a non-attention status.
+ *
+ * Nothing here acknowledges, fills, or sends anything: this chooses a screen, and the run still
+ * starts only on the applicant's own press of the launch control.
+ */
+export type ReviewedAnswersSaveLanding =
+  | { screen: "questions"; kind: "unanswered_required" }
+  | { screen: "portal"; kind: "metadata_refresh_launch" }
+  | { screen: ReviewScreen; kind: "status" };
+
+export function reviewedAnswersSaveLanding(
+  review: Pick<
+    ApplicationReview,
+    | "attention_reason"
+    | "attention_categories"
+    | "attention_acknowledgements"
+    | "cover_letter_supported"
+    | "filled_fields"
+    | "questions"
+    | "question_metadata_blockers"
+    | "questions_reviewed_at"
+    | "required_documents"
+    | "transcript_supported"
+    | "stall"
+    | "status"
+    | "unverified_submission"
+  >,
+  packetAuditAcknowledged: boolean,
+  context: { company?: string; role?: string; documents?: ChecklistDocumentMarks } = {},
+): ReviewedAnswersSaveLanding {
+  if (review.status === "needs_attention") {
+    const route = requiredQuestionReviewRoute(review.questions ?? [], review.question_metadata_blockers ?? []);
+    if (route.kind === "answer") return { screen: "questions", kind: "unanswered_required" };
+    if (metadataRefreshOutranksStandingAttention(review, packetAuditAcknowledged, context)) {
+      return { screen: "portal", kind: "metadata_refresh_launch" };
+    }
+  }
+  return { screen: screenForStatus(review.status, "portal"), kind: "status" };
 }
 
 export function completedSubmissionItems(review: Pick<ApplicationReview, "attention_reason" | "filled_fields" | "questions" | "receipt" | "status">): SubmissionChecklistItem[] {

@@ -60,7 +60,7 @@ import { applyBankVariant, type ApplyOutcome } from "@/features/applications";
 import { RequirementProvider, RequirementText, MatchLegend } from "@/components/app/RequirementText";
 import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX, exactPacketAuditClauses, exactPacketAuditRanges } from "@/features/applications";
 import { educationDrift, educationDriftMessage, type EducationProfile } from "@/features/applications";
-import { checklistRowControl, completedSubmissionGroups, directInputTaskPlan, directQuestionPromptFingerprint, directQuestionTaskFingerprint, displayQuestionLabel, documentAsksByKind, documentControls, humanInputItems, metadataRefreshOutranksStandingAttention, QUESTION_CHOICE_LIST_LIMIT, type DirectQuestionTask, type DirectQuestionTaskIntent, type SubmissionChecklistAction, type SubmissionChecklistItem } from "@/features/applications";
+import { checklistRowControl, completedSubmissionGroups, directInputTaskPlan, directQuestionPromptFingerprint, directQuestionTaskFingerprint, displayQuestionLabel, documentAsksByKind, documentControls, humanInputItems, metadataRefreshOutranksStandingAttention, QUESTION_CHOICE_LIST_LIMIT, reviewedAnswersSaveLanding, type DirectQuestionTask, type DirectQuestionTaskIntent, type SubmissionChecklistAction, type SubmissionChecklistItem } from "@/features/applications";
 import { prescriptEditableQuestions, prescriptNeedsHer, prescriptSummary } from "@/features/applications";
 import { answerWithExactOptionToggled, exactSelectedQuestionOptions, questionAcceptsMultipleOptions, questionReviewPresentation, requiredQuestionReviewRoute } from "@/features/applications";
 import type { JdMatchResponse, JobMatch } from "@/features/applications";
@@ -4077,6 +4077,18 @@ function Applications() {
             advanceSubmissionPublicationGeneration(submissionPublicationGenerationsRef.current, applicationId);
           }
           setSubmission(published);
+          /* A refused save that carries a review is a run having written to the packet under this
+             request. The typing stays hers, but standing exact-packet evidence must be re-measured
+             against what that run stored: the same reconciliation as the accepted path, so evidence
+             survives only a byte-identical packet and the winning run's edit voids it. */
+          const evidenceAfterRefusal = reconcilePacketEvidenceWithSubmission(
+            packetEvidenceRef.current,
+            applicationId,
+            published.review.questions ?? [],
+            published.review.packet_audit,
+          );
+          packetEvidenceRef.current = evidenceAfterRefusal;
+          setPacketEvidence(evidenceAfterRefusal);
         }
         if (!direct) setError(result.message);
         return { saved: false, message: result.message, ...(result.review ? { review: result.review } : {}) };
@@ -4265,15 +4277,43 @@ function Applications() {
         if (published !== submissionBeforeAnswer) {
           advanceSubmissionPublicationGeneration(submissionPublicationGenerationsRef.current, applicationId);
         }
+        /* THE AUDIT SURVIVES A SAVE EXACTLY AS LONG AS THE PACKET IT AUDITED DOES. This used to be
+           an unconditional wipe (the direct branch here, the answers screen's own press for the bulk
+           one), which was the final leg of the Mytos loop (application 55de7c9e, 2026-08-28): the
+           applicant's acknowledged exact-packet audit was destroyed by the very save that changed
+           nothing, metadataRefreshOutranksStandingAttention lost its acknowledged-audit arm, the
+           stale attention sentence re-occluded the launch panel, and the flow cycled answers screen
+           to attention screen with the managed re-read never on screen. The reconciliation is the
+           same decision prepareApplication, completeHandoff and recordSelfSubmitted already apply
+           to their own server envelopes: evidence stands only while the response's questions still
+           byte-match the audited snapshot and the packet audit identity is unchanged, so a save
+           that edited any answer still voids it, and nothing is ever acknowledged on her behalf. */
+        const nextEvidence = reconcilePacketEvidenceWithSubmission(
+          packetEvidenceRef.current,
+          applicationId,
+          published.review.questions,
+          published.review.packet_audit,
+        );
+        packetEvidenceRef.current = nextEvidence;
+        setPacketEvidence(nextEvidence);
         if (direct) {
-          packetEvidenceRef.current = null;
-          setPacketEvidence(null);
           setDirectAnswerAnnouncement({ token: Date.now(), message: "Saved to this application." });
         }
         setSubmission(published);
         setQuestions(mergeDiscoveredQuestions(answerDraftQuestions, published.review.questions));
         setFocusQuestion(null);
-        moveToScreen(screenForStatus(published.review.status, "portal"));
+        /* The direct flow saves from the attention screen and stays inside its own navigator, so it
+           keeps the bare status route. The answers screen's Save routes through the domain landing:
+           a still-blank required answer keeps the answers screen instead of bouncing into the
+           one-question flow, and a launch-ready packet (metadata_refresh route, acknowledged audit
+           preserved above) lands on the attention screen where the panel provably leads. */
+        moveToScreen(direct
+          ? screenForStatus(published.review.status, "portal")
+          : reviewedAnswersSaveLanding(published.review, Boolean(nextEvidence?.acknowledged), {
+            company: selected.job_context.company,
+            role: selected.job_context.role,
+            documents: published.documents,
+          }).screen);
         if (!direct) setNotice(result.notice);
       };
       if (direct) runDashboardTransition(publishSavedAnswer);
@@ -5021,13 +5061,20 @@ function Applications() {
           }}
           /* TWO SCREENS, TWO SAVES, and collapsing them is the defect. From Apply the answers ride
              into the packet on the submit-request she is about to press, so keeping them locally IS
-             keeping them. From a stopped run there is no such request coming, so the same handler
-             kept nothing. Either way the prior exact-packet audit is void, because the answers it
-             was taken over are no longer the answers on the packet. */
+             keeping them, and the prior exact-packet audit is voided here: those local answers are
+             no longer the answers the audit was taken over. From a stopped run the save is a server
+             write, and its evidence decision moves with it: saveReviewedAnswers reconciles the
+             standing audit against the answers the server actually stored, so an edited answer
+             still voids it while a byte-identical save no longer destroys the acknowledged audit
+             the metadata-refresh launch needs (the Mytos loop, application 55de7c9e). Until the
+             response lands, packetEvidenceReady already fails closed on the local edit. */
           onSubmit={() => {
-            setPacketEvidence(null);
-            if (selectedSubmission?.review.status === "needs_attention") void saveReviewedAnswers();
-            else saveApplyAnswers();
+            if (selectedSubmission?.review.status === "needs_attention") {
+              void saveReviewedAnswers();
+            } else {
+              setPacketEvidence(null);
+              saveApplyAnswers();
+            }
           }}
           saving={selected ? savingAnswerIds.has(selected.id) : false}
           onRefreshMetadata={() => void refreshEmployerQuestionMetadata()}

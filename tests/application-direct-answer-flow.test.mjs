@@ -218,13 +218,23 @@ test("direct answer saves revalidate the latest server question and exact choice
 test("a refused answer keeps evidence and only an accepted answer publishes", () => {
   const save = functionBody("  async function saveReviewedAnswers(");
   const savedGuard = requiredIndex(save, "if (!result.saved)", "refused answer guard");
-  const evidenceClear = requiredIndex(save, "packetEvidenceRef.current = null", "accepted answer evidence clear", savedGuard);
   const publish = requiredIndex(save, 'publishSubmissionEnvelope(submissionRef, saved, "direct")', "accepted answer publication", savedGuard);
+  /* The evidence write is a RECONCILIATION, not a wipe: standing exact-packet evidence survives
+     only while the stored answers still byte-match the audited snapshot, which is what lets a
+     byte-identical save keep the acknowledged audit the metadata-refresh launch decision needs
+     (the Mytos loop, application 55de7c9e) while any real edit still voids it. */
+  const evidenceReconcile = requiredIndex(save, "const nextEvidence = reconcilePacketEvidenceWithSubmission(", "accepted answer evidence reconciliation", publish);
+  const evidenceWrite = requiredIndex(save, "packetEvidenceRef.current = nextEvidence", "accepted answer evidence write", evidenceReconcile);
 
   assertOrdered(
-    [savedGuard, publish, evidenceClear],
+    [savedGuard, publish, evidenceReconcile, evidenceWrite],
     "authoritative state and packet evidence may only publish after the server accepts the answer",
   );
+  assert.doesNotMatch(save, /packetEvidenceRef\.current = null/, "no save outcome may blanket-void the audit any more");
+  /* The refused branch that carries a review is a run having written under the request, so its
+     evidence write must also be the reconciliation, measured against the review that run stored. */
+  const refusalReconcile = requiredIndex(save, "const evidenceAfterRefusal = reconcilePacketEvidenceWithSubmission(", "refused answer evidence reconciliation", savedGuard);
+  assert.ok(refusalReconcile < publish, "the refusal branch reconciles before the accepted path publishes");
   assert.match(save, /runDashboardTransition\(publishSavedAnswer\)/);
 });
 
