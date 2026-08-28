@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { isQaRender } from "@/lib/qa-mode";
 
 /**
  * The company's icon beside a job row, with its initial as the answer when there is no icon.
@@ -70,7 +71,20 @@ export function CompanyLogo({
   // Reset by key at the call site is unnecessary: a row is keyed by job id and a job's company
   // does not change under it.
   const [broken, setBroken] = useState(false);
-  const showIcon = name.length > 0 && !broken;
+  /* A QA RENDER DRAWS THE MONOGRAM AND NEVER RESOLVES ANYTHING.
+     The fixture companies are invented, but the route does not know that: it resolved a real mark
+     for "Acme Labs" off a live site, which put third-party content inside the dashboard's visual
+     baselines. Those run against a locally built app, so every CI run would re-fetch employer sites
+     under an 8s budget and go red whenever one of them was slow - a gate failing for a reason that
+     has nothing to do with the change under test. Deterministic fixtures are the whole point of QA
+     mode, and a made-up company has no logo by definition.
+     Deferred through an effect for the reason Funnel.tsx gives: isQaRender reads `window`, so
+     deciding this during render would disagree with the server's HTML. */
+  const [qa, setQa] = useState(false);
+  useEffect(() => {
+    if (isQaRender()) queueMicrotask(() => setQa(true));
+  }, []);
+  const showIcon = name.length > 0 && !broken && !qa;
   const src = `${LOGO_ENDPOINT}?c=${encodeURIComponent(name)}`
     + (boardUrl ? `&board=${encodeURIComponent(boardUrl)}` : "")
     + "&miss=404";

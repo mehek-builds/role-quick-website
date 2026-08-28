@@ -146,3 +146,14 @@ test("the board URL is still gated by the ATS allowlist", async () => {
   assert.match(source, /const ats = BOARD_HOSTS\[u\.hostname\];/, "exact hostname match, never a suffix test");
   assert.match(source, /if \(u\.protocol !== "https:"\) return null;/);
 });
+
+test("a QA render draws the monogram and resolves nothing", async () => {
+  /* The fixture companies are invented, but the route cannot tell: it resolved a real mark for
+     "Acme Labs" off a live site, which put third-party content inside the dashboard's visual
+     baselines. Those run against a locally built app, so CI would re-fetch employer sites on every
+     run under an 8s budget and go red whenever one was slow - a gate failing for a reason unrelated
+     to the change under test. */
+  const source = await code();
+  assert.match(source, /if \(isQaRender\(\)\) queueMicrotask\(\(\) => setQa\(true\)\)/);
+  assert.match(source, /const showIcon = name\.length > 0 && !broken && !qa;/);
+});
