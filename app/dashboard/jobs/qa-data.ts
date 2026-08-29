@@ -20,6 +20,18 @@ function hoursAgo(hours: number): string {
   return new Date(Date.now() - hours * 3_600_000).toISOString();
 }
 
+/* A row this fixture means as "found today" must stay today on every clock. countNewToday counts
+   since local midnight, so a plain 20-hour offset lands on yesterday for any run before 20:00,
+   silently emptying the "new today" chip and shifting every layout below it off its visual
+   baseline: the same commit passed CI at 23:20 UTC and failed it at 00:03. Clamped to just after
+   local midnight (and never into the future, for the first minute of the day). */
+function todayHoursAgo(hours: number): string {
+  const midnight = new Date();
+  midnight.setHours(0, 0, 0, 0);
+  const clamped = Math.min(Date.now(), Math.max(Date.now() - hours * 3_600_000, midnight.getTime() + 60_000));
+  return new Date(clamped).toISOString();
+}
+
 export function qaJobsPage(): JobsPage {
   return {
     ranked: true,
@@ -40,8 +52,8 @@ export function qaJobsPage(): JobsPage {
         apply_url: "https://boards.greenhouse.io/ramp/jobs/1",
         posting_url: "https://boards.greenhouse.io/ramp/jobs/1",
         remote: false,
-        posted_at: hoursAgo(3),
-        first_seen_at: hoursAgo(3),
+        posted_at: todayHoursAgo(3),
+        first_seen_at: todayHoursAgo(3),
         ats_name: "greenhouse",
         career_url: "https://ramp.com/careers",
         preference_score: 94,
@@ -64,8 +76,8 @@ export function qaJobsPage(): JobsPage {
         apply_url: "https://jobs.ashbyhq.com/linear/2",
         posting_url: "https://jobs.ashbyhq.com/linear/2",
         remote: true,
-        posted_at: hoursAgo(6),
-        first_seen_at: hoursAgo(6),
+        posted_at: todayHoursAgo(6),
+        first_seen_at: todayHoursAgo(6),
         ats_name: "ashby",
         career_url: "https://linear.app/careers",
         preference_score: 91,
@@ -87,8 +99,8 @@ export function qaJobsPage(): JobsPage {
         apply_url: "https://jobs.lever.co/notion/3",
         posting_url: "https://jobs.lever.co/notion/3",
         remote: false,
-        posted_at: hoursAgo(20),
-        first_seen_at: hoursAgo(20),
+        posted_at: todayHoursAgo(20),
+        first_seen_at: todayHoursAgo(20),
         ats_name: "lever",
         career_url: "https://notion.so/careers",
         preference_score: 89,
