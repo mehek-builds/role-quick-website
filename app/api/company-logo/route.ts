@@ -65,6 +65,25 @@ function svg(company: string) {
   });
 }
 
+/* What "no mark found" looks like, which depends on who is asking.
+ *
+ * The board tiles want an IMAGE, for the reason the header gives: that page has no client
+ * JavaScript, so a 404 would leave a broken-image icon with nothing to swap it out. That stays the
+ * default and nothing about it changes.
+ *
+ * The DASHBOARD wants a 404. It draws its marks inside a circle with its own border and already has
+ * a designed monogram for the empty case, so handing it monogramSvg would nest a bordered rounded
+ * SQUARE inside that circle. It runs client JavaScript and CompanyLogo already has an onError path,
+ * so a 404 is the answer it can actually use.
+ *
+ * THE MISS IS STILL CACHED, with the same header as a hit. Without that, every dashboard render
+ * re-probes the same handful of companies that have no findable mark - which is the whole failure
+ * this route exists to end. */
+function miss(company: string, request: Request) {
+  if (new URL(request.url).searchParams.get("miss") !== "404") return svg(company);
+  return new NextResponse(null, { status: 404, headers: { "Cache-Control": CACHE } });
+}
+
 async function get(url: string, signal: AbortSignal) {
   const res = await fetch(url, {
     headers: { "User-Agent": UA, Accept: "*/*" },
@@ -77,7 +96,7 @@ async function get(url: string, signal: AbortSignal) {
 
 export async function GET(request: Request) {
   const company = (new URL(request.url).searchParams.get("c") ?? "").slice(0, 120).trim();
-  if (!company) return svg("?");
+  if (!company) return miss("?", request);
 
   /* The curated set wins. Those marks were looked at by a human, and a redirect
      to the static file is cheaper than anything this route can do. */
@@ -210,5 +229,5 @@ export async function GET(request: Request) {
     clearTimeout(budget);
   }
 
-  return svg(company);
+  return miss(company, request);
 }

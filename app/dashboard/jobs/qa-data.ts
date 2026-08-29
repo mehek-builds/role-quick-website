@@ -15,21 +15,30 @@ import type { JobsPage } from "@/lib/api";
  * for a real signed-in student.
  */
 
-/** Fixed offsets from load, so "today" and "3 days ago" stay true whenever this is opened. */
-function hoursAgo(hours: number): string {
-  return new Date(Date.now() - hours * 3_600_000).toISOString();
-}
-
-/* A row this fixture means as "found today" must stay today on every clock. countNewToday counts
-   since local midnight, so a plain 20-hour offset lands on yesterday for any run before 20:00,
-   silently emptying the "new today" chip and shifting every layout below it off its visual
-   baseline: the same commit passed CI at 23:20 UTC and failed it at 00:03. Clamped to just after
-   local midnight (and never into the future, for the first minute of the day). */
-function todayHoursAgo(hours: number): string {
-  const midnight = new Date();
-  midnight.setHours(0, 0, 0, 0);
-  const clamped = Math.min(Date.now(), Math.max(Date.now() - hours * 3_600_000, midnight.getTime() + 60_000));
-  return new Date(clamped).toISOString();
+/**
+ * A fixture timestamp anchored to the LOCAL DAY, not to the moment of load.
+ *
+ * The offsets here used to be counted back from `Date.now()`, on the stated reasoning that "today"
+ * and "3 days ago" would then stay true whenever the fixture was opened. They do not. Two readers
+ * bucket by CALENDAR DAY, not by elapsed hours - countNewToday counts postings first seen since
+ * LOCAL MIDNIGHT, and formatRelativeDate floors elapsed time into whole days - so a job stamped
+ * three hours ago is "new today" at 14:00 and was yesterday at 00:07.
+ *
+ * That made the Jobs baseline valid only for part of the day. It cost a CI failure at 00:07 on
+ * 2026-08-29 whose diff was a missing "3 new today" badge shifting the whole page, on a branch that
+ * had touched nothing but where company logos are fetched from; a whitespace-only control run off
+ * main reproduced it exactly, which is the only reason it was not written off as the change's fault.
+ *
+ * `day` is how many calendar days back the row should read as, and it lands at a fixed hour on that
+ * day, so both readers give the same answer at any hour. Clamped to just before now, because at
+ * 00:07 "09:00 today" is in the future and a job the board has not seen yet is not a fixture, it is
+ * a bug.
+ */
+function daysAgo(day: number): string {
+  const at = new Date();
+  at.setHours(9, 0, 0, 0);
+  at.setDate(at.getDate() - day);
+  return new Date(Math.min(at.getTime(), Date.now() - 60_000)).toISOString();
 }
 
 export function qaJobsPage(): JobsPage {
@@ -52,8 +61,8 @@ export function qaJobsPage(): JobsPage {
         apply_url: "https://boards.greenhouse.io/ramp/jobs/1",
         posting_url: "https://boards.greenhouse.io/ramp/jobs/1",
         remote: false,
-        posted_at: todayHoursAgo(3),
-        first_seen_at: todayHoursAgo(3),
+        posted_at: daysAgo(0),
+        first_seen_at: daysAgo(0),
         ats_name: "greenhouse",
         career_url: "https://ramp.com/careers",
         preference_score: 94,
@@ -76,8 +85,8 @@ export function qaJobsPage(): JobsPage {
         apply_url: "https://jobs.ashbyhq.com/linear/2",
         posting_url: "https://jobs.ashbyhq.com/linear/2",
         remote: true,
-        posted_at: todayHoursAgo(6),
-        first_seen_at: todayHoursAgo(6),
+        posted_at: daysAgo(0),
+        first_seen_at: daysAgo(0),
         ats_name: "ashby",
         career_url: "https://linear.app/careers",
         preference_score: 91,
@@ -99,8 +108,8 @@ export function qaJobsPage(): JobsPage {
         apply_url: "https://jobs.lever.co/notion/3",
         posting_url: "https://jobs.lever.co/notion/3",
         remote: false,
-        posted_at: todayHoursAgo(20),
-        first_seen_at: todayHoursAgo(20),
+        posted_at: daysAgo(0),
+        first_seen_at: daysAgo(0),
         ats_name: "lever",
         career_url: "https://notion.so/careers",
         preference_score: 89,
@@ -122,8 +131,8 @@ export function qaJobsPage(): JobsPage {
         apply_url: "https://boards.greenhouse.io/vercel/4",
         posting_url: "https://boards.greenhouse.io/vercel/4",
         remote: true,
-        posted_at: hoursAgo(52),
-        first_seen_at: hoursAgo(52),
+        posted_at: daysAgo(2),
+        first_seen_at: daysAgo(2),
         ats_name: "greenhouse",
         career_url: "https://vercel.com/careers",
         preference_score: 76,
@@ -150,8 +159,8 @@ export function qaJobsPage(): JobsPage {
         apply_url: "https://boards.greenhouse.io/sierralabs/5",
         posting_url: "https://boards.greenhouse.io/sierralabs/5",
         remote: false,
-        posted_at: hoursAgo(74),
-        first_seen_at: hoursAgo(74),
+        posted_at: daysAgo(3),
+        first_seen_at: daysAgo(3),
         ats_name: "greenhouse",
         career_url: "https://boards.greenhouse.io/sierralabs",
         preference_score: 61,
@@ -170,8 +179,8 @@ export function qaJobsPage(): JobsPage {
         apply_url: "https://jobs.ashbyhq.com/cursor/6",
         posting_url: "https://jobs.ashbyhq.com/cursor/6",
         remote: false,
-        posted_at: hoursAgo(96),
-        first_seen_at: hoursAgo(96),
+        posted_at: daysAgo(4),
+        first_seen_at: daysAgo(4),
         ats_name: "ashby",
         career_url: "https://cursor.com/careers",
         /* No preferences matched, so no badge and no reasons line. The row must still read as a

@@ -286,9 +286,9 @@ function PrimitivePanel() {
 
       <Scenario id="company-logo-fallback" title="CompanyLogo without a usable image source">
         <div className="flex flex-wrap items-center gap-4">
-          <CompanyLogo company="Notion" careerUrl={null} />
-          <CompanyLogo company="" careerUrl={null} />
-          <CompanyLogo company={UNBREAKABLE} careerUrl="https://boards.greenhouse.io/fixture" />
+          <CompanyLogo company="Notion" />
+          <CompanyLogo company="" />
+          <CompanyLogo company={UNBREAKABLE} boardUrl="https://boards.greenhouse.io/fixture" />
         </div>
       </Scenario>
 

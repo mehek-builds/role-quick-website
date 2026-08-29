@@ -321,7 +321,7 @@ export function NextMatchCard({
         <button type="button" onClick={() => onOpen(match.id)} className="flex min-w-0 items-center gap-3 text-left">
           {/* No careers URL on a packet, so this falls back to the initial by design rather
               than painting some other company's icon on the row. */}
-          <CompanyLogo company={match.company} careerUrl={null} />
+          <CompanyLogo company={match.company} />
           <span className="min-w-0">
             <span className="flex flex-wrap items-baseline gap-2">
               <span className="truncate text-sm font-medium text-ink">{match.role}</span>
