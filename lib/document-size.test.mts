@@ -13,12 +13,19 @@ const PDF = { name: "resume.pdf", type: "application/pdf" };
 
 test("the prose label is the enforced cap, written the way the copy writes it", () => {
   assert.equal(APPLICATION_DOCUMENT_SIZE_LIMIT_LABEL, `${Math.floor(MAX_APPLICATION_DOCUMENT_BYTES / 1_000_000)} MB`);
+  /* The label floors to whole MB. A cap that is not a round number of MB would make every surface
+     promise less than the gate accepts, and the floor-derived assertion above could never catch
+     it: this is the guard that keeps the label honest. */
+  assert.equal(MAX_APPLICATION_DOCUMENT_BYTES % 1_000_000, 0, "the cap must stay a whole number of MB or the prose label understates it");
 });
 
 test("formatDocumentBytes reports decimal units at every scale", () => {
   assert.equal(formatDocumentBytes(999), "999 B");
   assert.equal(formatDocumentBytes(1_000), "1 KB");
   assert.equal(formatDocumentBytes(999_499), "999 KB");
+  /* 999,500-999,999 would round to "1000 KB", a unit no file manager prints; the MB arm takes
+     them instead. */
+  assert.equal(formatDocumentBytes(999_600), "1.0 MB");
   assert.equal(formatDocumentBytes(1_200_000), "1.2 MB");
   assert.equal(formatDocumentBytes(4_100_000), "4.1 MB");
 });

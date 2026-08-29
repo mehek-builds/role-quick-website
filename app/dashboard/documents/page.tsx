@@ -6,6 +6,7 @@ import ResumeWorkspace from "../resume/page";
 import { api, getApplicationProfile, type ApplicationProfile, type CanonicalApplication, type CanonicalCoverLetterResponse, type DocumentSummary, type GeneratedResume } from "@/lib/api";
 import { Button, ButtonLink } from "@/components/app/Button";
 import { Card, DataErrorState, EmptyState, ErrorNote, PendingLabel, ShimmerRows } from "@/components/app/ui";
+import { formatDocumentBytes } from "@/lib/document-size";
 import { MotionPanel, runDashboardTransition } from "@/components/app/Motion";
 import { useBilling } from "@/components/billing/BillingProvider";
 import { createLatestRequestCoordinator, restoreFocusAfterRetry } from "@/lib/latest-request";
@@ -386,7 +387,7 @@ export default function DocumentsPage() {
               {attachments.filter((item) => !item.deleted_at).map((item) => (
                 <Card key={item.id} className="p-5">
                   <p className="truncate text-small font-medium text-ink">{item.file_name}</p>
-                  <p className="mt-2 font-mono text-label text-muted">{item.kind} · {Math.max(1, Math.round(item.byte_size / 1024))} KB</p>
+                  <p className="mt-2 font-mono text-label text-muted">{item.kind} · {formatDocumentBytes(item.byte_size)}</p>
                   <p className="mt-3 text-label text-muted">Uploaded {new Date(item.created_at).toLocaleDateString()}</p>
                 </Card>
               ))}

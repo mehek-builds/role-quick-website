@@ -479,7 +479,7 @@ export default function ResumeWorkspace() {
             <input
               ref={fileRef}
               type="file"
-              accept={APPLICATION_DOCUMENT_ACCEPT_ATTRIBUTE.pdf}
+              accept={APPLICATION_DOCUMENT_ACCEPT_ATTRIBUTE[RESUME_UPLOAD_GATE.accept]}
               disabled={mutationBusy || !uploadReady}
               className="hidden"
               onChange={(e) => {

@@ -35,6 +35,13 @@
  *
  * Checked client-side as well as server-side so a student who picks a 9 MB scan is told in the modal
  * rather than after an upload she waited through.
+ *
+ * BEFORE RAISING THIS NUMBER: it is also the stand-in for the platform's request-body ceiling,
+ * which rejects a larger body on EVERY route of the one serverless function the API is (as a
+ * plain-text 413 with no CORS headers, surfaced only as "Failed to fetch"). The CSV import gate
+ * rides this constant for that reason alone; a raise that outruns the platform ceiling brings that
+ * unreadable failure back on every surface at once. Measured 2026-08-29: a 6 MB body is already
+ * past it. Keep it a whole number of MB, or the floored label below understates the real cap.
  */
 export const MAX_APPLICATION_DOCUMENT_BYTES = 4_000_000;
 
@@ -46,9 +53,15 @@ export const APPLICATION_DOCUMENT_SIZE_LIMIT_LABEL = `${Math.floor(MAX_APPLICATI
 
 export function formatDocumentBytes(bytes: number): string {
   if (bytes < 1_000) return `${bytes} B`;
-  if (bytes < 1_000_000) return `${Math.round(bytes / 1_000)} KB`;
+  /* 999,500 and up round to "1000 KB", a unit no file manager prints; hand them to the MB arm
+     as "1.0 MB" instead. */
+  if (bytes < 999_500) return `${Math.round(bytes / 1_000)} KB`;
   return `${(bytes / 1_000_000).toFixed(1)} MB`;
 }
+
+/* The cap as the formatter prints it, so the oversize sentence can tell when a rounded size
+   collapses into the stated limit and would read as a refusal of an allowed file. */
+const CAP_AS_FORMATTED = formatDocumentBytes(MAX_APPLICATION_DOCUMENT_BYTES);
 
 export type ApplicationDocumentAccept = "pdf" | "pdf-or-docx" | "pdf-or-txt" | "csv";
 
@@ -63,10 +76,12 @@ const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingm
 
 /**
  * One spelling per accept kind for the file input's `accept` attribute, so the picker's filter and
- * the gate's check cannot drift apart: a kind widened in matchesAccept without a matching attribute
- * would leave the picker hiding files the gate now allows, and vice versa. Extensions ride along
- * with the media types because a valid file can arrive with an empty `type`, and an attribute of
- * bare media types would hide it from the picker that the gate was written to admit.
+ * the gate's check cannot drift apart. The unit test walks every token here through the gate, so an
+ * attribute that offers a file the gate refuses cannot ship; the reverse direction (widening
+ * matchesAccept without adding the token here) has no mechanical check, so widen both together.
+ * Extensions ride along with the media types because a valid file can arrive with an empty `type`,
+ * and an attribute of bare media types would hide it from the picker that the gate was written to
+ * admit.
  */
 export const APPLICATION_DOCUMENT_ACCEPT_ATTRIBUTE: Record<ApplicationDocumentAccept, string> = {
   pdf: "application/pdf,.pdf",
@@ -121,7 +136,7 @@ export function validateApplicationDocument(
   if (!matchesAccept(file, options.accept)) return options.typeMessage;
   if (file.size > MAX_APPLICATION_DOCUMENT_BYTES) {
     const shown = formatDocumentBytes(file.size);
-    const lead = shown === formatDocumentBytes(MAX_APPLICATION_DOCUMENT_BYTES)
+    const lead = shown === CAP_AS_FORMATTED
       ? `That file is just over the ${APPLICATION_DOCUMENT_SIZE_LIMIT_LABEL} limit`
       : `That file is ${shown}, over the ${APPLICATION_DOCUMENT_SIZE_LIMIT_LABEL} limit`;
     return options.oversizeHint ? `${lead}. ${options.oversizeHint}` : `${lead}.`;

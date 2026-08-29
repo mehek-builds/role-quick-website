@@ -4058,7 +4058,7 @@ test("Resume upload ownership and its parsed profile survive Documents tab and r
       full_name: "Uploaded Student",
       resume_email: "uploaded@example.invalid",
     });
-    await page.locator('input[type="file"][accept*="application/pdf"]').setInputFiles({
+    await page.locator('input[type="file"][accept="application/pdf,.pdf"]').setInputFiles({
       name: "new-resume.pdf",
       mimeType: "application/pdf",
       buffer: Buffer.from("%PDF-1.4\nfixture resume\n%%EOF"),
@@ -4079,7 +4079,7 @@ test("Resume upload ownership and its parsed profile survive Documents tab and r
     await remountedUploadButton.waitFor({ state: "visible" });
     assert.equal(await remountedUploadButton.isDisabled(), true, "the remounted workspace exposed a second profile upload");
     assert.equal(
-      await page.locator('input[type="file"][accept*="application/pdf"]').isDisabled(),
+      await page.locator('input[type="file"][accept="application/pdf,.pdf"]').isDisabled(),
       true,
       "the remounted file input accepted a second profile upload",
     );

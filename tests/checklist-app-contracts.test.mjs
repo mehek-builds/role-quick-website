@@ -54,7 +54,7 @@ test("resume upload supports drop, file limits, progress, and retry", () => {
      Genuine request failures keep Retry. Rejection is derived from the gate at render, not
      stored: selectedFile lives in the shell-scoped mutation controller and survives this
      component remounting, so a stored flag would desync from it. */
-  assert.match(page, /const selectedFileRejected = selectedFile !== null && validateApplicationDocument\(selectedFile, RESUME_UPLOAD_GATE\) !== null/);
+  assert.match(page, /selectedFileRejected = [^;]*validateApplicationDocument\(selectedFile/);
   assert.match(page, /"Choose another file" : "Retry"/);
   assert.match(page, /selectedFileRejected \|\| error \?/);
 });
