@@ -154,6 +154,10 @@ test("a QA render draws the monogram and resolves nothing", async () => {
      run under an 8s budget and go red whenever one was slow - a gate failing for a reason unrelated
      to the change under test. */
   const source = await code();
-  assert.match(source, /if \(isQaRender\(\)\) queueMicrotask\(\(\) => setQa\(true\)\)/);
+  /* Decided on the first render, never flipped after mount: an effect-based swap raced the
+     screenshot and produced a logo in one CI run and a monogram in the next, which is worse than
+     the nondeterminism it was added to remove. */
+  assert.match(source, /const \[qa\] = useState\(isQaRender\);/);
+  assert.doesNotMatch(source, /setQa\(/, "a post-mount flip is a race against anything that reads the DOM");
   assert.match(source, /const showIcon = name\.length > 0 && !broken && !qa;/);
 });

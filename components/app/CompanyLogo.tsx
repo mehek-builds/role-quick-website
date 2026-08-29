@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { isQaRender } from "@/lib/qa-mode";
 
 /**
@@ -78,12 +78,15 @@ export function CompanyLogo({
      under an 8s budget and go red whenever one of them was slow - a gate failing for a reason that
      has nothing to do with the change under test. Deterministic fixtures are the whole point of QA
      mode, and a made-up company has no logo by definition.
-     Deferred through an effect for the reason Funnel.tsx gives: isQaRender reads `window`, so
-     deciding this during render would disagree with the server's HTML. */
-  const [qa, setQa] = useState(false);
-  useEffect(() => {
-    if (isQaRender()) queueMicrotask(() => setQa(true));
-  }, []);
+     DECIDED ON THE FIRST RENDER, not flipped afterwards. An effect that swapped the monogram in
+     after mount raced the screenshot: the same commit produced a logo in one CI run and a monogram
+     in the next, which is worse than the nondeterminism it was added to remove. A lazy useState
+     initializer runs once, before anything paints.
+     Reading `window` during render is safe HERE specifically: every caller renders this only after
+     a client-side fetch has resolved (the lists show a shimmer until then), so it never appears in
+     server HTML and has nothing to disagree with. isQaRender itself still guards `window` being
+     undefined, so a future server-rendered caller degrades to "not QA" rather than throwing. */
+  const [qa] = useState(isQaRender);
   const showIcon = name.length > 0 && !broken && !qa;
   const src = `${LOGO_ENDPOINT}?c=${encodeURIComponent(name)}`
     + (boardUrl ? `&board=${encodeURIComponent(boardUrl)}` : "")
