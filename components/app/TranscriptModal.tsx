@@ -5,7 +5,6 @@ import { Button } from "@/components/app/Button";
 import { Chip } from "@/components/app/ui";
 import { useDashboardOverlayExit } from "@/components/app/useDashboardOverlayExit";
 import {
-  MAX_APPLICATION_DOCUMENT_BYTES,
   attachApplicationDocument,
   deleteUserDocument,
   detachApplicationDocument,
@@ -13,7 +12,12 @@ import {
   type AttachedDocument,
   type RequiredDocumentAsk,
 } from "@/lib/api";
-import { formatDocumentBytes } from "@/lib/document-size";
+import {
+  APPLICATION_DOCUMENT_ACCEPT_ATTRIBUTE,
+  APPLICATION_DOCUMENT_SIZE_LIMIT_LABEL,
+  formatDocumentBytes,
+  validateApplicationDocument,
+} from "@/lib/document-size";
 import {
   DOCUMENT_REMOVAL_BUSY_LABEL,
   DOCUMENT_REMOVAL_CONFIRM_LABEL,
@@ -50,13 +54,6 @@ import {
  */
 
 type Stage = "ask" | "official" | "attached";
-
-/* Shared with Profile > Documents, which lists the same files. Two formatters is how one transcript
-   reads "1.2 MB" here and "1178 KB" on the page she deletes it from. See lib/document-size.ts for
-   why the scale is decimal. */
-const formatBytes = formatDocumentBytes;
-
-const SIZE_LIMIT_LABEL = `${Math.floor(MAX_APPLICATION_DOCUMENT_BYTES / 1_000_000)} MB`;
 
 export function TranscriptModal({
   applicationId,
@@ -221,18 +218,16 @@ export function TranscriptModal({
 
   function choose(file: File | null | undefined) {
     if (!file) return;
-    /* PDF checked on the media type OR the extension. A file dragged out of some file managers
-       arrives with an empty `type`, and refusing it here would be refusing a valid transcript for a
-       reason the student cannot see. The server checks all three ways again, so this is only about
-       telling her before an upload she waited through. */
-    if (file.type !== "application/pdf" && !/\.pdf$/i.test(file.name)) {
+    /* Type check, cap, and refusal copy are the shared gate's (document-size.ts): the same reasons
+       the other upload surfaces have them, told before an upload she waited through. */
+    const problem = validateApplicationDocument(file, {
+      accept: "pdf",
+      typeMessage: "Litos takes a PDF here. Save the transcript as a PDF from your student portal, then add it.",
+      oversizeHint: "A transcript exported from your portal is usually well under it.",
+    });
+    if (problem) {
       setChosen(null);
-      setError("Litos takes a PDF here. Save the transcript as a PDF from your student portal, then add it.");
-      return;
-    }
-    if (file.size > MAX_APPLICATION_DOCUMENT_BYTES) {
-      setChosen(null);
-      setError(`That file is ${formatBytes(file.size)} and the limit is ${SIZE_LIMIT_LABEL}. A transcript exported from your portal is usually well under it.`);
+      setError(problem);
       return;
     }
     setError(null);
@@ -454,15 +449,21 @@ export function TranscriptModal({
               >
                 <input
                   type="file"
-                  accept="application/pdf,.pdf"
+                  accept={APPLICATION_DOCUMENT_ACCEPT_ATTRIBUTE.pdf}
                   className="sr-only"
-                  onChange={(event) => choose(event.target.files?.[0])}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    /* Cleared so re-picking a same-named file after a refusal still fires change:
+                       she re-exports a smaller transcript under the portal's default filename. */
+                    event.target.value = "";
+                    choose(file);
+                  }}
                 />
                 <span className="text-sm font-medium text-ink">
                   {chosen ? chosen.name : "Drop your transcript here, or browse"}
                 </span>
                 <span className="mt-1 text-xs text-muted">
-                  {chosen && shownSize !== null ? formatBytes(shownSize) : `PDF, up to ${SIZE_LIMIT_LABEL}`}
+                  {chosen && shownSize !== null ? formatDocumentBytes(shownSize) : `PDF, up to ${APPLICATION_DOCUMENT_SIZE_LIMIT_LABEL}`}
                 </span>
               </label>
 
@@ -498,7 +499,7 @@ export function TranscriptModal({
                 </span>
                 <span className="min-w-0">
                   <span className="block truncate text-sm font-medium text-ink">{fileName || "Your transcript"}</span>
-                  {shownSize !== null && <span className="block font-mono text-[11px] text-muted">{formatBytes(shownSize)}</span>}
+                  {shownSize !== null && <span className="block font-mono text-[11px] text-muted">{formatDocumentBytes(shownSize)}</span>}
                 </span>
               </div>
               {/* Whether the STORED file is reusable rides on the document, not on the attachment,

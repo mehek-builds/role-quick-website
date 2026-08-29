@@ -3,9 +3,15 @@
 import { Button } from "@/components/app/Button";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { api, ApiError, ExperienceEntry, getTargeting, getToken, MAX_APPLICATION_DOCUMENT_BYTES } from "@/lib/api";
+import { api, ApiError, ExperienceEntry, getTargeting, getToken } from "@/lib/api";
 import { API_URL } from "@/lib/config";
-import { formatDocumentBytes } from "@/lib/document-size";
+import {
+  APPLICATION_DOCUMENT_ACCEPT_ATTRIBUTE,
+  APPLICATION_DOCUMENT_SIZE_LIMIT_LABEL,
+  OVERSIZE_DOCUMENT_HINT,
+  validateApplicationDocument,
+  type ApplicationDocumentGate,
+} from "@/lib/document-size";
 import { restoreFocusAfterRetry } from "@/lib/latest-request";
 import { litosClientHeaders } from "@/lib/product";
 import { Card, Chip, DataErrorState, PendingLabel, ShimmerRows, ErrorNote } from "@/components/app/ui";
@@ -25,6 +31,14 @@ import {
   type ResumeParsedProfileDraft,
   type ResumeResource,
 } from "./mutation-controller";
+
+/* One gate object for both the choose-time check and the render-time affordance, so the two
+   cannot answer differently about the same File. */
+const RESUME_UPLOAD_GATE: ApplicationDocumentGate = {
+  accept: "pdf",
+  typeMessage: "Choose one PDF file.",
+  oversizeHint: OVERSIZE_DOCUMENT_HINT,
+};
 
 type ProfileLoadResult =
   | { kind: "missing" }
@@ -394,23 +408,20 @@ export default function ResumeWorkspace() {
     [mutations],
   );
 
+  /* Derived at render, not stored: a stored flag desyncs from selectedFile, which lives in the
+     shell-scoped mutation controller and survives this component remounting. A rejected file can
+     never pass the same gate again, so the affordance beside it must offer the picker, not a
+     retry, and must never read "Upload complete". */
+  const selectedFileRejected = selectedFile !== null && validateApplicationDocument(selectedFile, RESUME_UPLOAD_GATE) !== null;
+
   function chooseUpload(file: File | undefined) {
     if (!file || !uploadReady || mutations.isActive()) return;
-    const pdfMime = file.type === "application/pdf";
-    const genericPdf = (file.type === "" || file.type === "application/octet-stream") && /\.pdf$/i.test(file.name);
-    if (!pdfMime && !genericPdf) {
+    /* The shared gate (document-size.ts): the check happens before any bytes move, because past
+       the cap the platform rejects the body as an unreadable 413. */
+    const problem = validateApplicationDocument(file, RESUME_UPLOAD_GATE);
+    if (problem) {
       setSelectedFile(file);
-      setError("Choose one PDF file.");
-      return;
-    }
-    /* Same client-side gate as the onboarding upload (steps.tsx): past
-       MAX_APPLICATION_DOCUMENT_BYTES the platform rejects the request body before the backend
-       runs, as a plain-text 413 with no CORS headers, which the browser reports only as a bare
-       "Failed to fetch" after the whole upload. So the check happens before any bytes move.
-       The old 10 MB here was the backend's multipart limit: a number no upload could reach. */
-    if (file.size > MAX_APPLICATION_DOCUMENT_BYTES) {
-      setSelectedFile(file);
-      setError(`That file is ${formatDocumentBytes(file.size)} and resumes upload up to 4 MB. Export a smaller PDF (most editors have a "reduce file size" option) and try again.`);
+      setError(problem);
       return;
     }
     setSelectedFile(file);
@@ -468,7 +479,7 @@ export default function ResumeWorkspace() {
             <input
               ref={fileRef}
               type="file"
-              accept="application/pdf"
+              accept={APPLICATION_DOCUMENT_ACCEPT_ATTRIBUTE[RESUME_UPLOAD_GATE.accept]}
               disabled={mutationBusy || !uploadReady}
               className="hidden"
               onChange={(e) => {
@@ -497,8 +508,8 @@ export default function ResumeWorkspace() {
           aria-disabled={!uploadReady}
           aria-busy={uploadPending}
         >
-          <p><span className="font-medium text-ink">Drop one PDF here</span>, or use the upload button. Maximum 4 MB.</p>
-          {selectedFile && <div className="mt-3 flex flex-wrap items-center gap-3"><span className="font-mono text-xs text-ink">{selectedFile.name}</span>{uploadPending ? <span role="status" aria-live="polite" className="inline-flex items-center gap-2"><progress aria-label="Uploading and reading resume" className="h-1.5 w-24 accent-brand" />Reading the PDF...</span> : error ? <button type="button" onClick={() => chooseUpload(selectedFile)} aria-describedby={uploadBlockedReason ? "resume-upload-blocked-reason" : undefined} disabled={!uploadReady} className="font-medium text-brand-ink underline underline-offset-4 disabled:text-muted disabled:no-underline">Retry</button> : <span role="status" className="text-positive">Upload complete</span>}</div>}
+          <p><span className="font-medium text-ink">Drop one PDF here</span>, or use the upload button. Maximum {APPLICATION_DOCUMENT_SIZE_LIMIT_LABEL}.</p>
+          {selectedFile && <div className="mt-3 flex flex-wrap items-center gap-3"><span className="font-mono text-xs text-ink">{selectedFile.name}</span>{uploadPending ? <span role="status" aria-live="polite" className="inline-flex items-center gap-2"><progress aria-label="Uploading and reading resume" className="h-1.5 w-24 accent-brand" />Reading the PDF...</span> : selectedFileRejected || error ? <button type="button" onClick={() => { if (selectedFileRejected) { fileRef.current?.click(); } else { chooseUpload(selectedFile); } }} aria-describedby={uploadBlockedReason ? "resume-upload-blocked-reason" : undefined} disabled={!uploadReady} className="font-medium text-brand-ink underline underline-offset-4 disabled:text-muted disabled:no-underline">{selectedFileRejected ? "Choose another file" : "Retry"}</button> : <span role="status" className="text-positive">Upload complete</span>}</div>}
         </div>
 
         {profileRefreshing && profile !== null && profile !== "missing" && !uploadPending && (

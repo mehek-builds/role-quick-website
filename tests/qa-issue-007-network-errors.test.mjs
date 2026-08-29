@@ -149,7 +149,7 @@ test("preview revocation cannot release a held commit, disconnect, or delete", (
 
   assert.match(source, /const mutationBusy = operationKind !== null && operationKind !== "preview"/);
   assert.match(source, /type="checkbox" checked=\{consent\} disabled=\{mutationBusy\}/);
-  assert.match(source, /type="file" accept="\.csv,text\/csv" hidden disabled=\{busy\}/);
+  assert.match(source, /type="file" accept=\{APPLICATION_DOCUMENT_ACCEPT_ATTRIBUTE\.csv\} hidden disabled=\{busy\}/);
   assert.match(source, /data-network-operation=\{operationKind \?\? "idle"\}/);
   assert.match(source, /aria-busy=\{busy\}/);
 });

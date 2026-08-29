@@ -66,6 +66,7 @@ import { prescriptEditableQuestions, prescriptNeedsHer, prescriptSummary } from 
 import { answerWithExactOptionToggled, exactQuestionOption, exactSelectedQuestionOptions, questionAcceptsMultipleOptions, questionReviewPresentation, requiredQuestionReviewRoute } from "@/features/applications";
 import type { JdMatchResponse, JobMatch } from "@/features/applications";
 import { userFacingError } from "@/lib/user-facing-error";
+import { APPLICATION_DOCUMENT_ACCEPT_ATTRIBUTE, validateApplicationDocument } from "@/lib/document-size";
 import { messageAsksForTheExtension } from "@/lib/extension-store-link";
 import { track } from "@/lib/analytics";
 import { replaceClosedComposerUrl } from "./composer-url";
@@ -3225,6 +3226,19 @@ function Applications() {
   async function uploadCanonicalCoverLetter(file: File): Promise<void> {
     const applicationId = canonicalSelected?.id;
     if (!applicationId) return;
+    /* The shared gate (document-size.ts): refused with a sentence before any bytes move, because
+       past the cap the platform rejects the body as an unreadable 413. */
+    /* Not the shared PDF-export hint: this surface also takes .txt, where "reduce file size"
+       advice does not exist. A cover letter this large is text to trim. */
+    const problem = validateApplicationDocument(file, {
+      accept: "pdf-or-txt",
+      typeMessage: "Upload the cover letter as a PDF or plain-text (.txt) file.",
+      oversizeHint: "Trim the letter or export a smaller file and try again.",
+    });
+    if (problem) {
+      setCanonicalFillError(problem);
+      return;
+    }
     const requestScope = beginCanonicalRequest(applicationId, "cover-letter");
     setCoverLetterBusy(true);
     setCanonicalFillError(null);
@@ -5791,7 +5805,7 @@ function CanonicalApplicationDetail({
                   Upload PDF or text
                   <input
                     type="file"
-                    accept="application/pdf,text/plain,.pdf,.txt"
+                    accept={APPLICATION_DOCUMENT_ACCEPT_ATTRIBUTE["pdf-or-txt"]}
                     className="sr-only"
                     disabled={coverLetterBusy || coverLetterLoading}
                     onChange={(event) => {
