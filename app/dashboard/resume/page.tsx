@@ -3,8 +3,7 @@
 import { Button } from "@/components/app/Button";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { api, ApiError, ExperienceEntry, getTargeting, getToken } from "@/lib/api";
-import { API_URL } from "@/lib/config";
+import { api, ApiError, ExperienceEntry, getTargeting, uploadResume } from "@/lib/api";
 import {
   APPLICATION_DOCUMENT_ACCEPT_ATTRIBUTE,
   APPLICATION_DOCUMENT_SIZE_LIMIT_LABEL,
@@ -13,7 +12,6 @@ import {
   type ApplicationDocumentGate,
 } from "@/lib/document-size";
 import { restoreFocusAfterRetry } from "@/lib/latest-request";
-import { litosClientHeaders } from "@/lib/product";
 import { Card, Chip, DataErrorState, PendingLabel, ShimmerRows, ErrorNote } from "@/components/app/ui";
 import { userFacingError } from "@/lib/user-facing-error";
 import {
@@ -250,44 +248,24 @@ export default function ResumeWorkspace() {
       setUploading(true);
       setError(null);
       try {
-        const form = new FormData();
-        // The backend multipart handler only reads the part named "resume" (profile.ts);
-        // "file" is silently ignored and the upload 400s.
-        form.append("resume", file);
-        const res = await fetch(`${API_URL}/profile`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${getToken()}`, ...litosClientHeaders() },
-          body: form,
-        });
-        const data = await res.json().catch(() => null);
-        if (!res.ok) {
-          /* Size cannot be the cause here: the client gate in chooseUpload already excluded it,
-             so blaming it would send the student checking a number that is fine. Same fallback
-             as uploadResume in lib/api.ts for the same response. */
-          setError(data?.error ?? "Could not read that resume.");
-        } else {
-          const parsedProfile = data as ResumeParsedProfile;
-          uploadedProfileRef.current = parsedProfile;
-          const parsedProfileWithoutTargetRoles = { ...parsedProfile };
-          delete parsedProfileWithoutTargetRoles.target_roles;
-          const currentRoles = profile && profile !== "missing" && Array.isArray(profile.target_roles)
-            ? profile.target_roles
-            : [];
-          profileRevisionRef.current += 1;
-          setProfile(
-            currentRoles.length > 0
-              ? { ...parsedProfileWithoutTargetRoles, target_roles: currentRoles }
-              : parsedProfileWithoutTargetRoles,
-          );
-          entriesRevisionRef.current += 1;
-          setEntries(null);
-          await refreshUploadedProfile();
-        }
-      } catch {
-        /* A fetch that rejects has no response at all: offline, a dropped connection, or a
-           platform-level rejection served without CORS headers. The browser's own words are
-           "Failed to fetch", which explains nothing. Same wording as uploadResume in lib/api.ts. */
-        setError("The upload did not reach us. Check your connection and try again.");
+        const parsedProfile = await uploadResume(file) as ResumeParsedProfile;
+        uploadedProfileRef.current = parsedProfile;
+        const parsedProfileWithoutTargetRoles = { ...parsedProfile };
+        delete parsedProfileWithoutTargetRoles.target_roles;
+        const currentRoles = profile && profile !== "missing" && Array.isArray(profile.target_roles)
+          ? profile.target_roles
+          : [];
+        profileRevisionRef.current += 1;
+        setProfile(
+          currentRoles.length > 0
+            ? { ...parsedProfileWithoutTargetRoles, target_roles: currentRoles }
+            : parsedProfileWithoutTargetRoles,
+        );
+        entriesRevisionRef.current += 1;
+        setEntries(null);
+        await refreshUploadedProfile();
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : "Could not read that resume.");
       } finally {
         setUploading(false);
       }

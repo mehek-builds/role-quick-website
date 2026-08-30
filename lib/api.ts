@@ -10,6 +10,11 @@ import { clearExtensionSession } from "./extension-bridge";
 import { MAX_COUNTRY_ELIGIBILITY_RECORDS } from "./work-eligibility-limit";
 import { sendTikTokEvent } from "./tiktok-client";
 import { PACKET_AUDIT_VERSION } from "./packet-audit-version";
+import {
+  fetchResumeUpload,
+  RESUME_UPLOAD_CLIENT_TIMEOUT_MS,
+  resumeUploadIdempotencyKey,
+} from "./resume-upload-request";
 
 export { PACKET_AUDIT_VERSION } from "./packet-audit-version";
 
@@ -1722,28 +1727,34 @@ export function putApplicationProfile(body: Partial<ApplicationProfile>) {
   });
 }
 
-/** Resume upload. Multipart, so it cannot go through `api()` (which sets JSON headers). */
+/**
+ * Resume upload. Multipart, so it cannot go through `api()` (which sets JSON headers).
+ *
+ * The server owns a tighter 24 second upload, extraction, and model budget before persistence.
+ * This 35 second browser deadline leaves an 11 second response and persistence margin, then acts
+ * as the final containment layer for platform or network stalls. A regression can produce a
+ * retryable error but can never leave onboarding spinning for 90
+ * seconds again.
+ */
+export { RESUME_UPLOAD_CLIENT_TIMEOUT_MS } from "./resume-upload-request";
+
 export async function uploadResume(file: File): Promise<ParsedProfile> {
   const token = getToken();
+  const idempotencyKey = await resumeUploadIdempotencyKey(
+    file,
+    token ? userIdFromToken(token) ?? "authenticated" : "unauthenticated",
+  );
   const form = new FormData();
   form.append("resume", file);
-  let res: Response;
-  try {
-    res = await fetch(`${API_URL}/profile`, {
-      method: "POST",
-      headers: {
-        ...litosClientHeaders(),
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: form,
-    });
-  } catch {
-    /* A fetch that rejects has no response at all - offline, a dropped connection, or a
-     * platform-level rejection served without CORS headers. The browser's own words here are
-     * "Failed to fetch", which the upload screen used to print verbatim as though it explained
-     * something. Say what the student can actually do instead. */
-    throw new Error("The upload did not reach us. Check your connection and try again.");
-  }
+  const res = await fetchResumeUpload(`${API_URL}/profile`, {
+    method: "POST",
+    headers: {
+      ...litosClientHeaders(),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      "Idempotency-Key": idempotencyKey,
+    },
+    body: form,
+  }, RESUME_UPLOAD_CLIENT_TIMEOUT_MS);
   const data = await res.json().catch(() => null);
   if (!res.ok) {
     throw new ApiError(res.status, (data as { error?: string } | null)?.error ?? "Could not read that resume.");
