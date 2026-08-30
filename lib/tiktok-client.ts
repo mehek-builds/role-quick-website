@@ -1,7 +1,7 @@
 "use client";
 
 import type { TikTokServerEventName } from "./tiktok-event-names";
-import { TIKTOK_US_PIXEL_CODE } from "./tiktok-pixel";
+import { TIKTOK_ADS_PIXEL_CODES } from "./tiktok-pixel";
 
 export type { TikTokServerEventName };
 
@@ -9,6 +9,7 @@ declare global {
   interface Window {
     ttq?: {
       instance(pixelCode: string): {
+        page(): void;
         track(event: TikTokServerEventName, properties?: Record<string, unknown>): void;
       };
     };
@@ -38,16 +39,19 @@ export function sendTikTokEvent(
   }
 }
 
-/* Fires the US advertiser account's browser pixel explicitly. window.ttq is
-   undefined when the pixel never loaded (ad blockers or consent tools), which
-   is a no-op. */
+/* Fires both advertiser accounts' browser pixels with the same event ID. Each
+   account can therefore optimize independently, while a single account still
+   deduplicates its browser and Events API copies. window.ttq is undefined when
+   the pixel never loaded (ad blockers or consent tools), which is a no-op. */
 export function trackTikTokPixelEvent(
   event: TikTokServerEventName,
   eventId: string,
   properties?: Record<string, string | number>,
 ) {
   try {
-    window.ttq?.instance(TIKTOK_US_PIXEL_CODE).track(event, { ...properties, event_id: eventId });
+    for (const pixelCode of TIKTOK_ADS_PIXEL_CODES) {
+      window.ttq?.instance(pixelCode).track(event, { ...properties, event_id: eventId });
+    }
   } catch {
     /* analytics must never break the funnel */
   }
