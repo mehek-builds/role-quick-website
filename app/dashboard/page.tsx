@@ -43,7 +43,7 @@ import {
   type ResumeGenerationInitiation,
 } from "@/features/applications";
 import { formatPay, jobApplicationActionLabel, jobTypeLabel, type JobApplicationMatch, type PayFacts } from "@/features/jobs";
-import { loadDashboardInitialState } from "@/features/dashboard";
+import { homePrimaryAction, loadDashboardInitialState } from "@/features/dashboard";
 import { localDayKey } from "@/lib/local-day";
 import { targetingHeadline } from "@/lib/periods";
 import { userFacingError } from "@/lib/user-facing-error";
@@ -426,6 +426,7 @@ export default function Home() {
     () => ({ ready: pipeline.ready, submitted: pipeline.sent, needsAction: pipeline.needsYou }),
     [pipeline],
   );
+  const primaryAction = homePrimaryAction(applicationSummary);
   /* Each summary block gates on its own total, so a student with emails but no applications is
      not shown a row of application zeros to prove it (and vice versa). */
   const applicationTotal = applicationSummary.ready + applicationSummary.submitted + applicationSummary.needsAction;
@@ -754,12 +755,8 @@ export default function Home() {
             </Link>
           </p>
         </div>
-        <ButtonLink href="/dashboard/applications?new=1&intent=fill" variant="secondary">
-          Fill application
-        </ButtonLink>
+        <ButtonLink href={primaryAction.href}>{primaryAction.label}</ButtonLink>
       </section>
-
-      <PlanStatus compact />
 
       {me?.is_guest && trialActive && (
         <Card className="flex flex-wrap items-center justify-between gap-4 p-5">
@@ -812,9 +809,9 @@ export default function Home() {
               ]}
               action={applicationSummary.needsAction > 0 ? {
                 label: applicationSummary.needsAction === 1
-                  ? "1 needs something from you"
-                  : `${applicationSummary.needsAction} need something from you`,
-                detail: "Finish what each one is waiting on",
+                  ? "1 application needs you"
+                  : `${applicationSummary.needsAction} applications need you`,
+                detail: "Continue where Litos stopped",
                 href: "/dashboard/applications?state=action",
               } : undefined}
             />
@@ -837,6 +834,8 @@ export default function Home() {
           )}
         </div>
       </section>
+
+      <PlanStatus compact />
 
       <section aria-labelledby="matches-heading" className="space-y-3">
         <div className="flex items-end justify-between gap-4">
@@ -1067,7 +1066,6 @@ function JobMatchCard({
   onHoverPrepare: () => void;
   onRetry: (upgradeTrigger: HTMLButtonElement) => void;
 }) {
-  const reviewHref = packetAction?.href ?? null;
   const status = packetAction ? (packetAction.stopped ? "needs-you" : "ready") : preparing ? "preparing" : preparationFailed ? "failed" : "idle";
   return (
     <Card
@@ -1146,15 +1144,7 @@ function JobMatchCard({
             <span className="flex min-h-11 items-center px-3 text-sm text-muted">
               <PendingLabel>Getting ready</PendingLabel>
             </span>
-          ) : reviewHref ? (
-            /* A LINK, not a button that opened a drawer here. Reviewing a packet is one screen,
-               /dashboard/applications, and this is the way in. It navigates rather than overlaying
-               so there is exactly one place the requirement highlighting, the legend, the gap
-               breakdown and the send control have to be kept correct. */
-            <Link href={reviewHref} aria-label={`Review ${job.title} at ${job.company_name}`} className="flex min-h-11 items-center rounded-full border border-control-border bg-surface px-4 text-center text-sm font-medium text-ink transition-colors hover:border-ink">
-              Review
-            </Link>
-          ) : tailoringAccess === null ? (
+          ) : packetAction ? null : tailoringAccess === null ? (
             <span className="flex min-h-11 items-center px-3 text-sm text-muted">
               <PendingLabel>Checking plan</PendingLabel>
             </span>
@@ -1179,11 +1169,12 @@ function JobMatchCard({
             </button>
           )}
           {packetAction ? (
-            /* The packet's own action, in the Jobs list's words, into the existing packet: a card
-               with a stopped or half-done application must not offer to start a second one. */
-            <Link href={`${packetAction.href}&intent=apply`} aria-label={`${packetAction.label}: ${job.title} at ${job.company_name}`} className="flex min-h-11 items-center rounded-full bg-action px-5 text-center text-sm font-medium text-action-ink transition-colors hover:bg-brand-ink">{packetAction.label}</Link>
+            /* One packet, one action. The destination owns the full review and next human step, so
+               a second Review control here only makes the student choose between two links to the
+               same application. */
+            <Link href={`${packetAction.href}&intent=apply`} aria-label={`${packetAction.label}: ${job.title} at ${job.company_name}`} className="flex min-h-11 items-center rounded-full border border-brand bg-surface px-5 text-center text-sm font-medium text-brand-ink transition-colors hover:bg-brand-soft">{packetAction.label}</Link>
           ) : (
-            <Link href={`/dashboard/applications?job=${job.id}&intent=fill`} aria-label={`Fill an application for ${job.title} at ${job.company_name}`} className="flex min-h-11 items-center rounded-full bg-action px-5 text-center text-sm font-medium text-action-ink transition-colors hover:bg-brand-ink">Fill application</Link>
+            <Link href={`/dashboard/applications?job=${job.id}&intent=fill`} aria-label={`Fill an application for ${job.title} at ${job.company_name}`} className="flex min-h-11 items-center rounded-full border border-brand bg-surface px-5 text-center text-sm font-medium text-brand-ink transition-colors hover:bg-brand-soft">Fill application</Link>
           )}
         </div>
       </div>

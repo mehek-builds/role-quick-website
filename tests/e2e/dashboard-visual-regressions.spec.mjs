@@ -3716,7 +3716,7 @@ test("Jobs remains scannable on desktop and the narrowest supported dashboard wi
   }
 });
 
-test("Home contains job actions and keeps the page CTA secondary", async () => {
+test("Home keeps one state-aware page CTA above the job actions", async () => {
   const { context, page, state } = await newDashboardPage({ viewport: { width: 1440, height: 1000 } });
   try {
     await page.goto(`${QA_ORIGIN}/dashboard?qa=1`, { waitUntil: "domcontentloaded" });
@@ -3724,7 +3724,8 @@ test("Home contains job actions and keeps the page CTA secondary", async () => {
     await skip.waitFor({ state: "visible" });
     const result = await skip.evaluate((button) => {
       const card = button.closest(".overflow-hidden");
-      const pageCta = document.querySelector('main a[href="/dashboard/applications?new=1&intent=fill"]');
+      const pageCta = [...document.querySelectorAll('main a[href="/dashboard/applications?state=ready"]')]
+        .find((link) => link.textContent?.includes("ready application"));
       /* A card whose job already has a packet prints that packet's own action words (Finish
          application / Review and fill), so the primary is found by its intent href first and the
          no-packet label second. */
@@ -3737,6 +3738,7 @@ test("Home contains job actions and keeps the page CTA secondary", async () => {
         card: cardRect.toJSON(),
         cardScrollWidth: card.scrollWidth,
         cardClientWidth: card.clientWidth,
+        pageLabel: pageCta.textContent?.trim(),
         pageBackground: getComputedStyle(pageCta).backgroundColor,
         cardBackground: getComputedStyle(cardCta).backgroundColor,
       };
@@ -3745,6 +3747,7 @@ test("Home contains job actions and keeps the page CTA secondary", async () => {
     assert.ok(result.button.left >= result.card.left - 1 && result.button.right <= result.card.right + 1, `Skip escaped its card: ${JSON.stringify(result)}`);
     assert.ok(result.button.top >= result.card.top - 1 && result.button.bottom <= result.card.bottom + 1, `Skip escaped its card vertically: ${JSON.stringify(result)}`);
     assert.ok(result.cardScrollWidth <= result.cardClientWidth + 1, `Home card overflowed: ${JSON.stringify(result)}`);
+    assert.equal(result.pageLabel, "Review 1 ready application");
     assert.notEqual(result.pageBackground, result.cardBackground, `page and card CTAs have equal emphasis: ${JSON.stringify(result)}`);
     await capturePass(page, "home-action-hierarchy");
 

@@ -148,7 +148,8 @@ describe("Home's zero has somewhere to go", () => {
        reading 12. The backend figure stays as the fallback for a caller with no inventory, and it
        still feeds the bars and the two windowed stats, which this page does not recompute. */
     assert.match(funnel, /<Stat value=\{sent \?\? f\.applications_submitted\} label="sent in total" \/>/);
-    assert.match(funnel, /<Stat value=\{f\.resumes_tailored\} label="resumes prepared for you" \/>/);
+    assert.match(funnel, /<Stat value=\{f\.resumes_tailored\} label="resume versions prepared" \/>/);
+    assert.match(funnel, /One job can have more than one resume version, so this number will not match Applications\./);
   });
 });
 

@@ -442,9 +442,11 @@ test("overview keeps three application states and sends matches to the review sc
      title, and it showed a MatchScore ring with none of the requirement highlighting that explains
      the number.
 
-     Review is a link now. That is the whole contract on this page. */
+     The packet's own action is the one link now. Home does not make the student choose between a
+     generic Review link and a state-specific action that both open the same packet. */
   assert.match(overview, /packetAction=\{packetActionFor\(job\)\}/);
-  assert.match(overview, /<Link href=\{reviewHref\}[\s\S]*?Review\s*<\/Link>/);
+  assert.doesNotMatch(overview, /<Link href=\{reviewHref\}/);
+  assert.match(overview, /href=\{`\$\{packetAction\.href\}&intent=apply`\}/);
   assert.match(overview, /\/dashboard\/applications\?application=\$\{packet\.id\}/);
   assert.match(overview, /\{status === "failed" \? "Try tailoring again" : "Tailor resume"\}/);
   assert.match(overview, /intent=fill[\s\S]{0,250}>Fill application<\/Link>/);
