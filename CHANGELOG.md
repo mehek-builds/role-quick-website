@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Onboarding now accepts grounded resume evidence without waiting for model-inferred role suggestions
+  and explains when the bounded local parser handled a provider slowdown.
 - The dashboard now leads with the most relevant application action, explains why resume and
   application totals can differ, and keeps plan status below the work overview.
 - Job cards now present one clear application action instead of competing review and fill links.

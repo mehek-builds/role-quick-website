@@ -49,6 +49,7 @@ import { JOB_TITLES } from "@/lib/job-titles";
 import { FIELDS, categoriesForFields, fieldsForCategories, focusPatch, focusSeed, inferResumeTargeting, titlesForFields, type SavedFocus } from "@/lib/onboarding-role-inference";
 import { rankOnboardingJobs, type OnboardingJob } from "@/lib/onboarding-jobs";
 import { measureElapsed, resumeReadyTiming } from "@/lib/monotonic-timing";
+import { resumeUploadState } from "@/features/onboarding";
 
 /* Computed once at module load, not per render. The argument is a constant, so the result is
    invariant - and this list is rendered as ~150 <option> nodes beside an input that re-renders on
@@ -732,6 +733,9 @@ export function ResumeStep({
   }, [parsed, file, parseSeconds]);
 
   if (savedProfile && showSaved && !parsed) {
+    // The server exposes this branch only when onboarding state confirms stored resume evidence.
+    // GET /profile does not repeat the upload-only bank counts, so preserve that known-ready fact.
+    const savedState = resumeUploadState(savedProfile, { knownReady: true });
     const savedRows = [
       { k: "Name", v: savedProfile.full_name || "not found" },
       { k: "School", v: savedProfile.school || "not found" },
@@ -746,6 +750,11 @@ export function ResumeStep({
           We kept everything already in your Litos profile. Review it here, or replace the file if it changed.
         </p>
         <Receipt rows={savedRows} />
+        {savedState.showFallbackWarning && (
+          <p className="mt-4 rounded-inner bg-warn-soft px-4 py-3 text-[13px] leading-6 text-warn">
+            We read this resume using the text in your file while our enrichment service was slow. Review the saved details above before continuing.
+          </p>
+        )}
         <div className="mt-6 flex flex-wrap items-center gap-3">
           <PrimaryButton onClick={onDone}>Keep this resume</PrimaryButton>
           <button
@@ -762,18 +771,20 @@ export function ResumeStep({
   }
 
   if (parsed) {
-    const distinctRoles = new Set(
-      (parsed.target_roles ?? []).map((role) => role.trim().toLowerCase()).filter(Boolean),
-    ).size;
-    // Mirror the server's has_resume gate. Advancing on a partial parse only returns the student
-    // to this same screen, which looks like a dead button rather than a validation failure.
-    const ready = !!parsed.full_name?.trim() && distinctRoles >= 5 && (parsed.bank_total ?? parsed.bank_seeded ?? 0) > 0;
+    // Focus is collected before upload. Model-inferred roles are enrichment, not resume evidence,
+    // so a provider outage may not turn a grounded local parse into a false unreadable-file state.
+    const { ready, showFallbackWarning } = resumeUploadState(parsed);
     return (
       <StartShell
         step="resume"
         title="Here's what we read."
       >
         <Receipt rows={rows} />
+        {showFallbackWarning && (
+          <p className="mt-4 rounded-inner bg-warn-soft px-4 py-3 text-[13px] leading-6 text-warn">
+            We read the resume using the text in your file while our enrichment service was slow. Review the details above, then continue normally.
+          </p>
+        )}
         {!ready && (
           <p className="mt-4 rounded-inner bg-warn-soft px-4 py-3 text-[13px] leading-6 text-warn">
             We couldn&apos;t read enough from that file. Try another PDF or DOCX.
