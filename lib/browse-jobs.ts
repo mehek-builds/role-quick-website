@@ -29,6 +29,8 @@ export type BrowseJob = {
      honestly speak for a role that is open in a country the company sponsors in and one it is
      not. */
   sponsorship_evidence?: "posting_offers" | "employer_h1b_filings" | null;
+  /** ISO-3166 jurisdictions shared by the sponsorship evidence behind this grouped role. */
+  sponsorship_country_codes?: string[];
   remote: boolean;
   posted_at: string | null;
   first_seen_at: string;

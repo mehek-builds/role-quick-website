@@ -6,6 +6,7 @@ import Link from "next/link";
 import { api, type JobsPage, type MonitoredJob } from "@/lib/api";
 import { fetchBoard, useJobMatchScores, MATCH_WEIGHTING_NOTE, SCORE_BATCH, type JobMatch } from "@/features/applications";
 import { CompanyLogo } from "@/components/app/CompanyLogo";
+import { sponsorshipEvidenceLabel, sponsorshipEvidenceTitle } from "@/lib/sponsorship-evidence";
 import { activeJobFilters, buildJobApplicationIndex, countNewToday, emptyJobsBody, isJobApplied, jobApplicationActionLabel, jobApplicationDetailHref, jobApplicationFor, jobApplicationHref, type JobApplicationIndex, type JobApplicationMatch } from "@/features/jobs";
 import { isQaRender } from "@/lib/qa-mode";
 import { Card, DataErrorState, EmptyState, ErrorNote, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
@@ -519,7 +520,7 @@ function JobRow({ job, application, applied, match }: { job: MonitoredJob; appli
           {job.title}
         </h2>
         <MatchBadge match={match} />
-        <SponsorBadge evidence={job.sponsorship_evidence} />
+        <SponsorBadge evidence={job.sponsorship_evidence} countryCode={job.sponsorship_country_code} />
       </div>
       <p className="mt-1 truncate text-sm text-muted">
         {job.company_name}
@@ -596,18 +597,20 @@ function JobRow({ job, application, applied, match }: { job: MonitoredJob; appli
  * reading this page. The title attribute carries which of the two kinds of evidence it was, because
  * the difference matters to the person deciding whether to spend an evening on the application.
  */
-function SponsorBadge({ evidence }: { evidence: MonitoredJob["sponsorship_evidence"] }) {
+function SponsorBadge({
+  evidence,
+  countryCode,
+}: {
+  evidence: MonitoredJob["sponsorship_evidence"];
+  countryCode: MonitoredJob["sponsorship_country_code"];
+}) {
   if (!evidence) return null;
   return (
     <span
       className="shrink-0 rounded-full bg-surface-alt px-2.5 py-0.5 font-mono text-[11px] font-medium text-muted"
-      title={
-        evidence === "posting_offers"
-          ? "This job post says visa sponsorship is available"
-          : "This company has H-1B filings on record with the US government: an approved petition, or an application it filed and the Labor Department certified. That is not a promise to sponsor you."
-      }
+      title={sponsorshipEvidenceTitle(evidence, countryCode)}
     >
-      {evidence === "posting_offers" ? "Sponsorship offered" : "Company has sponsored visas"}
+      {sponsorshipEvidenceLabel(evidence, countryCode)}
     </span>
   );
 }

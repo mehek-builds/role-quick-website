@@ -230,15 +230,18 @@ export function imageTypeOf(contentType: string | null, bytes: Uint8Array): stri
  * parameter, so without this anyone could hand the route an internal address
  * and have our server fetch it and hand back the body. The allowlist is the
  * whole defence; keep it exact-match on hostname. */
-const BOARD_HOSTS: Record<string, "greenhouse" | "lever" | "ashby" | "workable"> = {
+const BOARD_HOSTS: Record<string, BoardAts> = {
   "job-boards.greenhouse.io": "greenhouse",
   "boards.greenhouse.io": "greenhouse",
   "jobs.lever.co": "lever",
   "jobs.ashbyhq.com": "ashby",
   "apply.workable.com": "workable",
+  "ats.rippling.com": "rippling",
 };
 
-export type Board = { ats: "greenhouse" | "lever" | "ashby" | "workable"; token: string; url: string };
+type BoardAts = "greenhouse" | "lever" | "ashby" | "workable" | "rippling" | "breezy" | "recruitee";
+
+export type Board = { ats: BoardAts; token: string; url: string };
 
 /* Returns null for anything not recognisably one of our boards. Callers must
    treat null as "do not fetch", never as "fetch it anyway". */
@@ -251,10 +254,18 @@ export function parseBoardUrl(raw: string | null | undefined): Board | null {
     return null;
   }
   if (u.protocol !== "https:") return null;
-  const ats = BOARD_HOSTS[u.hostname];
+  let ats = BOARD_HOSTS[u.hostname];
+  let tokenFromHost: string | null = null;
+  const tenant = /^([A-Za-z0-9-]{1,100})\.(breezy\.hr|recruitee\.com)$/.exec(u.hostname);
+  if (!ats && tenant) {
+    ats = tenant[2] === "breezy.hr" ? "breezy" : "recruitee";
+    tokenFromHost = tenant[1];
+  }
   if (!ats) return null;
-  const token = u.pathname.split("/").filter(Boolean)[0];
+  const token = tokenFromHost ?? u.pathname.split("/").filter(Boolean)[0];
   if (!token || !/^[A-Za-z0-9._-]{1,100}$/.test(token)) return null;
+  if (ats === "breezy" || ats === "recruitee") return { ats, token, url: `https://${u.hostname}` };
+  if (ats === "rippling") return { ats, token, url: `https://${u.hostname}/${token}/jobs` };
   return { ats, token, url: `https://${u.hostname}/${token}` };
 }
 
