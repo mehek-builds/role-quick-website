@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { readFileSync } from "node:fs";
+import {
+  sponsorshipEvidenceLabel,
+  sponsorshipEvidenceTitle,
+} from "../lib/sponsorship-evidence.ts";
 
 /* THE SPONSOR-ONLY BOARD, on the pages that draw it.
  *
@@ -14,6 +18,7 @@ const browseLib = readFileSync("lib/browse-jobs.ts", "utf8");
 const dashboardJobs = readFileSync("app/dashboard/jobs/page.tsx", "utf8");
 const settings = readFileSync("app/dashboard/settings/page.tsx", "utf8");
 const startStep = readFileSync("components/start/SponsorshipStep.tsx", "utf8");
+const sponsorshipEvidence = readFileSync("lib/sponsorship-evidence.ts", "utf8");
 
 test("work eligibility keeps the persistent setup exit", () => {
   assert.match(startStep, /LaterLink/);
@@ -55,6 +60,16 @@ describe("the public board carries the filter through every link", () => {
 });
 
 describe("badges never speak for an employer who said nothing", () => {
+  test("country-aware evidence names its jurisdiction", () => {
+    assert.equal(sponsorshipEvidenceLabel("posting_offers", "DE"), "Sponsorship offered in DE");
+    assert.equal(
+      sponsorshipEvidenceLabel("posting_offers", ["US", "CA", "GB"]),
+      "Sponsorship offered in US, CA +1",
+    );
+    assert.match(sponsorshipEvidenceTitle("posting_offers", "DE"), /available in Germany/);
+    assert.match(sponsorshipEvidenceTitle("employer_h1b_filings", "US"), /in United States/);
+  });
+
   test("every sponsorship badge is guarded on evidence being present", () => {
     // Absence means "we do not know". A badge drawn without this guard would be the product
     // inventing a policy the employer never stated, in the one place someone is deciding whether
@@ -82,8 +97,9 @@ describe("badges never speak for an employer who said nothing", () => {
     // A filing record is evidence, not an offer. The tooltip is where that qualification lives, so
     // it is the thing worth pinning down.
     // Whitespace-tolerant: JSX wraps these sentences across lines.
-    assert.match(dashboardJobs, /not a promise to sponsor\s+you/i);
-    assert.match(browseJobs, /not a promise to sponsor\s+you/i);
+    assert.match(sponsorshipEvidence, /not a promise to sponsor you/i);
+    assert.match(dashboardJobs, /sponsorshipEvidenceTitle\(evidence, countryCode\)/);
+    assert.match(browseJobs, /sponsorshipEvidenceTitle\(job\.sponsorship_evidence, job\.sponsorship_country_codes\)/);
   });
 });
 

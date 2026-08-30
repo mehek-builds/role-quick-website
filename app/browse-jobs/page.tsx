@@ -19,6 +19,7 @@ import {
 import { logoSrc } from "@/lib/company-logos";
 import { isOther, JOB_TITLES, withOther } from "@/lib/job-titles";
 import { EMPLOYMENT_TYPES, formatPay, jobTypeLabel } from "@/features/jobs";
+import { sponsorshipEvidenceLabel, sponsorshipEvidenceTitle } from "@/lib/sponsorship-evidence";
 
 export const metadata: Metadata = {
   title: "Browse jobs",
@@ -174,14 +175,10 @@ function Tile({ job, eager, terms }: { job: BrowseJob; eager?: boolean; terms: s
            claim about an employer's immigration practice still cannot travel
            without it: "has filings on record" is evidence, never an offer. */
         <p
-          title={
-            job.sponsorship_evidence === "posting_offers"
-              ? "This job post says visa sponsorship is available"
-              : "This company has H-1B filings on record with the US government: an approved petition, or an application it filed and the Labor Department certified. That is not a promise to sponsor you."
-          }
+          title={sponsorshipEvidenceTitle(job.sponsorship_evidence, job.sponsorship_country_codes)}
           className="mt-1.5 font-mono text-label font-medium uppercase tracking-[0.08em] text-muted"
         >
-          {job.sponsorship_evidence === "posting_offers" ? "Sponsorship offered" : "Company has sponsored visas"}
+          {sponsorshipEvidenceLabel(job.sponsorship_evidence, job.sponsorship_country_codes)}
         </p>
       )}
     </a>

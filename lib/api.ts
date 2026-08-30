@@ -589,6 +589,8 @@ export type MonitoredJob = {
    * "no sponsorship" off the back of silence would be the product inventing an employer's policy.
    */
   sponsorship_evidence?: "posting_offers" | "employer_h1b_filings" | null;
+  /** ISO-3166 jurisdiction the sponsorship evidence applies to. */
+  sponsorship_country_code?: string | null;
 };
 
 /**

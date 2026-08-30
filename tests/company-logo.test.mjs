@@ -142,8 +142,9 @@ test("the board URL is still gated by the ATS allowlist", async () => {
      so the SSRF gate on that parameter is load-bearing for a second surface. It must stay an
      exact-match hostname allowlist. */
   const source = await readFile(new URL("../lib/company-logo-source.ts", import.meta.url), "utf8");
-  assert.match(source, /const BOARD_HOSTS: Record<string, "greenhouse" \| "lever" \| "ashby" \| "workable"> = \{/);
-  assert.match(source, /const ats = BOARD_HOSTS\[u\.hostname\];/, "exact hostname match, never a suffix test");
+  assert.match(source, /const BOARD_HOSTS: Record<string, BoardAts> = \{/);
+  assert.match(source, /let ats = BOARD_HOSTS\[u\.hostname\];/, "fixed board hosts use an exact lookup");
+  assert.match(source, /\^\(\[A-Za-z0-9-\]\{1,100\}\)\\\.\(breezy\\\.hr\|recruitee\\\.com\)\$/, "tenant board hosts use an anchored allowlist");
   assert.match(source, /if \(u\.protocol !== "https:"\) return null;/);
 });
 
