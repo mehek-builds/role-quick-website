@@ -21,10 +21,6 @@ import { Voices } from "@/components/Voices";
 /* BUILD_DATE moved to components/SiteFooter.tsx on 2026-08-04 with the footer
    that was the only thing reading it. Still stamped once at build time, not
    per render. */
-/* The lib/pricing.ts imports (FREE_LIMITS, PRO_LIMITS, PRO_MONTHLY_PRICE,
-   PRO_YEARLY_MONTHLY_PRICE, TRIAL_DAYS) were dropped 2026-07-30 with the
-   #pricing section. lib/pricing.ts itself is untouched. */
-
 /* DESIGN.md v1.1: one idea per viewport, one line of copy where one line
    works, tonal pillar bands, motion that settles rather than loops (the
    receipt is the one looping element). */
@@ -590,37 +586,6 @@ export default function Home() {
           </div>
         </section>
 
-        <section id="pricing" className="relative scroll-mt-24">
-          <Wash soft />
-          <div className="relative mx-auto max-w-5xl px-6 py-32">
-            <Reveal>
-              <a href="/pricing" className="block rounded-card focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand">
-                <div className="text-center">
-                  <p className="font-mono text-label uppercase tracking-[0.08em] text-teal-ink">Free and Litos+</p>
-                  <h2 className="mt-4 text-section font-[450] text-ink">Application filling stays free.</h2>
-                  <p className="mx-auto mt-4 max-w-2xl text-body text-muted">Use Litos+ when you want new tailored materials, outreach, insights, and automation.</p>
-                </div>
-                <div className="mt-10 grid gap-5 sm:grid-cols-2">
-                  <div className="rounded-card border border-teal/45 bg-teal-soft/45 p-6">
-                    <p className="font-mono text-label uppercase tracking-[0.08em] text-teal-ink">Free</p>
-                    <p className="mt-5 font-mono text-section text-ink">$0</p>
-                    <h3 className="mt-5 text-heading font-[450] text-ink">Fill applications. Track every move.</h3>
-                    <span className="mt-6 inline-flex min-h-11 items-center rounded-full border border-teal px-5 text-small font-medium text-teal-ink">Start free</span>
-                  </div>
-                  <div className="rounded-card border border-brand/45 bg-brand-soft/45 p-6">
-                    <p className="font-mono text-label uppercase tracking-[0.08em] text-brand-ink">Litos+</p>
-                    <p className="mt-5 font-mono text-section text-ink">From $19.99</p>
-                    <h3 className="mt-5 text-heading font-[450] text-ink">Choose one week, one month, or three months.</h3>
-                    <span className="mt-6 inline-flex min-h-11 items-center rounded-full border border-brand px-5 text-small font-medium text-brand-ink">See Litos+</span>
-                  </div>
-                </div>
-                <p className="mt-5 text-center font-mono text-machine text-muted">New accounts include 7 days of Litos+ with 5 tailored resumes, 5 cover letters, and generated answers for 5 applications.</p>
-                <p className="mt-3 text-center text-small font-medium text-brand-ink underline decoration-brand/35 underline-offset-4">Compare every feature</p>
-              </a>
-            </Reveal>
-          </div>
-        </section>
-
         {/* The packet. The three pillars above each show ONE act in
             isolation, which is the right way to explain them and the wrong
             way to convey that they are a single job. This is the recap: the
@@ -706,8 +671,8 @@ export default function Home() {
             break the RESUME / FORMS / EMAILS rhythm, so if the dashboard needs
             saying again it is not as a fourth pillar and not as these cards.
 
-            The reel now runs: three pillars, the packet recap, then voices,
-            FAQ and pricing. */}
+            The reel now runs: three pillars, the packet recap, then voices and
+            FAQ. */}
 
         {/* Voices: the film has just finished proving the mechanism, which is
             the exact moment the honest question becomes "does it work for
@@ -781,34 +746,6 @@ export default function Home() {
             </Reveal>
           </div>
         </section>
-
-        {/* REMOVED 2026-07-30, on Mehek's call: the whole #pricing section
-            ("What it costs.", the Free and Pro cards, and the cancellation
-            line). The "Pricing" links in Header.tsx and in the footer went with
-            it, because tests/route-integrity.test.mjs fails an anchor that
-            points at no id. The footer was inline in this file when that was
-            written; it moved to components/SiteFooter.tsx on 2026-08-04, so
-            "this page's own footer" no longer points anywhere. Look there.
-
-            There is no separate /pricing route and there never was. This
-            section, reached by those two nav links, was the whole of pricing on
-            the website.
-
-            Read the deleted section's own rationale before restoring or
-            re-deleting this, because it was written against exactly this state:
-            the site called itself free four times and never said what free
-            stops at, while the Chrome Web Store listing published the caps and
-            both prices, and the backend enforced them. Nine of ten rivals hide
-            or obfuscate price and the competitor audit called transparent
-            pricing the axis Litos wins on. Deleting this puts the site back to
-            being the quieter of the two surfaces.
-
-            STILL PUBLISHING PRICES, and now unmatched by any page: the Chrome
-            Web Store listing, and /terms which states the cancellation and
-            refund policy this section linked to. lib/pricing.ts is now
-            unreferenced by the site (it was read here so the page could not
-            drift from middleware/quota.ts LIMITS and TRIAL_DAYS) and was LEFT
-            IN PLACE, values intact, so restoring is an import and a paste. */}
 
         {/* Close: the finale: by here the live film has collated the book */}
         <section id="close" className="relative">

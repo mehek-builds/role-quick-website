@@ -133,10 +133,9 @@ string), and check the deployment in `vercel ls role-quick-website`.
 ## Open items
 
 - trylitos.com purchased on Porkbun and attached to the Litos Vercel project.
-- Pricing is OFF the site entirely (2026-07-27, Mehek's call) while the plan
-  is reworked. No surface quotes a price; `components/PricingCards.tsx` was
-  deleted. Unresolved: $49.99 is Pro's current monthly price and cannot also
-  be the Premium price, Premium's volume is unset, and "free trial" vs the
-  old "Free forever" promise are opposite products.
+- Public pricing is off the marketing site (2026-08-30, Mehek's call). Plan
+  selection remains in onboarding and Account. The noindexed `/pricing`
+  compatibility handoff remains only for installed extension versions that
+  bind checkout to the extension's signed-in account.
 - Publish the prepared Litos name, copy, icon, and screenshots to the existing
   Chrome Web Store listing.
