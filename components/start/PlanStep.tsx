@@ -39,7 +39,7 @@ import {
   type LitosPlusPlanId,
 } from "@/features/billing";
 import { track } from "@/lib/analytics";
-import { sendTikTokEvent } from "@/lib/tiktok-client";
+import { sendTikTokEvent, trackTikTokPixelEvent } from "@/lib/tiktok-client";
 import { operationIdFor, completeOperationId } from "@/lib/operation-id";
 import { PrimaryButton, StartShell } from "./ui";
 
@@ -90,6 +90,7 @@ export function PlanStep({ onSettled }: { onSettled: () => void }) {
       track("checkout_started", { plan_id: selected, source: "onboarding", trigger: "start_plan" });
       const tiktokEventId = operationIdFor(tiktokCheckoutIdsRef.current, selected);
       sendTikTokEvent("InitiateCheckout", tiktokEventId, { plan_id: selected });
+      trackTikTokPixelEvent("InitiateCheckout", tiktokEventId, { plan_id: selected });
       const access = await getBillingState();
       if (!access?.account_id) throw new Error("Litos could not bind checkout to this account. Refresh and try again.");
       const session = await createLitosPlusCheckout(selected, {

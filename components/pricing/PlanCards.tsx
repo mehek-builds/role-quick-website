@@ -20,7 +20,7 @@ import {
 } from "@/features/billing";
 import { getToken } from "@/lib/api";
 import { track } from "@/lib/analytics";
-import { sendTikTokEvent } from "@/lib/tiktok-client";
+import { sendTikTokEvent, trackTikTokPixelEvent } from "@/lib/tiktok-client";
 import { operationIdFor, completeOperationId } from "@/lib/operation-id";
 import { createCheckoutThroughExtension } from "@/lib/extension-bridge";
 
@@ -95,6 +95,7 @@ export function PlanCards() {
       track("checkout_started", { plan_id: planId, source: extensionCheckout ? "extension" : "pricing", trigger: sourceTrigger });
       const tiktokEventId = operationIdFor(tiktokCheckoutIdsRef.current, planId);
       sendTikTokEvent("InitiateCheckout", tiktokEventId, { plan_id: planId });
+      trackTikTokPixelEvent("InitiateCheckout", tiktokEventId, { plan_id: planId });
       let checkoutUrl: string;
       if (extensionCheckout) {
         checkoutUrl = await createCheckoutThroughExtension({
