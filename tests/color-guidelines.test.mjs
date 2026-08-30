@@ -185,12 +185,10 @@ const FAINT_DECORATION_ALLOWLIST = new Map([
   ["app/dashboard/page.tsx", [/aria-hidden.*text-faint/, /pay && type.*text-faint/]],
   ["app/browse-jobs/page.tsx", [/pay && type.*text-faint/, /font-mono.*uppercase.*text-faint/, /gap-.*text-faint/]],
   ["app/page.tsx", [/group-open:rotate-45/]],
-  ["app/pricing/page.tsx", [/group-open:rotate-45/]],
   ["components/start/ui.tsx", [/font-mono.*uppercase.*text-faint/]],
   ["components/app/ui.tsx", [/const shared = .*text-faint/]],
   ["components/app/Board.tsx", [/aria-hidden.*text-faint/]],
   ["components/app/ApplicationPacket.tsx", [/font-mono.*uppercase.*text-faint/, />·<|>·<\/span>/]],
-  ["components/pricing/FeatureMatrix.tsx", [/font-mono.*uppercase.*text-faint/]],
 ]);
 
 test("faint text is limited to audited decoration and redundant labels", async () => {

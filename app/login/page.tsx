@@ -417,7 +417,7 @@ export default function Login() {
         setSession(data.token, email.trim().toLowerCase());
         track("authentication_completed", { method: claimMode ? "email_claim" : "email_code" });
         /* A selected paid term is a preference only. New accounts start the no-card trial and
-           Stripe opens only after a later, explicit purchase from Pricing or Account. */
+           Stripe opens only after a later, explicit purchase from Account or the extension. */
         router.replace(await landingRoute());
       } else {
         setError(verifyCodeError(res.status, data?.error));

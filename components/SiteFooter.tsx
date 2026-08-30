@@ -93,7 +93,6 @@ export function SiteFooter({ wash = false }: { wash?: boolean }) {
               {/* Absolute, not bare "#product": on /try or /terms these have to
                   cross to the homepage before they can scroll to an id. */}
               <li><Link href="/#product" className={LINK}>Product</Link></li>
-              <li><a href="/pricing" className={LINK}>Pricing</a></li>
               <li><Link href="/#faq" className={LINK}>FAQ</Link></li>
               {/* Footer, not header, and this is still the whole reachability
                   story for /litos-vs-simplify: it is the one link to it.

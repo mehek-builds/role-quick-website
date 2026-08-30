@@ -14,7 +14,6 @@ import { SignInLink } from "@/components/SignInLink";
 const NAV = [
   { href: "/#product", label: "Product" },
   { href: "/browse-jobs", label: "Jobs" },
-  { href: "/pricing", label: "Pricing" },
   { href: "/try", label: "Try it free" },
   { href: "/#faq", label: "FAQ" },
 ] as const;

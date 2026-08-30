@@ -20,7 +20,7 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: "*",
         allow: "/",
-        disallow: ["/qa/", "/dashboard/", "/start", "/install", ...BOARD_CRAWL_TRAPS],
+        disallow: ["/qa/", "/dashboard/", "/start", "/install", "/pricing", ...BOARD_CRAWL_TRAPS],
       },
     ],
     sitemap: `${SITE_URL}/sitemap.xml`,

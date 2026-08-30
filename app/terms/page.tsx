@@ -157,15 +157,8 @@ export default function Terms() {
             Litos+ costs $19.99 for one week, $39.99 for one month, or $89.99
             for three months. Each subscription renews for the same period at
             the same total until you cancel. The three-month option is marked
-            most popular. Current prices and the full comparison are always
-            available on the{" "}
-            <a
-              href="/pricing"
-              className="text-ink underline decoration-border underline-offset-2"
-            >
-              Pricing page
-            </a>
-            .
+            most popular. Current plan details are shown during setup, before
+            checkout, and in Account.
           </p>
           <p>
             Stripe handles payments. Litos never sees or stores your card

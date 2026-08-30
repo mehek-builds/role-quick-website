@@ -22,8 +22,8 @@
  * this screen instead of being sold the thing they just bought. It is deliberately not
  * optional: making it optional is what would let a caller quietly strand a paid student here.
  *
- * Continue goes straight to Stripe. The one line this build changes versus /pricing is the return
- * route: /pricing sends people back to the settings page, and setup has to come back to setup.
+ * Continue goes straight to Stripe. Setup has to return to setup, while the extension checkout
+ * returns people to the settings page.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -51,7 +51,7 @@ export function PlanStep({ onSettled }: { onSettled: () => void }) {
    * sends the student back to /start, where the ledger still has `plan` outstanding and the flow
    * therefore renders this screen again - now to somebody who has just paid, offering to sell them
    * the same thing a second time. Reading the entitlement on mount and advancing when it is already
-   * paid is what closes that loop, and it is also correct for anyone who bought from /pricing in
+   * paid is what closes that loop, and it is also correct for anyone who bought from the extension in
    * another tab. */
   const [settled, setSettled] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -99,9 +99,8 @@ export function PlanStep({ onSettled }: { onSettled: () => void }) {
         trigger: "start_plan",
       });
       if (!session.offer_id) throw new Error("Checkout did not return a restorable offer.");
-      /* THE ONE LINE THIS BUILD CHANGES. /pricing returns to /dashboard/settings#plan; setup has to
-         come back to setup so a completed purchase lands on the last screen of the flow rather
-         than dropping the student into an account page they have never seen. */
+      /* Setup has to come back to setup so a completed purchase lands on the last screen of the
+         flow rather than dropping the student into an account page they have never seen. */
       rememberBillingReturnContext(session.offer_id, {
         accountId: access.account_id,
         returnRoute: "/start",

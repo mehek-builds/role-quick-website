@@ -29,10 +29,10 @@ test("the header ships one nav list, so phone and desktop cannot drift apart", (
   /* The regression was two hardcoded copies of the nav, one of which was
      deleted. A single source rendered twice is what stops that recurring. */
   const declared = [...header.matchAll(/\{\s*href:\s*"([^"]+)",\s*label:\s*"([^"]+)"\s*\}/g)];
-  assert.equal(declared.length, 5, "expected the five marketing destinations declared once");
+  assert.equal(declared.length, 4, "expected the four marketing destinations declared once");
   assert.deepEqual(
     declared.map((m) => m[1]),
-    ["/#product", "/browse-jobs", "/pricing", "/try", "/#faq"],
+    ["/#product", "/browse-jobs", "/try", "/#faq"],
   );
   assert.equal(
     (header.match(/NAV\.map\(/g) ?? []).length,
