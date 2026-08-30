@@ -237,9 +237,10 @@ const BOARD_HOSTS: Record<string, BoardAts> = {
   "jobs.ashbyhq.com": "ashby",
   "apply.workable.com": "workable",
   "ats.rippling.com": "rippling",
+  "jobs.crelate.com": "crelate",
 };
 
-type BoardAts = "greenhouse" | "lever" | "ashby" | "workable" | "rippling" | "breezy" | "recruitee";
+type BoardAts = "greenhouse" | "lever" | "ashby" | "workable" | "rippling" | "breezy" | "recruitee" | "crelate";
 
 export type Board = { ats: BoardAts; token: string; url: string };
 
@@ -262,6 +263,12 @@ export function parseBoardUrl(raw: string | null | undefined): Board | null {
     tokenFromHost = tenant[1];
   }
   if (!ats) return null;
+  if (ats === "crelate") {
+    const parts = u.pathname.split("/").filter(Boolean);
+    const token = parts[0] === "portal" ? parts[1] : null;
+    if (!token || !/^[A-Za-z0-9._-]{1,100}$/.test(token)) return null;
+    return { ats, token, url: `https://${u.hostname}/portal/${token}` };
+  }
   const token = tokenFromHost ?? u.pathname.split("/").filter(Boolean)[0];
   if (!token || !/^[A-Za-z0-9._-]{1,100}$/.test(token)) return null;
   if (ats === "breezy" || ats === "recruitee") return { ats, token, url: `https://${u.hostname}` };

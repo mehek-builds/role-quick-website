@@ -235,6 +235,11 @@ describe("parseBoardUrl", () => {
       token: "acme",
       url: "https://acme.recruitee.com",
     });
+    assert.deepEqual(parseBoardUrl("https://jobs.crelate.com/portal/canonrecruiting/job/123"), {
+      ats: "crelate",
+      token: "canonrecruiting",
+      url: "https://jobs.crelate.com/portal/canonrecruiting",
+    });
   });
 
   test("refuses anything that is not one of those hosts: this is the SSRF gate", () => {
@@ -248,6 +253,9 @@ describe("parseBoardUrl", () => {
       "https://apply.workable.com.evil.com/suade", // another suffix trick
       "https://acme.breezy.hr.evil.com/p/role",
       "https://acme.recruitee.com.evil.com/o/role",
+      "https://jobs.crelate.com.evil.com/portal/acme",
+      "https://jobs.crelate.com/api/candidateportal/getclientvars",
+      "https://jobs.crelate.com/portal",
       "https://evil.com/job-boards.greenhouse.io/stripe", // path trick
       "https://localhost/admin",
       "https://127.0.0.1/",
