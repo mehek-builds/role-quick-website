@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { track } from "@/lib/analytics";
-import { sendTikTokEvent } from "@/lib/tiktok-client";
+import { sendTikTokEvent, trackTikTokPixelEvent } from "@/lib/tiktok-client";
 import { operationIdFor, completeOperationId } from "@/lib/operation-id";
 import { isQaRender } from "@/lib/qa-mode";
 import {
@@ -182,6 +182,7 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
       track("checkout_started", { plan_id: planId, feature_key: request.feature, placement: request.placement });
       const tiktokEventId = operationIdFor(tiktokCheckoutIdsRef.current, planId);
       sendTikTokEvent("InitiateCheckout", tiktokEventId, { plan_id: planId });
+      trackTikTokPixelEvent("InitiateCheckout", tiktokEventId, { plan_id: planId });
       void emitBillingEvent("upgrade_clicked", {
         feature_key: request.feature,
         placement: request.placement,

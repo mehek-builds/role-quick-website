@@ -27,3 +27,16 @@ test("the verified Stripe return Purchase is routed to the US pixel", async () =
   assert.match(billingReturn, /trackTikTokPixelEvent\("Purchase"/);
   assert.match(billingReturn, /billingReturnVerdict/);
 });
+
+test("every checkout entry point sends InitiateCheckout through the browser pixel", async () => {
+  const checkoutSurfaces = await Promise.all([
+    read("components/billing/BillingProvider.tsx"),
+    read("components/pricing/PlanCards.tsx"),
+    read("components/start/PlanStep.tsx"),
+  ]);
+
+  for (const surface of checkoutSurfaces) {
+    assert.match(surface, /sendTikTokEvent\("InitiateCheckout", tiktokEventId/);
+    assert.match(surface, /trackTikTokPixelEvent\("InitiateCheckout", tiktokEventId/);
+  }
+});
