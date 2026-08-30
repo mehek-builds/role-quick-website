@@ -15,12 +15,15 @@ test("the root layout loads the US TikTok pixel", async () => {
 });
 
 test("the verified Stripe return Purchase is routed to the US pixel", async () => {
-  const [client, billingReturn] = await Promise.all([
+  const [client, server, billingReturn] = await Promise.all([
     read("lib/tiktok-client.ts"),
+    read("lib/tiktok-events.ts"),
     read("app/billing/return/page.tsx"),
   ]);
 
   assert.match(client, /ttq\?\.instance\(TIKTOK_US_PIXEL_CODE\)\.track/);
+  assert.match(server, /event_source_id: TIKTOK_US_PIXEL_CODE/);
+  assert.doesNotMatch(server, /DA3DU3JC77U208UL6HS0/);
   assert.match(billingReturn, /trackTikTokPixelEvent\("Purchase"/);
   assert.match(billingReturn, /billingReturnVerdict/);
 });

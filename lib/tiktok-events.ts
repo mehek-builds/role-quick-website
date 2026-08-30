@@ -3,8 +3,8 @@
    calls the /api/tiktok-event route instead (see lib/tiktok-client.ts). */
 
 import { type TikTokServerEventName } from "./tiktok-event-names";
+import { TIKTOK_US_PIXEL_CODE } from "./tiktok-pixel";
 
-const TIKTOK_PIXEL_CODE = "DA3DU3JC77U208UL6HS0";
 const TIKTOK_EVENTS_ENDPOINT = "https://business-api.tiktok.com/open_api/v1.3/event/track/";
 const REQUEST_TIMEOUT_MS = 4_000;
 
@@ -21,7 +21,7 @@ export async function sendTikTokServerEvent(input: {
   const testEventCode = process.env.TIKTOK_TEST_EVENT_CODE;
   const body = {
     event_source: "web",
-    event_source_id: TIKTOK_PIXEL_CODE,
+    event_source_id: TIKTOK_US_PIXEL_CODE,
     data: [
       {
         event: input.event,
