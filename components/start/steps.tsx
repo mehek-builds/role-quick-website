@@ -48,6 +48,7 @@ import { ThinkingOrb } from "thinking-orbs";
 import { JOB_TITLES } from "@/lib/job-titles";
 import { FIELDS, categoriesForFields, fieldsForCategories, focusPatch, focusSeed, inferResumeTargeting, titlesForFields, type SavedFocus } from "@/lib/onboarding-role-inference";
 import { rankOnboardingJobs, type OnboardingJob } from "@/lib/onboarding-jobs";
+import { measureElapsed, resumeReadyTiming } from "@/lib/monotonic-timing";
 
 /* Computed once at module load, not per render. The argument is a constant, so the result is
    invariant - and this list is rendered as ~150 <option> nodes beside an input that re-renders on
@@ -663,7 +664,7 @@ export function ResumeStep({
   const [parsed, setParsed] = useState<ParsedProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
   /* Measured, not decorated. See the receipt comment below. */
-  const [parseSeconds, setParseSeconds] = useState<number | null>(null);
+  const [parseSeconds, setParseSeconds] = useState<number | null | undefined>(undefined);
   const inputRef = useRef<HTMLInputElement>(null);
   const [showSaved, setShowSaved] = useState(() => !!savedProfile);
 
@@ -683,10 +684,10 @@ export function ResumeStep({
     setError(null);
     setFile(f);
     setBusy(true);
-    const startedAt = Date.now();
     try {
-      const result = await uploadResume(f);
-      setParseSeconds((Date.now() - startedAt) / 1000);
+      const measured = await measureElapsed(() => uploadResume(f));
+      const result = measured.value;
+      setParseSeconds(measured.seconds);
       setParsed(result);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not read that resume.");
@@ -712,7 +713,7 @@ export function ResumeStep({
     const exp = parsed.experience?.length ?? 0;
     const proj = parsed.projects?.length ?? 0;
     const banked = parsed.bank_total ?? parsed.bank_seeded ?? 0;
-    const elapsed = parseSeconds === null ? "" : `${parseSeconds.toFixed(1)}s`;
+    const timing = resumeReadyTiming(parseSeconds);
     return [
       { k: "Received", v: `${file.name} · ${formatDocumentBytes(file.size)}` },
       { k: "Name", v: parsed.full_name || "not found" },
@@ -721,7 +722,12 @@ export function ResumeStep({
       { k: "Experience", v: `${exp} ${exp === 1 ? "entry" : "entries"}` },
       { k: "Projects", v: `${proj} ${proj === 1 ? "entry" : "entries"}` },
       { k: "Skills", v: `${parsed.skills?.length ?? 0} tagged` },
-      { t: elapsed, k: "Ready in", v: `${banked} ${banked === 1 ? "entry" : "entries"} banked`, done: true },
+      {
+        t: timing.time,
+        k: timing.label,
+        v: `${banked} ${banked === 1 ? "entry" : "entries"} banked`,
+        done: true,
+      },
     ];
   }, [parsed, file, parseSeconds]);
 

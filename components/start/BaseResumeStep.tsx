@@ -26,6 +26,11 @@ import { courseworkLine } from "@/lib/profile-editor";
 import {
   type AvailabilityWindowInput,
 } from "@/lib/availability-window";
+import {
+  elapsedClockStamp,
+  startElapsedMeasurement,
+  type ElapsedMeasurement,
+} from "@/lib/monotonic-timing";
 
 /* ─────────────────────────────────────────────────────────────────────────────
  * The base resume screen. Paper on the left, the build on the right.
@@ -405,12 +410,10 @@ export function BaseResumeStep({
   const [failure, setFailure] = useState<"build" | "edits" | "finish" | null>(null);
   const [finished, setFinished] = useState(false);
   const started = useRef(false);
-  const startedAt = useRef<number>(0);
+  const startedAt = useRef<ElapsedMeasurement | null>(null);
 
   const stamp = useCallback(() => {
-    const elapsed = Math.max(0, Date.now() - startedAt.current);
-    const s = Math.floor(elapsed / 1000);
-    return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+    return elapsedClockStamp(startedAt.current);
   }, []);
 
   const note = useCallback(
@@ -506,7 +509,7 @@ export function BaseResumeStep({
 
   const run = useCallback(() => {
     started.current = true;
-    startedAt.current = Date.now();
+    startedAt.current = startElapsedMeasurement();
     setError(null);
     setFailure(null);
     setLog([]);
@@ -558,7 +561,7 @@ export function BaseResumeStep({
     if (started.current) return;
     started.current = true;
     if (demo) {
-      startedAt.current = Date.now();
+      startedAt.current = startElapsedMeasurement();
       replayDemo(emit);
       return;
     }
