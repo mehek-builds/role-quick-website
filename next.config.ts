@@ -144,6 +144,7 @@ const extraControlledDevOrigins = controlledPortalOrigin
   : [];
 
 const nextConfig: NextConfig = {
+  output: "standalone",
   /* Dashboard navigation uses React's ViewTransition boundary so the old page can leave before
    * the next one settles in. The browser API is progressive enhancement: unsupported browsers
    * keep the same instant navigation, and globals.css removes every duration for reduced motion. */

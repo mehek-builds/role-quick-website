@@ -12,7 +12,7 @@ export function isLemonSqueezyCheckoutUrl(value: string): boolean {
 export function isLitosPayCheckoutUrl(value: string): boolean {
   try {
     const url = new URL(value);
-    const api = new URL(process.env.NEXT_PUBLIC_API_URL ?? "https://student-outreach-backend.vercel.app");
+    const api = new URL(process.env.NEXT_PUBLIC_API_URL ?? "https://api.trylitos.com");
     return url.protocol === "https:"
       && url.origin === api.origin
       && /^\/billing\/litos-pay\/checkout\/[0-9a-f-]{36}$/i.test(url.pathname)

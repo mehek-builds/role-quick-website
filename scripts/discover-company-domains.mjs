@@ -24,7 +24,7 @@ const UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36";
 
 const FACETS =
-  (process.env.NEXT_PUBLIC_API_URL ?? "https://student-outreach-backend.vercel.app") +
+  (process.env.NEXT_PUBLIC_API_URL ?? "https://api.trylitos.com") +
   "/jobs/facets";
 
 /* Trailing noise that is never part of a domain. Kept tight: stripping too much

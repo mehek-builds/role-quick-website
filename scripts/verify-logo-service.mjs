@@ -30,7 +30,7 @@
 const BASE = (process.argv[2] ?? "http://localhost:3000").replace(/\/+$/, "");
 const API = `${BASE}/api/company-logo`;
 const BOARD =
-  process.env.NEXT_PUBLIC_API_URL ?? "https://student-outreach-backend.vercel.app";
+  process.env.NEXT_PUBLIC_API_URL ?? "https://api.trylitos.com";
 
 let failures = 0;
 const check = (ok, label, detail = "") => {
