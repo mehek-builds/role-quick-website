@@ -7006,7 +7006,7 @@ function DirectApplicationQuestion({ task, position, total, saving, saved, focus
             </p>
           )}
           <TerminalActionBar className="!fixed inset-x-4 !bottom-[calc(var(--dashboard-bottom-bar)+0.75rem)] !z-40 mt-6 justify-end sm:inset-x-6 lg:!static lg:!inset-auto lg:!bottom-auto lg:!z-20 lg:shadow-none">
-            <div className={`grid w-full gap-2 ${hasPrevious ? "grid-cols-[auto_minmax(0,1fr)]" : "grid-cols-1"} sm:flex sm:w-auto sm:items-center`}>
+            <div className={`grid w-full gap-2 ${hasPrevious ? "grid-cols-[auto_minmax(0,1fr)]" : "grid-cols-1"} sm:flex sm:items-center sm:w-auto`}>
               {hasPrevious && (
                 <Button
                   type="button"
