@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- The dashboard now leads with the most relevant application action, explains why resume and
+  application totals can differ, and keeps plan status below the work overview.
+- Job cards now present one clear application action instead of competing review and fill links.
+
 ## [0.2.0] - 2026-08-02
 
 ### Added
@@ -161,4 +169,3 @@
 ### Changed
 
 - Application progress and public product copy now accurately describe standing consent, safety pauses, and verified submission receipts.
-

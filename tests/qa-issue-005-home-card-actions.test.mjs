@@ -4,10 +4,10 @@ import test from "node:test";
 
 const source = await readFile(new URL("../app/dashboard/page.tsx", import.meta.url), "utf8");
 
-test("Home keeps job actions inside each card and one primary action near the job", () => {
+test("Home leads with the pipeline action and keeps one secondary action inside each card", () => {
   assert.match(
     source,
-    /<ButtonLink href="\/dashboard\/applications\?new=1&intent=fill" variant="secondary">\s*Fill application\s*<\/ButtonLink>/,
+    /<ButtonLink href=\{primaryAction\.href\}>\{primaryAction\.label\}<\/ButtonLink>/,
   );
   assert.match(
     source,
@@ -15,6 +15,7 @@ test("Home keeps job actions inside each card and one primary action near the jo
   );
   assert.match(
     source,
-    /href=\{`\/dashboard\/applications\?job=\$\{job\.id\}&intent=fill`\}[^>]+bg-action/,
+    /href=\{`\/dashboard\/applications\?job=\$\{job\.id\}&intent=fill`\}[^>]+border-brand bg-surface/,
   );
+  assert.doesNotMatch(source, /<Link href=\{reviewHref\}/);
 });

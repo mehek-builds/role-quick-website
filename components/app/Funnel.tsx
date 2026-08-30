@@ -139,11 +139,14 @@ export function Funnel({ stopped, sent }: { stopped?: FunnelStopped | null; sent
             windowed measurements this page does not recompute. */}
         <Stat value={sent ?? f.applications_submitted} label="sent in total" />
         <Stat value={f.submitted_this_week} label="in the last 7 days" />
-        {/* "prepared for you", not "you tailored": the dashboard prewarms resumes for the day's
-            top matches before the student opens any of them, so this count grows just by visiting.
-            Calling it their own throughput would be the one thing this panel must not do. */}
-        <Stat value={f.resumes_tailored} label="resumes prepared for you" />
+        {/* Versions, not applications: the dashboard can prewarm and later regenerate a resume for
+            the same job, so this count can grow without adding another application to the tracker. */}
+        <Stat value={f.resumes_tailored} label="resume versions prepared" />
       </div>
+
+      <p className="mt-3 text-label leading-5 text-muted">
+        One job can have more than one resume version, so this number will not match Applications.
+      </p>
 
       {/* Only when the zero needs accounting for: work was prepared, none of it went out, and
           something is actually waiting. Every other combination leaves this off. */}

@@ -41,11 +41,11 @@ export function PlanStatus({ compact = false, showAction = true }: { compact?: b
         : `${access.legacy_summary ?? "Your existing limits remain in place."} Application filling is unlimited.`;
 
   return (
-    <Card className={`${compact ? "p-4" : "p-5"} border-brand/30 bg-brand-soft/35`}>
+    <Card className={compact ? "border-border bg-surface p-4" : "border-brand/30 bg-brand-soft/35 p-5"}>
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <p className="font-mono text-label uppercase tracking-[0.08em] text-brand-ink">{accessLabel(access)}</p>
-          <h2 className="mt-2 text-heading font-[450] text-ink">{heading}</h2>
+          <h2 className={compact ? "mt-1 text-base font-medium text-ink" : "mt-2 text-heading font-[450] text-ink"}>{heading}</h2>
           <p className="mt-1 text-small text-muted">{body}</p>
           {v2Trial && !compact && (
             <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 font-mono text-label text-muted" aria-label="Trial usage">
@@ -68,6 +68,7 @@ export function PlanStatus({ compact = false, showAction = true }: { compact?: b
         ) : (
           <Button
             type="button"
+            variant={compact ? "secondary" : "primary"}
             onClick={() => openUpgrade({
               feature: "ai_resume_tailoring",
               placement: "plan_status",
