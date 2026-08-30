@@ -131,8 +131,8 @@ describe("the refusal renders where the button is, and is announced exactly once
     const row = code.match(/<div className="mt-5 flex flex-wrap items-center justify-end gap-3">([\s\S]*?)<\/div>/);
     assert.ok(row, "the generate button must keep its own row");
     assert.match(row[1], /<ComposerRefusalNote refusal=\{refusal\} at="action" \/>/);
-    assert.match(row[1], /Tailor resume/);
-    assert.match(row[1], /Fill application/);
+    assert.match(row[1], /Tailor resume first/);
+    assert.match(row[1], /Open and fill employer form/);
     assert.match(
       code,
       /function ComposerRefusalNote\([\s\S]*?if \(!refusal \|\| refusal\.at !== at\) return null;[\s\S]*?role="alert">\{refusal\.message\}<\/p>/,
@@ -146,7 +146,7 @@ describe("the refusal renders where the button is, and is announced exactly once
   });
 
   test("the empty boxes are marked invalid, so the message is attached to what it is about", () => {
-    assert.match(code, /aria-invalid=\{invalid\("jobDescription"\) \|\| undefined\}/);
+    assert.match(code, /aria-invalid=\{jobDescriptionInvalid \|\| undefined\}/);
     assert.match(code, /aria-invalid=\{invalid \|\| undefined\}/);
     for (const field of ["company", "role", "portalUrl"]) {
       assert.match(code, new RegExp(`invalid=\\{invalid\\("${field}"\\)\\}`), field);
