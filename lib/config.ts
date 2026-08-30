@@ -13,6 +13,6 @@ export const SITE_URL = (
 // Volley internally). The website calls it directly: same API, same JWT, so a
 // signed-in extension user and a signed-in website user are the same account.
 export const API_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? "https://student-outreach-backend.vercel.app";
+  process.env.NEXT_PUBLIC_API_URL ?? "https://api.trylitos.com";
 
 export const EXTENSION_ID = "bdbedbmkjpfioknfpmhookefabipjaad";
