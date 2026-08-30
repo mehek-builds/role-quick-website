@@ -719,7 +719,8 @@ test("direct answer progress survives application switches without double-counti
     "a new review pass resets history while the same pass preserves its cursor and total",
   );
 
-  assert.match(page, /onNavigateDirectQuestion=\{\(promptFingerprint\) => \{[\s\S]*?const progress = current\.get\(selected\.id\);[\s\S]*?progress\.key !== directAnswerPassKey\(selectedSubmission\.review\)[\s\S]*?next\.set\(selected\.id, \{[\s\S]*?cursorPromptFingerprint: promptFingerprint,[\s\S]*?navigationToken: progress\.navigationToken \+ 1/);
+  assert.match(page, /onNavigateDirectQuestion=\{\(promptFingerprint\) => \{[\s\S]*?const expectedKey = directAnswerPassKey\(selectedSubmission\.review\);[\s\S]*?storedProgress\?\.key === expectedKey[\s\S]*?answeredTasks: \[\],[\s\S]*?next\.set\(selected\.id, \{[\s\S]*?cursorPromptFingerprint: promptFingerprint,[\s\S]*?navigationToken: progress\.navigationToken \+ 1/);
+  assert.doesNotMatch(page, /if \(!progress \|\| progress\.key !== directAnswerPassKey\(selectedSubmission\.review\)\) return current;/);
 });
 
 test("a direct answer owns the screen and invalidates an older poll snapshot", () => {

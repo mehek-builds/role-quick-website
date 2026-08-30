@@ -4788,7 +4788,7 @@ function Applications() {
           {applicationTaskOpen ? (
             <div className="flex min-h-14 items-center justify-between gap-4 py-2.5">
               <div className="min-w-0">
-                <h2 ref={applicationTaskHeadingRef} tabIndex={-1} id="application-ledger-heading" className="truncate text-sm font-medium text-ink outline-none">{applicationTaskRole}</h2>
+                <h2 ref={applicationTaskHeadingRef} tabIndex={-1} id="application-ledger-heading" className="line-clamp-2 text-sm font-medium leading-5 text-ink outline-none">{applicationTaskRole}</h2>
                 <p className="mt-0.5 flex min-w-0 items-center gap-2 text-xs text-muted">
                   <span className="truncate">{applicationTaskCompany}</span>
                   <span aria-hidden="true">·</span>
@@ -5244,8 +5244,26 @@ function Applications() {
           onNavigateDirectQuestion={(promptFingerprint) => {
             runDashboardTransition(() => {
               setDirectAnswerProgresses((current) => {
-                const progress = current.get(selected.id);
-                if (!progress || progress.key !== directAnswerPassKey(selectedSubmission.review)) return current;
+                const expectedKey = directAnswerPassKey(selectedSubmission.review);
+                const storedProgress = current.get(selected.id);
+                /* The screen derives a fresh pass before this map has necessarily been populated.
+                   The old handler treated that valid first visit as stale and silently ignored
+                   Next. Seed the same pass the screen is already showing, so a visible control
+                   always has a state transition behind it. */
+                const progress = storedProgress?.key === expectedKey
+                  ? storedProgress
+                  : {
+                    key: expectedKey,
+                    answeredTasks: [],
+                    cursorPromptFingerprint: null,
+                    lastSavedPromptFingerprint: null,
+                    navigationToken: 0,
+                    total: directInputTaskPlan(selectedSubmission.review, {
+                      company: selected.job_context.company,
+                      role: selected.job_context.role,
+                      documents: selectedSubmission.documents,
+                    }).questionTasks.length,
+                  };
                 const next = new Map(current);
                 next.set(selected.id, {
                   ...progress,
@@ -5916,6 +5934,14 @@ function NewApplicationPanel({
 }) {
   const patch = (next: Partial<NewApplicationDraft>) => onChange({ ...value, ...next });
   const invalid = (field: ApplicationDraftField) => refusal?.fields.includes(field) ?? false;
+  const jobDescriptionInvalid = invalid("jobDescription");
+  const [jobDescriptionOpen, setJobDescriptionOpen] = useState(() => Boolean(value.jobDescription.trim()) || jobDescriptionInvalid);
+  const fillReady = Boolean(value.company.trim())
+    && Boolean(value.role.trim())
+    && isHttpsJobUrl(value.portalUrl.trim());
+  const tailorReady = fillReady && Boolean(value.jobDescription.trim());
+  const readinessId = "new-application-readiness";
+
   return (
     <Card className="p-6">
       <div className="max-w-2xl">
@@ -5942,8 +5968,24 @@ function NewApplicationPanel({
           row is not "beside" this one. With the message down there it sat at y = 979 on a 375x812
           viewport while this button was at y = 554. */}
       <ComposerRefusalNote refusal={refusal} at="url" />
-      <label className="mt-4 block text-xs font-medium text-muted" htmlFor="new-application-jd">Job description</label>
-      <textarea id="new-application-jd" value={value.jobDescription} onChange={(event) => patch({ jobDescription: event.target.value })} rows={12} placeholder="Optional for filling. Paste the complete job description to tailor a resume." aria-invalid={invalid("jobDescription") || undefined} className={`mt-1.5 w-full rounded-inner border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand ${invalid("jobDescription") ? "border-danger" : "border-control-border"}`} />
+      <div className="mt-4 rounded-inner border border-border bg-surface-alt px-4 py-3">
+        <button
+          type="button"
+          aria-expanded={jobDescriptionOpen}
+          aria-controls="new-application-tailoring-details"
+          onClick={() => setJobDescriptionOpen((open) => !open)}
+          className="flex min-h-11 w-full items-center justify-between gap-4 text-left text-small font-medium text-ink"
+        >
+          <span>Add a job description to tailor first</span>
+          <span aria-hidden="true" className="font-mono text-label text-muted">{jobDescriptionOpen ? "Hide" : "Add"}</span>
+        </button>
+        {jobDescriptionOpen && (
+          <div id="new-application-tailoring-details" className="pt-2">
+            <label className="block text-xs font-medium text-muted" htmlFor="new-application-jd">Job description</label>
+            <textarea id="new-application-jd" value={value.jobDescription} onChange={(event) => patch({ jobDescription: event.target.value })} rows={6} placeholder="Paste the complete job description." aria-invalid={jobDescriptionInvalid || undefined} className={`mt-1.5 min-h-36 w-full rounded-inner border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand ${jobDescriptionInvalid ? "border-danger" : "border-control-border"}`} />
+          </div>
+        )}
+      </div>
       {/* Beside the button that raised it, not in the page banner far above it. The button and this
           line are in the same flex row, so a student who can reach the button can read the refusal
           without scrolling: no scrollIntoView, no requestAnimationFrame, nothing that stops running
@@ -5951,11 +5993,14 @@ function NewApplicationPanel({
           reader still hears it exactly once. */}
       <div className="mt-5 flex flex-wrap items-center justify-end gap-3">
         <ComposerRefusalNote refusal={refusal} at="action" />
-        <Button type="button" variant="secondary" onClick={(event) => onTailor(event.currentTarget)} disabled={creating !== null} className="border-brand text-brand-ink">
-          {creating === "tailor" ? <PendingLabel state="composing">Tailoring</PendingLabel> : "Tailor resume"}
+        <p id={readinessId} className="mr-auto max-w-xl text-small leading-6 text-muted">
+          Company, role, and a complete HTTPS job URL unlock the employer form. A job description also unlocks tailoring.
+        </p>
+        <Button type="button" variant="secondary" aria-describedby={readinessId} onClick={(event) => onTailor(event.currentTarget)} disabled={creating !== null || !tailorReady} className="border-brand text-brand-ink">
+          {creating === "tailor" ? <PendingLabel state="composing">Tailoring</PendingLabel> : "Tailor resume first"}
         </Button>
-        <Button type="button" onClick={onFill} disabled={creating !== null}>
-          {creating === "fill" ? <PendingLabel state="composing" onColor>Preparing form</PendingLabel> : "Fill application"}
+        <Button type="button" aria-describedby={readinessId} onClick={onFill} disabled={creating !== null || !fillReady}>
+          {creating === "fill" ? <PendingLabel state="composing" onColor>Preparing form</PendingLabel> : "Open and fill employer form"}
         </Button>
       </div>
     </Card>
@@ -6718,10 +6763,11 @@ function DirectApplicationQuestion({ task, position, total, saving, saved, focus
       : task.question.answer ?? "",
   );
   const [submitting, setSubmitting] = useState(false);
+  const [navigating, setNavigating] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [choiceTouched, setChoiceTouched] = useState(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const busy = saving || submitting;
+  const busy = saving || submitting || navigating;
   const savedAnswer = task.question.answer ?? "";
   const answerDirty = answer !== savedAnswer;
   /* THIS QUESTION IS ON SCREEN FOR THE ONE UNDER IT, and its own answer already stands.
@@ -6818,6 +6864,7 @@ function DirectApplicationQuestion({ task, position, total, saving, saved, focus
     if (busy) return;
     if (answerDirty) onDraftChange(task.question.id, promptFingerprint, taskFingerprint, answer);
     else onClearDraft(promptFingerprint);
+    setNavigating(true);
     navigateToQuestion();
   }
 
@@ -6849,7 +6896,7 @@ function DirectApplicationQuestion({ task, position, total, saving, saved, focus
           <p className="mt-2 text-small leading-6 text-muted">{task.question.explanation}</p>
         )}
 
-        <form onSubmit={submitAnswer} aria-busy={busy} className="mt-6">
+        <form onSubmit={submitAnswer} aria-busy={busy} className="mt-6 pb-40 lg:pb-0">
           {task.question.options && task.question.options.length > 0 ? (
             acceptsMultipleOptions ? (
               <fieldset aria-labelledby={headingId} aria-describedby={answerDescribedBy} aria-invalid={visibleError ? true : undefined} className="space-y-2">
@@ -6958,36 +7005,38 @@ function DirectApplicationQuestion({ task, position, total, saving, saved, focus
               {visibleError}
             </p>
           )}
-          <div className={`mt-6 grid gap-2 ${hasPrevious ? "grid-cols-[auto_minmax(0,1fr)]" : "grid-cols-1"} sm:flex sm:items-center`}>
-            {hasPrevious && (
-              <Button
-                type="button"
-                variant="secondary"
-                aria-label="Previous question"
-                disabled={busy}
-                onClick={() => navigate(onPrevious)}
-              >
-                Previous
-              </Button>
-            )}
-            {saved && !answerDirty ? (
-              <Button
-                type="button"
-                block
-                className="sm:w-auto"
-                aria-label={hasNext ? "Next question" : "Review application"}
-                disabled={busy}
-                onClick={() => hasNext ? navigate(onNext) : onReviewApplication()}
-              >
-                {hasNext ? "Next question" : "Review application"}
-              </Button>
-            ) : (
-              <Button type="submit" block className="sm:w-auto" disabled={busy || answerBlocked}>
-                {busy ? <PendingLabel onColor>Saving...</PendingLabel> : actionLabel}
-              </Button>
-            )}
-          </div>
-          <p className="mt-3 text-label leading-5 text-muted">Nothing goes to the employer until you review the completed application.</p>
+          <TerminalActionBar className="!fixed inset-x-4 !bottom-[calc(var(--dashboard-bottom-bar)+0.75rem)] !z-40 mt-6 justify-end sm:inset-x-6 lg:!static lg:!inset-auto lg:!bottom-auto lg:!z-20 lg:shadow-none">
+            <div className={`grid w-full gap-2 ${hasPrevious ? "grid-cols-[auto_minmax(0,1fr)]" : "grid-cols-1"} sm:flex sm:w-auto sm:items-center`}>
+              {hasPrevious && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  aria-label="Previous question"
+                  disabled={busy}
+                  onClick={() => navigate(onPrevious)}
+                >
+                  Previous
+                </Button>
+              )}
+              {saved && !answerDirty ? (
+                <Button
+                  type="button"
+                  block
+                  className="sm:w-auto"
+                  aria-label={hasNext ? "Next question" : "Review application"}
+                  disabled={busy}
+                  onClick={() => hasNext ? navigate(onNext) : onReviewApplication()}
+                >
+                  {navigating ? <PendingLabel onColor>Opening next question</PendingLabel> : hasNext ? "Next question" : "Review application"}
+                </Button>
+              ) : (
+                <Button type="submit" block className="sm:w-auto" disabled={busy || answerBlocked}>
+                  {saving || submitting ? <PendingLabel onColor>Saving...</PendingLabel> : actionLabel}
+                </Button>
+              )}
+            </div>
+            <p className="basis-full text-label leading-5 text-muted">Nothing goes to the employer until you review the completed application.</p>
+          </TerminalActionBar>
         </form>
       </section>
     </MotionPanel>

@@ -147,8 +147,8 @@ test("Free filling uses canonical application seams and never generation", async
   assert.doesNotMatch(bridge.slice(bridge.indexOf("export async function startFreeFillThroughExtension"), bridge.indexOf("export async function armHandoffs")), /fill_data_url/);
   assert.doesNotMatch(applications, /Factual fields prepared/);
   assert.match(applications, /Click Fill in the Litos extension card/);
-  assert.match(applications, /variant="secondary"[\s\S]*onClick=\{\(event\) => onTailor\(event\.currentTarget\)\}[\s\S]*"Tailor resume"/);
-  assert.match(applications, /onClick=\{onFill\}[\s\S]*"Fill application"/);
+  assert.match(applications, /variant="secondary"[\s\S]*onClick=\{\(event\) => onTailor\(event\.currentTarget\)\}[\s\S]*"Tailor resume first"/);
+  assert.match(applications, /onClick=\{onFill\}[\s\S]*"Open and fill employer form"/);
   const routedJob = applications.slice(
     applications.indexOf("if (!pendingJob || packets === null) return;"),
     applications.indexOf("/* Fail closed during query-only navigation."),

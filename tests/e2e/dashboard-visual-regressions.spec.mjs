@@ -273,6 +273,44 @@ const DIRECT_ANSWER_SUBMISSION = {
   cover_letter: null,
 };
 
+const CONTEXT_QUESTION_REVIEW = {
+  ...DIRECT_ANSWER_PACKET.spec._review,
+  attention_reason: '"If you selected a response to the prior question, explain." is required and is still empty',
+  questions: [{
+    id: "direct-sanctions-parent",
+    question: "Please confirm whether any sanctions category applies to you.",
+    answer: "None of the above",
+    kind: "required",
+    required: true,
+    portal_input_type: "select-one",
+    portal_selector: "#sanctions",
+    options: ["A listed category applies", "None of the above"],
+  }, {
+    id: "direct-sanctions-follow-up",
+    question: "If you selected a response to the prior question, explain.",
+    answer: "",
+    kind: "required",
+    required: true,
+    portal_input_type: "text",
+    portal_selector: "#sanctions_follow_up",
+  }],
+};
+
+const CONTEXT_QUESTION_PACKET = {
+  ...DIRECT_ANSWER_PACKET,
+  id: "fixture-packet-context-question",
+  spec: {
+    ...DIRECT_ANSWER_PACKET.spec,
+    _review: CONTEXT_QUESTION_REVIEW,
+  },
+};
+
+const CONTEXT_QUESTION_SUBMISSION = {
+  application_id: CONTEXT_QUESTION_PACKET.id,
+  review: CONTEXT_QUESTION_REVIEW,
+  cover_letter: null,
+};
+
 const DIRECT_ANSWER_PACKET_B = {
   ...DIRECT_ANSWER_PACKET,
   id: "fixture-packet-direct-answer-b",
@@ -2634,6 +2672,67 @@ test("Application answers preserve drafts while moving backward and forward", as
   }
 });
 
+test("A saved context question advances on the first visit", async () => {
+  const { context, page, state } = await newDashboardPage({
+    viewport: { width: 390, height: 844 },
+    resumeHistoryFixture: [CONTEXT_QUESTION_PACKET],
+    submissionFixtures: { [CONTEXT_QUESTION_PACKET.id]: CONTEXT_QUESTION_SUBMISSION },
+  });
+  const parentQuestion = "Please confirm whether any sanctions category applies to you.";
+  const dependentQuestion = "If you selected a response to the prior question, explain.";
+  try {
+    await page.goto(`${ORIGIN}/dashboard/applications`, { waitUntil: "domcontentloaded" });
+    const row = page.locator(`button[data-application-row-id="${CONTEXT_QUESTION_PACKET.id}"]:visible`);
+    await row.waitFor({ state: "visible", timeout: 20_000 });
+    await row.click();
+
+    const parentHeading = page.getByRole("heading", { name: parentQuestion, exact: true });
+    await parentHeading.waitFor({ state: "visible", timeout: 10_000 });
+    assert.match(await parentHeading.locator("xpath=ancestor::section[1]").innerText(), /1 of 2/);
+
+    const next = page.getByRole("button", { name: "Next question", exact: true });
+    await next.click();
+
+    const dependentHeading = page.getByRole("heading", { name: dependentQuestion, exact: true });
+    await dependentHeading.waitFor({ state: "visible", timeout: 10_000 });
+    assert.match(await dependentHeading.locator("xpath=ancestor::section[1]").innerText(), /2 of 2/);
+    await page.waitForFunction(() => document.activeElement?.id === "direct-application-question-direct-sanctions-follow-up");
+    assert.equal(await parentHeading.count(), 0, "the saved parent remained visible after Next question");
+    assertNoPageErrors(state, "Saved context question navigation");
+  } finally {
+    await context.close();
+  }
+});
+
+test("The manual composer reveals requirements before an action can fail", async () => {
+  const { context, page, state } = await newDashboardPage({ viewport: { width: 390, height: 844 } });
+  try {
+    await page.goto(`${ORIGIN}/dashboard/applications?new=1&intent=fill`, { waitUntil: "domcontentloaded" });
+    await page.getByRole("heading", { name: "Fill an application.", exact: true }).waitFor({ state: "visible" });
+    const fill = page.getByRole("button", { name: "Open and fill employer form", exact: true });
+    const tailor = page.getByRole("button", { name: "Tailor resume first", exact: true });
+    assert.equal(await fill.isDisabled(), true, "the empty composer exposed an active fill action");
+    assert.equal(await tailor.isDisabled(), true, "the empty composer exposed an active tailoring action");
+    assert.equal(await page.getByLabel("Job description").count(), 0, "the optional tailoring field dominated the default mobile form");
+    await page.getByText("Company, role, and a complete HTTPS job URL unlock the employer form.", { exact: false }).waitFor({ state: "visible" });
+
+    await page.getByLabel("Company").fill("Fixture Systems");
+    await page.getByLabel("Role").fill("Product Engineering Intern");
+    await page.getByLabel("Job URL").fill("http://jobs.example.com/product-engineering-intern");
+    assert.equal(await fill.isDisabled(), true, "an insecure or incomplete URL unlocked the employer form");
+    await page.getByLabel("Job URL").fill("https://jobs.example.com/product-engineering-intern");
+    assert.equal(await fill.isEnabled(), true, "a complete manual application did not unlock filling");
+    assert.equal(await tailor.isDisabled(), true, "tailoring unlocked without a job description");
+
+    await page.getByRole("button", { name: "Add a job description to tailor first", exact: true }).click();
+    await page.getByLabel("Job description").fill(HOME_JOB_FIXTURE.description);
+    assert.equal(await tailor.isEnabled(), true, "a complete tailoring draft did not unlock tailoring");
+    assertNoPageErrors(state, "Manual application composer readiness");
+  } finally {
+    await context.close();
+  }
+});
+
 test("A poll that sees an accepted answer before its PUT response preserves two-question history", async () => {
   const { context, page, state } = await newDashboardPage({
     viewport: { width: 1280, height: 900 },
@@ -3739,8 +3838,9 @@ test("delayed resume denials restore focus after the initiating control changes"
     await applications.page.getByLabel("Company").fill("Focus Labs");
     await applications.page.getByLabel("Role").fill("Product Engineer Intern");
     await applications.page.getByLabel("Job URL").fill("https://jobs.example.com/focus-labs/product-engineer-intern");
+    await applications.page.getByRole("button", { name: "Add a job description to tailor first", exact: true }).click();
     await applications.page.getByLabel("Job description").fill(HOME_JOB_FIXTURE.description);
-    const tailor = applications.page.getByRole("button", { name: "Tailor resume", exact: true });
+    const tailor = applications.page.getByRole("button", { name: "Tailor resume first", exact: true });
     await tailor.evaluate((node) => node.setAttribute("data-focus-probe", "application-tailor-trigger"));
     const applicationDenial = applications.state.holdNextResumeGenerate(denial);
     await tailor.click();
