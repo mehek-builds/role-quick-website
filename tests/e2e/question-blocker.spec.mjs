@@ -102,8 +102,10 @@ await context.route((url) => !url.href.startsWith(ORIGIN), async (route) => {
 
 test.after(async () => {
   if (anyFailure) process.stderr.write(`\nquestion-blocker artifacts written to ${ARTIFACT_DIR}\n`);
-  await context.close();
-  await browser.close();
+  /* Guarded, because a crashed Chromium makes close() throw, and an unguarded first line here
+     would skip the kill and leak the next start process. Same shape as qa-guest-entry. */
+  await context.close().catch(() => {});
+  await browser.close().catch(() => {});
   server.kill("SIGTERM");
 });
 
@@ -192,7 +194,9 @@ function blockerTest(label, run) {
       await captureFailure(label, page, pageErrors, failure);
       throw failure;
     } finally {
-      await page.close();
+      /* Guarded: a throw out of a finally block REPLACES the propagating assertion error, so an
+         unguarded close here would report a teardown fault instead of the actual failure. */
+      await page.close().catch(() => {});
     }
   });
 }
