@@ -94,7 +94,10 @@ type OnboardingEvent =
      the question badly the first time. */
   | "onboarding_revisit_opened"
   | "onboarding_revisit_saved"
-  | "onboarding_build_claim_required";
+  | "onboarding_build_claim_required"
+  /* The build's entitlement paywall sent somebody to /pricing. A count here is an account whose
+     free setup build was gone, which for a fresh student should be nearly never. */
+  | "onboarding_build_upgrade_opened";
 
 type CoreEvent =
   | "authentication_completed"
