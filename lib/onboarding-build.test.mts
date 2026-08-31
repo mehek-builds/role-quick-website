@@ -44,11 +44,13 @@ const statusOf = (stages: BuildStage[], key: string) => stages.find((s) => s.key
 test("there are exactly three stages, because three things actually happen", () => {
   // Not five. POST /resume/generate does the writing and the layout behind one await, so there is
   // no event between them to drive a transition and showing two rows would be theatre.
-  assert.deepEqual(BUILD_STAGES.map((s) => s.key), ["posting", "resume", "questions"]);
+  // Questions before resume since 2026-09-01: the form read can refuse, generation costs a free
+  // build, and everything that can refuse runs before the one call that spends.
+  assert.deepEqual(BUILD_STAGES.map((s) => s.key), ["posting", "questions", "resume"]);
 });
 
 test("each stage carries a shipped orb state that matches the work", () => {
-  assert.deepEqual(BUILD_STAGES.map((s) => s.orb), ["working", "composing", "solving"]);
+  assert.deepEqual(BUILD_STAGES.map((s) => s.orb), ["working", "solving", "composing"]);
 });
 
 test("the first stage starts active and the rest wait", () => {
@@ -75,8 +77,8 @@ test("a stage is only ever done after its own call resolved", async () => {
   await new Promise((r) => setTimeout(r, 0));
   const midway = seen[seen.length - 1];
   assert.equal(statusOf(midway, "posting"), "done");
+  assert.equal(statusOf(midway, "questions"), "done");
   assert.equal(statusOf(midway, "resume"), "active", "the resume stage finished before generation did");
-  assert.equal(statusOf(midway, "questions"), "waiting");
 
   releaseGeneration(null);
   await run;
@@ -91,7 +93,7 @@ test("the stages are reported in order and never go backwards", async () => {
   const activeOrder = seen
     .map((stages) => stages.find((s) => s.status === "active")?.key)
     .filter(Boolean);
-  assert.deepEqual(activeOrder, ["posting", "resume", "questions"]);
+  assert.deepEqual(activeOrder, ["posting", "questions", "resume"]);
 });
 
 test("the result carries the real counts, not a rounded promise", async () => {
@@ -167,12 +169,13 @@ test("a failure marks the stage that broke, so the screen can say which", async 
   );
   const last = questions.seen[questions.seen.length - 1];
   assert.equal(statusOf(last, "questions"), "failed");
-  // And the work that DID succeed still reads as done rather than being reset by the failure.
-  assert.equal(statusOf(last, "resume"), "done");
+  /* The load-bearing half of the reorder: a form that could not be read fails BEFORE generation
+     has run, so nothing was spent on a flow that dies here. The resume stage never started. */
+  assert.equal(statusOf(last, "resume"), "waiting");
 });
 
 test("stagesAt marks everything before the named stage as done", () => {
-  const stages = stagesAt("questions", "active");
+  const stages = stagesAt("resume", "active");
   assert.deepEqual(stages.map((s) => s.status), ["done", "done", "active"]);
 });
 

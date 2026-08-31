@@ -33,6 +33,7 @@ import { MatchLegend, RequirementProvider, RequirementText } from "@/components/
 import { isStructuredUpgradeDenial } from "@/features/billing";
 import {
   BuildPreconditionError,
+  PostingReadError,
   buildActionLabel,
   initialStages,
   runOnboardingBuild,
@@ -88,7 +89,10 @@ export function BuildStep({
 }) {
   const [stages, setStages] = useState<BuildStage[]>(() => initialStages());
   const [result, setResult] = useState<BuildResult | null>(null);
-  const [error, setError] = useState<{ message: string; fixable: boolean; field: "full_name" | "resume_email" | null; entitlement: boolean } | null>(null);
+  const [error, setError] = useState<{ message: string; fixable: boolean; field: "full_name" | "resume_email" | null; entitlement: boolean; postingRead: boolean } | null>(null);
+  /* Bumped by "Read the form again". The scan stage runs before anything is spent, so re-running
+     the whole build after a scan failure costs nothing until the scan actually passes. */
+  const [attempt, setAttempt] = useState(0);
   const [posting, setPosting] = useState<MonitoredJob>(match.job);
   /* THE APPLICANT'S NAME, held here because ResumeSpec has no name field.
    *
@@ -143,7 +147,11 @@ export function BuildStep({
         loadQuestions: async (jobId) => {
           const prescript = await getPostingQuestions(jobId);
           if (prescript.discovery_status !== "ok" || prescriptMetadataBlockers(prescript).length > 0) {
-            throw new Error("Litos could not verify every employer question yet. Try reading the company form again.");
+            /* Typed, so the failure screen can offer the recovery this actually has: read the form
+               again (the stage runs before anything is spent now, so a retry costs nothing), or
+               pick another posting. The generic screen's copy blames the fit, which a scan failure
+               says nothing about. */
+            throw new PostingReadError("Litos could not verify every employer question yet. Try reading the company form again.");
           }
           return {
             total: prescript.question_count,
@@ -176,6 +184,7 @@ export function BuildStep({
            denial shape takes this branch, for the same reason the dashboard checks it: an
            unrelated 402 must not become an upsell. */
         const entitlement = isStructuredUpgradeDenial(reason, "ai_resume_tailoring");
+        const postingRead = reason instanceof PostingReadError;
         setError({
           message: reason instanceof Error ? reason.message : "Litos could not build this application.",
           fixable,
@@ -183,11 +192,15 @@ export function BuildStep({
              fixed in different places, and for a guest the email is not fixable in Account at all. */
           field: reason instanceof BuildPreconditionError ? reason.field : null,
           entitlement,
+          postingRead,
         });
-        track("onboarding_build_failed", { fixable, entitlement });
+        track("onboarding_build_failed", { fixable, entitlement, posting_read: postingRead });
       });
     return () => { cancelled = true; };
-  }, [match.job.id]);
+    /* `attempt` re-runs the whole sequence for "Read the form again". Safe by construction: every
+       stage that can refuse runs before the one that spends, so a retry only ever pays when it is
+       actually going to reach the questions screen. */
+  }, [match.job.id, attempt]);
 
   /* Score the built resume against the posting, once both exist. Separate from the build effect
      because it is decoration on top of a finished build, not a stage of it: a failure here must
@@ -237,6 +250,47 @@ export function BuildStep({
           <PrimaryButton onClick={() => { track("onboarding_build_upgrade_opened", {}); window.location.assign("/pricing"); }}>
             See Litos+ plans
           </PrimaryButton>
+          <LaterLink onClick={onLater} />
+        </div>
+      </StartShell>
+    );
+  }
+
+  /* A SCAN FAILURE IS ABOUT THE EMPLOYER'S PAGE, NOT THE STUDENT'S FIT. The generic screen below
+     says "this one is not a fit Litos can write honestly", which is the right sentence for a
+     resume-quality refusal and a falsehood for a form Litos could not read. This branch says what
+     happened and offers the recovery it actually has: the read runs before anything is spent, so
+     trying again is free, and a protected form that will never read (a Cloudflare-gated portal)
+     still has "Show me a different one" as the way on. */
+  if (error?.postingRead) {
+    return (
+      <StartShell step="build" title="That build did not finish.">
+        <ErrorNote message={error.message} />
+        <p className="mt-4 text-sm leading-6 text-muted">
+          Litos reads the employer&apos;s application form before writing anything, and this read
+          could not verify every question. That is about {posting.company_name}&apos;s page, not
+          about your fit. Reading it again often works; nothing was spent and nothing was lost.
+        </p>
+        <div className="mt-6 flex flex-wrap items-center gap-4">
+          <PrimaryButton
+            onClick={() => {
+              track("onboarding_build_form_reread", {});
+              setError(null);
+              setResult(null);
+              setJdMatch(null);
+              setStages(initialStages());
+              setAttempt((n) => n + 1);
+            }}
+          >
+            Read the form again
+          </PrimaryButton>
+          <button
+            type="button"
+            onClick={onPickAnother}
+            className="text-sm text-muted underline underline-offset-4 hover:text-ink"
+          >
+            Show me a different one
+          </button>
           <LaterLink onClick={onLater} />
         </div>
       </StartShell>

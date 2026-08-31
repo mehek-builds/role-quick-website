@@ -26,12 +26,16 @@ test("an entitlement denial is recognised by its structured shape, for the build
 test("the paywall branch renders before the generic failure and offers no posting loop", async () => {
   const build = await read("components/start/BuildStep.tsx");
   const entitlementAt = build.indexOf("if (error?.entitlement)");
-  const genericAt = build.indexOf('title="That build did not finish."');
+  const genericAt = build.indexOf('this one is not a fit');
   assert.ok(entitlementAt !== -1, "the entitlement branch is gone");
   assert.ok(genericAt !== -1, "the generic failure branch is gone");
   assert.ok(entitlementAt < genericAt, "the generic branch shadows the entitlement branch");
 
-  const branch = build.slice(entitlementAt, genericAt);
+  /* The slice ends at the entitlement branch's own closing, found as the next branch's opening
+     comment (the posting-read screen sits between this branch and the generic one now), so this
+     asserts the entitlement branch alone rather than its neighbours' prose. */
+  const branchEnd = build.indexOf("A SCAN FAILURE IS ABOUT", entitlementAt);
+  const branch = build.slice(entitlementAt, branchEnd === -1 ? genericAt : branchEnd);
   /* The honest forward control is the plans page, where the ask already lives (the
      paywall-sequence decision keeps it on /pricing). Never another posting: the refusal is about
      the account, so every posting refuses identically. */

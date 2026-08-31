@@ -32,11 +32,27 @@ export type BuildStage = {
   status: BuildStageStatus;
 };
 
+/* QUESTIONS BEFORE THE RESUME, and the order is load-bearing rather than cosmetic (2026-09-01).
+   The questions stage is a live read of the employer's form, and it can fail: a protected page, a
+   slow ATS, a scan that could not verify every field. When it ran AFTER generation, that failure
+   arrived with the student's free build already spent on a flow that then died, which is exactly
+   the "discovering it after a reservation has been taken" waste the precondition comment below
+   names. Everything that can refuse now runs before the one call that costs anything. */
 export const BUILD_STAGES: readonly { key: BuildStageKey; label: string; orb: BuildStage["orb"] }[] = [
   { key: "posting", label: "Reading the posting", orb: "working" },
+  { key: "questions", label: "Reading the employer's application", orb: "solving" },
   { key: "resume", label: "Writing your one page for it", orb: "composing" },
-  { key: "questions", label: "Answering the application", orb: "solving" },
 ];
+
+/** Thrown when the employer's form could not be fully read. Its own class so the screen can offer
+ *  the honest recovery (read it again, or pick another posting) instead of the generic failure,
+ *  which blames the fit. A scan failure says nothing about the student. */
+export class PostingReadError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PostingReadError";
+  }
+}
 
 export type BuildResult = {
   /** The canonical application POST /resume/generate created or linked. The review screen submits
@@ -147,11 +163,27 @@ export async function runOnboardingBuild(
     throw reason;
   }
 
+  /* THE EMPLOYER'S FORM IS READ BEFORE ANYTHING IS SPENT. This stage can genuinely fail (a
+     protected page, a scan that could not verify every field), and when it ran after generation
+     that failure arrived with the free build already consumed by a flow that then died on this
+     screen (measured live 2026-09-01). Failing here costs nothing, and the scan it did complete
+     is cached server-side, so the retry the failure screen offers is cheap. */
+  onStages(stagesAt("questions", "active"));
+  let questions: Awaited<ReturnType<BuildDeps["loadQuestions"]>>;
+  try {
+    questions = await deps.loadQuestions(jobId);
+  } catch (reason) {
+    fail("questions");
+    throw reason;
+  }
+
   /* Checked HERE, before the expensive call, and named by field.
      Generation rejects a missing name or resume email from deep inside the resume engine, and that
      error reaches a student as a failed build rather than as the one-line fix it actually is. It
      also costs nothing to check first, whereas discovering it after a reservation has been taken
-     spends a trial generation on a request that could never have succeeded. */
+     spends a trial generation on a request that could never have succeeded. Sits after the
+     questions stage so its failure marking is truthful: everything before "resume" really did
+     finish. */
   if (!identity.fullName?.trim()) {
     fail("resume");
     throw new BuildPreconditionError("full_name", "Your resume did not give us a name to put on the page.");
@@ -174,15 +206,6 @@ export async function runOnboardingBuild(
     });
   } catch (reason) {
     fail("resume");
-    throw reason;
-  }
-
-  onStages(stagesAt("questions", "active"));
-  let questions: Awaited<ReturnType<BuildDeps["loadQuestions"]>>;
-  try {
-    questions = await deps.loadQuestions(jobId);
-  } catch (reason) {
-    fail("questions");
     throw reason;
   }
 
