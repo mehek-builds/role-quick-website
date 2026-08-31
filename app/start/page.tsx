@@ -670,10 +670,12 @@ export default function Start() {
                 if (cameBack) { track("onboarding_revisit_saved", { step: "resume" }); setRevisiting(null); }
                 /* A refresh that still serves "resume" did not advance, whatever the requests said.
                    Reporting it as an advance would leave the auto-advancing upload on a spinner
-                   forever, because the screen it is waiting to be unmounted by never changes. A
-                   revisit is the exception: it returns to the step the student came from, which the
-                   cleared override restores on its own. */
-                return cameBack || s.step !== "resume";
+                   forever, because the screen it is waiting to be unmounted by never changes. This
+                   check is what the return value MEANS, so it has no revisit exception: a revisit
+                   normally returns to the later step the student came from, but if the server
+                   re-parked the account on "resume" in the meantime (a replay enrollment, a ledger
+                   reset), that return lands right back here and must say so. */
+                return s.step !== "resume";
               })().catch((reason) => {
                 setError(reason instanceof Error ? reason.message : "Could not continue.");
                 return false;
