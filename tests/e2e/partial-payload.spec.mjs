@@ -392,7 +392,21 @@ test("a throw the parse boundary does NOT cover is still contained to its band",
    * AGAINST origin/main: the route boundary fired and the whole of /dashboard/applications was
    * replaced by "This page did not load."
    */
-  stub = { ...BASE_STUB, "/applications/board": { stages: ["applied", "interview", "offer"], cards: [null, null] } };
+  /* The payload moved once, and the case's subject did not.
+
+     `cards: [null, null]` used to reach render and throw on `c.stage`. The submission-authority
+     gate now rejects a null card inside fetchBoard, where the Board's own catch turns it into the
+     HANDLED board error, so nulls stopped exercising the boundary. The residual class the gate
+     deliberately does not cover is a card whose AUTHORITY is exact but whose display fields have
+     drifted in type: authority is validated field by field, `role` and `company` are not. React
+     throws on an object rendered as a child, so `role: {}` on an otherwise valid card is the same
+     genuine residual the nulls used to be: it passes every check in front of render and dies
+     inside it, which is precisely what SectionBoundary exists to contain. */
+  const throwingCard = {
+    ...GOOD_BOARD.cards[0],
+    role: {},
+  };
+  stub = { ...BASE_STUB, "/applications/board": { ...GOOD_BOARD, cards: [throwingCard] } };
   const page = await openPage("/dashboard/applications");
 
   /* The band's own fallback, from components/app/SectionBoundary.tsx, not the route boundary's. */

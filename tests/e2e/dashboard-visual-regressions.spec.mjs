@@ -3950,7 +3950,14 @@ test("delayed resume denials restore focus after the initiating control changes"
       return closeRect.left > dialogRect.left + dialogRect.width * 0.75;
     });
     /* The page behind the dialog, not just the dialog. This capture is full-page, and the
-       Applications list under it kept arriving after the dialog had settled. */
+       Applications list under it kept arriving after the dialog had settled.
+
+       The bistable part was the AppliedToday counter. It renders null until its count fetch
+       resolves, and whether that fetch beat the capture decided between two STABLE layouts about
+       120px apart, which is why two runs at one commit produced exactly the same 35,738-pixel
+       diff again and again: the page always settled, on one of two sides of the race. A stability
+       wait cannot pick a side; only waiting for the terminal state can. */
+    await applications.page.getByText("applied today").first().waitFor({ state: "visible", timeout: 15_000 });
     await waitForStableContent(applications.page.locator("main").first(), "Applications delayed-denial page behind the dialog");
     await capturePass(applications.page, "applications-delayed-denial-upgrade");
     await applicationUpgrade.getByRole("button", { name: "Close Litos+ options" }).click();
