@@ -151,10 +151,33 @@ const LOCKED_BILLING_STATE_FIXTURE = {
   },
 };
 
+const APPLICATION_PACKET_ID = "d6693be1-9d1d-4f61-9911-8d95f1ad1b01";
+const APPLICATION_PACKET_ATTEMPT_ID = "b6693be1-9d1d-4f61-9911-8d95f1ad1b01";
+const APPLICATION_PACKET_CANONICAL_ID = "c6693be1-9d1d-4f61-9911-8d95f1ad1b01";
+const APPLICATION_PACKET_CAPTURED_AT = "2026-07-21T12:05:00.000Z";
+const APPLICATION_PACKET_SUBMISSION_PROJECTION = {
+  state: "confirmed",
+  attempt_id: APPLICATION_PACKET_ATTEMPT_ID,
+  canonical_application_id: APPLICATION_PACKET_CANONICAL_ID,
+  packet_id: APPLICATION_PACKET_ID,
+  submitted_at: APPLICATION_PACKET_CAPTURED_AT,
+  receipt: {
+    confirmation_text: "Application received",
+    final_url: "https://jobs.example.test/applications/received",
+    captured_at: APPLICATION_PACKET_CAPTURED_AT,
+    source: "managed_browser",
+  },
+  source: "managed_browser",
+  tracker_stage: "applied",
+};
+
 const APPLICATION_PACKET_BOARD_FIXTURE = {
+  schema_version: "submission-authority-v1",
+  submission_authority_revision: "4",
+  build_revision: "dashboard-visual-fixture",
   stages: ["applied", "interview", "offer"],
   cards: [{
-    id: "d6693be1-9d1d-4f61-9911-8d95f1ad1b01",
+    id: APPLICATION_PACKET_ID,
     job_id: null,
     company: "Acme Labs",
     role: "Product Engineer",
@@ -162,8 +185,32 @@ const APPLICATION_PACKET_BOARD_FIXTURE = {
     moved_at: "2026-07-21T12:00:00.000Z",
     reviewable: true,
     submission_status: "questions_ready",
+    submission_projection: APPLICATION_PACKET_SUBMISSION_PROJECTION,
+    submission_authority: {
+      schema_version: "submission-authority-v1",
+      revision: "4",
+      state: "confirmed",
+      application_id: APPLICATION_PACKET_ID,
+      packet_id: APPLICATION_PACKET_ID,
+      projection: APPLICATION_PACKET_SUBMISSION_PROJECTION,
+      retry_safety: {
+        kind: "blocked_confirmed",
+        attemptId: APPLICATION_PACKET_ATTEMPT_ID,
+        confirmedAt: APPLICATION_PACKET_CAPTURED_AT,
+      },
+    },
     stage: "applied",
   }],
+};
+
+const APPLICATION_PACKET = {
+  ...RESUMES[0],
+  id: APPLICATION_PACKET_BOARD_FIXTURE.cards[0].id,
+  job_context: {
+    ...RESUMES[0].job_context,
+    company: APPLICATION_PACKET_BOARD_FIXTURE.cards[0].company,
+    role: APPLICATION_PACKET_BOARD_FIXTURE.cards[0].role,
+  },
 };
 
 const TRANSCRIPT_PACKET = {
@@ -1637,7 +1684,7 @@ test("hand-built application overlays retain an inert exit and restore their exa
   const { context, page, state } = await newDashboardPage({
     viewport: { width: 1280, height: 900 },
     boardFixture: APPLICATION_PACKET_BOARD_FIXTURE,
-    resumeHistoryFixture: [TRANSCRIPT_PACKET, OFFICIAL_TRANSCRIPT_PACKET],
+    resumeHistoryFixture: [APPLICATION_PACKET, TRANSCRIPT_PACKET, OFFICIAL_TRANSCRIPT_PACKET],
     submissionFixtures: {
       [TRANSCRIPT_PACKET.id]: {
         application_id: TRANSCRIPT_PACKET.id,
@@ -1661,7 +1708,16 @@ test("hand-built application overlays retain an inert exit and restore their exa
     const packetTrigger = page.getByRole("button", {
       name: /See the application built for Product Engineer at Acme Labs/,
     });
-    await packetTrigger.waitFor({ state: "visible" });
+    await packetTrigger.waitFor({ state: "visible" }).catch(async (reason) => {
+      const diagnostic = await page.evaluate(() => ({
+        url: location.href,
+        buttons: [...document.querySelectorAll("button")]
+          .map((button) => button.getAttribute("aria-label") ?? button.textContent?.trim())
+          .filter(Boolean),
+        mainText: document.querySelector("main")?.textContent?.trim().slice(0, 2_000),
+      }));
+      assert.fail(`Application packet trigger did not render: ${reason.message}\n${JSON.stringify(diagnostic)}`);
+    });
     await packetTrigger.evaluate((node) => node.setAttribute("data-focus-probe", "application-packet-trigger"));
     const packetTriggerPoint = await packetTrigger.evaluate((node) => {
       const rect = node.getBoundingClientRect();
@@ -1963,6 +2019,7 @@ test("reduced motion closes hand-built and native overlays without retained anim
     viewport: { width: 1280, height: 900 },
     reducedMotion: "reduce",
     boardFixture: APPLICATION_PACKET_BOARD_FIXTURE,
+    resumeHistoryFixture: [APPLICATION_PACKET],
   });
   try {
     await page.goto(`${QA_ORIGIN}/dashboard/applications?qa=1`, { waitUntil: "domcontentloaded" });
@@ -2714,7 +2771,7 @@ test("The manual composer reveals requirements before an action can fail", async
     assert.equal(await fill.isDisabled(), true, "the empty composer exposed an active fill action");
     assert.equal(await tailor.isDisabled(), true, "the empty composer exposed an active tailoring action");
     assert.equal(await page.getByLabel("Job description").count(), 0, "the optional tailoring field dominated the default mobile form");
-    await page.getByText("Company, role, and a complete HTTPS job URL unlock the employer form.", { exact: false }).waitFor({ state: "visible" });
+    await page.getByText("Company, role, and a complete HTTPS job URL unlock the extension fallback.", { exact: false }).waitFor({ state: "visible" });
 
     await page.getByLabel("Company").fill("Fixture Systems");
     await page.getByLabel("Role").fill("Product Engineering Intern");
