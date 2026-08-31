@@ -13,6 +13,8 @@ type PrescriptQuestion = {
   question: string;
   input_type: string;
   options: string[] | null;
+  options_complete?: boolean;
+  optionsComplete?: boolean;
   required: boolean;
   max_length: number | null;
   answer: string;
@@ -23,8 +25,19 @@ type PrescriptQuestion = {
 };
 
 type Prescript = {
+  discovery_status?: "ok" | "metadata_incomplete" | "form_not_reached" | "failed";
+  metadata_blockers?: PrescriptMetadataBlocker[];
   ask: PrescriptQuestion[];
   already_answered: number;
+};
+
+type PrescriptMetadataBlocker = {
+  kind: "missing_question_text" | "missing_exact_options" | "unsupported_multi_value" | "ambiguous_question_identity";
+  required: boolean;
+  portal_input_type: string;
+  control_id?: string;
+  portal_selector?: string;
+  question?: string;
 };
 
 type EditableQuestion = {
@@ -34,9 +47,12 @@ type EditableQuestion = {
   kind: "essay" | "required";
   required: boolean;
   options?: string[] | null;
+  options_complete?: boolean;
+  optionsComplete?: boolean;
   portal_input_type?: string;
   explanation?: string;
   remembered?: boolean;
+  answer_state?: "unanswered" | "skipped" | "litos_refused";
 };
 
 /**
@@ -79,9 +95,14 @@ export function prescriptEditableQuestions(prescript: Prescript | null | undefin
       kind: "required",
       required: item.required !== false,
       options: item.options && item.options.length > 0 ? item.options : null,
+      options_complete: item.options_complete,
+      optionsComplete: item.optionsComplete,
       portal_input_type: item.input_type,
       explanation: item.explanation,
       remembered: item.remembered === true,
+      ...(!item.required && !(item.answer ?? "").trim()
+        ? { answer_state: "unanswered" as const }
+        : {}),
     });
   }
   return out;
@@ -106,7 +127,20 @@ export function prescriptSummary(prescript: Prescript | null | undefined): strin
   return `Litos already has ${filled} for this form. There ${asked === 1 ? "is" : "are"} ${question} only you can answer.`;
 }
 
-/** Whether the Apply flow should stop and ask before it builds anything. */
+/** Metadata that must be read exactly before the Apply flow may continue. */
+export function prescriptMetadataBlockers(
+  prescript: Prescript | null | undefined,
+): PrescriptMetadataBlocker[] {
+  return Array.isArray(prescript?.metadata_blockers) ? prescript.metadata_blockers : [];
+}
+
+/** Whether lookahead has an incomplete employer-form read. */
+export function prescriptBlocksProgress(prescript: Prescript | null | undefined): boolean {
+  if (!prescript) return false;
+  return prescript.discovery_status !== "ok" || prescriptMetadataBlockers(prescript).length > 0;
+}
+
+/** Whether the Apply flow should stop for an answer or an incomplete employer-form read. */
 export function prescriptNeedsHer(prescript: Prescript | null | undefined): boolean {
-  return (prescript?.ask?.length ?? 0) > 0;
+  return (prescript?.ask?.length ?? 0) > 0 || prescriptBlocksProgress(prescript);
 }

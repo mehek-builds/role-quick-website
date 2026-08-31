@@ -68,7 +68,7 @@ describe("a review's declared lists are made real before anything reads them", (
     const start = applications.indexOf("const refreshSubmission = useCallback");
     assert.notEqual(start, -1);
     const body = applications.slice(start, applications.indexOf("}, [", start));
-    assert.match(body, /reviewWithLists\(raw\.review\)/, "the polled review has to be normalised while it is still in hand");
+    assert.match(body, /submissionResponseForDisplay\(raw, \{ packetId: requestedId \}\)/, "the polled review has to be authority-normalised while it is still in hand");
   });
 
   test("the normaliser defaults lists and only lists", () => {

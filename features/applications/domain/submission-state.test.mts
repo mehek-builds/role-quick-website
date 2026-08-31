@@ -119,6 +119,23 @@ test("handoff_url and configured are versioned by nothing, so they are compared 
   assert.equal(nextSubmissionState(fromServer, { ...fromServer, configured: false }).configured, false);
 });
 
+test("an authority-only revision is installed even when the mutable review clock does not move", () => {
+  const current: SubmissionSnapshot = {
+    ...fromServer,
+    submission_authority: { schema_version: "submission-authority-v1", revision: "7" },
+    submission_projection: { state: "none" },
+    retry_safety: { kind: "no_evidence" },
+  };
+  const incoming: SubmissionSnapshot = {
+    ...current,
+    submission_authority: { schema_version: "submission-authority-v1", revision: "8" },
+    submission_projection: { state: "unverified", attempt_id: "attempt-8" },
+    retry_safety: { kind: "blocked_unverified", attemptId: "attempt-8" },
+  };
+
+  assert.equal(nextSubmissionState(current, incoming), incoming);
+});
+
 /* THE SAME DEFECT AS THE COVER LETTER, IN THE FIELD ADDED AFTER IT.
  *
  * `documents` lives outside `review`, so nothing advances `review.updated_at` when a transcript is

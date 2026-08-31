@@ -60,13 +60,13 @@ test("the metadata recovery action is explicit, accessible, and stays beside its
 });
 
 test("unsaved edits cannot ride a metadata refresh and the refresh is the blocker screen primary", () => {
-  assert.match(PAGE, /metadataRefreshDisabled=\{questionEditsUnsaved\}/);
+  assert.match(PAGE, /metadataRefreshDisabled=\{prescriptLookaheadIssue \? false : questionEditsUnsaved\}/);
   assert.match(PAGE, /currentQuestionsSnapshot !== packetQuestionsSnapshot\(selectedSubmission\.review\.questions\)/);
 
   const screen = functionBody(PAGE, "function QuestionsScreen(");
   assert.match(screen, /Save or go Back to discard your edits before refreshing\./);
   assert.match(screen, /Unsaved edits on this page are not used\./);
-  assert.match(screen, /variant=\{requiredMetadataBlocked \? "secondary" : "primary"\}/,
+  assert.match(screen, /variant=\{continuationBlocked \? "secondary" : "primary"\}/,
     "saving partial answers must not visually outrank the action that can clear the blocker");
   assert.match(screen, /disabled=\{saving \|\| refreshingMetadata/,
     "answer save and metadata refresh must not race");
@@ -109,7 +109,8 @@ test("review creates evidence and then starts the scoped employer metadata read"
 });
 
 test("metadata-only eligibility is recalculated from the current audited question snapshot", () => {
-  assert.match(PAGE, /const canRefreshRequiredMetadataFromReview = requiredQuestionReviewRoute\([\s\S]*?questions,[\s\S]*?selectedSubmission\?\.review\.question_metadata_blockers \?\? \[\],[\s\S]*?\)\.kind === "metadata_refresh"/);
+  assert.match(PAGE, /const activeQuestionMetadataBlockers = \[[\s\S]*?selectedSubmission\?\.review\.question_metadata_blockers \?\? \[\][\s\S]*?prescriptMetadata/);
+  assert.match(PAGE, /const canRefreshRequiredMetadataFromReview = requiredQuestionReviewRoute\([\s\S]*?questions,[\s\S]*?activeQuestionMetadataBlockers,[\s\S]*?\)\.kind === "metadata_refresh"/);
   assert.match(PAGE, /const auditedQuestions = Array\.isArray\(response\.questions\) \? response\.questions : questions;[\s\S]*?setQuestions\(auditedQuestions\)/,
     "packet-audit questions must publish before review can recompute the special action");
 });

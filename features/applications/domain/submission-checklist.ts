@@ -173,6 +173,7 @@ export function directQuestionTaskFingerprint(task: DirectQuestionTask): string 
     directQuestionPromptFingerprint(task),
     task.intent,
     task.question.answer,
+    task.question.answer_state ?? null,
     task.question.answer_source ?? null,
     task.question.answer_reviewed_at ?? null,
   ]);
@@ -802,7 +803,7 @@ function applicantConfirmedAnswer(
 }
 
 export function humanInputItems(
-  review: Pick<ApplicationReview, "attention_reason" | "attention_categories" | "attention_acknowledgements" | "cover_letter_supported" | "filled_fields" | "questions" | "questions_reviewed_at" | "required_documents" | "transcript_supported" | "stall" | "status">,
+  review: Pick<ApplicationReview, "attention_reason" | "attention_categories" | "attention_acknowledgements" | "cover_letter_supported" | "filled_fields" | "questions" | "question_metadata_blockers" | "questions_reviewed_at" | "required_documents" | "transcript_supported" | "stall" | "status">,
   /* The employer, the role, and what the application already carries. None of the three is on the
      review: the first two live on the packet's job_context and the third on the submission envelope,
      so the caller supplies them. Optional, and every default is the honest one: with no company the
@@ -848,6 +849,10 @@ export function humanInputItems(
   }
 
   const emptySubjects = emptyFieldSubjects(blockers);
+  const presentedQuestions = new Map(questionReviewPresentation(
+    review.questions ?? [],
+    review.question_metadata_blockers ?? [],
+  ).editableQuestions.map((question) => [question.id, question]));
 
   for (const blocker of blockers) {
     if (blockerDuplicatesQuestion(blocker, review.questions)) continue;
@@ -870,7 +875,8 @@ export function humanInputItems(
     });
   }
 
-  for (const question of review.questions ?? []) {
+  for (const storedQuestion of review.questions ?? []) {
+    const question = presentedQuestions.get(storedQuestion.id) ?? storedQuestion;
     if (review.cover_letter_supported === false && isCoverLetterFieldLabel(question.question)) continue;
     const answer = (question.answer ?? "").trim();
     if (question.required && !answer) {
@@ -885,6 +891,20 @@ export function humanInputItems(
            instead of naming a box she has to guess the wording for. A blank answer to a closed
            list is exactly the shape this exists for: she typed "Yes" into an acknowledgement whose
            only option was a sentence, and the fill failed silently. */
+        ...(question.options && question.options.length > 0 && question.options.length <= QUESTION_CHOICE_LIST_LIMIT
+          ? { options: question.options }
+          : {}),
+      });
+      continue;
+    }
+    if (!question.required && !answer && question.answer_state !== "skipped") {
+      addUnique(items, {
+        id: `optional-${question.id}`,
+        label: displayQuestionLabel(question.question),
+        detail: "Optional, answer or skip",
+        action: "Answer",
+        actionKind: "answer",
+        questionId: question.id,
         ...(question.options && question.options.length > 0 && question.options.length <= QUESTION_CHOICE_LIST_LIMIT
           ? { options: question.options }
           : {}),

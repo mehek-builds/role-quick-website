@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { activeBoardStages, boardCoverage, boardCoverageNote, boardStageReconciliationNote, fetchBoard, moveCard, pipelineCoverage, type BoardCard, type Stage } from "@/features/applications";
+import { activeBoardStages, boardCardRequiresSubmissionReview, boardCoverage, boardCoverageNote, boardStageReconciliationNote, fetchBoard, moveCard, pipelineCoverage, publicBoardCard, submissionProjectionIsConfirmed, submissionProjectionNeedsRepair, type BoardCard, type Stage } from "@/features/applications";
 import { userFacingError } from "@/lib/user-facing-error";
 
 /**
@@ -60,7 +60,12 @@ const STAGE_TONE: Record<Stage, { dot: string; text: string; soft: string; borde
   closed: { dot: "bg-faint", text: "text-muted", soft: "bg-surface-alt", border: "border-l-border" },
 };
 
-function submissionLabel(status: string): string {
+function submissionLabel(card: BoardCard): string {
+  const identity = { packetId: card.id };
+  if (submissionProjectionIsConfirmed(card.submission_projection, identity)) return "Sent";
+  if (submissionProjectionNeedsRepair(card.submission_projection, identity)) return "Receipt needs review";
+  if (card.submission_projection?.state === "unverified") return "Needs you";
+  const status = card.submission_status ?? "";
   if (status === "submitted") return "Sent";
   if (["needs_attention", "ready_for_final_approval", "failed"].includes(status)) return "Needs you";
   if (["submit_requested", "preparing", "filling", "submitting", "submission_claimed"].includes(status)) return "Getting ready";
@@ -109,7 +114,7 @@ export function Board({
     fetchBoard()
       .then((b) => {
         if (cancelled) return;
-        setCards(b.cards);
+        setCards(b.cards.map(publicBoardCard));
         setStages(b.stages);
         setFailed(false);
       })
@@ -184,6 +189,8 @@ export function Board({
     Boolean(onRevisit) && (revisitableIds === undefined ? openable(card) : revisitableIds.has(card.id));
 
   const visibleStages = activeBoardStages(stages);
+  const authorityReviewCards = (cards ?? []).filter(boardCardRequiresSubmissionReview);
+  const ordinaryCards = (cards ?? []).filter((card) => !boardCardRequiresSubmissionReview(card));
   /* What has not been sent, in a sentence.
      Counted off the LEDGER's inventory when the page supplies one, so this sentence and the list
      header directly above it are one number. It used to count `cards` - this board's own
@@ -192,7 +199,7 @@ export function Board({
      not been sent yet". Falls back to the card count when no inventory is passed, which is the
      shape the QA harness renders. */
   const coverageNote = cards
-    ? boardCoverageNote(inventory ? pipelineCoverage(inventory) : boardCoverage(cards, visibleStages))
+    ? boardCoverageNote(inventory ? pipelineCoverage(inventory) : boardCoverage(ordinaryCards, visibleStages))
     : null;
   /* Applied is a STAGE, and the student can move a card into it herself. When that has happened,
      its count is legitimately larger than the number Litos sent, and the board says which is which
@@ -219,6 +226,29 @@ export function Board({
         <p role="status" className="mb-3 rounded-inner bg-warn-soft px-4 py-2.5 text-[13px] text-warn">
           {moveError}
         </p>
+      )}
+      {authorityReviewCards.length > 0 && (
+        <section className="mb-4 rounded-card border border-warn/30 bg-warn-soft p-3" aria-labelledby="board-submission-review-heading">
+          <h3 id="board-submission-review-heading" className="text-[13px] font-medium text-warn">Submission evidence needs review</h3>
+          <p className="mt-1 text-xs leading-5 text-warn">
+            These applications stay blocked from another send until Litos can verify the exact receipt.
+          </p>
+          <ul className="mt-2 space-y-2">
+            {authorityReviewCards.map((card) => (
+              <li key={card.id} className="flex items-center justify-between gap-3 rounded-inner border border-warn/20 bg-surface px-3 py-2">
+                <div className="min-w-0">
+                  <p className="truncate text-[13px] font-medium text-ink">{card.role}</p>
+                  <p className="truncate text-xs text-muted">{card.company} · {submissionLabel(card)}</p>
+                </div>
+                {openable(card) && (
+                  <button type="button" onClick={() => onOpen?.(card.id)} className="shrink-0 text-xs font-medium text-brand-ink underline underline-offset-2">
+                    Review
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
       {/* WHAT THE COLUMNS ARE NOT SHOWING, above them rather than below, because it is the first
           thing true of this board on most accounts: nothing has been sent, so every card derives
@@ -284,7 +314,9 @@ export function Board({
                       which is the question a board is looked at to answer. */}
                   <p className="mt-1 text-[11px] text-muted">
                     {relativeTime(card.moved_at ?? card.created_at)}
-                    {card.submission_status ? ` · Litos: ${submissionLabel(card.submission_status)}` : ""}
+                    {card.submission_status || card.submission_projection
+                      ? ` · Litos: ${submissionLabel(card)}`
+                      : ""}
                   </p>
                   {/* The move control keeps its right edge clear so the packet mark can sit in the
                       actual corner rather than above it. Visible below md, where the mobile tab bar

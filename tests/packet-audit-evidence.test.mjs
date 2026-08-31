@@ -282,8 +282,8 @@ test("prepare and poll responses hydrate the generated cover letter into review 
   const prepare = source.slice(prepareStart, prepareEnd);
 
   assert.match(source, /function packetWithSubmission\(packet: GeneratedResume, submission: SubmissionResponse\)/);
-  assert.match(source, /submissionReviewPacketIdentity\(packet\.spec\._review\) === submissionReviewPacketIdentity\(submission\.review\)/);
-  assert.match(source, /const nextCoverLetter = nextCoverLetterValue\(packet\.spec\._cover_letter, submission\)/);
+  assert.match(source, /submissionReviewPacketIdentity\(packet\.spec\._review\) === submissionReviewPacketIdentity\(displaySubmission\.review\)/);
+  assert.match(source, /const nextCoverLetter = nextCoverLetterValue\(packet\.spec\._cover_letter, displaySubmission\)/);
   assert.match(source, /_cover_letter: nextCoverLetter/);
   assert.match(source, /coverLetterField\.included && !coverLetterField\.value[\s\S]{0,100}\? undefined/);
   assert.match(poll, /const incomingCoverLetter = submissionCoverLetterField\(result\)/);

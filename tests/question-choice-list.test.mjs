@@ -30,7 +30,8 @@ test("a short closed list renders as the employer's own choices, and picking one
   assert.match(screen, /role="radiogroup"[\s\S]{0,200}?data-choice-list/);
   assert.match(screen, /<div id=\{`question-\$\{question\.id\}`\} role="radiogroup"/);
   // The chosen option's own text becomes the answer, byte for byte.
-  assert.match(screen, /onChange=\{\(\) => onChange\(questions\.map\(\(item\) => item\.id === question\.id \? \{ \.\.\.item, answer: option \} : item\)\)\}/);
+  assert.match(screen, /onChange=\{\(\) => updateQuestionAnswer\(question\.id, option\)\}/);
+  assert.match(screen, /\? \{ \.\.\.item, answer, answer_state: undefined \}/);
   // The long-list select survives below the split: tests/ask-at-apply.test.mjs pins its shape.
   assert.match(screen, /<option value="">Choose an answer<\/option>/);
 });
@@ -41,7 +42,7 @@ test("an exact multi-value field renders checkboxes and stores employer-ordered 
   assert.match(screen, /type="checkbox"/);
   assert.match(screen, /checked=\{exactSelectedQuestionOptions\(question\.answer, question\.options\)\?\.includes\(option\) === true\}/);
   assert.match(screen, /answerWithExactOptionToggled\(question\.answer, question\.options, option, event\.target\.checked\)/);
-  assert.match(screen, /item\.id === question\.id \? \{ \.\.\.item, answer \} : item/);
+  assert.match(screen, /updateQuestionAnswer\(question\.id, answer\)/);
 });
 
 test("focusing a Your turn row still lands when the question rendered as a radio group", () => {
@@ -59,7 +60,7 @@ test("a whole-paragraph question stays fully readable instead of rendering as a 
 
 test("an unread employer choice list stays visible without becoming a free-text answer", () => {
   const screen = functionBody(PAGE, "function QuestionsScreen(");
-  assert.match(PAGE, /metadataBlockers=\{selectedSubmission\?\.review\.question_metadata_blockers \?\? \[\]\}/);
+  assert.match(PAGE, /metadataBlockers=\{activeQuestionMetadataBlockers\}/);
   assert.match(screen, /questionReviewPresentation\(questions, metadataBlockers\)/);
   assert.match(screen, /effectiveMetadataBlockers\.length > 0/);
   assert.match(screen, /Exact choices not read/);

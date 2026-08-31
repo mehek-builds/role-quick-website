@@ -15,6 +15,7 @@ import {
   type ApplicationProfile,
   type ApplicationReview,
   type AttachedDocument,
+  type AuthoritativeSubmissionProjection,
   type CanonicalApplication,
   type CanonicalCoverLetterResponse,
   type CoverLetter,
@@ -24,6 +25,7 @@ import {
   type PacketAuditResponse,
   type ManualHandoffResponse,
   type ResumeSpec,
+  type SubmissionRetrySafety,
 } from "@/lib/api";
 import { Card, Chip, EmptyState, ErrorNote, ExtensionStoreLink, PendingLabel, ScrollableRow, ShimmerRows, TerminalActionBar, formatRelativeDate } from "@/components/app/ui";
 import { CompanyLogo } from "@/components/app/CompanyLogo";
@@ -62,8 +64,8 @@ import { RequirementProvider, RequirementText, MatchLegend } from "@/components/
 import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX, exactPacketAuditClauses, exactPacketAuditRanges } from "@/features/applications";
 import { educationDrift, educationDriftMessage, type EducationProfile } from "@/features/applications";
 import { checklistRowControl, completedSubmissionGroups, directInputTaskPlan, directQuestionPromptFingerprint, directQuestionTaskFingerprint, displayQuestionLabel, documentAsksByKind, documentControls, humanInputItems, metadataRefreshOutranksStandingAttention, QUESTION_CHOICE_LIST_LIMIT, reviewedAnswersSaveLanding, type DirectQuestionTask, type DirectQuestionTaskIntent, type SubmissionChecklistAction, type SubmissionChecklistItem } from "@/features/applications";
-import { prescriptEditableQuestions, prescriptNeedsHer, prescriptSummary } from "@/features/applications";
-import { answerWithExactOptionToggled, exactQuestionOption, exactSelectedQuestionOptions, questionAcceptsMultipleOptions, questionReviewPresentation, requiredQuestionReviewRoute } from "@/features/applications";
+import { prescriptBlocksProgress, prescriptEditableQuestions, prescriptMetadataBlockers, prescriptNeedsHer, prescriptSummary } from "@/features/applications";
+import { answerWithExactOptionToggled, exactQuestionOption, exactSelectedQuestionOptions, optionalQuestionNeedsDecision, questionAcceptsMultipleOptions, questionReviewPresentation, requiredQuestionReviewRoute } from "@/features/applications";
 import type { JdMatchResponse, JobMatch } from "@/features/applications";
 import { userFacingError } from "@/lib/user-facing-error";
 import { APPLICATION_DOCUMENT_ACCEPT_ATTRIBUTE, validateApplicationDocument } from "@/lib/document-size";
@@ -78,6 +80,7 @@ import { acknowledgePacketEvidence, packetAuditAcknowledgementAccepted, packetQu
 import { useBilling } from "@/components/billing/BillingProvider";
 import { isStructuredUpgradeDenial } from "@/features/billing";
 import { completeOperationId, operationIdFor } from "@/lib/operation-id";
+import { applicationPacketAuthorityState, confirmedProjectionForPacket, quarantinedSubmissionAuthority, reviewClaimsSubmissionSent, reviewForSubmissionProjection, submissionAuthorityEnvelopeFromUnknown, submissionProjectionIsConfirmed } from "@/features/applications";
 
 type Screen = "review" | "questions" | "submitting" | "portal" | "submitted";
 type ApplicationSort = "next" | "recent" | "company";
@@ -228,7 +231,96 @@ function packetAuditRecoveryMayCommit(currentApplicationId: string | null, reque
    send. An empty object is a real answer, "nothing is attached"; undefined is "nobody has looked".
    The `partial: true` seed below is exactly the second case, and so is a backend that predates the
    documents route. */
-export type SubmissionResponse = { application_id: string; review: ApplicationReview; cover_letter?: CoverLetter | null; documents?: Record<string, AttachedDocument>; handoff_url?: string; configured?: boolean; partial?: boolean };
+export type SubmissionResponse = {
+  application_id: string;
+  review: ApplicationReview;
+  submission_authority?: unknown;
+  submission_projection?: AuthoritativeSubmissionProjection;
+  rejected_submission_projection?: unknown;
+  submission_authority_quarantined?: true;
+  retry_safety?: SubmissionRetrySafety | null;
+  cover_letter?: CoverLetter | null;
+  documents?: Record<string, AttachedDocument>;
+  handoff_url?: string;
+  configured?: boolean;
+  partial?: boolean;
+};
+
+type SubmissionResponseDisplayContext = {
+  packetId: string;
+  canonicalApplicationId?: string;
+  attemptId?: string;
+};
+
+function submissionResponseDisplayContext(
+  packet: GeneratedResume | null | undefined,
+  packetId: string,
+): SubmissionResponseDisplayContext {
+  const canonical = packet ? canonicalApplicationFromPacket(packet) : null;
+  return {
+    packetId,
+    ...(canonical ? { canonicalApplicationId: canonical.id } : {}),
+  };
+}
+
+function submissionResponseForDisplay(
+  response: SubmissionResponse,
+  expected: SubmissionResponseDisplayContext,
+): SubmissionResponse {
+  const authority = submissionAuthorityEnvelopeFromUnknown(response, {
+    applicationId: response.application_id,
+    packetId: expected.packetId,
+    ...(expected.canonicalApplicationId
+      ? { canonicalApplicationId: expected.canonicalApplicationId }
+      : {}),
+    ...(expected.attemptId ? { attemptId: expected.attemptId } : {}),
+  });
+  const parsedProjection = authority?.projection ?? null;
+  const retrySafety = authority?.retrySafety ?? null;
+  const confirmedProjection = confirmedProjectionForPacket(parsedProjection, {
+    packetId: expected.packetId,
+    ...(expected.canonicalApplicationId
+      ? { canonicalApplicationId: expected.canonicalApplicationId }
+      : {}),
+    ...(expected.attemptId ? { attemptId: expected.attemptId } : {}),
+    retrySafety,
+  });
+  const rejectedProjection = authority === null
+    ? response.submission_authority ?? response.submission_projection
+    : parsedProjection?.state === "confirmed" && confirmedProjection === null
+      ? parsedProjection
+      : undefined;
+  const authorityQuarantined = confirmedProjection
+    ? false
+    : authority === null
+      || response.submission_authority_quarantined === true
+      || rejectedProjection !== undefined
+      || reviewClaimsSubmissionSent(response.review);
+  const projectionForReview: AuthoritativeSubmissionProjection = confirmedProjection
+    ?? (parsedProjection?.state !== "confirmed" ? parsedProjection : null)
+    ?? quarantinedSubmissionAuthority({
+      applicationId: response.application_id,
+      packetId: expected.packetId,
+      ...(expected.canonicalApplicationId
+        ? { canonicalApplicationId: expected.canonicalApplicationId }
+        : {}),
+      ...(expected.attemptId ? { attemptId: expected.attemptId } : {}),
+    }).projection;
+  return {
+    ...response,
+    review: reviewWithLists(reviewForSubmissionProjection(
+      response.review,
+      projectionForReview,
+      expected,
+    )),
+    submission_projection: projectionForReview,
+    retry_safety: retrySafety as SubmissionRetrySafety | null,
+    ...(rejectedProjection === undefined
+      ? {}
+      : { rejected_submission_projection: rejectedProjection }),
+    submission_authority_quarantined: authorityQuarantined ? true : undefined,
+  };
+}
 
 type ResumeGenerationResponse = {
   resume_id: string;
@@ -253,6 +345,13 @@ type ApplicationFillResponse = {
   handoff?: ApplicationFillHandoff;
   application?: CanonicalApplication;
 };
+type ManagedPrepareResponse = {
+  application_id: string;
+  packet_id: string;
+  state: "preparing" | "ready_for_review" | "needs_attention";
+  review: ApplicationReview;
+  reused: boolean;
+};
 type FillReceipt = ApplicationFillResponse & { company: string; role: string; portalUrl: string };
 
 function sameCoverLetter(left: CoverLetter | undefined, right: CoverLetter): boolean {
@@ -267,22 +366,43 @@ function sameCoverLetter(left: CoverLetter | undefined, right: CoverLetter): boo
 }
 
 function packetWithSubmission(packet: GeneratedResume, submission: SubmissionResponse): GeneratedResume {
-  const reviewUnchanged = packet.spec._review?.updated_at === submission.review.updated_at
-    && submissionReviewPacketIdentity(packet.spec._review) === submissionReviewPacketIdentity(submission.review);
-  const coverLetterField = submissionCoverLetterField(submission);
-  const nextCoverLetter = nextCoverLetterValue(packet.spec._cover_letter, submission);
+  const displaySubmission = submissionResponseForDisplay(
+    submission,
+    submissionResponseDisplayContext(packet, packet.id),
+  );
+  const reviewUnchanged = packet.spec._review?.updated_at === displaySubmission.review.updated_at
+    && submissionReviewPacketIdentity(packet.spec._review) === submissionReviewPacketIdentity(displaySubmission.review);
+  const coverLetterField = submissionCoverLetterField(displaySubmission);
+  const nextCoverLetter = nextCoverLetterValue(packet.spec._cover_letter, displaySubmission);
   const coverLetterUnchanged = nextCoverLetter === undefined
     ? packet.spec._cover_letter === undefined
     : sameCoverLetter(packet.spec._cover_letter, nextCoverLetter);
-  if (reviewUnchanged && coverLetterUnchanged) return packet;
+  const projectionUnchanged = JSON.stringify(packet.submission_projection)
+    === JSON.stringify(displaySubmission.submission_projection);
+  const authorityUnchanged = JSON.stringify(packet.submission_authority)
+    === JSON.stringify(displaySubmission.submission_authority);
+  const retrySafetyUnchanged = JSON.stringify(packet.retry_safety)
+    === JSON.stringify(displaySubmission.retry_safety);
+  const quarantineUnchanged = packet.submission_authority_quarantined
+    === displaySubmission.submission_authority_quarantined;
+  if (reviewUnchanged
+    && coverLetterUnchanged
+    && projectionUnchanged
+    && authorityUnchanged
+    && retrySafetyUnchanged
+    && quarantineUnchanged) return packet;
   return {
     ...packet,
+    submission_authority: displaySubmission.submission_authority,
+    submission_projection: displaySubmission.submission_projection,
+    retry_safety: displaySubmission.retry_safety,
+    submission_authority_quarantined: displaySubmission.submission_authority_quarantined,
     cover_letter_download_url: coverLetterField.included && !coverLetterField.value
       ? undefined
       : packet.cover_letter_download_url,
     spec: {
       ...packet.spec,
-      _review: submission.review,
+      _review: displaySubmission.review,
       _cover_letter: nextCoverLetter,
     },
   };
@@ -290,9 +410,79 @@ function packetWithSubmission(packet: GeneratedResume, submission: SubmissionRes
 
 /** A mutation response is causally newer even when a backend keeps review.updated_at unchanged. */
 function packetWithDirectSubmission(packet: GeneratedResume, submission: SubmissionResponse): GeneratedResume {
-  const hydrated = packetWithSubmission(packet, submission);
-  if (hydrated.spec._review === submission.review) return hydrated;
-  return { ...hydrated, spec: { ...hydrated.spec, _review: submission.review } };
+  const displaySubmission = submissionResponseForDisplay(
+    submission,
+    submissionResponseDisplayContext(packet, packet.id),
+  );
+  const hydrated = packetWithSubmission(packet, displaySubmission);
+  if (hydrated.spec._review === displaySubmission.review) return hydrated;
+  return { ...hydrated, spec: { ...hydrated.spec, _review: displaySubmission.review } };
+}
+
+function packetForSubmissionDisplay(packet: GeneratedResume): GeneratedResume {
+  const storedReview = packet.spec._review;
+  if (!storedReview) return packet;
+  const canonicalApplication = canonicalApplicationFromPacket(packet);
+  const identity = canonicalApplication
+    ? {
+      canonicalApplicationId: canonicalApplication.id,
+      packetId: canonicalApplication.legacy_generated_resume_id ?? null,
+    }
+    : { packetId: packet.id };
+  const authority = submissionAuthorityEnvelopeFromUnknown(packet, {
+    applicationId: packet.id,
+    packetId: identity.packetId,
+    ...(canonicalApplication
+      ? { canonicalApplicationId: canonicalApplication.id }
+      : {}),
+  });
+  const publicProjection: AuthoritativeSubmissionProjection = authority?.projection
+    ?? quarantinedSubmissionAuthority({
+      applicationId: packet.id,
+      packetId: identity.packetId,
+      ...(canonicalApplication
+        ? { canonicalApplicationId: canonicalApplication.id }
+        : {}),
+    }).projection;
+  const retrySafety = authority?.retrySafety ?? null;
+  const authorityQuarantined = authority === null
+    || packet.submission_authority_quarantined === true
+    || (reviewClaimsSubmissionSent(storedReview)
+      && !submissionProjectionIsConfirmed(publicProjection, identity));
+  const review = reviewWithLists(reviewForSubmissionProjection(
+    storedReview,
+    publicProjection,
+    identity,
+  ));
+  return {
+    ...packet,
+    submission_projection: publicProjection,
+    retry_safety: retrySafety as SubmissionRetrySafety | null,
+    submission_authority_quarantined: authorityQuarantined ? true : undefined,
+    spec: { ...packet.spec, _review: review },
+  };
+}
+
+function packetAuthorityForEmployerAction(
+  packet: GeneratedResume,
+  submission?: SubmissionResponse | null,
+) {
+  const exactPacket = packetForSubmissionDisplay(packet);
+  const exactSubmission = submission
+    ? submissionResponseForDisplay(
+      submission,
+      submissionResponseDisplayContext(exactPacket, exactPacket.id),
+    )
+    : null;
+  const review = exactSubmission?.review ?? exactPacket.spec._review;
+  return applicationPacketAuthorityState(
+    exactSubmission?.submission_projection ?? exactPacket.submission_projection,
+    { packetId: exactPacket.id },
+    review,
+    exactSubmission?.retry_safety ?? exactPacket.retry_safety,
+    exactSubmission?.submission_authority_quarantined === true
+      || exactPacket.submission_authority_quarantined === true,
+  );
 }
 
 type ProfileIdentity = {
@@ -591,6 +781,15 @@ function Applications() {
      From Apply it must not: she has not read the resume yet, and starting a submission because she
      answered a question would take a screen away from her rather than give her one. */
   const [prescriptNote, setPrescriptNote] = useState("");
+  const [prescriptMetadata, setPrescriptMetadata] = useState<ApplicationQuestionMetadataBlocker[]>([]);
+  const [prescriptLookaheadIssue, setPrescriptLookaheadIssue] = useState<{ jobId: string; message: string } | null>(null);
+  const [prescriptRetrying, setPrescriptRetrying] = useState(false);
+  const clearPrescriptState = useCallback(() => {
+    setPrescriptNote("");
+    setPrescriptMetadata([]);
+    setPrescriptLookaheadIssue(null);
+    setPrescriptRetrying(false);
+  }, []);
   const [screen, setScreen] = useState<Screen>("review");
   /* The route the applicant chose, available synchronously to a poll that started on the prior
      screen. React state alone is one render behind the click: a submission fetch begun on portal
@@ -700,6 +899,7 @@ function Applications() {
      fixture to /login before it could verify anything. */
   const [qaMode, setQaMode] = useState<boolean | null>(null);
   const [creating, setCreating] = useState<"fill" | "tailor" | null>(null);
+  const managedPrepareRef = useRef<string | null>(null);
   const [extractingJd, setExtractingJd] = useState(false);
   const [showNewApplication, setShowNewApplication] = useState(false);
   const [newApplication, setNewApplication] = useState(EMPTY_APPLICATION_DRAFT);
@@ -808,10 +1008,13 @@ function Applications() {
     setSubmissionState((current) => {
       const next = typeof update === "function" ? update(current) : update;
       if (!next) return next;
-      const review = reviewWithLists(next.review);
-      return review === next.review ? next : { ...next, review };
+      if (qaMode === true) {
+        const review = reviewWithLists(next.review);
+        return review === next.review ? next : { ...next, review };
+      }
+      return submissionResponseForDisplay(next, { packetId: next.application_id });
     });
-  }, []);
+  }, [qaMode]);
   const [coverLetterBody, setCoverLetterBody] = useState("");
   const packetCoverLetterEditorRevisionRef = useRef(0);
   const editPacketCoverLetterBody = useCallback((body: string) => {
@@ -963,8 +1166,14 @@ function Applications() {
   }, [packetEvidence]);
 
   const captureCompletedSubmission = useCallback((result: SubmissionResponse, source: string) => {
-    if (result.review.status !== "submitted" || capturedSubmissionIds.current.has(result.application_id)) return;
-    capturedSubmissionIds.current.add(result.application_id);
+    const exact = submissionResponseForDisplay(result, { packetId: result.application_id });
+    if (exact.submission_authority_quarantined === true
+      || !confirmedProjectionForPacket(exact.submission_projection, {
+        packetId: exact.application_id,
+        retrySafety: exact.retry_safety ?? null,
+      })
+      || capturedSubmissionIds.current.has(exact.application_id)) return;
+    capturedSubmissionIds.current.add(exact.application_id);
     track("application_submission_completed", { source });
   }, []);
 
@@ -1004,7 +1213,7 @@ function Applications() {
       if (!packetAuditRecoveryMayCommit(selectedIdRef.current, applicationId)) return true;
       const raw = await api<SubmissionResponse>(`/applications/${applicationId}/submission`);
       if (!packetAuditRecoveryMayCommit(selectedIdRef.current, applicationId)) return true;
-      const server = { ...raw, review: reviewWithLists(raw.review) };
+      const server = submissionResponseForDisplay(raw, { packetId: applicationId });
       const canonical = publishSubmissionEnvelope(
         submissionRef,
         submissionAfterPacketAudit(server, submissionRef.current, audit),
@@ -1040,7 +1249,7 @@ function Applications() {
       setNotice("This application is paused for a fresh exact-packet review.");
     }
     return true;
-  }, [moveToScreen, spec]);
+  }, [moveToScreen, setSubmission, spec]);
 
   // Lifted out of MatchScore so the gap list and BOTH panes' highlighting read one /jd-match
   // result. The JD pane used to highlight against resumeTerms, every content word anywhere in the
@@ -1076,6 +1285,7 @@ function Applications() {
   }, []);
 
   const selectPacket = useCallback((incoming: GeneratedResume) => {
+    clearPrescriptState();
     /* A READY envelope is the named exception to the refusal below, not a hole in it.
      *
      * The guard's own comment says "an explicit packet action first restores the linked packet's
@@ -1086,10 +1296,11 @@ function Applications() {
      *
      * It gates on reviewCanBeSent - the same predicate the Ready filter uses - so the send this
      * permits is exactly what the label promises. Before this, the Tracker showed READY rows whose
-     * only reachable action was the attended handoff, which is a label promising something the screen
+    * only reachable action was the attended handoff, which is a label promising something the screen
      * could not do. */
     const sendable = sendableLinkedPacketFromCanonicalEnvelope(incoming);
-    const packet = sendable ?? incoming;
+    const packetCandidate = sendable ?? incoming;
+    const packet = qaMode === true ? packetCandidate : packetForSubmissionDisplay(packetCandidate);
     const canonical = sendable ? null : canonicalApplicationFromPacket(packet);
     /* Reopening the row already on screen must not erase its pending explicit save: the current
        row is still reachable through the application switcher and openApplication calls this
@@ -1162,7 +1373,17 @@ function Applications() {
          an empty object would claim the application had been measured and could block a send on
          an ask this seed cannot confirm. */
       setSubmission(rememberedSubmission ?? (status
-        ? { application_id: packet.id, review: selectedReview!, cover_letter: packet.spec._cover_letter ?? null, documents: documentsFromSpecMarks(packet.spec._documents), partial: true }
+        ? {
+          application_id: packet.id,
+          review: selectedReview!,
+          submission_authority: packet.submission_authority,
+          submission_projection: packet.submission_projection,
+          submission_authority_quarantined: packet.submission_authority_quarantined,
+          retry_safety: qaMode === true ? { kind: "no_evidence" } : packet.retry_safety ?? null,
+          cover_letter: packet.spec._cover_letter ?? null,
+          documents: documentsFromSpecMarks(packet.spec._documents),
+          partial: true,
+        }
         : null));
       setError(null);
       setPollError(null);
@@ -1170,7 +1391,7 @@ function Applications() {
       setNotice(null);
       moveToScreen(historicalPacketAuditStale || status === "ready_for_final_approval" ? "review" : screenForStatus(status, "review"));
     });
-  }, [commitCanonicalSelection, moveToScreen]);
+  }, [clearPrescriptState, commitCanonicalSelection, moveToScreen, qaMode, setSubmission]);
 
   /* User navigation writes local state and route state as one action. The local write makes the
      switch feel immediate; the URL makes reload, sharing, and browser history reopen the same
@@ -1384,7 +1605,7 @@ function Applications() {
     const requestedSelectionRevision = editorRevisionRef.current;
     const requestedMutationGeneration = submissionMutationGenerationRef.current;
     const raw = await api<SubmissionResponse>(`/applications/${requestedId}/submission`);
-    let result: SubmissionResponse = { ...raw, review: reviewWithLists(raw.review) };
+    let result = submissionResponseForDisplay(raw, { packetId: requestedId });
     if (result.application_id !== requestedId) return;
 
     /* Selection owns only the visible screen. The full response still belongs to the application
@@ -1541,7 +1762,7 @@ function Applications() {
       || result.review.status === "submitted";
     if (!pollMayRoute) return;
     moveToScreen(screenForStatus(result.review.status, "submitting"));
-  }, [captureCompletedSubmission, moveToScreen, qaMode, revalidateAcknowledgedEvidence, selectedId]);
+  }, [captureCompletedSubmission, moveToScreen, qaMode, revalidateAcknowledgedEvidence, selectedId, setSubmission]);
 
   /* The applicant's own escape hatch when the cover letter has not arrived. The 2.5s poll already
      asks for it, so this exists for the case the poll cannot recover from on its own: a hung or
@@ -1563,7 +1784,7 @@ function Applications() {
      still blocked on the letter that had just been written. Every writer goes through here. */
   const applyCoverLetterToSubmission = useCallback((applicationId: string, coverLetter: CoverLetter | null) => {
     setSubmission((current) => current && current.application_id === applicationId ? { ...current, cover_letter: coverLetter } : current);
-  }, []);
+  }, [setSubmission]);
 
   /* The same problem the cover letter has, for documents: `packets` and `submission` each hold a
      copy of what an application carries, and the send gate reads the second one. Written here rather
@@ -1599,7 +1820,7 @@ function Applications() {
       } else delete marks[kind];
       return { ...packet, spec: { ...packet.spec, _documents: marks } };
     }) ?? current);
-  }, []);
+  }, [setSubmission]);
 
   useEffect(() => {
     if (!selectedId || qaMode || !["submitting", "portal"].includes(screen)) return;
@@ -1916,10 +2137,7 @@ function Applications() {
             void createApplication(draft);
           }
         } else {
-          // A route effect no longer has the browser click activation that opened this page. The
-          // employer tab must be reserved by the visible Fill application button below, or Chrome
-          // will block it before the extension can arm the canonical record.
-          setNotice("Job details are ready. Choose Fill application to verify the extension and open the employer form.");
+          setNotice("Job details are ready. Choose Prepare in Litos to use your main resume without opening another tab.");
         }
       }
       setPendingJob(null);
@@ -2314,12 +2532,18 @@ function Applications() {
         setError(`We did not send this one on its own. ${drift}`);
         return;
       }
+      if (packetAuthorityForEmployerAction(packet).state !== "safe_not_sent") {
+        setUnsendable((current) => new Set(current).add(id));
+        setError("We did not send this one on its own. Its exact prior submission evidence needs review first.");
+        return;
+      }
       try {
         track("application_submission_requested", { source: "autopilot" });
-        const result = await api<SubmissionResponse>(`/applications/${id}/submit-request`, {
+        const raw = await api<SubmissionResponse>(`/applications/${id}/submit-request`, {
           method: "POST",
           body: JSON.stringify({ questions: packet.spec._review?.questions ?? [] }),
         });
+        const result = submissionResponseForDisplay(raw, { packetId: id });
         captureCompletedSubmission(result, "autopilot");
         setPackets((current) => current?.map((item) => (item.id === id ? { ...item, spec: { ...item.spec, _review: result.review } } : item)) ?? current);
       } catch (reason) {
@@ -2417,9 +2641,13 @@ function Applications() {
     && selectedSubmission.application_id === selected?.id
     && currentQuestionsSnapshot !== packetQuestionsSnapshot(selectedSubmission.review.questions),
   );
+  const activeQuestionMetadataBlockers = [
+    ...(selectedSubmission?.review.question_metadata_blockers ?? []),
+    ...prescriptMetadata,
+  ];
   const canRefreshRequiredMetadataFromReview = requiredQuestionReviewRoute(
     questions,
-    selectedSubmission?.review.question_metadata_blockers ?? [],
+    activeQuestionMetadataBlockers,
   ).kind === "metadata_refresh";
   const activePacketEvidence = selected && packetEvidence?.applicationId === selected.id ? packetEvidence : null;
   const exactPacketPdfReady = Boolean(activePacketEvidence?.pdfVerified);
@@ -2678,9 +2906,8 @@ function Applications() {
    * before any of that, and the handful of questions that genuinely need her can be put in front
    * of her while she is still looking at the job.
    *
-   * Nothing here blocks. The pre-script is fetched after the packet exists, so a scan that is slow,
-   * refused, or not deployed costs her nothing: getPostingQuestions swallows every failure and this
-   * falls through to the review screen, which is exactly today's behaviour.
+   * A failed or incomplete read keeps this packet on the questions screen. An empty result is safe
+   * only when the server explicitly says the employer form was read completely.
    *
    * The answers land in the SAME `questions` state that "Check the answers" edits, and from Apply
    * they travel out through the same POST /applications/:id/submit-request. An answer typed on a
@@ -2705,6 +2932,9 @@ function Applications() {
    * local-only save there is not a save at all. It had this handler anyway, and every answer typed
    * on a stalled run was discarded with the tab. See saveReviewedAnswers. */
   function saveApplyAnswers() {
+    if (prescriptLookaheadIssue
+      || requiredQuestionReviewRoute(questions, prescriptMetadata).kind !== "continue"
+      || questions.some(optionalQuestionNeedsDecision)) return;
     setPrescriptNote("");
     setFocusQuestion(null);
     moveToScreen("review");
@@ -2712,19 +2942,53 @@ function Applications() {
   }
 
   async function askPrescriptQuestions(jobId: string) {
-    const prescript = await getPostingQuestions(jobId);
-    if (!prescriptNeedsHer(prescript)) return;
-    const asked = prescriptEditableQuestions(prescript);
-    setQuestions((current) => mergeDiscoveredQuestions(current, asked));
-    setPrescriptNote(prescriptSummary(prescript));
-    setFocusQuestion(null);
-    moveToScreen("questions");
+    const applicationId = selectedIdRef.current;
+    setPrescriptRetrying(true);
+    try {
+      const prescript = await getPostingQuestions(jobId);
+      if (selectedIdRef.current !== applicationId) return;
+      const asked = prescriptEditableQuestions(prescript);
+      const blockers = prescriptMetadataBlockers(prescript);
+      const progressBlocked = prescriptBlocksProgress(prescript);
+      setQuestions((current) => mergeDiscoveredQuestions(current, asked));
+      setPrescriptMetadata(blockers);
+      setPrescriptLookaheadIssue(progressBlocked
+        ? {
+          jobId,
+          message: blockers.length > 0 || prescript.discovery_status === "metadata_incomplete"
+            ? "Litos found an employer field whose exact wording or choices are incomplete. Read the company form again before continuing."
+            : "Litos could not finish reading the company form. Try the form read again before continuing.",
+        }
+        : null);
+      setPrescriptNote(prescriptSummary(prescript));
+      setFocusQuestion(null);
+      if (prescriptNeedsHer(prescript)) {
+        moveToScreen("questions");
+      } else if (screenRef.current === "questions") {
+        moveToScreen("review");
+        setNotice("The employer form is fully read. Check the resume before continuing.");
+      }
+    } catch {
+      if (selectedIdRef.current !== applicationId) return;
+      setPrescriptLookaheadIssue({
+        jobId,
+        message: "Litos could not verify the employer questions. Try reading the company form again before continuing.",
+      });
+      setFocusQuestion(null);
+      moveToScreen("questions");
+    } finally {
+      if (selectedIdRef.current === applicationId) setPrescriptRetrying(false);
+    }
   }
 
   async function fillApplication(
     draft: NewApplicationDraft = newApplication,
     errorSurface: "composer" | "tracker" | "submission" = "composer",
   ) {
+    if (draft.jobId) {
+      await prepareMonitoredApplication(draft, errorSurface);
+      return;
+    }
     const company = draft.company.trim();
     const role = draft.role.trim();
     const portalUrl = draft.portalUrl.trim();
@@ -2858,6 +3122,81 @@ function Applications() {
       companyTab?.close();
       reportFailure(reason instanceof Error ? reason.message : "Litos could not prepare this form. Your job details are still here.");
     } finally {
+      setCreating(null);
+    }
+  }
+
+  async function prepareMonitoredApplication(
+    draft: NewApplicationDraft,
+    errorSurface: "composer" | "tracker" | "submission" = "composer",
+  ) {
+    const jobId = draft.jobId;
+    if (!jobId || managedPrepareRef.current === jobId) return;
+    const reportFailure = (message: string) => {
+      if (errorSurface === "tracker") {
+        setCanonicalFillError(message);
+        setSubmissionFillError(null);
+        setError(null);
+      } else if (errorSurface === "submission") {
+        setSubmissionFillError(message);
+        setCanonicalFillError(null);
+        setError(null);
+      } else {
+        refuseInComposer("action", message, []);
+      }
+    };
+    managedPrepareRef.current = jobId;
+    setCreating("fill");
+    setComposerRefusal(null);
+    setCanonicalFillError(null);
+    setSubmissionFillError(null);
+    setError(null);
+    setNotice("Litos is preparing this application with your main resume. Nothing has been sent.");
+    try {
+      const prepared = await api<ManagedPrepareResponse>("/applications/managed-prepare", {
+        method: "POST",
+        body: JSON.stringify({ job_id: jobId, resume_source: "main_resume" }),
+      });
+      if (managedPrepareRef.current !== jobId) return;
+      const [history, canonical] = await Promise.all([
+        api<{ resumes: GeneratedResume[] }>(`/resume/history?application=${encodeURIComponent(prepared.packet_id)}`),
+        api<{ applications: CanonicalApplication[] }>("/applications?limit=200"),
+      ]);
+      if (managedPrepareRef.current !== jobId) return;
+      const exactReview = reviewWithLists(prepared.review);
+      const legacy = history.resumes.map((packet) => packet.id === prepared.packet_id
+        ? { ...packet, spec: { ...packet.spec, _review: exactReview } }
+        : packet);
+      const merged = mergeCanonicalApplicationHistory(legacy, canonical.applications);
+      const preparedPacket = withRestoredLinkedPackets(merged).find((packet) => packet.id === prepared.packet_id);
+      if (!preparedPacket) {
+        throw new Error("Litos prepared the application but could not reopen its exact packet. Reload Applications to continue.");
+      }
+      setCanonicalIdByPacketId(Object.fromEntries(canonical.applications
+        .filter((application): application is CanonicalApplication & { legacy_generated_resume_id: string } => Boolean(application.legacy_generated_resume_id))
+        .map((application) => [application.legacy_generated_resume_id, application.id])));
+      setPackets(merged);
+      openApplication(preparedPacket, { history: "replace" });
+      if (prepared.state !== "preparing") moveToScreen("review");
+      setNewApplication(EMPTY_APPLICATION_DRAFT);
+      forgetCheckoutDraft();
+      setShowNewApplication(false);
+      setNotice(prepared.state === "preparing"
+        ? "Litos is reading and filling the employer form with your main resume. Nothing has been sent."
+        : prepared.reused
+          ? "Your existing prepared application is open for review. Nothing has been sent."
+          : "Prepared in Litos with your main resume. Review the exact packet before continuing.");
+      track("application_fill_prepared", {
+        source: "monitored_job",
+        state: prepared.state,
+        reused: prepared.reused,
+      });
+    } catch (reason) {
+      reportFailure(reason instanceof Error
+        ? reason.message
+        : "Litos could not prepare this application. Your job details are still here.");
+    } finally {
+      if (managedPrepareRef.current === jobId) managedPrepareRef.current = null;
       setCreating(null);
     }
   }
@@ -3387,21 +3726,31 @@ function Applications() {
      stopped managed run uses the server-backed question editor so Save persists the answers. A
      pre-fill packet keeps the answers locally until its submit request, as before. */
   function routeMissingRequiredAnswers(candidateQuestions: ApplicationQuestion[] = questions): boolean {
+    if (prescriptLookaheadIssue) {
+      setError(null);
+      setQuestions(candidateQuestions);
+      setFocusQuestion(null);
+      moveToScreen("questions");
+      return true;
+    }
     const nextRoute = requiredQuestionReviewRoute(
       candidateQuestions,
-      selectedSubmission?.review.question_metadata_blockers ?? [],
+      activeQuestionMetadataBlockers,
     );
     const firstMissingId = nextRoute.kind === "answer" ? nextRoute.questionId : null;
+    const optionalDecisionId = candidateQuestions.find(optionalQuestionNeedsDecision)?.id ?? null;
     const requiredMetadataMissing = nextRoute.kind === "metadata_refresh";
-    if (!firstMissingId && !requiredMetadataMissing) return false;
+    if (!firstMissingId && !optionalDecisionId && !requiredMetadataMissing) return false;
     setError(null);
     setPrescriptNote("");
     if (selectedSubmission?.review.status === "needs_attention") {
-      reviewPortalQuestions(firstMissingId ?? undefined, "answer");
+      if (firstMissingId) reviewPortalQuestions(firstMissingId ?? undefined, "answer");
+      else reviewPortalQuestions(optionalDecisionId ?? undefined, "answer");
       return true;
     }
     setQuestions(candidateQuestions);
-    setFocusQuestion(firstMissingId ? { id: firstMissingId, token: Date.now() } : null);
+    const focusQuestionId = firstMissingId ?? optionalDecisionId;
+    setFocusQuestion(focusQuestionId ? { id: focusQuestionId, token: Date.now() } : null);
     moveToScreen("questions", { scrollToTop: !firstMissingId });
     return true;
   }
@@ -3428,7 +3777,7 @@ function Applications() {
     if (selectedIdRef.current !== applicationId) return;
     const nextQuestionRoute = requiredQuestionReviewRoute(
       questions,
-      selectedSubmission?.review.question_metadata_blockers ?? [],
+      activeQuestionMetadataBlockers,
     );
     if (nextQuestionRoute.kind !== "metadata_refresh" && routeMissingRequiredAnswers(questions)) return;
     if (qaMode) {
@@ -3449,7 +3798,7 @@ function Applications() {
         const portalUrl = canonicalReview.portal_url?.trim();
         const atsName = canonicalReview.ats_name?.trim() || portalName(portalUrl ?? "");
         if (!portalUrl || !atsName) throw new Error("The saved employer form identity is incomplete. Reload this packet before auditing it.");
-        const saved = await api<SubmissionResponse>(`/applications/${applicationId}/review`, {
+        const raw = await api<SubmissionResponse>(`/applications/${applicationId}/review`, {
           method: "PUT",
           body: JSON.stringify({
             ats_name: atsName,
@@ -3458,6 +3807,7 @@ function Applications() {
             skipped_reasons: canonicalReview.skipped_reasons,
           }),
         });
+        const saved = submissionResponseForDisplay(raw, { packetId: applicationId });
         savedReview = saved.review;
         if (selectedIdRef.current !== applicationId) return;
         setSubmission((current) => current?.application_id === applicationId ? { ...current, review: saved.review } : current);
@@ -3637,6 +3987,11 @@ function Applications() {
     if (!selected) return;
     const applicationId = selected.id;
     if (!options.allowServerAnswerRefresh && routeMissingRequiredAnswers(finalQuestions)) return;
+    if (!qaMode && packetAuthorityForEmployerAction(selected, submission).state !== "safe_not_sent") {
+      setError("Litos cannot start another employer attempt until the exact prior submission evidence is verified.");
+      moveToScreen("review");
+      return;
+    }
     setPrepareStartedAt(new Date().toISOString());
     setSubmittingPhase("preparing");
     moveToScreen("submitting");
@@ -3647,10 +4002,11 @@ function Applications() {
     });
     try {
       if (!qaMode) {
-        const result = await api<SubmissionResponse>(`/applications/${applicationId}/submit-request`, {
+        const raw = await api<SubmissionResponse>(`/applications/${applicationId}/submit-request`, {
           method: "POST",
           body: JSON.stringify({ questions: finalQuestions, ...(options.restart ? { restart: true } : {}) }),
         });
+        const result = submissionResponseForDisplay(raw, { packetId: applicationId });
         captureCompletedSubmission(result, options.restart ? "restart" : "review");
         if (selectedIdRef.current !== applicationId) {
           setPackets((current) => current?.map((packet) => packet.id === applicationId ? packetWithDirectSubmission(packet, result) : packet) ?? current);
@@ -3706,7 +4062,7 @@ function Applications() {
     const requestedId = selected.id;
     setError(null);
     try {
-      const result = qaMode
+      const rawResult = qaMode
         ? outcome === "submitted"
           ? {
             ...submission,
@@ -3728,6 +4084,9 @@ function Applications() {
           method: "POST",
           body: JSON.stringify({ outcome }),
         });
+      const result = qaMode
+        ? rawResult
+        : submissionResponseForDisplay(rawResult, { packetId: requestedId });
       if (selectedIdRef.current !== requestedId) {
         setPackets((current) => current?.map((packet) => packet.id === requestedId ? packetWithDirectSubmission(packet, result) : packet) ?? current);
         return;
@@ -3773,7 +4132,7 @@ function Applications() {
     const requestedId = selected.id;
     setError(null);
     try {
-      const result = qaMode
+      const rawResult = qaMode
         ? {
           ...submission,
           review: {
@@ -3790,6 +4149,9 @@ function Applications() {
           },
         }
         : await api<SubmissionResponse>(`/applications/${requestedId}/submission/self-submitted`, { method: "POST" });
+      const result = qaMode
+        ? rawResult
+        : submissionResponseForDisplay(rawResult, { packetId: requestedId });
       if (selectedIdRef.current !== requestedId) {
         setPackets((current) => current?.map((packet) => packet.id === requestedId ? packetWithDirectSubmission(packet, result) : packet) ?? current);
         return;
@@ -3932,6 +4294,7 @@ function Applications() {
   async function saveReviewedAnswers(direct?: {
     questionId: string;
     answer: string;
+    answerState?: ApplicationQuestion["answer_state"];
     intent: DirectQuestionTaskIntent;
     promptFingerprint: string;
     taskFingerprint: string;
@@ -3991,12 +4354,15 @@ function Applications() {
     const safeDirectPromptFingerprint = safeDirectTask
       ? directQuestionPromptFingerprint(safeDirectTask)
       : null;
+    const directIsSkip = direct?.answerState === "skipped";
     if (direct && (
       !safeDirectTask
       || safeDirectTask.intent !== direct.intent
       || safeDirectPromptFingerprint !== direct.promptFingerprint
       || directQuestionTaskFingerprint(safeDirectTask) !== direct.taskFingerprint
-      || (safeDirectTask.question.options?.length
+      || (directIsSkip && (safeDirectTask.question.required || Boolean(direct.answer.trim())))
+      || (!directIsSkip && !direct.answer.trim())
+      || (!directIsSkip && safeDirectTask.question.options?.length
         && (questionAcceptsMultipleOptions(safeDirectTask.question)
           ? exactSelectedQuestionOptions(direct.answer, safeDirectTask.question.options) === null
           /* The fill path's own equivalence, not byte equality. A stored answer the backend
@@ -4011,7 +4377,9 @@ function Applications() {
     }
     const answerDraftQuestions = direct
       ? activeSubmission.review.questions.map((question) => (
-        question.id === direct.questionId ? { ...question, answer: direct.answer } : question
+        question.id === direct.questionId
+          ? { ...question, answer: direct.answer, answer_state: direct.answerState }
+          : question
       ))
       : questions;
     if (direct && !answerDraftQuestions.some((question) => question.id === direct.questionId)) {
@@ -4184,6 +4552,7 @@ function Applications() {
           question.id === direct.questionId
           && directQuestionPromptFingerprint({ question }) === direct.promptFingerprint
           && question.answer === direct.answer
+          && question.answer_state === direct.answerState
         )) ?? null
         : null;
       const latestSnapshotHasSubmittedAnswer = latestSnapshotMatchesAcceptedPass
@@ -4225,7 +4594,7 @@ function Applications() {
         const answeredQuestion = saved.review.questions.find((question) => (
           question.id === direct.questionId
           && directQuestionPromptFingerprint({ question }) === safeDirectPromptFingerprint
-        )) ?? { ...safeDirectTask.question, answer: direct.answer };
+        )) ?? { ...safeDirectTask.question, answer: direct.answer, answer_state: direct.answerState };
         const answeredTask = { ...safeDirectTask, question: answeredQuestion };
         const answeredTasks = activeAnsweredTasks.some((task) => (
           directQuestionPromptFingerprint(task) === safeDirectPromptFingerprint
@@ -4441,7 +4810,7 @@ function Applications() {
     setUnverifiedSubmissionError(null);
     try {
       const now = new Date().toISOString();
-      const result = qaMode
+      const rawResult = qaMode
         ? found
           ? {
             ...submission,
@@ -4476,6 +4845,9 @@ function Applications() {
           method: "POST",
           body: JSON.stringify({ found }),
         });
+      const result = qaMode
+        ? rawResult
+        : submissionResponseForDisplay(rawResult, { packetId: requestedId });
       if (selectedIdRef.current !== requestedId) return;
       submissionRef.current = result;
       setSubmission(result);
@@ -4529,7 +4901,8 @@ function Applications() {
         setSubmission(result);
         moveToScreen("submitted");
       } else {
-        const result = await api<SubmissionResponse>(`/applications/${selected.id}/submission/approve`, { method: "POST" });
+        const raw = await api<SubmissionResponse>(`/applications/${selected.id}/submission/approve`, { method: "POST" });
+        const result = submissionResponseForDisplay(raw, { packetId: requestedId });
         captureCompletedSubmission(result, "final_approval");
         /* The packet the student is LOOKING at, which after a multi-minute send need not be the one
            they approved: the packet switcher renders above every screen including this one, so
@@ -5137,7 +5510,7 @@ function Applications() {
           applicationRole={selected.job_context.role ?? "Application"}
           applicationCompany={selected.job_context.company ?? "Company"}
           questions={questions}
-          metadataBlockers={selectedSubmission?.review.question_metadata_blockers ?? []}
+          metadataBlockers={activeQuestionMetadataBlockers}
           actionableQuestionIds={actionableQuestionIds}
           onChange={setQuestions}
           onBack={() => {
@@ -5167,11 +5540,16 @@ function Applications() {
             }
           }}
           saving={selected ? savingAnswerIds.has(selected.id) : false}
-          onRefreshMetadata={() => void refreshEmployerQuestionMetadata()}
-          refreshingMetadata={metadataRefreshId === selected?.id}
-          metadataRefreshDisabled={questionEditsUnsaved}
-          metadataRefreshNeedsPacketReview={!packetEvidenceReady}
+          onRefreshMetadata={() => {
+            if (prescriptLookaheadIssue) void askPrescriptQuestions(prescriptLookaheadIssue.jobId);
+            else void refreshEmployerQuestionMetadata();
+          }}
+          refreshingMetadata={prescriptLookaheadIssue ? prescriptRetrying : metadataRefreshId === selected?.id}
+          metadataRefreshDisabled={prescriptLookaheadIssue ? false : questionEditsUnsaved}
+          metadataRefreshNeedsPacketReview={prescriptLookaheadIssue ? false : !packetEvidenceReady}
           metadataRefreshError={metadataRefreshError?.applicationId === selected?.id ? metadataRefreshError.message : null}
+          lookaheadError={prescriptLookaheadIssue?.message ?? null}
+          blockContinuation={Boolean(prescriptLookaheadIssue)}
           reviewDiscovered={selectedSubmission?.review.status === "needs_attention"}
           focusQuestion={focusQuestion}
           prescriptNote={prescriptNote}
@@ -5215,6 +5593,7 @@ function Applications() {
           onOpenQuestion={(questionId, intent) => reviewPortalQuestions(questionId, intent)}
           onChooseOption={chooseBlockerOption}
           onSaveQuestion={(questionId, answer, intent, promptFingerprint, taskFingerprint, task) => saveReviewedAnswers({ questionId, answer, intent, promptFingerprint, taskFingerprint, task })}
+          onSkipQuestion={(questionId, intent, promptFingerprint, taskFingerprint, task) => saveReviewedAnswers({ questionId, answer: "", answerState: "skipped", intent, promptFingerprint, taskFingerprint, task })}
           savingAnswer={savingAnswerIds.has(selected.id)}
           answeredQuestionFingerprints={selectedAnsweredPromptFingerprints}
           directAnswerProgress={selectedDirectAnswerProgress}
@@ -5939,6 +6318,7 @@ function NewApplicationPanel({
   const fillReady = Boolean(value.company.trim())
     && Boolean(value.role.trim())
     && isHttpsJobUrl(value.portalUrl.trim());
+  const managedPrepare = Boolean(value.jobId);
   const tailorReady = fillReady && Boolean(value.jobDescription.trim());
   const readinessId = "new-application-readiness";
 
@@ -5994,13 +6374,17 @@ function NewApplicationPanel({
       <div className="mt-5 flex flex-wrap items-center justify-end gap-3">
         <ComposerRefusalNote refusal={refusal} at="action" />
         <p id={readinessId} className="mr-auto max-w-xl text-small leading-6 text-muted">
-          Company, role, and a complete HTTPS job URL unlock the employer form. A job description also unlocks tailoring.
+          {managedPrepare
+            ? "Prepare with your main resume inside Litos. You will review the exact packet here before anything can be sent."
+            : "Company, role, and a complete HTTPS job URL unlock the extension fallback. A job description also unlocks tailoring."}
         </p>
         <Button type="button" variant="secondary" aria-describedby={readinessId} onClick={(event) => onTailor(event.currentTarget)} disabled={creating !== null || !tailorReady} className="border-brand text-brand-ink">
           {creating === "tailor" ? <PendingLabel state="composing">Tailoring</PendingLabel> : "Tailor resume first"}
         </Button>
         <Button type="button" aria-describedby={readinessId} onClick={onFill} disabled={creating !== null || !fillReady}>
-          {creating === "fill" ? <PendingLabel state="composing" onColor>Preparing form</PendingLabel> : "Open and fill employer form"}
+          {creating === "fill"
+            ? <PendingLabel state="composing" onColor>{managedPrepare ? "Preparing in Litos" : "Preparing form"}</PendingLabel>
+            : managedPrepare ? "Prepare in Litos" : "Open and fill employer form"}
         </Button>
       </div>
     </Card>
@@ -6317,7 +6701,7 @@ function EditableHighlight({ value, terms, onChange, className = "" }: { value: 
   );
 }
 
-function QuestionsScreen({ applicationRole, applicationCompany, questions, metadataBlockers = [], actionableQuestionIds = [], onChange, onBack, onSubmit, onRefreshMetadata, saving = false, refreshingMetadata = false, metadataRefreshDisabled = false, metadataRefreshNeedsPacketReview = false, metadataRefreshError = null, reviewDiscovered = false, focusQuestion = null, prescriptNote = "" }: {
+function QuestionsScreen({ applicationRole, applicationCompany, questions, metadataBlockers = [], actionableQuestionIds = [], onChange, onBack, onSubmit, onRefreshMetadata, saving = false, refreshingMetadata = false, metadataRefreshDisabled = false, metadataRefreshNeedsPacketReview = false, metadataRefreshError = null, lookaheadError = null, blockContinuation = false, reviewDiscovered = false, focusQuestion = null, prescriptNote = "" }: {
   applicationRole: string;
   applicationCompany: string;
   questions: ApplicationQuestion[];
@@ -6332,6 +6716,8 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, metad
   metadataRefreshDisabled?: boolean;
   metadataRefreshNeedsPacketReview?: boolean;
   metadataRefreshError?: string | null;
+  lookaheadError?: string | null;
+  blockContinuation?: boolean;
   reviewDiscovered?: boolean;
   focusQuestion?: { id: string; token: number } | null;
   prescriptNote?: string;
@@ -6341,8 +6727,9 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, metad
   const presentation = questionReviewPresentation(questions, metadataBlockers);
   const editableQuestions = presentation.editableQuestions;
   const effectiveMetadataBlockers = presentation.metadataBlockers;
-  const requiredMetadataBlocked = effectiveMetadataBlockers.some((blocker) => blocker.required);
+  const metadataBlocked = effectiveMetadataBlockers.length > 0;
   const missingQuestions = editableQuestions.filter((question) => question.required && !question.answer.trim());
+  const optionalDecisionMissing = editableQuestions.some(optionalQuestionNeedsDecision);
   const focusQuestionId = focusQuestion?.id ?? null;
   const focusToken = focusQuestion?.token ?? 0;
   const actionableIds = new Set(actionableQuestionIds);
@@ -6351,7 +6738,21 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, metad
   const focusedReview = reviewDiscovered && actionableQuestions.length > 0 && !showAllAnswers;
   const visibleQuestions = reviewDiscovered
     ? (focusedReview ? actionableQuestions : editableQuestions)
-    : missingQuestions;
+    : editableQuestions;
+  const continuationBlocked = blockContinuation
+    || metadataBlocked
+    || missingQuestions.length > 0
+    || optionalDecisionMissing;
+  const updateQuestionAnswer = (questionId: string, answer: string) => {
+    onChange(questions.map((item) => item.id === questionId
+      ? { ...item, answer, answer_state: undefined }
+      : item));
+  };
+  const skipOptionalQuestion = (questionId: string) => {
+    onChange(questions.map((item) => item.id === questionId && !item.required
+      ? { ...item, answer: "", answer_state: "skipped" as const }
+      : item));
+  };
   /* Arriving from a Your turn row means the student pressed ONE thing, so the caret belongs in that
      answer. Without this the screen opens at the top of a list of every question the form asked and
      the row she pressed can be several screens down, which is close enough to nothing happening.
@@ -6422,6 +6823,15 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, metad
           </button>
         )}
       </div>
+      {lookaheadError && (
+        <Card className="border-warn/30 bg-warn-soft p-5">
+          <p className="text-label text-warn">Employer form read incomplete</p>
+          <p role="alert" className="mt-2 text-small leading-6 text-ink">{lookaheadError}</p>
+          <Button className="mt-4" onClick={onRefreshMetadata} disabled={refreshingMetadata} aria-busy={refreshingMetadata}>
+            {refreshingMetadata ? "Reading the company form..." : "Read the company form again"}
+          </Button>
+        </Card>
+      )}
       {effectiveMetadataBlockers.length > 0 && (
         <section aria-labelledby="question-metadata-heading" className="space-y-3">
           <div>
@@ -6432,7 +6842,7 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, metad
             <p className="mt-1 text-small leading-6 text-muted">
               Litos must read the employer&apos;s exact wording and choices before presenting an answer.
             </p>
-            <div className="mt-4 flex flex-wrap items-center gap-3">
+            {!lookaheadError && <div className="mt-4 flex flex-wrap items-center gap-3">
               <Button
                 onClick={onRefreshMetadata}
                 disabled={refreshingMetadata || metadataRefreshDisabled}
@@ -6450,7 +6860,7 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, metad
                     ? "Litos needs your exact packet review before it can fill the employer form."
                   : "Litos opens the employer form, reads its current fields, and fills only your saved answers. Unsaved edits on this page are not used."}
               </p>
-            </div>
+            </div>}
             {metadataRefreshError && (
               <p role="alert" className="mt-3 text-small leading-6 text-danger">{metadataRefreshError}</p>
             )}
@@ -6462,14 +6872,14 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, metad
               </p>
               <p className="mt-1 text-label text-warn">
                 {blocker.kind === "unsupported_multi_value"
-                  ? "Multiple answers need the company form"
+                  ? "Exact choices need a fresh read"
                   : blocker.kind === "missing_exact_options"
                     ? "Exact choices not read"
                     : "Exact question not read"}
               </p>
               <p className="mt-3 text-small leading-6 text-muted">
                 {blocker.kind === "unsupported_multi_value"
-                  ? "This employer accepts more than one selection. Litos will not reduce it to one answer, so review it on the company form."
+                  ? "This field accepts more than one selection. Litos will read its complete current choice list before asking you to choose here."
                   : blocker.kind === "missing_exact_options"
                     ? "The employer's current options were not readable, so Litos did not guess or fill this field."
                     : "The employer's question was not readable, so Litos did not guess or fill this field."}
@@ -6485,13 +6895,41 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, metad
               weight, with the line height of body text. The full text always renders: what she is
               agreeing to is the one thing this screen must not truncate. */}
           <label htmlFor={`question-${question.id}`} className={`block text-sm text-ink ${question.question.trim().length > 140 ? "font-normal leading-6" : "font-medium"}`}>{displayQuestionLabel(question.question)}</label>
-          <p className={`mt-1 font-mono text-[11px] uppercase tracking-[0.08em] ${question.required && !question.answer.trim() ? "text-warn" : "text-muted"}`}>{question.required && !question.answer.trim() ? "Required" : "Review"}</p>
+          <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
+            <p className={`font-mono text-[11px] uppercase tracking-[0.08em] ${question.required && !question.answer.trim() ? "text-warn" : "text-muted"}`}>
+              {question.required
+                ? question.answer.trim() ? "Answered" : "Required"
+                : question.answer_state === "skipped"
+                  ? "Skipped"
+                  : question.answer.trim() ? "Optional, answered" : "Optional, answer or skip"}
+            </p>
+            {!question.required && (
+              question.answer_state === "skipped" ? (
+                <button type="button" onClick={() => updateQuestionAnswer(question.id, "")} className="min-h-9 text-xs font-medium text-brand-ink underline underline-offset-2">
+                  Answer instead
+                </button>
+              ) : (
+                <button type="button" onClick={() => skipOptionalQuestion(question.id)} className="min-h-9 text-xs font-medium text-muted underline underline-offset-2 hover:text-ink">
+                  Skip
+                </button>
+              )
+            )}
+          </div>
           {/* Why this one is hers. Written by the backend so that the Apply screen and a stalled
               run's attention reason cannot describe the same refusal in two different voices. */}
           {question.explanation && (
             <p className="mt-1 text-xs leading-5 text-muted">{question.explanation}</p>
           )}
-          {question.options && question.options.length > 0 ? (
+          {question.answer_draft?.trim() && !question.answer.trim() && question.answer_state !== "skipped" && (
+            <p className="mt-3 rounded-inner border border-warn/20 bg-warn-soft px-3 py-2 text-xs leading-5 text-warn">
+              Your previous answer did not match the employer&apos;s current choices: {question.answer_draft}. Choose again below.
+            </p>
+          )}
+          {!question.required && question.answer_state === "skipped" ? (
+            <p className="mt-4 rounded-inner border border-border bg-surface-alt px-4 py-3 text-sm leading-6 text-muted">
+              This optional question will be left blank. Choose Answer instead if you want to include a response.
+            </p>
+          ) : question.options && question.options.length > 0 ? (
             /* The employer's own list, so a fixed choice is a choice rather than a box she has to
                guess the wording for. Sixteen DRW self-ratings and Point72's office list are all
                this shape, and a free-text answer to any of them is an answer the form rejects.
@@ -6514,7 +6952,7 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, metad
                       onChange={(event) => {
                         const answer = answerWithExactOptionToggled(question.answer, question.options, option, event.target.checked);
                         if (answer === null) return;
-                        onChange(questions.map((item) => item.id === question.id ? { ...item, answer } : item));
+                        updateQuestionAnswer(question.id, answer);
                       }}
                       className="mt-1 h-4 w-4 shrink-0 rounded border-control-border text-brand-ink focus:ring-brand/30"
                     />
@@ -6536,7 +6974,7 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, metad
                       name={`question-choice-${question.id}`}
                       value={option}
                       checked={exactQuestionOption(question.answer, question.options) === option}
-                      onChange={() => onChange(questions.map((item) => item.id === question.id ? { ...item, answer: option } : item))}
+                      onChange={() => updateQuestionAnswer(question.id, option)}
                       className="mt-1 h-4 w-4 shrink-0 border-control-border text-brand-ink focus:ring-brand/30"
                     />
                     <span>{option}</span>
@@ -6563,7 +7001,7 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, metad
                    underlying answer bytes are untouched until she actually picks, so an untouched
                    Save still posts the exact stored bytes and the audit survives it. */
                 value={exactQuestionOption(question.answer, question.options) ?? ""}
-                onChange={(event) => onChange(questions.map((item) => item.id === question.id ? { ...item, answer: event.target.value } : item))}
+                onChange={(event) => updateQuestionAnswer(question.id, event.target.value)}
                 className="mt-4 w-full rounded-inner border border-control-border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand"
               >
                 <option value="">Choose an answer</option>
@@ -6571,7 +7009,7 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, metad
               </select>
             )
           ) : (
-            <textarea id={`question-${question.id}`} value={question.answer} onChange={(event) => onChange(questions.map((item) => item.id === question.id ? { ...item, answer: event.target.value } : item))} rows={3} className="mt-4 w-full rounded-inner border border-control-border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand" />
+            <textarea id={`question-${question.id}`} value={question.answer} onChange={(event) => updateQuestionAnswer(question.id, event.target.value)} rows={3} className="mt-4 w-full rounded-inner border border-control-border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand" />
           )}
           {/* Said once, on the row it is true of, rather than as a promise at the top of a screen
               she cannot check. A declaration about her carries to the next posting; an answer about
@@ -6588,11 +7026,15 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, metad
           screen this is a request to the server, and a button that reads "Save" throughout a write
           it does not acknowledge is how the old handler got away with saving nothing. */}
       <TerminalActionBar className="justify-end">
-        <Button variant={requiredMetadataBlocked ? "secondary" : "primary"} onClick={onSubmit} disabled={saving || refreshingMetadata || (editableQuestions.length === 0 && requiredMetadataBlocked)}>
+        <Button variant={continuationBlocked ? "secondary" : "primary"} onClick={onSubmit} disabled={saving || refreshingMetadata || continuationBlocked}>
           {saving
             ? "Saving..."
-            : requiredMetadataBlocked
-              ? editableQuestions.length > 0 ? "Save available answers" : "Waiting for a fresh read"
+            : blockContinuation || metadataBlocked
+              ? "Waiting for a complete form read"
+              : missingQuestions.length > 0
+                ? "Answer required questions"
+                : optionalDecisionMissing
+                  ? "Answer or skip optional questions"
               : "Save and continue"}
         </Button>
       </TerminalActionBar>
@@ -6736,7 +7178,7 @@ function UnverifiedSubmissionCard({ attentionReason, submitting, error, onSubmit
   );
 }
 
-function DirectApplicationQuestion({ task, position, total, saving, saved, focusToken, hasPrevious, hasNext, preservedDraft, externalFailure, onDraftChange, onClearDraft, onClearFailure, onPrevious, onNext, onReviewApplication, onSave }: {
+function DirectApplicationQuestion({ task, position, total, saving, saved, focusToken, hasPrevious, hasNext, preservedDraft, externalFailure, onDraftChange, onClearDraft, onClearFailure, onPrevious, onNext, onReviewApplication, onSave, onSkip }: {
   task: DirectQuestionTask;
   position: number;
   total: number;
@@ -6754,6 +7196,7 @@ function DirectApplicationQuestion({ task, position, total, saving, saved, focus
   onNext: () => void;
   onReviewApplication: () => void;
   onSave: (questionId: string, answer: string, intent: DirectQuestionTaskIntent, promptFingerprint: string, taskFingerprint: string, task: DirectQuestionTask) => Promise<DirectAnswerSaveResult>;
+  onSkip: (questionId: string, intent: DirectQuestionTaskIntent, promptFingerprint: string, taskFingerprint: string, task: DirectQuestionTask) => Promise<DirectAnswerSaveResult>;
 }) {
   const [promptFingerprint] = useState(() => directQuestionPromptFingerprint(task));
   const [taskFingerprint] = useState(() => directQuestionTaskFingerprint(task));
@@ -6778,6 +7221,9 @@ function DirectApplicationQuestion({ task, position, total, saving, saved, focus
      dependent-questions.ts. */
   const contextOnly = task.context === true && !answerDirty;
   const requiredBlank = task.question.required && !answer.trim();
+  const optionalDecisionBlank = !task.question.required
+    && task.question.answer_state !== "skipped"
+    && !answer.trim();
   const exactOptions = task.question.options ?? [];
   const acceptsMultipleOptions = questionAcceptsMultipleOptions(task.question);
   const selectedExactOptions = acceptsMultipleOptions
@@ -6795,7 +7241,7 @@ function DirectApplicationQuestion({ task, position, total, saving, saved, focus
     ? selectedExactOptions === null
     : selectedExactOption === null);
   const choiceErrorVisible = choiceMissing && (choiceTouched || Boolean(answer.trim()));
-  const answerBlocked = requiredBlank || choiceMissing;
+  const answerBlocked = requiredBlank || choiceMissing || optionalDecisionBlank;
   const headingId = `direct-application-question-${encodeURIComponent(task.question.id)}`;
   const progressId = `${headingId}-progress`;
   const helperId = `${headingId}-helper`;
@@ -6837,6 +7283,21 @@ function DirectApplicationQuestion({ task, position, total, saving, saved, focus
     onClearFailure(promptFingerprint);
     onDraftChange(task.question.id, promptFingerprint, taskFingerprint, answer);
     const result = await onSave(task.question.id, answer, task.intent, promptFingerprint, taskFingerprint, task);
+    setSubmitting(false);
+    if (!result.saved) {
+      setSaveError(result.message);
+    } else if (!result.mayAdvance && result.retryMessage) {
+      setSaveError(result.retryMessage);
+    }
+  }
+
+  async function skipOptionalAnswer() {
+    if (busy || task.question.required) return;
+    setSubmitting(true);
+    setSaveError(null);
+    onClearFailure(promptFingerprint);
+    onClearDraft(promptFingerprint);
+    const result = await onSkip(task.question.id, task.intent, promptFingerprint, taskFingerprint, task);
     setSubmitting(false);
     if (!result.saved) {
       setSaveError(result.message);
@@ -6890,10 +7351,17 @@ function DirectApplicationQuestion({ task, position, total, saving, saved, focus
               asked twice, which is what re-admitting it looks like from the outside. */}
           {task.context === true
             ? "Your answer to this is saved. It is shown because the next question refers back to it."
-            : `${task.question.required ? "Required. " : ""}Litos saves this answer to this application before showing the next one.`}
+            : task.question.required
+              ? "Required. Litos saves this answer to this application before showing the next one."
+              : "Optional. Answer it or skip it. Litos saves this answer to this application before showing the next one."}
         </p>
         {task.question.explanation && (
           <p className="mt-2 text-small leading-6 text-muted">{task.question.explanation}</p>
+        )}
+        {task.question.answer_draft?.trim() && !answer.trim() && (
+          <p className="mt-3 rounded-inner border border-control-border bg-surface-alt px-3 py-2 text-small leading-6 text-muted">
+            Your previous answer did not match the employer&apos;s current choices: {task.question.answer_draft}. Choose again below.
+          </p>
         )}
 
         <form onSubmit={submitAnswer} aria-busy={busy} className="mt-6 pb-40 lg:pb-0">
@@ -7030,9 +7498,16 @@ function DirectApplicationQuestion({ task, position, total, saving, saved, focus
                   {navigating ? <PendingLabel onColor>Opening next question</PendingLabel> : hasNext ? "Next question" : "Review application"}
                 </Button>
               ) : (
-                <Button type="submit" block className="sm:w-auto" disabled={busy || answerBlocked}>
-                  {saving || submitting ? <PendingLabel onColor>Saving...</PendingLabel> : actionLabel}
-                </Button>
+                <div className={`grid gap-2 ${task.question.required ? "grid-cols-1" : "grid-cols-2"}`}>
+                  {!task.question.required && (
+                    <Button type="button" variant="secondary" disabled={busy} onClick={() => void skipOptionalAnswer()}>
+                      {saving || submitting ? "Saving..." : "Skip"}
+                    </Button>
+                  )}
+                  <Button type="submit" block className="sm:w-auto" disabled={busy || answerBlocked}>
+                    {saving || submitting ? <PendingLabel onColor>Saving...</PendingLabel> : actionLabel}
+                  </Button>
+                </div>
               )}
             </div>
             <p className="basis-full text-label leading-5 text-muted">Nothing goes to the employer until you review the completed application.</p>
@@ -7043,7 +7518,7 @@ function DirectApplicationQuestion({ task, position, total, saving, saved, focus
   );
 }
 
-function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTrialPacket, approving, securityCodeSubmitting, securityCodeError, onSubmitSecurityCode, unverifiedSubmissionSubmitting, unverifiedSubmissionError, onSubmitUnverifiedOutcome, educationProfile, educationProfileStatus, onCheckResume, onReloadCoverLetter, onWriteCoverLetter, coverLetterReloading, onHandoffComplete, onApprove, sendRefusal, onRestart, restarting, onRetry, onReviewPacket, onReviewQuestions, onOpenQuestion, onChooseOption, onSaveQuestion, savingAnswer, answeredQuestionFingerprints, directAnswerProgress, directAnswerDrafts, directAnswerFailure, onDirectAnswerDraftChange, onClearDirectAnswerDraft, onNavigateDirectQuestion, onClearDirectAnswerFailure, onRefreshQuestionMetadata, questionMetadataRefreshing, questionMetadataRefreshDisabled, questionMetadataNeedsPacketReview, questionMetadataRefreshError, onQuestionsFinished, onAddDocument, onToggleAcknowledged, attentionTicking, onSelfSubmitted, onPacketAuditRefusal, onOpenWithExtension, extensionFillBusy, extensionFillError }: { packet: GeneratedResume; submission: SubmissionResponse; packetEvidenceReviewed: boolean; manualTrialPacket: PacketAuditResponse | null; approving: boolean; securityCodeSubmitting: boolean; securityCodeError: string | null; onSubmitSecurityCode: (code: string) => void; unverifiedSubmissionSubmitting: boolean; unverifiedSubmissionError: string | null; onSubmitUnverifiedOutcome: (found: boolean) => void; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onReloadCoverLetter: () => void; onWriteCoverLetter: () => void; coverLetterReloading: boolean; onHandoffComplete: (outcome?: "cleared" | "submitted") => void; onApprove: () => void; sendRefusal: { message: string; issues: string[] } | null; onRestart: () => void; restarting: boolean; onRetry: () => void; onReviewPacket: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string, intent?: SubmissionChecklistAction) => void; onChooseOption: (questionId: string, option: string) => void; onSaveQuestion: (questionId: string, answer: string, intent: DirectQuestionTaskIntent, promptFingerprint: string, taskFingerprint: string, task: DirectQuestionTask) => Promise<DirectAnswerSaveResult>; savingAnswer: boolean; answeredQuestionFingerprints: ReadonlySet<string>; directAnswerProgress: DirectAnswerProgress | null; directAnswerDrafts: ReadonlyMap<string, DirectAnswerDraft>; directAnswerFailure: DirectAnswerFailure | null; onDirectAnswerDraftChange: (questionId: string, promptFingerprint: string, taskFingerprint: string, answer: string) => void; onClearDirectAnswerDraft: (promptFingerprint: string) => void; onNavigateDirectQuestion: (promptFingerprint: string) => void; onClearDirectAnswerFailure: (promptFingerprint: string) => void; onRefreshQuestionMetadata: () => void; questionMetadataRefreshing: boolean; questionMetadataRefreshDisabled: boolean; questionMetadataNeedsPacketReview: boolean; questionMetadataRefreshError: string | null; onQuestionsFinished: () => void; onAddDocument: (kind: string) => void; onToggleAcknowledged: (item: SubmissionChecklistItem, acknowledged: boolean) => void; attentionTicking: ReadonlySet<string>; onSelfSubmitted: () => void; onPacketAuditRefusal: (reason: unknown) => Promise<boolean>; onOpenWithExtension: () => void; extensionFillBusy: boolean; extensionFillError: string | null }) {
+function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTrialPacket, approving, securityCodeSubmitting, securityCodeError, onSubmitSecurityCode, unverifiedSubmissionSubmitting, unverifiedSubmissionError, onSubmitUnverifiedOutcome, educationProfile, educationProfileStatus, onCheckResume, onReloadCoverLetter, onWriteCoverLetter, coverLetterReloading, onHandoffComplete, onApprove, sendRefusal, onRestart, restarting, onRetry, onReviewPacket, onReviewQuestions, onOpenQuestion, onChooseOption, onSaveQuestion, onSkipQuestion, savingAnswer, answeredQuestionFingerprints, directAnswerProgress, directAnswerDrafts, directAnswerFailure, onDirectAnswerDraftChange, onClearDirectAnswerDraft, onNavigateDirectQuestion, onClearDirectAnswerFailure, onRefreshQuestionMetadata, questionMetadataRefreshing, questionMetadataRefreshDisabled, questionMetadataNeedsPacketReview, questionMetadataRefreshError, onQuestionsFinished, onAddDocument, onToggleAcknowledged, attentionTicking, onSelfSubmitted, onPacketAuditRefusal, onOpenWithExtension, extensionFillBusy, extensionFillError }: { packet: GeneratedResume; submission: SubmissionResponse; packetEvidenceReviewed: boolean; manualTrialPacket: PacketAuditResponse | null; approving: boolean; securityCodeSubmitting: boolean; securityCodeError: string | null; onSubmitSecurityCode: (code: string) => void; unverifiedSubmissionSubmitting: boolean; unverifiedSubmissionError: string | null; onSubmitUnverifiedOutcome: (found: boolean) => void; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onReloadCoverLetter: () => void; onWriteCoverLetter: () => void; coverLetterReloading: boolean; onHandoffComplete: (outcome?: "cleared" | "submitted") => void; onApprove: () => void; sendRefusal: { message: string; issues: string[] } | null; onRestart: () => void; restarting: boolean; onRetry: () => void; onReviewPacket: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string, intent?: SubmissionChecklistAction) => void; onChooseOption: (questionId: string, option: string) => void; onSaveQuestion: (questionId: string, answer: string, intent: DirectQuestionTaskIntent, promptFingerprint: string, taskFingerprint: string, task: DirectQuestionTask) => Promise<DirectAnswerSaveResult>; onSkipQuestion: (questionId: string, intent: DirectQuestionTaskIntent, promptFingerprint: string, taskFingerprint: string, task: DirectQuestionTask) => Promise<DirectAnswerSaveResult>; savingAnswer: boolean; answeredQuestionFingerprints: ReadonlySet<string>; directAnswerProgress: DirectAnswerProgress | null; directAnswerDrafts: ReadonlyMap<string, DirectAnswerDraft>; directAnswerFailure: DirectAnswerFailure | null; onDirectAnswerDraftChange: (questionId: string, promptFingerprint: string, taskFingerprint: string, answer: string) => void; onClearDirectAnswerDraft: (promptFingerprint: string) => void; onNavigateDirectQuestion: (promptFingerprint: string) => void; onClearDirectAnswerFailure: (promptFingerprint: string) => void; onRefreshQuestionMetadata: () => void; questionMetadataRefreshing: boolean; questionMetadataRefreshDisabled: boolean; questionMetadataNeedsPacketReview: boolean; questionMetadataRefreshError: string | null; onQuestionsFinished: () => void; onAddDocument: (kind: string) => void; onToggleAcknowledged: (item: SubmissionChecklistItem, acknowledged: boolean) => void; attentionTicking: ReadonlySet<string>; onSelfSubmitted: () => void; onPacketAuditRefusal: (reason: unknown) => Promise<boolean>; onOpenWithExtension: () => void; extensionFillBusy: boolean; extensionFillError: string | null }) {
   const { review } = submission;
   const awaitingSecurityCode = review.status === "awaiting_security_code";
   const needsAttention = review.status === "needs_attention";
@@ -7204,7 +7679,9 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
   const coverLetterWaited = coverLetterMissing && coverLetterWaitedFor === waitedApplicationId;
   const coverLetterState = coverLetterGate({ supported: review.cover_letter_supported, required: review.cover_letter_required, coverLetter: submission.cover_letter, waited: coverLetterWaited });
   const coverLetterPending = coverLetterBlocks(coverLetterState);
-  const requiredAnswerMissing = review.questions.some((question) => question.required && !(question.answer ?? "").trim());
+  const optionalAnswerDecisionMissing = review.questions.some(optionalQuestionNeedsDecision);
+  const requiredAnswerMissing = review.questions.some((question) => question.required && !(question.answer ?? "").trim())
+    || optionalAnswerDecisionMissing;
   const safeAttentionReason = review.attention_reason
     ? userFacingError(review.attention_reason, "Litos could not finish the company’s form. Try again in a minute.")
     : undefined;
@@ -7294,6 +7771,15 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
 
   async function saveCurrentDirectQuestion(questionId: string, answer: string, intent: DirectQuestionTaskIntent, promptFingerprint: string, taskFingerprint: string, task: DirectQuestionTask): Promise<DirectAnswerSaveResult> {
     const result = await onSaveQuestion(questionId, answer, intent, promptFingerprint, taskFingerprint, task);
+    if (!result.saved) return result;
+    if (!result.mayAdvance) return result;
+    if (!result.promptFingerprint) {
+      return { saved: false as const, message: "Litos saved the answer but could not match the next employer field. Review the updated application packet." };
+    }
+    return result;
+  }
+  async function skipCurrentDirectQuestion(questionId: string, intent: DirectQuestionTaskIntent, promptFingerprint: string, taskFingerprint: string, task: DirectQuestionTask): Promise<DirectAnswerSaveResult> {
+    const result = await onSkipQuestion(questionId, intent, promptFingerprint, taskFingerprint, task);
     if (!result.saved) return result;
     if (!result.mayAdvance) return result;
     if (!result.promptFingerprint) {
@@ -7498,6 +7984,7 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
             }}
             onReviewApplication={onQuestionsFinished}
             onSave={saveCurrentDirectQuestion}
+            onSkip={skipCurrentDirectQuestion}
           />
         ) : (
           <>
@@ -7943,7 +8430,7 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
         )}
         {review.status === "ready_for_final_approval" && requiredAnswerMissing && (
           <p className="mt-3 text-xs leading-5 text-warn">
-            Required answer missing.
+            {optionalAnswerDecisionMissing ? "Answer or skip every optional question before sending." : "Required answer missing."}
           </p>
         )}
         {review.status === "ready_for_final_approval" && sensitiveQuestionPresent && (

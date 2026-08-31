@@ -92,15 +92,13 @@ export function BuildStep({
         },
         loadQuestions: async (jobId) => {
           const prescript = await getPostingQuestions(jobId);
-          /* NULL IS NOT A FAILURE HERE, and the existing contract is why: getPostingQuestions
-             catches every failure mode to null because they all mean the same thing to Apply,
-             which is that there is nothing extra to ask. Onboarding follows that rather than
-             inventing a second meaning for the same response. The consequence is stated on the
-             button: no outstanding questions sends the student straight to review. */
+          if (prescript.discovery_status !== "ok" || prescript.metadata_blockers.length > 0) {
+            throw new Error("Litos could not verify every employer question yet. Try reading the company form again.");
+          }
           return {
-            total: prescript?.question_count ?? 0,
-            alreadyAnswered: prescript?.already_answered ?? 0,
-            ask: prescript?.ask ?? [],
+            total: prescript.question_count,
+            alreadyAnswered: prescript.already_answered,
+            ask: prescript.ask,
           };
         },
       },

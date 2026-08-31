@@ -186,6 +186,77 @@ test("humanInputItems carries the employer's own options on a missing required a
   assert.equal(essay?.options, undefined, "a question with no list stays a plain Answer row");
 });
 
+test("optional questions stay actionable until the applicant answers or skips them", () => {
+  const base = {
+    status: "needs_attention" as const,
+    attention_reason: "",
+    questions: [{
+      id: "optional-location",
+      question: "Which other offices would you consider?",
+      answer: "",
+      answer_state: "unanswered" as const,
+      kind: "required" as const,
+      required: false,
+      portal_input_type: "select-multiple",
+      options: ["Chicago", "New York"],
+    }],
+  };
+
+  assert.deepEqual(humanInputItems(base).map((item) => ({
+    questionId: item.questionId,
+    detail: item.detail,
+    action: item.action,
+  })), [{
+    questionId: "optional-location",
+    detail: "Optional, answer or skip",
+    action: "Answer",
+  }]);
+  const directPlan = directInputTaskPlan(base);
+  assert.equal(directPlan.questionTasks[0]?.question.id, "optional-location");
+  assert.equal(directPlan.questionTasks[0]?.question.answer_state, "unanswered");
+  assert.equal(humanInputItems({
+    ...base,
+    questions: [{ ...base.questions[0], answer_state: "litos_refused" as const }],
+  }).length, 1);
+  assert.equal(humanInputItems({
+    ...base,
+    questions: [{ ...base.questions[0], answer_state: "skipped" as const }],
+  }).length, 0);
+});
+
+test("a stale exact multi-select is repaired as an in-Litos answer task", () => {
+  const reviewWithStaleAnswer = {
+    status: "needs_attention" as const,
+    attention_reason: "Select every location where you can work: unsupported multi value",
+    question_metadata_blockers: [{
+      kind: "unsupported_multi_value" as const,
+      required: true,
+      portal_input_type: "select-multiple",
+      portal_selector: "#locations",
+      question: "Select every location where you can work",
+    }],
+    questions: [{
+      id: "locations",
+      question: "Select every location where you can work",
+      answer: "A, B",
+      kind: "required" as const,
+      required: true,
+      portal_input_type: "select-multiple",
+      portal_selector: "#locations",
+      options: ["A", "A, B", "B"],
+      options_complete: true,
+    }],
+  };
+
+  const plan = directInputTaskPlan(reviewWithStaleAnswer);
+  assert.equal(plan.metadataBlockers.length, 0);
+  assert.equal(plan.nonQuestionTasks.length, 0);
+  assert.equal(plan.questionTasks[0]?.question.id, "locations");
+  assert.equal(plan.questionTasks[0]?.question.answer, "");
+  assert.equal(plan.questionTasks[0]?.question.answer_draft, "A, B");
+  assert.deepEqual(plan.questionTasks[0]?.question.options, ["A", "A, B", "B"]);
+});
+
 test("humanInputItems keeps a long option list off the row, where the editor's select is the kinder shape", () => {
   const options = Array.from({ length: QUESTION_CHOICE_LIST_LIMIT + 1 }, (_, index) => `Office ${index + 1}`);
   const items = humanInputItems({

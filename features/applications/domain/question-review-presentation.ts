@@ -29,6 +29,12 @@ function usableQuestionOptions(options: readonly string[] | null | undefined): s
   return usable;
 }
 
+function questionOptionsAreComplete(
+  question: Pick<ApplicationQuestion, "options_complete" | "optionsComplete">,
+): boolean {
+  return question.options_complete !== false && question.optionsComplete !== false;
+}
+
 export function questionAcceptsMultipleOptions(
   question: Pick<ApplicationQuestion, "portal_input_type" | "options">,
 ): boolean {
@@ -131,6 +137,15 @@ export function answerWithExactOptionToggled(
   if (checked) next.add(option);
   else next.delete(option);
   return exactOptions.filter((candidate) => next.has(candidate)).join(", ");
+}
+
+/** Optional rows stay actionable until the applicant answers or explicitly skips them. */
+export function optionalQuestionNeedsDecision(
+  question: Pick<ApplicationQuestion, "required" | "answer" | "answer_state">,
+): boolean {
+  return !question.required
+    && !question.answer.trim()
+    && question.answer_state !== "skipped";
 }
 
 function normalizedQuestionLabel(value: string | undefined): string {
@@ -239,7 +254,8 @@ export function questionReviewPresentation(
     const matchingQuestion = questions.find((question) => blockerMatchesQuestion(blocker, question));
     return !matchingQuestion
       || !questionAcceptsMultipleOptions(matchingQuestion)
-      || exactSelectedQuestionOptions(matchingQuestion.answer, matchingQuestion.options) === null;
+      || !questionOptionsAreComplete(matchingQuestion)
+      || usableQuestionOptions(matchingQuestion.options).length === 0;
   });
   effectiveServerBlockers.forEach(addBlocker);
   const questionIdCounts = new Map<string, number>();
@@ -273,16 +289,14 @@ export function questionReviewPresentation(
     const controlType = normalizedControlType(question.portal_input_type);
     const options = usableQuestionOptions(question.options);
     if (questionAcceptsMultipleOptions(question)) {
-      if (options.length === 0) {
+      if (options.length === 0 || !questionOptionsAreComplete(question)) {
         blockedQuestionIds.add(question.id);
         addBlocker(syntheticMetadataBlocker(question, "missing_exact_options"));
-      } else if (exactSelectedQuestionOptions(question.answer, options) === null) {
-        blockedQuestionIds.add(question.id);
-        addBlocker(syntheticMetadataBlocker(question, "unsupported_multi_value"));
       }
       continue;
     }
-    if (CLOSED_QUESTION_CONTROL.test(controlType) && options.length === 0) {
+    if (CLOSED_QUESTION_CONTROL.test(controlType)
+      && (options.length === 0 || !questionOptionsAreComplete(question))) {
       blockedQuestionIds.add(question.id);
       addBlocker(syntheticMetadataBlocker(question, "missing_exact_options"));
     }
@@ -291,12 +305,24 @@ export function questionReviewPresentation(
   const editableQuestions = questions.flatMap((question) => {
     if (blockedQuestionIds.has(question.id)) return [];
     const options = usableQuestionOptions(question.options);
+    const staleMultiValueAnswer = questionAcceptsMultipleOptions(question)
+      && exactSelectedQuestionOptions(question.answer, options) === null;
+    const safeQuestion = staleMultiValueAnswer
+      ? {
+        ...question,
+        answer: "",
+        ...(!question.required ? { answer_state: "unanswered" as const } : {}),
+        ...(question.answer_draft?.trim()
+          ? { answer_draft: question.answer_draft }
+          : question.answer.trim() ? { answer_draft: question.answer } : {}),
+      }
+      : question;
     if (options.length === 0) {
-      return question.options == null ? [question] : [{ ...question, options: null }];
+      return question.options == null ? [safeQuestion] : [{ ...safeQuestion, options: null }];
     }
     if (question.options?.length === options.length
-      && question.options.every((option, index) => option === options[index])) return [question];
-    return [{ ...question, options }];
+      && question.options.every((option, index) => option === options[index])) return [safeQuestion];
+    return [{ ...safeQuestion, options }];
   });
 
   return { editableQuestions, metadataBlockers };

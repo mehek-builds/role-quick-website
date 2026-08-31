@@ -41,6 +41,7 @@ test("an unchanged stored answer list does not manufacture an audit-time write",
 test("any accepted answer field change still requires the guarded save", () => {
   assert.equal(reviewAnswersNeedSave(answered, [{ ...answered[0], answer: "Yes" }]), true);
   assert.equal(reviewAnswersNeedSave(answered, [{ ...answered[0], confirmed: true }]), true);
+  assert.equal(reviewAnswersNeedSave(answered, [{ ...answered[0], required: false, answer: "", answer_state: "skipped" }]), true);
   assert.equal(reviewAnswersNeedSave(answered, []), true);
 });
 
@@ -249,6 +250,19 @@ describe("saving answers from the Review-answers screen", () => {
     assert.equal(body.questions[0].confirmed, true, "her confirmation reaches the route");
     assert.equal("confirmed" in body.questions[1], false,
       "and the unflagged question posts exactly what it always posted");
+  });
+
+  test("an optional Skip persists a blank answer and its reversible state", async () => {
+    const server = accepts();
+    await saveReviewAnswers({
+      applicationId: APPLICATION_ID,
+      questions: [{ ...answered[0], required: false, answer: "", answer_state: "skipped" }],
+      send: server.send,
+    });
+
+    const body = JSON.parse(server.sent[0].init.body) as { questions: Record<string, unknown>[] };
+    assert.equal(body.questions[0].answer, "");
+    assert.equal(body.questions[0].answer_state, "skipped");
   });
 
   /* `confirmed: false` never leaves the screen. The route's schema takes true or nothing, and a

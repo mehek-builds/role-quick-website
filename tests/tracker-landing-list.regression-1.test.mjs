@@ -106,7 +106,8 @@ describe("the board says what it is not drawing", () => {
        canonical inventory - so one screen carried "Your applications 100" directly over "187 of 200
        have not been sent yet". The sentence is now about the list it sits under. The card fallback
        stays for callers with no inventory to hand it (the QA harness). */
-    assert.match(board, /inventory \? pipelineCoverage\(inventory\) : boardCoverage\(cards, visibleStages\)/);
+    assert.match(board, /const ordinaryCards = \(cards \?\? \[\]\)\.filter/);
+    assert.match(board, /inventory \? pipelineCoverage\(inventory\) : boardCoverage\(ordinaryCards, visibleStages\)/);
     assert.match(board, /\{coverageNote\}/);
     assert.match(
       applications,
