@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { NextResponse } from "next/server";
+import { backendLogoEvidence, evidenceImageUrl } from "@/lib/company-logo-evidence";
 import { logoPath } from "@/lib/company-logos";
 import {
   boardHostedLogo,
@@ -34,12 +35,16 @@ import {
  * keyed by company name rather than accumulated in a directory somebody has to
  * prune: there is no state to go stale, only answers that stop being asked for.
  *
- * WHERE THE IDENTITY COMES FROM. Preferably not the company's name. We poll
- * each employer's board by a token we chose, so the page at that token is that
- * company's by construction: asking IT who they are beats guessing a domain
- * from their name, which is how block.co (an NFT company) nearly ended up on
- * Block's jobs. Name-guessing survives only as a last resort, for boards that
- * are bot-blocked or say nothing about themselves.
+ * WHERE THE IDENTITY COMES FROM. Preferably not the company's name. The best
+ * source is the backend's own verified evidence: it gates every surfaced job on
+ * a proven first-party logo URL and sends it on every /jobs row, so this route
+ * asks for that first (lib/company-logo-evidence.ts has the numbers on what
+ * ignoring it cost). Failing that, we poll each employer's board by a token we
+ * chose, so the page at that token is that company's by construction: asking IT
+ * who they are beats guessing a domain from their name, which is how block.co
+ * (an NFT company) nearly ended up on Block's jobs. Name-guessing survives only
+ * as a last resort, for boards that are bot-blocked or say nothing about
+ * themselves.
  *
  * FAILURE IS AN IMAGE, NOT AN ERROR. Anything unresolved returns the company's
  * initial as an SVG, with a 200. A 404 would need the tile to notice and swap
@@ -57,6 +62,22 @@ const CACHE = "public, max-age=86400, s-maxage=604800, stale-while-revalidate=25
 const UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36";
 const MAX_BYTES = 512 * 1024;
+/* The backend verifier accepts assets up to 1MB (its MAX_IMAGE_BYTES), so a
+   verified evidence URL is allowed the same, or this route would re-reject
+   marks the pipeline already accepted. The 512KB cap stays for everything this
+   route discovers on its own. */
+const MAX_EVIDENCE_BYTES = 1024 * 1024;
+/* The evidence lookup gets under half the route's 8s budget: if the backend is
+   slow, the remaining time still has to cover the board fetch and icon fetches
+   the legacy chain needs, or a degraded backend would turn every logo into a
+   monogram instead of merely losing the shortcut. */
+const EVIDENCE_LOOKUP_MS = 3500;
+/* And the WHOLE evidence step, fetches included, gets a cap of its own. The
+   lookup being fast does not make the evidence host fast: a hung asset host
+   given the bare 8s signal would starve the legacy chain that used to have the
+   full budget, so a company that resolved fine before the evidence step existed
+   would return a week-cached monogram whenever its evidence host wedged. */
+const EVIDENCE_STEP_MS = 5000;
 
 function svg(company: string) {
   return new NextResponse(monogramSvg(company), {
@@ -94,6 +115,99 @@ async function get(url: string, signal: AbortSignal) {
   return res;
 }
 
+/* A body, read no further than the cap. `arrayBuffer()` buffers everything
+   before any length check can run, which makes a size cap a statement about
+   what gets SERVED rather than what gets read: an oversized body would be
+   downloaded in full into this invocation's memory just to be thrown away.
+   Content-Length settles it for free when the server declares it; otherwise
+   the stream is abandoned at the first byte past the cap. */
+async function boundedBytes(res: Response, maxBytes: number): Promise<Uint8Array<ArrayBuffer> | null> {
+  const declared = Number(res.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    await res.body?.cancel();
+    return null;
+  }
+  if (!res.body) {
+    const raw = new Uint8Array(await res.arrayBuffer());
+    return raw.length && raw.length <= maxBytes ? raw : null;
+  }
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
+  }
+  if (!total) return null;
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return out;
+}
+
+type Mark = { bytes: Uint8Array<ArrayBuffer>; type: string };
+
+/* One URL to bytes the tile can draw, shared by every resolution step: sniff
+   the type rather than trusting the header (Lever's S3 serves image bytes as
+   application/octet-stream), unwrap an .ico to its embedded PNG where the
+   caller allows one, and refuse everything else. `finalUrlAllowed` re-checks
+   the response's FINAL URL: `get` follows redirects, and a host gate that only
+   sees the first hop guarantees nothing about where the bytes came from. */
+async function fetchImage(
+  url: string,
+  signal: AbortSignal,
+  opts: { maxBytes: number; allowIco: boolean; finalUrlAllowed?: (finalUrl: string) => boolean },
+): Promise<Mark | null> {
+  try {
+    const res = await get(url, signal);
+    if (opts.finalUrlAllowed && !opts.finalUrlAllowed(res.url)) {
+      await res.body?.cancel();
+      return null;
+    }
+    const raw = await boundedBytes(res, opts.maxBytes);
+    if (!raw) return null;
+    let bytes: Uint8Array<ArrayBuffer> = raw;
+    let type = imageTypeOf(res.headers.get("content-type"), raw);
+    if (type === "image/x-icon") {
+      if (!opts.allowIco) return null;
+      const inner = pngInsideIco(raw);
+      if (!inner) return null;
+      bytes = inner;
+      type = "image/png";
+    }
+    if (!type) return null;
+    return { bytes, type };
+  } catch {
+    return null;
+  }
+}
+
+/* Every resolved mark leaves through here, so the headers cannot drift between
+   resolution steps. The source label is squeezed to printable ASCII before it
+   becomes a header: undici throws on a header value with a control or
+   non-Latin-1 character, that throw would land in the route-level catch AFTER
+   the image was already fetched, and the whole rest of the chain would be
+   skipped for a string that only ever existed for observability. */
+function markResponse(mark: Mark, source: string) {
+  return new NextResponse(mark.bytes, {
+    status: 200,
+    headers: {
+      "Content-Type": mark.type,
+      "Cache-Control": CACHE,
+      "X-Logo-Source": source.replace(/[^\x20-\x7e]/g, "_").slice(0, 200),
+    },
+  });
+}
+
 export async function GET(request: Request) {
   const company = (new URL(request.url).searchParams.get("c") ?? "").slice(0, 120).trim();
   if (!company) return miss("?", request);
@@ -123,41 +237,67 @@ export async function GET(request: Request) {
   const controller = new AbortController();
   const budget = setTimeout(() => controller.abort(), 8000);
 
-  /* One helper for "given a domain I trust, get its mark". Both paths below end
-     here; only the way they arrived at the domain differs. */
-  const markFromDomain = async (domain: string) => {
+  /* One helper for "given a domain I trust, get its mark". Every path below
+     ends here; only the way it arrived at the domain differs. The signal is a
+     parameter because the evidence step runs on a tighter budget than the
+     legacy chain (see EVIDENCE_STEP_MS). */
+  const markFromDomain = async (domain: string, signal: AbortSignal = controller.signal) => {
     const origin = `https://${domain}`;
     let html = "";
     try {
-      html = await (await get(origin, controller.signal)).text();
+      html = await (await get(origin, signal)).text();
     } catch {
       /* the icon may still sit at a well-known path */
     }
     for (const url of iconUrls(html, origin).slice(0, 6)) {
-      try {
-        const res = await get(url, controller.signal);
-        const raw = new Uint8Array(await res.arrayBuffer());
-        if (!raw.length || raw.length > MAX_BYTES) continue;
-        let bytes: Uint8Array<ArrayBuffer> = raw;
-        let type = imageTypeOf(res.headers.get("content-type"), raw);
-        if (type === "image/x-icon") {
-          const inner = pngInsideIco(raw);
-          if (!inner) continue;
-          bytes = inner;
-          type = "image/png";
-        }
-        if (!type) continue;
-        return { bytes, type, source: domain };
-      } catch {
-        /* next icon */
-      }
+      const mark = await fetchImage(url, signal, { maxBytes: MAX_BYTES, allowIco: true });
+      if (mark) return mark;
     }
     return null;
   };
 
+  const boardParam = new URL(request.url).searchParams.get("board");
+
   try {
-    /* 1. THE BOARD WE POLL. Identity is not inferred here, so this wins. */
-    const board = parseBoardUrl(new URL(request.url).searchParams.get("board"));
+    /* 1. THE BACKEND'S VERIFIED EVIDENCE. The backend refuses to surface a job
+       until its own verifier has proven a first-party logo for the source, so
+       for any (company, board) pair the tile can legitimately ask about, the
+       answer usually already exists and only has to be fetched. This step is
+       what covers the Workable, Rippling, Recruitee, Breezy and Crelate boards
+       the extraction below was never taught. The lookup is fed the RAW board
+       parameter, not the parsed one: it is compared against career_url strings
+       from the same API, never fetched, so parseBoardUrl's gate does not apply
+       to it. */
+    const evidenceBudget = AbortSignal.any([controller.signal, AbortSignal.timeout(EVIDENCE_STEP_MS)]);
+    const evidence = await backendLogoEvidence(
+      company,
+      boardParam,
+      AbortSignal.any([evidenceBudget, AbortSignal.timeout(EVIDENCE_LOOKUP_MS)]),
+    );
+    if (evidence?.url) {
+      const mark = await fetchImage(evidence.url, evidenceBudget, {
+        maxBytes: MAX_EVIDENCE_BYTES,
+        allowIco: true,
+        /* Redirects are followed, so the gate that admitted the URL is applied
+           to where the response actually came from as well. */
+        finalUrlAllowed: (finalUrl) => evidenceImageUrl(finalUrl, evidence.domain) !== null,
+      });
+      if (mark) return markResponse(mark, `verified:${evidence.method ?? "unknown"}`);
+    }
+    /* The evidence can also be just a verified DOMAIN (the homepage-asset
+       method proves the employer's site rather than a hosted image, and its
+       asset sometimes lives on a page-builder CDN the host gate rightly will
+       not fetch). A backend-verified domain is a strictly better input to
+       markFromDomain than the board-backlink guess below, so use it before
+       falling through. */
+    if (evidence?.domain) {
+      const mark = await markFromDomain(evidence.domain, evidenceBudget);
+      if (mark) return markResponse(mark, `verified-domain:${evidence.domain}`);
+    }
+
+    /* 2. THE BOARD WE POLL. Identity is not inferred here either, so this is
+       the next best thing when the backend had no answer for the pair. */
+    const board = parseBoardUrl(boardParam);
     if (board) {
       let html = "";
       try {
@@ -170,25 +310,10 @@ export async function GET(request: Request) {
          corroborate: the URL is keyed to the organisation. */
       const hosted = boardHostedLogo(html, board.ats);
       if (hosted) {
-        try {
-          const res = await get(hosted, controller.signal);
-          const raw = new Uint8Array(await res.arrayBuffer());
-          const type = imageTypeOf(res.headers.get("content-type"), raw);
-          if (raw.length && raw.length <= MAX_BYTES && type && type !== "image/x-icon") {
-            const bytes = new Uint8Array(raw.byteLength);
-            bytes.set(raw);
-            return new NextResponse(bytes, {
-              status: 200,
-              headers: {
-                "Content-Type": type,
-                "Cache-Control": CACHE,
-                "X-Logo-Source": `${board.ats}:${board.token}`,
-              },
-            });
-          }
-        } catch {
-          /* fall through */
-        }
+        /* No .ico here: these are the employer's own uploaded marks and an
+           icon container in that slot has always meant something went wrong. */
+        const mark = await fetchImage(hosted, controller.signal, { maxBytes: MAX_BYTES, allowIco: false });
+        if (mark) return markResponse(mark, `${board.ats}:${board.token}`);
       }
 
       /* Greenhouse hosts no logo, but its boards link the employer's own site.
@@ -196,22 +321,13 @@ export async function GET(request: Request) {
       const owned = html ? ownDomainFromBoard(html, new URL(board.url).hostname, board.token) : null;
       if (owned) {
         const mark = await markFromDomain(owned);
-        if (mark) {
-          return new NextResponse(mark.bytes, {
-            status: 200,
-            headers: {
-              "Content-Type": mark.type,
-              "Cache-Control": CACHE,
-              "X-Logo-Source": `${board.ats}:${board.token} -> ${owned}`,
-            },
-          });
-        }
+        if (mark) return markResponse(mark, `${board.ats}:${board.token} -> ${owned}`);
       }
     }
 
-    /* 2. LAST RESORT: guess a domain from the name. Everything that ever
+    /* 3. LAST RESORT: guess a domain from the name. Everything that ever
        attached the wrong company's logo came from here, which is why it runs
-       only once the board has had its say. */
+       only once the backend and the board have both had their say. */
     for (const domain of domainCandidates(company)) {
       let html = "";
       try {
@@ -221,16 +337,7 @@ export async function GET(request: Request) {
       }
       if (!identifies(company, html)) continue;
       const mark = await markFromDomain(domain);
-      if (mark) {
-        return new NextResponse(mark.bytes, {
-          status: 200,
-          headers: {
-            "Content-Type": mark.type,
-            "Cache-Control": CACHE,
-            "X-Logo-Source": `name-guess:${domain}`,
-          },
-        });
-      }
+      if (mark) return markResponse(mark, `name-guess:${domain}`);
     }
   } catch {
     /* the budget fired, or the network did something unhelpful */
