@@ -117,10 +117,20 @@ for (const company of sample) {
 console.log(`     ${resolved}/${sample.length} of the residue resolved (informational)`);
 
 /* --- 3. the denylist holds --- */
-console.log("\n3. a company whose .com belongs to someone else stays a monogram");
+console.log("\n3. a company whose .com belongs to someone else is never name-guessed");
+/* The denylist protects the NAME GUESS, and that is all it has to protect. A
+   monogram passes. So does a mark served as `verified:*`: backend evidence is
+   keyed to the exact row on our own board, not to whoever owns the .com, and a
+   real Peloton joining the board is allowed its real logo. What must never
+   appear here is a name-guessed image, which is how peloton.com's oil-and-gas
+   software nearly got a fitness company's rows. */
 for (const company of ["Peloton", "crisp", "Peloton Interactive"]) {
   const r = await logo(company);
-  check(r.isMonogram, `${company} is a monogram`, r.type);
+  check(
+    r.isMonogram || (r.isImage && r.source.startsWith("verified")),
+    `${company} is a monogram or backend-verified, never a guess`,
+    r.source || r.type,
+  );
 }
 
 /* --- 4. the unknown case is an image, not an error --- */
@@ -158,23 +168,33 @@ check(
 console.log("\n7. the mark comes from the board we poll, not from the name");
 
 /* Block is THE case. Guessing from the name gives block.co, an NFT company;
-   their Greenhouse board links block.xyz, which is the real one. */
+   their Greenhouse board links block.xyz, which is the real one. Whether Block
+   resolves AT ALL is board data, not code: Block has left the board before
+   (measured 2026-09-01: no exact "Block" row among 204 substring matches, and
+   this check sat red against production for it). The invariant a deploy can
+   actually gate on is that whatever answers is never the name guess. */
 const block = await logo("Block", "follow", "https://job-boards.greenhouse.io/block");
-check(block.isImage && !block.isMonogram, "Block resolved a real mark", `${block.type}, ${block.bytes}B`);
 check(
-  block.source.includes("block.xyz"),
-  "and it came from block.xyz, not the name-guess block.co",
-  block.source,
+  block.isMonogram
+    || (!block.source.startsWith("name-guess") && !block.source.includes("block.co")),
+  "Block is never served from the name-guess block.co",
+  block.source || block.type,
 );
 
-/* Ashby and Lever host the employer's own uploaded logo, keyed to the org. */
+/* Ashby hosts the employer's own uploaded logo, keyed to the org, and the
+   backend's evidence records that same URL: either source label proves the
+   mark did not come from the name. */
 const crisp = await logo("crisp", "follow", "https://jobs.ashbyhq.com/crisp");
 check(
   crisp.isImage && !crisp.isMonogram,
   "crisp resolved from its Ashby board despite being on the name denylist",
   `${crisp.type}, ${crisp.source}`,
 );
-check(crisp.source.startsWith("ashby:"), "served from the ATS-hosted logo", crisp.source);
+check(
+  crisp.source.startsWith("ashby:") || crisp.source.startsWith("verified"),
+  "served from the ATS-hosted logo or its verified evidence",
+  crisp.source,
+);
 
 /* --- 8. the board parameter cannot be pointed anywhere --- */
 console.log("\n8. the board parameter is not an open fetch");
@@ -216,6 +236,32 @@ check(
   parsable.length === withBoardUrl.length,
   "and every one is a board the logo service will accept",
   `${parsable.length}/${withBoardUrl.length}`,
+);
+
+/* --- 10. the backend's verified evidence actually dresses the board --- */
+console.log("\n10. a live board row resolves through the backend's evidence");
+/* The feature the evidence path exists for, held end to end: the backend
+   refuses to surface a row without verified logo evidence, so a row it just
+   handed us must come back as a real image, and from the evidence or the board,
+   never from the name. Probed on rows the API returned seconds ago so the case
+   tracks the live board instead of pinning a company that can churn off it. */
+const liveRows = withBoardUrl.filter((j) => typeof j.company_name === "string" && j.company_name);
+check(liveRows.length > 0, "the grouped rows carry company_name", String(liveRows.length));
+let evidenceHits = 0;
+for (const rowUnderTest of liveRows.slice(0, 3)) {
+  const r = await logo(rowUnderTest.company_name, "follow", rowUnderTest.career_url);
+  const fromEvidence = r.source.startsWith("verified");
+  if (fromEvidence) evidenceHits += 1;
+  check(
+    r.status === 200 && !r.source.startsWith("name-guess"),
+    `${rowUnderTest.company_name} answered without a name guess`,
+    r.source || r.type,
+  );
+}
+check(
+  evidenceHits > 0,
+  "at least one of them was served from backend evidence",
+  `${evidenceHits}/${Math.min(3, liveRows.length)}`,
 );
 
 console.log(`\n${failures === 0 ? "PASS" : `FAIL (${failures})`}`);
