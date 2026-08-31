@@ -29,7 +29,7 @@ function usableQuestionOptions(options: readonly string[] | null | undefined): s
   return usable;
 }
 
-function questionOptionsAreComplete(
+export function questionOptionsAreComplete(
   question: Pick<ApplicationQuestion, "options_complete" | "optionsComplete">,
 ): boolean {
   return question.options_complete !== false && question.optionsComplete !== false;

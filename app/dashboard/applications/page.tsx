@@ -65,7 +65,7 @@ import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX, exactPacketAuditClauses
 import { educationDrift, educationDriftMessage, type EducationProfile } from "@/features/applications";
 import { checklistRowControl, completedSubmissionGroups, directInputTaskPlan, directQuestionPromptFingerprint, directQuestionTaskFingerprint, displayQuestionLabel, documentAsksByKind, documentControls, humanInputItems, metadataRefreshOutranksStandingAttention, QUESTION_CHOICE_LIST_LIMIT, reviewedAnswersSaveLanding, type DirectQuestionTask, type DirectQuestionTaskIntent, type SubmissionChecklistAction, type SubmissionChecklistItem } from "@/features/applications";
 import { prescriptBlocksProgress, prescriptEditableQuestions, prescriptMetadataBlockers, prescriptNeedsHer, prescriptSummary } from "@/features/applications";
-import { answerWithExactOptionToggled, exactQuestionOption, exactSelectedQuestionOptions, optionalQuestionNeedsDecision, questionAcceptsMultipleOptions, questionReviewPresentation, requiredQuestionReviewRoute } from "@/features/applications";
+import { answerWithExactOptionToggled, exactQuestionOption, exactSelectedQuestionOptions, optionalQuestionNeedsDecision, questionAcceptsMultipleOptions, questionOptionsAreComplete, questionReviewPresentation, requiredQuestionReviewRoute } from "@/features/applications";
 import type { JdMatchResponse, JobMatch } from "@/features/applications";
 import { userFacingError } from "@/lib/user-facing-error";
 import { APPLICATION_DOCUMENT_ACCEPT_ATTRIBUTE, validateApplicationDocument } from "@/lib/document-size";
@@ -7202,7 +7202,7 @@ function UnverifiedSubmissionCard({ attentionReason, submitting, error, onSubmit
   );
 }
 
-function DirectApplicationQuestion({ task, position, total, saving, saved, focusToken, hasPrevious, hasNext, preservedDraft, externalFailure, onDraftChange, onClearDraft, onClearFailure, onPrevious, onNext, onReviewApplication, onSave, onSkip }: {
+export function DirectApplicationQuestion({ task, position, total, saving, saved, focusToken, hasPrevious, hasNext, preservedDraft, externalFailure, onDraftChange, onClearDraft, onClearFailure, onPrevious, onNext, onReviewApplication, onSave, onSkip }: {
   task: DirectQuestionTask;
   position: number;
   total: number;
@@ -7385,6 +7385,22 @@ function DirectApplicationQuestion({ task, position, total, saving, saved, focus
         {task.question.answer_draft?.trim() && !answer.trim() && (
           <p className="mt-3 rounded-inner border border-control-border bg-surface-alt px-3 py-2 text-small leading-6 text-muted">
             Your previous answer did not match the employer&apos;s current choices: {task.question.answer_draft}. Choose again below.
+          </p>
+        )}
+
+        {task.question.options && task.question.options.length > 0
+          && !questionOptionsAreComplete(task.question) && (
+          /* THE MENU BELOW IS NOT THE WHOLE MENU.
+             options_complete false means discovery saw more employer choices than it could retain
+             exactly. Rendering the partial list with no mark is the worst of the three options: she
+             picks Amsterdam from three, never learning the employer offered nine, and a wrong answer
+             she chose deliberately looks exactly like a right one. The list still shows, because the
+             choices that WERE read exactly are real and usually contain her answer. It just stops
+             claiming to be complete. */
+          <p className="mt-3 rounded-inner border border-control-border bg-surface-alt px-3 py-2 text-small leading-6 text-muted">
+            Litos could not read this employer&apos;s full list of choices, so the options below may
+            be only part of it. Pick one if your answer is there. If it is not, leave this and Litos
+            will not guess on your behalf.
           </p>
         )}
 
