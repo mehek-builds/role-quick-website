@@ -644,9 +644,13 @@ export function ResumePaper({
           solver's linear model no longer describes the layout and the measured fill drifts toward
           1.0 - at which point the sheet's overflow-hidden starts silently eating the last line.
           A slightly smaller thumbnail is a much better failure than a clipped resume. */}
+      {/* [&_mark]:px-0 strips TermMark's horizontal padding inside the paper alone. The paper's
+          contract is that the preview wraps where the PDF wraps, and half a character of padding
+          per marked term is enough to wrap a marked line one word early. The colour survives; the
+          width cost does not. */}
       <div
         ref={frameRef}
-        className="h-full w-full box-border px-[5.88%] py-[4.5%] text-[clamp(5px,1.72cqw,15px)]"
+        className="h-full w-full box-border px-[5.88%] py-[4.5%] text-[clamp(5px,1.72cqw,15px)] [&_mark]:px-0"
         style={{ "--rq-gap": `${gapEm.toFixed(3)}em` } as React.CSSProperties}
       >
         {/* flow-root establishes a block formatting context, so the section headers' top margins

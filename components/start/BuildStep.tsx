@@ -53,6 +53,24 @@ export type BuildContext = {
   applicantName: string | null;
 };
 
+/* The posting's words with their requirement marks and legend, shared by the build screen and the
+   review screen so the two panes cannot drift apart: what the student approves on review is
+   rendered by the same code that showed it building. Callers wrap it in a RequirementProvider. */
+export function MarkedPostingBody({ description, jdMatch }: { description: string; jdMatch: JdMatchResponse | null }) {
+  return (
+    <>
+      {jdMatch?.scorable && (
+        <div className="mt-1">
+          <MatchLegend missingCount={jdMatch.missing.length} />
+        </div>
+      )}
+      <p className="mt-1 whitespace-pre-line text-[12.5px] leading-6 text-ink">
+        <RequirementText text={description} />
+      </p>
+    </>
+  );
+}
+
 export function BuildStep({
   match,
   onQuestions,
@@ -283,16 +301,7 @@ export function BuildStep({
                 RequirementText under the same provider, so both panes carry the same colours for
                 the same meanings, which is what closes the issue instead of re-opening it. */}
             {!building && posting.description && (
-              <>
-                {jdMatch?.scorable && (
-                  <div className="mt-1">
-                    <MatchLegend missingCount={jdMatch.missing.length} />
-                  </div>
-                )}
-                <p className="mt-1 whitespace-pre-line text-[12.5px] leading-6 text-ink">
-                  <RequirementText text={posting.description} />
-                </p>
-              </>
+              <MarkedPostingBody description={posting.description} jdMatch={jdMatch} />
             )}
           </div>
         </section>

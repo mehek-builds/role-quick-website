@@ -39,11 +39,11 @@ import {
   type EducationProfile,
   type JdMatchResponse,
 } from "@/features/applications";
-import { MatchLegend, RequirementProvider, RequirementText } from "@/components/app/RequirementText";
+import { RequirementProvider } from "@/components/app/RequirementText";
 import { track } from "@/lib/analytics";
 import { PrimaryButton, Receipt, StartShell } from "./ui";
 import { ResumePaper } from "./ResumePaper";
-import { contactHeaderOf } from "./BuildStep";
+import { contactHeaderOf, MarkedPostingBody } from "./BuildStep";
 
 type SubmitOutcome = { sent: boolean };
 
@@ -138,16 +138,7 @@ export function ReviewStep({
                 {posting.ats_name}
               </p>
               {posting.description && (
-                <>
-                  {jdMatch?.scorable && (
-                    <div className="mt-1">
-                      <MatchLegend missingCount={jdMatch.missing.length} />
-                    </div>
-                  )}
-                  <p className="mt-1 whitespace-pre-line text-[12.5px] leading-6 text-ink">
-                    <RequirementText text={posting.description} />
-                  </p>
-                </>
+                <MarkedPostingBody description={posting.description} jdMatch={jdMatch} />
               )}
             </div>
           </section>
