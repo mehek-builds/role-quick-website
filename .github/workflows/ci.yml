@@ -208,6 +208,13 @@ jobs:
       # screenshot, the serialised DOM and a Playwright trace on failure and
       # nothing at all on success, so this upload is empty on a green run.
 
+      # The employer question blocker's four render modes, driven through /qa/question-blocker.
+      # None of the 39 dashboard-visual scenarios reach this UI, which is how options_complete
+      # went unread in DirectApplicationQuestion with nothing red (3a90a2e). Above the
+      # deliberately-last partial-payload step, so its known-red case cannot skip this.
+      - name: Question blocker harness spec
+        run: npm run test:question-blocker
+
       # LAST ON PURPOSE. These steps run sequentially, so whichever fails first skips every
       # step after it. This spec is currently red on one case whose payload the board's submission
       # authority gate now rejects before render, and while it sat above them it was silently
@@ -232,5 +239,6 @@ jobs:
             test-results/country-eligibility-flow/
             test-results/dashboard-visual-regressions/
             test-results/narrow-viewport/
+            test-results/question-blocker/
           if-no-files-found: ignore
           retention-days: 7
