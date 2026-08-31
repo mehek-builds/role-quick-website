@@ -102,9 +102,18 @@ export async function GET(request: Request) {
      to the static file is cheaper than anything this route can do. */
   const committed = logoPath(company);
   if (committed && existsSync(path.join(process.cwd(), "public", committed))) {
-    return NextResponse.redirect(new URL(committed, request.url), {
+    /* A ROOT-RELATIVE Location, never one built from request.url.
+     *
+     * request.url is the origin the server saw, not the origin the browser asked for. Behind
+     * Railway's proxy that is the container's own http://localhost:3000, so `new URL(committed,
+     * request.url)` sent every visitor to port 3000 ON THEIR OWN MACHINE and every committed logo
+     * silently became an empty tile. It worked on Vercel, which rewrote request.url to the public
+     * origin, so the cutover broke it with no code change. RFC 7231 allows a relative Location and
+     * the browser resolves it against the URL it actually requested, which is correct on any host
+     * and needs no trust in x-forwarded-* headers. */
+    return new Response(null, {
       status: 308,
-      headers: { "Cache-Control": CACHE },
+      headers: { Location: committed, "Cache-Control": CACHE },
     });
   }
 
