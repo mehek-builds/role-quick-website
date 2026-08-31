@@ -93,13 +93,99 @@ async function waitForServer(origin, child) {
  * of this, which is why tests/e2e/fixture-data.mjs, which always sends `questions`, was green
  * against the shipped defect.
  */
-function thinPacket(key, status, { role, company }) {
+/* Every fixture carries a submission-authority envelope, because the dashboard no longer trusts a
+ * bare `_review.status`. `packetForSubmissionDisplay` routes the stored review through
+ * `reviewForSubmissionProjection`, which downgrades any review that CLAIMS sent to
+ * `needs_attention` unless the projection is confirmed for that exact identity, and quarantines a
+ * packet whose envelope does not parse. A fixture without one therefore renders the
+ * needs-attention screen no matter what status it sets, which is what made this suite red.
+ *
+ * The ids are UUIDs for the same reason: the envelope is rejected outright when the application id
+ * is not one, before any field of it is read. */
+const UUID_TAIL = "-4000-8000-000000000000";
+/* Hex only. The pattern is /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+ * so a key like "sent" cannot be spelled into the id directly. */
+const KEY_HEX = { needs: "11111111", ready: "22222222", sent: "33333333" };
+const keyHex = (key) => KEY_HEX[key] ?? "99999999";
+const packetUuid = (key) => `${keyHex(key)}-0000${UUID_TAIL}`;
+const attemptUuid = (key) => `${keyHex(key)}-1111${UUID_TAIL}`;
+/* A confirmed projection requires a UUID canonical id. null is rejected, which is the trap:
+ * the packet has no canonical application, but the projection still has to carry one. */
+const canonicalUuid = (key) => `${keyHex(key)}-2222${UUID_TAIL}`;
+
+const SUBMITTED_AT = "2026-08-10T12:40:00.000Z";
+const CAPTURED_AT = "2026-08-10T12:40:05.000Z";
+
+/* A confirmed projection has an exact key set, and its receipt source has to agree with the
+ * projection source, so this cannot be trimmed. */
+function confirmedAuthority(key) {
+  const packetId = packetUuid(key);
+  const attemptId = attemptUuid(key);
+  const projection = {
+    state: "confirmed",
+    attempt_id: attemptId,
+    canonical_application_id: canonicalUuid(key),
+    packet_id: packetId,
+    submitted_at: SUBMITTED_AT,
+    receipt: {
+      confirmation_text: "Your application has been received.",
+      final_url: "https://jobs.example.com/confirmation",
+      captured_at: CAPTURED_AT,
+      source: "managed_browser",
+    },
+    source: "managed_browser",
+    tracker_stage: "applied",
+  };
+  const retrySafety = { kind: "blocked_confirmed", attemptId, confirmedAt: CAPTURED_AT };
   return {
-    id: `thin-packet-${key}`,
+    submission_projection: projection,
+    retry_safety: retrySafety,
+    submission_authority: {
+      schema_version: "submission-authority-v1",
+      revision: "12",
+      state: "confirmed",
+      application_id: packetId,
+      packet_id: packetId,
+      projection,
+      retry_safety: retrySafety,
+    },
+  };
+}
+
+/* Valid, parses, and asserts nothing was ever sent. A review that makes no sent claim is returned
+ * unchanged through this, which is what keeps "Review and send" on screen for a ready packet. */
+function noSubmissionAuthority(key) {
+  const packetId = packetUuid(key);
+  const projection = { state: "none" };
+  /* Not null. A "none" projection is only accepted alongside a retry verdict of `no_evidence` or
+   * `safe_not_sent`; with null the envelope is rejected and the packet is quarantined, which puts
+   * the needs-attention screen up even though the review itself was never downgraded. */
+  const retrySafety = { kind: "no_evidence" };
+  return {
+    submission_projection: projection,
+    retry_safety: retrySafety,
+    submission_authority: {
+      schema_version: "submission-authority-v1",
+      revision: "12",
+      state: "none",
+      application_id: packetId,
+      packet_id: packetId,
+      projection,
+      retry_safety: retrySafety,
+    },
+  };
+}
+
+function thinPacket(key, status, { role, company }) {
+  const packetId = packetUuid(key);
+  const authority = status === "submitted" ? confirmedAuthority(key) : noSubmissionAuthority(key);
+  return {
+    id: packetId,
     job_context: { company, role, jd_hash: `hash-${key}` },
     resume_object_key: `fixture/${key}`,
     created_at: "2026-08-10T12:00:00.000Z",
     download_url: "#",
+    ...authority,
     spec: {
       school: "Fixture University",
       degree: "B.S. Fixture Studies",
@@ -111,7 +197,9 @@ function thinPacket(key, status, { role, company }) {
         jd_text: `Fixture posting ${key}. The company builds accessible TypeScript interfaces.`,
         status,
         updated_at: "2026-08-10T12:30:00.000Z",
-        ...(status === "submitted" ? { submitted_at: "2026-08-10T12:40:00.000Z" } : {}),
+        ...(status === "submitted"
+          ? { submitted_at: SUBMITTED_AT, submission_claim_id: attemptUuid(key) }
+          : {}),
       },
     },
   };
