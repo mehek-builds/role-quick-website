@@ -863,7 +863,12 @@ browserTest("a failed canonical Back load never leaves the prior application's c
     await page.waitForURL((url) => url.searchParams.get("application") === CANONICAL_A.id, { timeout: 10_000 });
     await page.getByRole("button", { name: "Open and fill application", exact: true }).waitFor({ state: "hidden", timeout: 10_000 });
     assert.equal(await page.getByRole("button", { name: "Tailor resume", exact: true }).count(), 0, "the previous canonical application kept an active Tailor control after the route changed");
-    assert.equal(await page.getByRole("heading", { name: CANONICAL_B.role, exact: true }).count(), 0, "the previous canonical identity survived a failed Back load");
+    /* waitFor hidden, not an instant count. The defect this case exists to catch is B's identity
+     * SURVIVING under A's URL, and waitFor still fails on that. An instant count also fails when
+     * B's teardown lags one render behind the button above, which is a timing artifact of the
+     * runner, not the defect: this exact line was the suite's one CI-only failure on 2026-08-31,
+     * green twice locally on the same commit. */
+    await page.getByRole("heading", { name: CANONICAL_B.role, exact: true }).first().waitFor({ state: "hidden", timeout: 10_000 });
 
     failApplicationHistory = false;
     await page.goForward();
