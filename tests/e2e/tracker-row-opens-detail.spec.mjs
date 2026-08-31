@@ -105,8 +105,24 @@ async function waitForServer(origin, child) {
 const UUID_TAIL = "-4000-8000-000000000000";
 /* Hex only. The pattern is /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
  * so a key like "sent" cannot be spelled into the id directly. */
-const KEY_HEX = { needs: "11111111", ready: "22222222", sent: "33333333" };
-const keyHex = (key) => KEY_HEX[key] ?? "99999999";
+const KEY_HEX = {
+  needs: "11111111",
+  ready: "22222222",
+  sent: "33333333",
+  unverified: "44444444",
+  "question-metadata": "55555555",
+  "single-direct-question": "66666666",
+  "legacy-question-metadata": "77777777",
+  "hydrated-ready": "88888888",
+};
+/* Every key must be mapped. A shared fallback gave five distinct fixtures one packet id, and an
+ * envelope is bound to a packet BY id, so the wrong authority can be matched to the wrong row and
+ * the suite still goes green. Fail loudly instead. */
+const keyHex = (key) => {
+  const hex = KEY_HEX[key];
+  if (!hex) throw new Error(`No fixture UUID mapped for packet key "${key}". Add one to KEY_HEX.`);
+  return hex;
+};
 const packetUuid = (key) => `${keyHex(key)}-0000${UUID_TAIL}`;
 const attemptUuid = (key) => `${keyHex(key)}-1111${UUID_TAIL}`;
 /* A confirmed projection requires a UUID canonical id. null is rejected, which is the trap:
@@ -847,7 +863,12 @@ browserTest("a failed canonical Back load never leaves the prior application's c
     await page.waitForURL((url) => url.searchParams.get("application") === CANONICAL_A.id, { timeout: 10_000 });
     await page.getByRole("button", { name: "Open and fill application", exact: true }).waitFor({ state: "hidden", timeout: 10_000 });
     assert.equal(await page.getByRole("button", { name: "Tailor resume", exact: true }).count(), 0, "the previous canonical application kept an active Tailor control after the route changed");
-    assert.equal(await page.getByRole("heading", { name: CANONICAL_B.role, exact: true }).count(), 0, "the previous canonical identity survived a failed Back load");
+    /* waitFor hidden, not an instant count. The defect this case exists to catch is B's identity
+     * SURVIVING under A's URL, and waitFor still fails on that. An instant count also fails when
+     * B's teardown lags one render behind the button above, which is a timing artifact of the
+     * runner, not the defect: this exact line was the suite's one CI-only failure on 2026-08-31,
+     * green twice locally on the same commit. */
+    await page.getByRole("heading", { name: CANONICAL_B.role, exact: true }).first().waitFor({ state: "hidden", timeout: 10_000 });
 
     failApplicationHistory = false;
     await page.goForward();

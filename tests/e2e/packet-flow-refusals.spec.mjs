@@ -35,7 +35,7 @@ import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { chromium } from "playwright-core";
 
-import { BACKEND_ORIGIN, RESUMES, SESSION_TOKEN, STUB } from "./fixture-data.mjs";
+import { BACKEND_ORIGIN, RESUMES, SESSION_TOKEN, STUB, confirmedAuthorityFor } from "./fixture-data.mjs";
 
 async function freePort() {
   return new Promise((resolve, reject) => {
@@ -146,11 +146,45 @@ function packetAuditResponse(packet) {
   };
 }
 
+/* The packet's own envelope travels with every submission response. Without it the dashboard
+ * quarantines the packet and renders the needs-attention screen instead of the audited flow. */
 function submissionFor(packet, auditResponse) {
   return {
     application_id: packet.id,
+    submission_projection: packet.submission_projection,
+    retry_safety: packet.retry_safety,
+    submission_authority: packet.submission_authority,
     review: { ...packet.spec._review, packet_audit: auditResponse.packet_audit },
     cover_letter: null,
+  };
+}
+
+const LANDED_CAPTURED_AT = "2026-08-20T12:00:00.000Z";
+const LANDED_CONFIRMATION = "Thank you. Your application was received.";
+const LANDED_FINAL_URL = "https://jobs.example.com/fixture/confirmation";
+
+/* An accepted send must return authority, not just a "submitted" status. */
+function landedResponse(submission, packet) {
+  const { attemptId, envelope } = confirmedAuthorityFor(packet.id, `refusals-${packet.id}`, {
+    confirmationText: LANDED_CONFIRMATION,
+    finalUrl: LANDED_FINAL_URL,
+    capturedAt: LANDED_CAPTURED_AT,
+  });
+  return {
+    ...submission,
+    ...envelope,
+    review: {
+      ...submission.review,
+      status: "submitted",
+      submitted_at: LANDED_CAPTURED_AT,
+      submission_claim_id: attemptId,
+      receipt: {
+        confirmation_text: LANDED_CONFIRMATION,
+        final_url: LANDED_FINAL_URL,
+        captured_at: LANDED_CAPTURED_AT,
+        reference_id: "FIXTURE-0002",
+      },
+    },
   };
 }
 
@@ -204,20 +238,7 @@ async function openAuditedFlow(packet, { ackResponse = null, submitResponse = nu
         submitInFlight = false;
         if (submitResponse) return json(submitResponse.body, submitResponse.status);
         if (landedSubmission) return json(landedSubmission);
-        return json({
-          ...submission,
-          review: {
-            ...submission.review,
-            status: "submitted",
-            submitted_at: "2026-08-20T12:00:00.000Z",
-            receipt: {
-              confirmation_text: "Thank you. Your application was received.",
-              final_url: "https://jobs.example.com/fixture/confirmation",
-              captured_at: "2026-08-20T12:00:00.000Z",
-              reference_id: "FIXTURE-0002",
-            },
-          },
-        });
+        return json(landedResponse(submission, packet));
       }
       /* The review_edit save that precedes the audit on resume_ready packets. Echo the saved
          review; the flow only needs the envelope back. */
