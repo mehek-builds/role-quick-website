@@ -30,7 +30,8 @@
     "test:approve": "node --test tests/e2e/approve-resolves.spec.mjs",
     "test:packet-flow-refusals": "node --test tests/e2e/packet-flow-refusals.spec.mjs",
     "test:exact-packet-pdf": "node --test tests/e2e/exact-packet-pdf.spec.mjs",
-    "test:start-application": "node --test tests/e2e/start-application-sequence.spec.mjs"
+    "test:start-application": "node --test tests/e2e/start-application-sequence.spec.mjs",
+    "test:question-blocker": "node --test tests/e2e/question-blocker.spec.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",
