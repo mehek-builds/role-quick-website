@@ -660,12 +660,24 @@ export default function Start() {
               /* A revisit still reloads the parsed profile, because a re-uploaded resume changes it.
                  It just does not acknowledge or advance. */
               const cameBack = revisiting !== null;
-              void (async () => {
+              /* Returned rather than voided: a clean parse now advances without rendering the recap,
+                 and ResumeStep needs to know whether the advance landed. `false` is its cue to fall
+                 back to the recap so the student keeps a control next to the error banner. */
+              return (async () => {
                 if (!cameBack && hasFlowLedger(state)) await acknowledgeOnboardingFlowStep("resume", "continued", state.flow_version);
                 const s = await refresh();
                 if (s.has_resume) await loadProfile();
                 if (cameBack) { track("onboarding_revisit_saved", { step: "resume" }); setRevisiting(null); }
-              })().catch((reason) => setError(reason instanceof Error ? reason.message : "Could not continue."));
+                /* A refresh that still serves "resume" did not advance, whatever the requests said.
+                   Reporting it as an advance would leave the auto-advancing upload on a spinner
+                   forever, because the screen it is waiting to be unmounted by never changes. A
+                   revisit is the exception: it returns to the step the student came from, which the
+                   cleared override restores on its own. */
+                return cameBack || s.step !== "resume";
+              })().catch((reason) => {
+                setError(reason instanceof Error ? reason.message : "Could not continue.");
+                return false;
+              });
             }}
           />
         );

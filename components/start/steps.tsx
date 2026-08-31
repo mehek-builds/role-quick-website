@@ -656,7 +656,11 @@ export function ResumeStep({
   onLater,
   savedProfile,
 }: {
-  onDone: () => void;
+  /* Returns whether the flow actually advanced, or void from call sites that predate the auto
+     advance. `false` is the one value that matters: it tells a clean-parse upload the acknowledge
+     or refresh failed, so the recap must render as the fallback control instead of leaving the
+     student on a spinner with nothing left to press. */
+  onDone: () => void | Promise<boolean>;
   onLater: () => void;
   savedProfile?: ParsedProfile | null;
 }) {
@@ -685,17 +689,38 @@ export function ResumeStep({
     setError(null);
     setFile(f);
     setBusy(true);
+    let advancedCleanly = false;
     try {
       const measured = await measureElapsed(() => uploadResume(f));
       const result = measured.value;
       setParseSeconds(measured.seconds);
+      /* A CLEAN PARSE GOES STRAIGHT TO THE MATCH (Mehek, 2026-09-01). The recap screen restated
+         what the parse had just done and asked for a press that decided nothing, so it is skipped
+         whenever there is nothing on it a student must weigh. It still renders for the two states
+         that DO need their eyes before continuing: a local-fallback parse (review the details the
+         outage may have misread) and a parse too thin to advance at all. The deliberate action
+         here is choosing the file; this press was a receipt, not a decision.
+
+         The advance itself can fail (the acknowledge POST or the refresh), and `onDone` reports
+         that as `false`. Falling through to the recap on failure is what keeps a working control
+         on the screen next to the page-level error banner. */
+      const { ready, showFallbackWarning } = resumeUploadState(result);
+      if (ready && !showFallbackWarning) {
+        const advanced = await Promise.resolve(onDone());
+        // Stay busy on success: the refresh has already advanced the step, so this screen is
+        // unmounting and un-busying it would flash the empty drop zone for a frame.
+        if (advanced !== false) {
+          advancedCleanly = true;
+          return;
+        }
+      }
       setParsed(result);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not read that resume.");
       setFile(null);
       if (inputRef.current) inputRef.current.value = "";
     } finally {
-      setBusy(false);
+      if (!advancedCleanly) setBusy(false);
     }
   }
 
