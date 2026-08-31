@@ -89,11 +89,16 @@ describe("the list scores the posting, not the preview of it", () => {
     assert.doesNotMatch(code, /fetchJdMatch\(job\.description/);
   });
 
-  test("the review screen still sends its own text", () => {
-    // Its packet holds the JD captured when the resume was tailored to it. The live row may have
-    // been edited since, and that screen's number must be about the document on the page.
+  test("the review screen still sends its own text when it has one", () => {
+    /* Its packet holds the JD captured when the resume was tailored to it. The live row may have
+       been edited since, and that screen's number must be about the document on the page. The
+       fallback is new (2026-09-01) and deliberately narrower: ONLY a packet with no saved text at
+       all asks the backend to read the posting through job_context, because before that those
+       packets simply never scored and their panes never marked. A present jdText must still win. */
     const matchScore = readFileSync("components/app/MatchScore.tsx", "utf8");
-    assert.match(matchScore, /fetchJdMatch\(jdText,/);
+    assert.match(matchScore, /fetchJdMatch\(hasJdText \? jdText : null,/);
+    // And a packet with neither saved text nor a job id has genuinely nothing to score against.
+    assert.match(matchScore, /if \(!hasJdText && !jobContext\?\.job_id\) return;/);
   });
 
   test("the list request carries job_id", () => {

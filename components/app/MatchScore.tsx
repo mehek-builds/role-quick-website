@@ -53,8 +53,16 @@ export function MatchScore({
     if (disabled) return;
     let cancelled = false;
     const resumeText = resumeSpecText(spec);
-    if (!jdText.trim() || !resumeText.trim()) return;
-    fetchJdMatch(jdText, resumeText, jobContext)
+    if (!resumeText.trim()) return;
+    /* A posting with no saved JD text used to end the story here, so those applications never got
+       a score and neither pane ever got a mark: the coordination existed for some postings and not
+       others, with nothing telling the student which kind they were on. The route supports exactly
+       this case: omitting jd_text asks the backend to read the posting itself through job_context,
+       which is how the board's own match scores are computed. Only a posting with neither saved
+       text nor a job id has genuinely nothing to score against. */
+    const hasJdText = jdText.trim().length > 0;
+    if (!hasJdText && !jobContext?.job_id) return;
+    fetchJdMatch(hasJdText ? jdText : null, resumeText, jobContext)
       .then((next) => {
         if (cancelled) return;
         // Cleared here rather than before the request: resetting synchronously inside the effect

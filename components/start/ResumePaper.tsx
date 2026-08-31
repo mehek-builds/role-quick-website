@@ -4,6 +4,16 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState } from 
 import type { ResumeSpec, ResumeEntry } from "@/lib/api";
 import { resumeContactLine } from "@/lib/resumeContact";
 import { startsWithStrongVerb } from "@/lib/strong-verbs";
+import { RequirementText } from "@/components/app/RequirementText";
+
+/* Read-only text that can carry requirement marks. `hideMissing` for the same reason the
+   dashboard's resume pane sets it: a missing requirement cannot legitimately appear on the resume,
+   and if the words happen to be there anyway the scorer counted them covered, so an amber mark
+   would contradict the number beside it. With no RequirementProvider above, the index is empty and
+   this renders a plain span: the paper stays monochrome wherever nothing supplies marks. */
+function PaperText({ text }: { text: string }) {
+  return <RequirementText text={text} hideMissing />;
+}
 
 /* The base resume, drawn as paper.
  *
@@ -27,11 +37,17 @@ import { startsWithStrongVerb } from "@/lib/strong-verbs";
  * common way a strong student's resume looks weak. `useFittedGap` below solves for the exact
  * vertical rhythm that closes the page, from a real measurement rather than an estimate.
  *
- * BLACK AND WHITE, NO EXCEPTIONS. Every resume surface in this product is monochrome (hard rule,
- * 2026-07). Nothing in this file may take a brand color, a status color, or a tint - not for a
- * highlight, not for a "new" marker, not for hover. The arriving-line animation is opacity and
- * transform only, for exactly this reason: those are the two properties that cannot smuggle a
- * color in. If a future state needs emphasis here, it gets weight or rule-work, never hue.
+ * BLACK AND WHITE, NO EXCEPTIONS, WITH ONE PROVIDER-GATED OVERLAY. The DOCUMENT is monochrome
+ * (hard rule, 2026-07): nothing this paper prints may take a brand color, a status color, or a
+ * tint, and the PDF the student sends is untouched by anything in this file. The arriving-line
+ * animation is opacity and transform only, for exactly this reason.
+ *
+ * The one sanctioned exception (Mehek, 2026-09-01): when a surface wraps this paper in a
+ * RequirementProvider, the read-only text renders through RequirementText and carries the same
+ * requirement marks as the job description beside it, in the same colours, so a term reads as one
+ * meaning across both panes (ISSUE-047, the colour with no support, closed from the support side).
+ * The marks are comparison UI drawn OVER the preview, not part of the document: no provider, no
+ * hue, and every surface that renders the paper alone stays exactly as monochrome as before.
  */
 
 export type ContactHeader = {
@@ -434,7 +450,7 @@ function Entry({
                   }}
                 />
               ) : (
-                bullet
+                <PaperText text={bullet} />
               )}
               {editing && (
                 <RemoveButton
@@ -508,7 +524,7 @@ function Education({ spec, index, first }: { spec: ResumeSpec; index: number; fi
             {editing ? (
               <Editable value={spec.coursework ?? ""} onCommit={(v) => set({ coursework: v })} />
             ) : (
-              spec.coursework
+              <PaperText text={spec.coursework ?? ""} />
             )}
           </div>
         </Line>
@@ -716,7 +732,7 @@ export function ResumePaper({
                             }
                           />
                         ) : (
-                          block.skills.join(", ")
+                          <PaperText text={block.skills.join(", ")} />
                         )}
                       </div>
                     </Line>

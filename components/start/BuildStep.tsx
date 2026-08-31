@@ -20,7 +20,16 @@ import { ThinkingOrb } from "thinking-orbs";
 import { ErrorNote } from "@/components/app/ui";
 import { ResumePaper, type ContactHeader } from "./ResumePaper";
 import { api, getJob, getPostingQuestions, isGuestSession, type MonitoredJob, type ResumeSpec } from "@/lib/api";
-import { prescriptMetadataBlockers, type ProfileIdentity } from "@/features/applications";
+import {
+  buildRequirementIndex,
+  EMPTY_REQUIREMENT_INDEX,
+  fetchJdMatch,
+  prescriptMetadataBlockers,
+  resumeSpecText,
+  type JdMatchResponse,
+  type ProfileIdentity,
+} from "@/features/applications";
+import { MatchLegend, RequirementProvider, RequirementText } from "@/components/app/RequirementText";
 import {
   BuildPreconditionError,
   buildActionLabel,
@@ -33,6 +42,17 @@ import { track } from "@/lib/analytics";
 import { LaterLink, PrimaryButton, StartShell } from "./ui";
 import type { OnboardingMatch } from "@/lib/onboarding-match";
 
+/* What this screen learned that the screens after it need: the full posting (the match feed's row
+   may not carry the description), the requirement match both panes were marked with, and the
+   applicant's name for the paper header. Passed up rather than re-fetched, because the review
+   screen draws the same two panes and re-asking the network for what is already in hand would make
+   the transition between them flicker. */
+export type BuildContext = {
+  posting: MonitoredJob;
+  jdMatch: JdMatchResponse | null;
+  applicantName: string | null;
+};
+
 export function BuildStep({
   match,
   onQuestions,
@@ -41,7 +61,7 @@ export function BuildStep({
 }: {
   match: OnboardingMatch;
   /** Built. The questions screen takes the result from here. */
-  onQuestions: (result: BuildResult) => void;
+  onQuestions: (result: BuildResult, context: BuildContext) => void;
   /** Back to the match screen to choose a different posting. The way out of a build that cannot
    *  succeed for THIS posting no matter how many times it is retried. */
   onPickAnother: () => void;
@@ -58,6 +78,11 @@ export function BuildStep({
    * already loads identity as a precondition of generating at all, so the name is in hand - this
    * keeps it rather than throwing it away and rendering a headless document. */
   const [applicantName, setApplicantName] = useState<string | null>(null);
+  /* The requirement match both panes are coloured with: one request, one meaning per colour, the
+     same index driving the posting's marks and the paper's (via RequirementProvider). Null while
+     the build runs and after a failed fetch, in which case both panes render unmarked prose, which
+     is the pre-ISSUE-047 state rather than a new failure mode. */
+  const [jdMatch, setJdMatch] = useState<JdMatchResponse | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -74,7 +99,7 @@ export function BuildStep({
           return { fullName: identity.full_name ?? null, resumeEmail: identity.resume_email ?? null };
         },
         generateResume: async (input) => {
-          const generated = await api<{ canonical_application_id?: string; application?: { spec?: ResumeSpec } }>("/resume/generate", {
+          const generated = await api<{ canonical_application_id?: string; application?: { id?: string; spec?: ResumeSpec } }>("/resume/generate", {
           method: "POST",
           body: JSON.stringify({
             initiation: "explicit_click",
@@ -86,7 +111,13 @@ export function BuildStep({
           }),
           });
           return {
-            applicationId: generated.canonical_application_id ?? null,
+            /* THE LEGACY generated_resumes ID, NOT canonical_application_id, and getting this wrong
+               is a 404 on the send. POST /applications/:id/submit-request resolves its row through
+               ownedResume, which reads generated_resumes alone; the canonical application is a
+               parallel row that carries this one as legacy_generated_resume_id. Handing the
+               canonical id to the review screen made every onboarding send answer "Application not
+               found" (measured live, 2026-09-01). */
+            applicationId: generated.application?.id ?? null,
             resumeSpec: generated.application?.spec ?? null,
           };
         },
@@ -130,6 +161,31 @@ export function BuildStep({
     return () => { cancelled = true; };
   }, [match.job.id]);
 
+  /* Score the built resume against the posting, once both exist. Separate from the build effect
+     because it is decoration on top of a finished build, not a stage of it: a failure here must
+     never mark the build failed or block the way forward. */
+  useEffect(() => {
+    const spec = result?.resumeSpec;
+    const jdText = posting.description ?? "";
+    if (!spec || !jdText.trim()) return;
+    let cancelled = false;
+    const resumeText = resumeSpecText(spec);
+    if (!resumeText.trim()) return;
+    fetchJdMatch(jdText, resumeText, {
+      company: posting.company_name,
+      role: posting.title,
+      job_id: posting.id,
+    })
+      /* Validated at the boundary, because both this screen and the review screen build the
+         requirement index from these two arrays in render: a response without them (an older
+         backend, a proxy error page) must degrade to unmarked panes, never to a render crash. */
+      .then((next) => {
+        if (cancelled) return;
+        setJdMatch(Array.isArray(next?.matched) && Array.isArray(next?.missing) ? next : null);
+      })
+      .catch(() => { if (!cancelled) setJdMatch(null); });
+    return () => { cancelled = true; };
+  }, [result, posting.description, posting.company_name, posting.title, posting.id]);
 
   /* The one precondition a guest cannot satisfy from Account, because a guest has no account email.
      Read at render rather than stored: the student may have claimed one in another tab. */
@@ -187,7 +243,9 @@ export function BuildStep({
   }
 
   const building = result === null;
-
+  const requirementIndex = jdMatch
+    ? buildRequirementIndex(jdMatch.matched, jdMatch.missing)
+    : EMPTY_REQUIREMENT_INDEX;
 
   return (
     <StartShell
@@ -195,6 +253,9 @@ export function BuildStep({
       title={building ? "Building your application." : "Here is your application."}
       wide
     >
+      {/* ONE PROVIDER OVER BOTH PANES, which is the whole feature: the same index colours a term
+          in the posting and in the paper, and hovering either side lifts it on both. */}
+      <RequirementProvider index={requirementIndex}>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {/* LEFT: the posting, pinned. Unchanged between phases on purpose, so the student can read
             what Litos is reading rather than watching it disappear at the moment it matters. */}
@@ -216,16 +277,22 @@ export function BuildStep({
                 than a job title. There is something to compare against on the right now, so the
                 text has to actually be here.
 
-                NO TERM MARKING. It was here, over both panes, and it came out with the hand-rolled
-                resume view it was paired with: the shared ResumePaper draws the real document and
-                does not mark, so a mark on this side would point at nothing on that side - the
-                exact ISSUE-047 failure, a colour with no support. Restoring the link means teaching
-                ResumePaper to mark, which is a change to a component four surfaces share and a
-                decision of its own rather than a side effect of this screen. */}
+                MARKED, and the mark has support on the other side (Mehek, 2026-09-01). ISSUE-047
+                took the marking out because ResumePaper drew an unmarked document, so a colour here
+                pointed at nothing there. ResumePaper now renders its read-only text through
+                RequirementText under the same provider, so both panes carry the same colours for
+                the same meanings, which is what closes the issue instead of re-opening it. */}
             {!building && posting.description && (
-              <p className="mt-1 whitespace-pre-line text-[12.5px] leading-6 text-ink">
-                {posting.description}
-              </p>
+              <>
+                {jdMatch?.scorable && (
+                  <div className="mt-1">
+                    <MatchLegend missingCount={jdMatch.missing.length} />
+                  </div>
+                )}
+                <p className="mt-1 whitespace-pre-line text-[12.5px] leading-6 text-ink">
+                  <RequirementText text={posting.description} />
+                </p>
+              </>
             )}
           </div>
         </section>
@@ -266,6 +333,7 @@ export function BuildStep({
           </div>
         </section>
       </div>
+      </RequirementProvider>
 
       {/* The stage list. Each row is a real call, and its orb runs only while that call is in
           flight. Five of the six shipped orb states map onto real work here; the three used are
@@ -293,7 +361,7 @@ export function BuildStep({
 
       <div className="mt-7 flex flex-wrap items-center gap-4">
         <PrimaryButton
-          onClick={() => result && onQuestions(result)}
+          onClick={() => result && onQuestions(result, { posting, jdMatch, applicantName })}
           disabled={building}
         >
           {/* The count is REAL or the button does not claim it. While building it says what is
@@ -312,7 +380,7 @@ export function BuildStep({
  * `_contact` is what the backend rendered the PDF's own header from (engine/resumeRender.ts), so
  * reading it here is what keeps this preview and the document the employer receives saying the same
  * thing. The name falls back to the loaded identity for a spec that predates `_contact`. */
-function contactHeaderOf(spec: ResumeSpec, fallbackName: string | null): ContactHeader {
+export function contactHeaderOf(spec: ResumeSpec, fallbackName: string | null): ContactHeader {
   const contact = (spec as ResumeSpec & { _contact?: Partial<ContactHeader> })._contact ?? {};
   return { ...contact, full_name: contact.full_name?.trim() || fallbackName || "" };
 }
