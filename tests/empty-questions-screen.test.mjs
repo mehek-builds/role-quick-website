@@ -21,7 +21,7 @@ const read = (p) => readFile(new URL(`../${p}`, import.meta.url), "utf8");
 
 test("a build that found nothing outstanding acknowledges the questions step", async () => {
   const page = await read("app/start/page.tsx");
-  const handoff = page.slice(page.indexOf("onQuestions={(result) => {"), page.indexOf("case \"questions\":"));
+  const handoff = page.slice(page.indexOf("onQuestions={(result, context) => {"), page.indexOf("case \"questions\":"));
 
   assert.match(handoff, /outstandingQuestions === 0/, "the handoff no longer notices an empty ask");
   assert.match(handoff, /await ack\("questions"\)/, "the empty step is no longer acknowledged, so it renders");

@@ -61,6 +61,7 @@ import { NotificationsStep } from "@/components/start/NotificationsStep";
 import { PlanStep } from "@/components/start/PlanStep";
 import { freshnessOf, hoursSinceSeen, type OnboardingMatch } from "@/lib/onboarding-match";
 import type { BuildResult } from "@/lib/onboarding-build";
+import type { BuildContext } from "@/components/start/BuildStep";
 
 /* Whether this account's flow is one the acknowledgement ledger exists for.
  *
@@ -84,7 +85,10 @@ export default function Start() {
      they are on with nothing carried over, which is why each screen re-reads what it needs rather
      than assuming this state survived. */
   const [chosenMatch, setChosenMatch] = useState<OnboardingMatch | null>(null);
-  const [built, setBuilt] = useState<BuildResult | null>(null);
+  /* The build result plus what the build screen learned around it (the full posting, the
+     requirement match, the applicant's name), so the review screen can draw the same two marked
+     panes without re-fetching any of it. */
+  const [built, setBuilt] = useState<(BuildResult & Partial<BuildContext>) | null>(null);
   /* THE ANSWERS THEMSELVES, not just how many. Kept because a student can now come BACK to this
      screen, and a revisit that shows an empty form has lost their work: the built `ask` carries the
      employer's questions with no answers on them, so seeding from it alone blanks everything they
@@ -496,7 +500,7 @@ export default function Start() {
    * mid-sequence: the alternative is carrying a packet the student cannot see and cannot check. */
   const resumeSequence = useCallback(() => {
     if (!chosenMatch) return <MatchStep onLater={later} onBuild={setChosenMatch} />;
-    return <BuildStep match={chosenMatch} onLater={later} onPickAnother={() => setChosenMatch(null)} onQuestions={setBuilt} />;
+    return <BuildStep match={chosenMatch} onLater={later} onPickAnother={() => setChosenMatch(null)} onQuestions={(result, context) => setBuilt({ ...result, ...context })} />;
   }, [chosenMatch, later]);
 
   const fail = useCallback(
@@ -797,8 +801,8 @@ export default function Start() {
               if (state.pinned_target_job_id) setPinnedJobDeclined(true);
               setChosenMatch(null);
             }}
-            onQuestions={(result) => {
-              setBuilt(result);
+            onQuestions={(result, context) => {
+              setBuilt({ ...result, ...context });
               stepDone("match");
               /* A SCREEN WITH NOTHING TO ASK IS NOT A SCREEN, so it is acknowledged here rather
                  than shown.
@@ -865,9 +869,13 @@ export default function Start() {
         if (!chosenMatch || !built) return resumeSequence();
         return (
           <ReviewStep
-            posting={chosenMatch.job}
+            /* The build screen's own loaded posting when it is in hand: the match feed's row can
+               arrive without a description, and the review pane draws the posting's words. */
+            posting={built.posting ?? chosenMatch.job}
             applicationId={built?.applicationId ?? null}
             resumeSpec={built?.resumeSpec ?? null}
+            jdMatch={built.jdMatch ?? null}
+            applicantName={built.applicantName ?? profile?.full_name ?? null}
             educationProfile={profile}
             answersSaved={answersGiven.length}
             fieldsAnswered={built?.totalQuestions ?? 0}

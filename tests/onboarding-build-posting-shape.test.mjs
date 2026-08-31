@@ -47,7 +47,10 @@ test("the build reads metadata blockers through the mixed-version defensive help
   const build = await read("components/start/BuildStep.tsx");
   const questions = build.slice(build.indexOf("loadQuestions:"), build.indexOf("},\n      },", build.indexOf("loadQuestions:")));
 
-  assert.match(build, /import \{ prescriptMetadataBlockers, type ProfileIdentity \} from "@\/features\/applications"/);
+  /* The import grew to a multi-line specifier list when the build screen took on requirement
+     marking, so this matches the helper inside the braces rather than one exact line. */
+  assert.match(build, /import \{[\s\S]*?\bprescriptMetadataBlockers\b[\s\S]*?\} from "@\/features\/applications"/);
+  assert.match(build, /import \{[\s\S]*?\btype ProfileIdentity\b[\s\S]*?\} from "@\/features\/applications"/);
   assert.match(questions, /prescriptMetadataBlockers\(prescript\)\.length > 0/);
   assert.doesNotMatch(questions, /prescript\.metadata_blockers\.length/);
 });

@@ -7,7 +7,15 @@
  * employer's system under the student's name, and it cannot be undone by anything Litos can do
  * afterwards.
  *
- * So the screen is built around that fact rather than around the conversion:
+ * IT SHOWS THE EVIDENCE IT ASKS ABOUT (Mehek, 2026-09-01). The first version of this screen was a
+ * bare recap: two labelled boxes naming the posting and asserting a resume was attached, one screen
+ * after the build had shown both in full. Asking "happy with this?" while hiding the this made the
+ * flow ask the same question twice on two screens, and the second time with less to look at. The
+ * screen now draws the same two panes the build screen draws, posting left and the actual one page
+ * right, with the same requirement marking, and puts the consequence and the button under them. A
+ * student says yes to the document they can see.
+ *
+ * The rest is built around irreversibility rather than conversion:
  *
  *   - no countdown, no pre-tick, no auto-send. The opt-in auto-submit feature ships with a
  *     15-second cancelable countdown and has no business in a first-run flow, where the student
@@ -22,10 +30,20 @@
 
 import { useState } from "react";
 import { ErrorNote, PendingLabel } from "@/components/app/ui";
-import { api, type MonitoredJob } from "@/lib/api";
-import { educationDrift, educationDriftMessage, type EducationProfile } from "@/features/applications";
+import { api, type MonitoredJob, type ResumeSpec } from "@/lib/api";
+import {
+  buildRequirementIndex,
+  EMPTY_REQUIREMENT_INDEX,
+  educationDrift,
+  educationDriftMessage,
+  type EducationProfile,
+  type JdMatchResponse,
+} from "@/features/applications";
+import { RequirementProvider } from "@/components/app/RequirementText";
 import { track } from "@/lib/analytics";
 import { PrimaryButton, Receipt, StartShell } from "./ui";
+import { ResumePaper } from "./ResumePaper";
+import { contactHeaderOf, MarkedPostingBody } from "./BuildStep";
 
 type SubmitOutcome = { sent: boolean };
 
@@ -33,6 +51,8 @@ export function ReviewStep({
   posting,
   applicationId,
   resumeSpec,
+  jdMatch,
+  applicantName,
   educationProfile,
   answersSaved,
   fieldsAnswered,
@@ -40,10 +60,15 @@ export function ReviewStep({
   onSaveForLater,
 }: {
   posting: MonitoredJob;
-  /** The canonical application POST /resume/generate created for this posting. Without one there
-   *  is nothing to submit against, so the screen offers only the save path. */
+  /** The generated_resumes row POST /resume/generate created for this posting; the id space
+   *  /applications/:id/submit-request resolves. Without one there is nothing to submit against,
+   *  so the screen offers only the save path. */
   applicationId: string | null;
-  resumeSpec: { school?: string; degree?: string; grad_date?: string } | null;
+  resumeSpec: ResumeSpec | null;
+  /** The requirement match the build screen already fetched, reused so both screens colour the
+   *  panes identically. Null renders both panes unmarked, never an error. */
+  jdMatch: JdMatchResponse | null;
+  applicantName: string | null;
   educationProfile: EducationProfile | null;
   /** How many answers the student gave on the questions screen. */
   answersSaved: number;
@@ -88,36 +113,55 @@ export function ReviewStep({
     }
   }
 
+  const requirementIndex = jdMatch
+    ? buildRequirementIndex(jdMatch.matched, jdMatch.missing)
+    : EMPTY_REQUIREMENT_INDEX;
+
   return (
-    <StartShell step="review" title="Happy with this? Then send it.">
+    <StartShell step="review" title="Happy with this? Then send it." wide>
       {error && <div className="mb-4"><ErrorNote message={error} /></div>}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <section className="overflow-hidden rounded-inner border border-border">
-          <header className="border-b border-border bg-surface-alt px-3.5 py-2">
-            <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Going to</span>
-          </header>
-          <div className="flex flex-col gap-1.5 p-3.5">
-            <p className="text-[15px] leading-snug text-ink">{posting.title}</p>
-            <p className="font-mono text-[11px] leading-relaxed text-muted">
-              {[posting.company_name, posting.location].filter(Boolean).join(" · ")}
-              <br />
-              {posting.ats_name}
-            </p>
-          </div>
-        </section>
+      {/* The same two panes the build screen drew, under one provider so a term keeps its colour
+          and its hover link across both. What is being approved stays on screen while it is being
+          approved. */}
+      <RequirementProvider index={requirementIndex}>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <section className="overflow-hidden rounded-inner border border-border">
+            <header className="border-b border-border bg-surface-alt px-3.5 py-2">
+              <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Going to</span>
+            </header>
+            <div className="flex max-h-[380px] flex-col gap-2 overflow-y-auto p-3.5">
+              <p className="text-[15px] leading-snug text-ink">{posting.title}</p>
+              <p className="font-mono text-[11px] leading-relaxed text-muted">
+                {[posting.company_name, posting.location].filter(Boolean).join(" · ")}
+                <br />
+                {posting.ats_name}
+              </p>
+              {posting.description && (
+                <MarkedPostingBody description={posting.description} jdMatch={jdMatch} />
+              )}
+            </div>
+          </section>
 
-        <section className="overflow-hidden rounded-inner border border-border">
-          <header className="border-b border-border bg-surface-alt px-3.5 py-2">
-            <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Attached</span>
-          </header>
-          <div className="p-3.5">
-            <p className="text-[13px] leading-6 text-muted">
-              Your one page, written for this posting from your own resume.
-            </p>
-          </div>
-        </section>
-      </div>
+          <section className="overflow-hidden rounded-inner border border-border">
+            <header className="flex min-h-[38px] items-center justify-between gap-3 border-b border-border bg-surface-alt px-3.5 py-2">
+              <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Attached</span>
+              {resumeSpec && <span className="font-mono text-[11px] text-positive">1 page</span>}
+            </header>
+            <div className="flex max-h-[380px] min-h-[170px] flex-col gap-3 overflow-y-auto p-3.5">
+              {resumeSpec ? (
+                <div className="origin-top scale-[0.62] [transform-box:content-box]">
+                  <ResumePaper spec={resumeSpec} contact={contactHeaderOf(resumeSpec, applicantName)} />
+                </div>
+              ) : (
+                <p className="text-[13px] leading-6 text-muted">
+                  Your one page, written for this posting from your own resume.
+                </p>
+              )}
+            </div>
+          </section>
+        </div>
+      </RequirementProvider>
 
       <div className="mt-5">
         <Receipt
