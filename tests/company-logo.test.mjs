@@ -162,3 +162,28 @@ test("a QA render draws the monogram and resolves nothing", async () => {
   assert.doesNotMatch(source, /setQa\(/, "a post-mount flip is a race against anything that reads the DOM");
   assert.match(source, /const showIcon = name\.length > 0 && !broken && !qa;/);
 });
+
+test("the committed-logo redirect never carries the origin the server saw", async () => {
+  /* THE THIRD WAY THIS SHIPPED BROKEN, and like the first two it was silent.
+     The route answered a committed mark with
+       NextResponse.redirect(new URL(committed, request.url), { status: 308 })
+     and request.url is the origin the SERVER saw, not the one the browser asked for. On Vercel
+     that was rewritten to the public origin and the redirect was correct. Behind Railway's proxy
+     it is the container's own http://localhost:3000, so production answered every committed logo
+     with `Location: https://localhost:3000/company/<slug>.png` and sent each visitor to port 3000
+     on their own machine. Measured in production on 2026-08-31. No exception, no console error,
+     no red build: just the column of empty circles this file exists to prevent, on the employers
+     that DO have a curated mark. A relative Location is resolved by the browser against the URL it
+     actually requested, so it is correct on every host and trusts no x-forwarded-* header. */
+  const raw = await readFile(new URL("../app/api/company-logo/route.ts", import.meta.url), "utf8");
+  /* Stripped like code() above. The route now carries a comment quoting the broken call verbatim,
+     and this file has already been bitten once by an explanation matching its own assertion. */
+  const source = raw.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/^\s*\/\/.*$/gm, " ");
+  assert.doesNotMatch(
+    source,
+    /redirect\(new URL\([^)]*request\.url/,
+    "a redirect built from request.url points at whatever origin the server saw",
+  );
+  assert.match(source, /headers: \{ Location: committed,/, "the committed mark redirects relatively");
+  assert.match(source, /status: 308,/);
+});
