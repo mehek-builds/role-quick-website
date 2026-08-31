@@ -55,9 +55,19 @@ is how `block.co` (an NFT company) nearly landed on Block's jobs, `imply.com`
 - `/api/company-logo?c=<name>&board=<career_url>` resolves it at request time, so
   a company the job monitor added an hour ago is dressed on the next request and
   one that left the board is simply never asked for again.
+- **The backend's verified evidence is consulted first.** The backend refuses to
+  surface a job until its verifier proves a first-party logo for the source, and
+  every /jobs row carries that URL. The route asks the backend for it before
+  scraping anything itself (`lib/company-logo-evidence.ts`); the evidence URL is
+  fetched only when its host is a known ATS asset host, our own backend, or the
+  employer domain the same row asserts. This is what covers Workable, Rippling,
+  Recruitee, Breezy and Crelate, which the scrape below never learned.
 - **`parseBoardUrl` is an SSRF gate**, not tidiness: the board URL is a query
   parameter our server fetches. Exact-hostname allowlist, https only, plain-slug
-  token. Do not loosen it to a regex or a suffix match.
+  token. Do not loosen it to a regex or a suffix match. The evidence lookup does
+  not weaken it: the board parameter is only ever COMPARED against career_url
+  strings from our own API there, and the URLs fetched come from the API's
+  response, never from the client.
 - Name-guessing is the last resort only, and keeps its own rules: `.com` only,
   the site must name the company, and a denylist of names whose obvious `.com`
   belongs to someone else.
