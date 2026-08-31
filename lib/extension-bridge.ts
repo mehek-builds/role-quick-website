@@ -95,9 +95,9 @@ const ABSENT: ExtensionState = {
   updateRequired: false,
 };
 
-export const MINIMUM_ATTENDED_HANDOFF_EXTENSION_VERSION = "0.5.10";
-export const MINIMUM_MANAGED_ACCOUNT_HANDOFF_EXTENSION_VERSION = "0.5.11";
-export const MINIMUM_ORACLE_HANDOFF_EXTENSION_VERSION = "0.5.12";
+export const MINIMUM_ATTENDED_HANDOFF_EXTENSION_VERSION = "0.6.5";
+export const MINIMUM_MANAGED_ACCOUNT_HANDOFF_EXTENSION_VERSION = "0.6.5";
+export const MINIMUM_ORACLE_HANDOFF_EXTENSION_VERSION = "0.6.5";
 
 export function minimumAttendedHandoffExtensionVersion(atsName: string | undefined): string {
   if (atsName === "oraclecloud") return MINIMUM_ORACLE_HANDOFF_EXTENSION_VERSION;
