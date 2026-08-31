@@ -59,7 +59,12 @@ export const fixturePacketId = (key) => fixtureUuid("packet", key);
 const fixtureAttemptId = (key) => fixtureUuid("attempt", key);
 const fixtureCanonicalId = (key) => fixtureUuid("canonical", key);
 
-function fixtureAuthority(key, status) {
+/* One revision for the packets and the board envelope. boardSubmissionAuthorityCollectionIsComplete
+ * requires the collection revision on the RESPONSE and every card's authority to match it, so these
+ * drifting apart takes fetchBoard into its throw and the whole board renders as failed. */
+export const BOARD_AUTHORITY_REVISION = "4";
+
+export function fixtureAuthority(key, status) {
   const packetId = fixturePacketId(key);
   if (status !== "submitted") {
     const projection = { state: "none" };
@@ -69,7 +74,7 @@ function fixtureAuthority(key, status) {
       retry_safety: retrySafety,
       submission_authority: {
         schema_version: "submission-authority-v1",
-        revision: "12",
+        revision: BOARD_AUTHORITY_REVISION,
         state: "none",
         application_id: packetId,
         packet_id: packetId,
@@ -101,7 +106,7 @@ function fixtureAuthority(key, status) {
     retry_safety: retrySafety,
     submission_authority: {
       schema_version: "submission-authority-v1",
-      revision: "12",
+      revision: BOARD_AUTHORITY_REVISION,
       state: "confirmed",
       application_id: packetId,
       packet_id: packetId,

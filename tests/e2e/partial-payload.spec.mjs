@@ -69,7 +69,7 @@ const PLAYWRIGHT_MODULE = process.env.PLAYWRIGHT_MODULE ?? "playwright-core";
 const playwrightModule = await import(PLAYWRIGHT_MODULE);
 const { chromium } = playwrightModule.default ?? playwrightModule;
 
-import { BACKEND_ORIGIN, SESSION_TOKEN, STUB, fixturePacketId } from "./fixture-data.mjs";
+import { BACKEND_ORIGIN, SESSION_TOKEN, STUB, fixturePacketId, fixtureAuthority, BOARD_AUTHORITY_REVISION } from "./fixture-data.mjs";
 import { isSanctionedThirdParty } from "./sanctioned-third-parties.mjs";
 
 /* The one override the healthy baseline needs. The shared fixture answers the board with two empty
@@ -77,9 +77,18 @@ import { isSanctionedThirdParty } from "./sanctioned-third-parties.mjs";
    empty board and a contained failure both render nothing much, so the control case has to have a
    card in it to be worth anything. */
 const GOOD_BOARD = {
+  /* GOOD_BOARD replaces the shared board stub wholesale, so it has to carry the authority
+     collection envelope itself. Without it fetchBoard throws before any of these cases start. */
+  schema_version: "submission-authority-v1",
+  submission_authority_revision: BOARD_AUTHORITY_REVISION,
   stages: ["saved", "applied", "interview", "offer", "closed"],
   cards: [
     {
+      /* The card needs its authority, not just a status. Board.tsx now splits cards through
+         boardCardRequiresSubmissionReview, which pulls out anything claiming `submitted` without a
+         confirmed projection, so a status-only card never reaches the stage columns this case is
+         about. */
+      ...fixtureAuthority("sent-0", "submitted"),
       id: fixturePacketId("sent-0"),
       job_id: null,
       company: "Fixture Company sent-0",
@@ -341,7 +350,10 @@ test("a board with no `stages` still renders every column and every move option"
    * The fallback is now the client's own ACTIVE_BOARD_STAGES, which activeBoardStages() filters
    * through one line later anyway, so this can surface nothing the client would not otherwise draw.
    */
-  stub = { ...BASE_STUB, "/applications/board": { cards: GOOD_BOARD.cards } };
+  /* Keep the authority collection envelope. fetchBoard throws when the response carries no
+     collection revision, so dropping it here fails the board before `stages` is ever missing, which
+     is not the condition this case is about. */
+  stub = { ...BASE_STUB, "/applications/board": { schema_version: GOOD_BOARD.schema_version, submission_authority_revision: GOOD_BOARD.submission_authority_revision, cards: GOOD_BOARD.cards } };
   const page = await openPage("/dashboard/applications");
 
   /* All three columns, addressed by their own headings rather than by text anywhere on the page. */
