@@ -178,10 +178,16 @@ export async function createGuestSession(
  *
  *  Same result shape as createGuestSession, for the same reason: /start routes on the outcome,
  *  and a thrown ApiError would reach the student as an unhandled rejection rather than as the
- *  sentence the server wrote about what to fix (a 402 entitlement denial, a 422 profile gap). */
+ *  sentence the server wrote about what to fix (a 402 entitlement denial, a 422 profile gap).
+ *
+ *  `jobGone` separates the one refusal that is not about the ACCOUNT: a 404 means the posting
+ *  left the board between the click and this request (boards rotate ids and purge closed rows
+ *  daily), which no retry and no account fix can bring back. /start routes that case back into
+ *  the ordinary flow instead of parking the student on it - the same degrade the guest half
+ *  already gets server-side, where a pin miss opens the session unpinned rather than failing it. */
 export async function attachMonitoredJob(
   jobId: string,
-): Promise<{ ok: true; applicationId: string } | { ok: false; error: string }> {
+): Promise<{ ok: true; applicationId: string } | { ok: false; error: string; jobGone: boolean }> {
   try {
     const attached = await api<{ application_id: string }>("/applications/from-job", {
       method: "POST",
@@ -194,6 +200,7 @@ export async function attachMonitoredJob(
       error: reason instanceof Error && reason.message
         ? reason.message
         : "We could not add this job to your tracker. Try again.",
+      jobGone: reason instanceof ApiError && reason.status === 404,
     };
   }
 }

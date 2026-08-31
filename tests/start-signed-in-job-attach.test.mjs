@@ -83,11 +83,18 @@ describe("signed in with a job param: attach, then land selected on the applicat
       /if \(cancelled\) return;/,
       "a navigation away from /start before the attach resolves must not route or set state on a gone component",
     );
+    /* Two different refusals, two different obligations. A 402 or 422 is about the ACCOUNT and
+       the server's sentence tells the student what to fix; a 404 is about the POSTING - the row
+       left the board between the tile render and this request - and no sentence, retry button,
+       or account fix brings it back. The first must stay visible; the second must rejoin the
+       ordinary /start flow instead of parking the student on a dead end (measured live
+       2026-08-31: "Job not found" over an otherwise empty page). */
     assert.match(
       attachBranch,
-      /if \(!result\.ok\) \{\s*\n\s*setError\(result\.error\);\s*\n\s*return;\s*\n\s*\}/,
-      "a refusal (402 entitlement denial, 422 profile gap) must reach the student as the server's " +
-      "own sentence through the page's error state, not vanish into a redirect",
+      /if \(!result\.ok\) \{\s*\n\s*if \(result\.jobGone\) \{\s*\n\s*window\.location\.replace\("\/start"\);\s*\n\s*return;\s*\n\s*\}\s*\n\s*setError\(result\.error\);\s*\n\s*return;\s*\n\s*\}/,
+      "a gone posting must rejoin /start without the param (location.replace, so the back button " +
+      "cannot re-run the attach against the same dead id), while every other refusal still " +
+      "reaches the student as the server's own sentence through the page's error state",
     );
     /* Its own ref, not the guest one: the two branches guard different requests, and sharing a
        flag would let whichever mounted first swallow the other. */
@@ -178,5 +185,14 @@ describe("attachMonitoredJob is the one honest call site for POST /applications/
     );
     const callSites = api.split("/applications/from-job").length - 1;
     assert.equal(callSites, 1, "one call site, so the request shape and error contract cannot fork");
+  });
+
+  test("jobGone is derived from the status, never from the sentence", () => {
+    assert.match(
+      api,
+      /jobGone: reason instanceof ApiError && reason\.status === 404,/,
+      "the route's 404 is the one fact that means the posting left the board; matching on the " +
+      "error TEXT would couple this to backend wording that can change under it",
+    );
   });
 });
