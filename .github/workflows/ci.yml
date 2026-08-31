@@ -239,5 +239,6 @@ jobs:
             test-results/country-eligibility-flow/
             test-results/dashboard-visual-regressions/
             test-results/narrow-viewport/
+            test-results/question-blocker/
           if-no-files-found: ignore
           retention-days: 7
