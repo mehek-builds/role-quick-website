@@ -69,7 +69,7 @@ const PLAYWRIGHT_MODULE = process.env.PLAYWRIGHT_MODULE ?? "playwright-core";
 const playwrightModule = await import(PLAYWRIGHT_MODULE);
 const { chromium } = playwrightModule.default ?? playwrightModule;
 
-import { BACKEND_ORIGIN, SESSION_TOKEN, STUB } from "./fixture-data.mjs";
+import { BACKEND_ORIGIN, SESSION_TOKEN, STUB, fixturePacketId } from "./fixture-data.mjs";
 import { isSanctionedThirdParty } from "./sanctioned-third-parties.mjs";
 
 /* The one override the healthy baseline needs. The shared fixture answers the board with two empty
@@ -80,7 +80,7 @@ const GOOD_BOARD = {
   stages: ["saved", "applied", "interview", "offer", "closed"],
   cards: [
     {
-      id: "fixture-packet-sent-0",
+      id: fixturePacketId("sent-0"),
       job_id: null,
       company: "Fixture Company sent-0",
       role: "Fixture Role sent-0",

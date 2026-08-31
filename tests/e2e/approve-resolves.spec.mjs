@@ -159,8 +159,27 @@ const PACKET_AUDIT_RESPONSE = {
   },
 };
 
+/* The not-yet-sent response needs an envelope too. A response without one is quarantined even when
+ * its review makes no sent claim, so the ready screen never renders and the packet-review control
+ * never appears. `none` beside a `no_evidence` verdict is the shape that says "nothing was sent"
+ * and still parses. */
+const AWAITING_PROJECTION = { state: "none" };
+const AWAITING_RETRY_SAFETY = { kind: "no_evidence" };
+const AWAITING_AUTHORITY = {
+  schema_version: "submission-authority-v1",
+  revision: "12",
+  state: "none",
+  application_id: APPROVABLE.id,
+  packet_id: APPROVABLE.id,
+  projection: AWAITING_PROJECTION,
+  retry_safety: AWAITING_RETRY_SAFETY,
+};
+
 const AWAITING = {
   application_id: APPROVABLE.id,
+  submission_projection: AWAITING_PROJECTION,
+  retry_safety: AWAITING_RETRY_SAFETY,
+  submission_authority: AWAITING_AUTHORITY,
   review: {
     ...APPROVABLE.spec._review,
     status: "ready_for_final_approval",
@@ -169,12 +188,56 @@ const AWAITING = {
   },
   cover_letter: null,
 };
+/* The send response has to carry its own authority, not just a receipt.
+ *
+ * The dashboard treats a review claiming `submitted` as unproven unless a confirmed projection
+ * accompanies it for that exact packet, so a response with only `review.receipt` is quarantined
+ * back to needs-attention and the confirmation copy never renders. That is what stranded the four
+ * send cases here after the authority contract landed. */
+const SENT_ATTEMPT_ID = "aaaaaaaa-1111-4000-8000-000000000001";
+const SENT_CANONICAL_ID = "aaaaaaaa-2222-4000-8000-000000000002";
+const SENT_AT = "2026-08-04T12:00:00.000Z";
+const SENT_PROJECTION = {
+  state: "confirmed",
+  attempt_id: SENT_ATTEMPT_ID,
+  canonical_application_id: SENT_CANONICAL_ID,
+  packet_id: APPROVABLE.id,
+  submitted_at: SENT_AT,
+  receipt: {
+    confirmation_text: "Thank you. Your application was received.",
+    final_url: "https://jobs.example.com/fixture/confirmation",
+    captured_at: SENT_AT,
+    source: "managed_browser",
+  },
+  source: "managed_browser",
+  tracker_stage: "applied",
+};
+const SENT_RETRY_SAFETY = {
+  kind: "blocked_confirmed",
+  attemptId: SENT_ATTEMPT_ID,
+  confirmedAt: SENT_AT,
+};
+
+const SENT_AUTHORITY = {
+  schema_version: "submission-authority-v1",
+  revision: "12",
+  state: "confirmed",
+  application_id: APPROVABLE.id,
+  packet_id: APPROVABLE.id,
+  projection: SENT_PROJECTION,
+  retry_safety: SENT_RETRY_SAFETY,
+};
+
 const SENT = {
   application_id: APPROVABLE.id,
+  submission_projection: SENT_PROJECTION,
+  retry_safety: SENT_RETRY_SAFETY,
+  submission_authority: SENT_AUTHORITY,
   review: {
     ...APPROVABLE.spec._review,
     status: "submitted",
-    submitted_at: "2026-08-04T12:00:00.000Z",
+    submitted_at: SENT_AT,
+    submission_claim_id: SENT_ATTEMPT_ID,
     receipt: {
       confirmation_text: "Thank you. Your application was received.",
       final_url: "https://jobs.example.com/fixture/confirmation",

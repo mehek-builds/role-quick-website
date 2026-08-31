@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 /**
  * The fabricated account the click-path spec drives.
  *
@@ -40,9 +41,80 @@ const REALISTIC_JD_PARAGRAPH =
   "Experience with Node.js, PostgreSQL, and customer-facing product engineering is preferred. ";
 export const REALISTIC_JD = REALISTIC_JD_PARAGRAPH.repeat(14).trim();
 
+/* Ids are UUIDs, and each packet carries a submission-authority envelope.
+ *
+ * The dashboard stopped trusting a bare `_review.status`. `packetForSubmissionDisplay` parses an
+ * envelope and routes the review through `reviewForSubmissionProjection`, which downgrades any
+ * review CLAIMING sent to `needs_attention` unless the projection is confirmed for that exact
+ * identity, and quarantines a packet whose envelope does not parse. Three rules bite here:
+ *   1. the id must match /^[0-9a-f]{8}-.../i, so it is hashed rather than spelled;
+ *   2. a confirmed projection needs a UUID canonical_application_id, never null;
+ *   3. a "none" projection is only valid beside a no_evidence or safe_not_sent retry verdict.
+ * Miss any one and the packet renders the needs-attention screen while its review looks fine. */
+function fixtureUuid(prefix, key) {
+  const h = createHash("sha256").update(`${prefix}:${key}`).digest("hex");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-8${h.slice(17, 20)}-${h.slice(20, 32)}`;
+}
+export const fixturePacketId = (key) => fixtureUuid("packet", key);
+const fixtureAttemptId = (key) => fixtureUuid("attempt", key);
+const fixtureCanonicalId = (key) => fixtureUuid("canonical", key);
+
+function fixtureAuthority(key, status) {
+  const packetId = fixturePacketId(key);
+  if (status !== "submitted") {
+    const projection = { state: "none" };
+    const retrySafety = { kind: "no_evidence" };
+    return {
+      submission_projection: projection,
+      retry_safety: retrySafety,
+      submission_authority: {
+        schema_version: "submission-authority-v1",
+        revision: "12",
+        state: "none",
+        application_id: packetId,
+        packet_id: packetId,
+        projection,
+        retry_safety: retrySafety,
+      },
+    };
+  }
+  const attemptId = fixtureAttemptId(key);
+  const capturedAt = "2026-07-21T12:30:05.000Z";
+  const projection = {
+    state: "confirmed",
+    attempt_id: attemptId,
+    canonical_application_id: fixtureCanonicalId(key),
+    packet_id: packetId,
+    submitted_at: "2026-07-21T12:30:00.000Z",
+    receipt: {
+      confirmation_text: "Your application has been received.",
+      final_url: "https://jobs.example.com/confirmation",
+      captured_at: capturedAt,
+      source: "managed_browser",
+    },
+    source: "managed_browser",
+    tracker_stage: "applied",
+  };
+  const retrySafety = { kind: "blocked_confirmed", attemptId, confirmedAt: capturedAt };
+  return {
+    submission_projection: projection,
+    retry_safety: retrySafety,
+    submission_authority: {
+      schema_version: "submission-authority-v1",
+      revision: "12",
+      state: "confirmed",
+      application_id: packetId,
+      packet_id: packetId,
+      projection,
+      retry_safety: retrySafety,
+    },
+  };
+}
+
 function packet(key, status) {
   return {
-    id: `fixture-packet-${key}`,
+    id: fixturePacketId(key),
+    ...fixtureAuthority(key, status),
     job_context: { company: `Fixture Company ${key}`, role: `Fixture Role ${key}`, jd_hash: `hash-${key}` },
     resume_object_key: `fixture/${key}`,
     created_at: "2026-07-21T12:00:00.000Z",
@@ -84,7 +156,9 @@ function packet(key, status) {
            disable the button just as thoroughly. */
         preview_screenshot_url: "/qa/portal-preview.svg",
         updated_at: "2026-07-21T12:00:00.000Z",
-        ...(status === "submitted" ? { submitted_at: "2026-07-21T12:30:00.000Z" } : {}),
+        ...(status === "submitted"
+          ? { submitted_at: "2026-07-21T12:30:00.000Z", submission_claim_id: fixtureAttemptId(key) }
+          : {}),
       },
     },
   };
