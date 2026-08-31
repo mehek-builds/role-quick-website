@@ -150,16 +150,6 @@ jobs:
       - name: Quality refactor regression spec
         run: npm run test:quality-refactor
 
-      # Same job on purpose: it reuses the build and the Chromium installed
-      # above rather than paying for either twice. This spec is the ONLY thing
-      # that can observe the per-band error boundaries actually containing a
-      # throw, so leaving it out of CI would mean a refactor could delete the
-      # containment silently. tests/section-boundary-placement.test.mjs covers
-      # the boundaries still EXISTING from inside `npm test`; only this one
-      # covers them working.
-      - name: Partial payload containment spec
-        run: npm run test:partial-payload
-
       # Same job, same Chromium, same build. The base resume step's build start is a RACE between
       # two fetches, so it has no source-level cover at all: tests/start-onboarding-defects.test.mjs
       # can only pin the shape of the fix. This spec forces the losing ordering and is the only
@@ -196,6 +186,21 @@ jobs:
       # is a bare locator timeout with no picture. The spec writes a full-page
       # screenshot, the serialised DOM and a Playwright trace on failure and
       # nothing at all on success, so this upload is empty on a green run.
+
+      # LAST ON PURPOSE. These steps run sequentially, so whichever fails first skips every
+      # step after it. This spec is currently red on one case whose payload the board's submission
+      # authority gate now rejects before render, and while it sat above them it was silently
+      # skipping the four onboarding and sequence walks below. Keeping it last means a known-red
+      # containment case cannot hide a regression in anything else.
+      #
+      # It reuses the build and Chromium above rather than paying for either twice. It is the ONLY
+      # thing that can observe the per-band error boundaries actually CONTAINING a throw, so leaving
+      # it out of CI would mean a refactor could delete the containment silently.
+      # tests/section-boundary-placement.test.mjs covers the boundaries still EXISTING from inside
+      # `npm test`; only this one covers them working.
+      - name: Partial payload containment spec
+        run: npm run test:partial-payload
+
       - name: Failure artifacts
         if: always()
         uses: actions/upload-artifact@v7
