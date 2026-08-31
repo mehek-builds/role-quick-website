@@ -97,7 +97,11 @@ type OnboardingEvent =
   | "onboarding_build_claim_required"
   /* The build's entitlement paywall sent somebody to /pricing. A count here is an account whose
      free setup build was gone, which for a fresh student should be nearly never. */
-  | "onboarding_build_upgrade_opened";
+  | "onboarding_build_upgrade_opened"
+  /* A student pressed "Read the form again" after a posting-questions scan failure. The stage
+     runs before anything is spent, so this is a free retry, and a high count on one posting is a
+     form Litos structurally cannot read. */
+  | "onboarding_build_form_reread";
 
 type CoreEvent =
   | "authentication_completed"
