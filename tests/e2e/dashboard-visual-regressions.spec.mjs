@@ -1399,6 +1399,35 @@ async function waitForStableGeometry(locator, label) {
   assert.equal(stable, true, `${label} did not settle before visual capture`);
 }
 
+/* Geometry stability is not content stability, and this suite needed both.
+ *
+ * waitForStableGeometry watches ONE node's bounding rect. The delayed-denial upgrade case waited on
+ * the dialog that way and then captured the whole PAGE, so the Applications list BEHIND the dialog
+ * was never waited on at all. A pixel diff at an identical rendering commit put every differing
+ * pixel outside the dialog: the applied-today line, Read job, Hide, Tailor resume first, Open and
+ * fill employer form. Controls appearing and moving, at stable geometry for the dialog itself, is
+ * exactly what a rect check cannot see.
+ *
+ * So this signs the rendered TEXT and the child count of a region and waits for both to hold still
+ * across consecutive frames. */
+async function waitForStableContent(locator, label) {
+  const stable = await locator.evaluate(async (node) => {
+    const deadline = performance.now() + 4_000;
+    let previous = "";
+    let consecutive = 0;
+    while (performance.now() < deadline) {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const signature = `${node.querySelectorAll("*").length}:${node.innerText ?? ""}`;
+      if (signature === previous) consecutive += 1;
+      else consecutive = 0;
+      previous = signature;
+      if (consecutive >= 5) return true;
+    }
+    return false;
+  });
+  assert.equal(stable, true, `${label} did not settle before visual capture`);
+}
+
 async function resizeForCapture(page, width, height) {
   await page.setViewportSize({ width, height });
   await page.waitForFunction(
@@ -3920,6 +3949,9 @@ test("delayed resume denials restore focus after the initiating control changes"
       const closeRect = close.getBoundingClientRect();
       return closeRect.left > dialogRect.left + dialogRect.width * 0.75;
     });
+    /* The page behind the dialog, not just the dialog. This capture is full-page, and the
+       Applications list under it kept arriving after the dialog had settled. */
+    await waitForStableContent(applications.page.locator("main").first(), "Applications delayed-denial page behind the dialog");
     await capturePass(applications.page, "applications-delayed-denial-upgrade");
     await applicationUpgrade.getByRole("button", { name: "Close Litos+ options" }).click();
     await applicationUpgrade.waitFor({ state: "detached" });
