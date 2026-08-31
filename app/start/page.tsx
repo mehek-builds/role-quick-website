@@ -330,6 +330,19 @@ export default function Start() {
         void attachMonitoredJob(attachJobId).then((result) => {
           if (cancelled) return;
           if (!result.ok) {
+            /* A 404 means the POSTING is gone, not that anything about the account needs fixing:
+               boards rotate ids and purge closed rows daily, so a tile rendered hours ago can
+               name a row that no longer exists. Parking the student on that sentence with a
+               retry button is a dead end - no retry brings the row back (measured live
+               2026-08-31: "Job not found" over an otherwise empty page). Rejoining /start
+               without the param re-runs this whole decision tree cleanly: a finished account
+               lands on /dashboard, an unfinished one continues onboarding from its own step.
+               location.replace rather than the router so the dead param URL also leaves the
+               history - the back button must not re-run the attach against the same gone id. */
+            if (result.jobGone) {
+              window.location.replace("/start");
+              return;
+            }
             setError(result.error);
             return;
           }
