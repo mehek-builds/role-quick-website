@@ -29,10 +29,11 @@ function jsxElement(source, name) {
   return element[0];
 }
 
-test("the extra questions are asked at Apply, not discovered mid-run", () => {
+test("the extra questions and discovery blockers are resolved at Apply", () => {
   const ask = functionBody(PAGE, "async function askPrescriptQuestions(jobId: string)");
   assert.match(ask, /await getPostingQuestions\(jobId\)/);
-  assert.match(ask, /if \(!prescriptNeedsHer\(prescript\)\) return;/);
+  assert.match(ask, /const progressBlocked = prescriptBlocksProgress\(prescript\)/);
+  assert.match(ask, /if \(prescriptNeedsHer\(prescript\)\) \{/);
   assert.match(ask, /moveToScreen\("questions"\)/);
 });
 
@@ -43,8 +44,15 @@ test("it runs after the packet exists, so a slow or missing scan costs her nothi
   assert.ok(created > 0 && asked > created, "the pre-script is fetched after the packet is built");
   // Only for a posting off the board. A hand-typed link has no posting to look ahead at.
   assert.match(create, /if \(draft\.jobId && !keepCanonicalDetail\) \{\s*await askPrescriptQuestions\(draft\.jobId\);\s*if \(!requestMayPublish\(\)\) return;\s*\}/);
-  // Every failure means "nothing extra to ask", which is exactly today's behaviour.
-  assert.match(API, /export function getPostingQuestions[\s\S]{0,400}?\.catch\(\(\) => null\)/);
+  // A failed lookahead is not evidence that the employer has nothing to ask.
+  const postingQuestionsStart = API.indexOf("export function getPostingQuestions(jobId: string)");
+  const postingQuestions = API.slice(
+    postingQuestionsStart,
+    API.indexOf("\nexport function putApplicationProfile", postingQuestionsStart),
+  );
+  assert.match(postingQuestions, /return api<PostingPrescript>/);
+  assert.doesNotMatch(postingQuestions, /\.catch\(/);
+  assert.match(PAGE, /Litos could not verify the employer questions/);
 });
 
 test("the answers go out through the one path every other answer takes", () => {

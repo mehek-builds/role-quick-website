@@ -34,6 +34,7 @@ export type ReviewAnswerSaveQuestion = {
   answer: string;
   kind: "essay" | "required";
   required: boolean;
+  answer_state?: "unanswered" | "skipped" | "litos_refused";
   /* HER EXPLICIT CONFIRMATION OF THIS EXACT ANSWER, and the one field on this type the server reads
    * as a claim rather than a value. An unedited Save is byte-identical to a save she never looked
    * at, so the backend's merge rightly mints nothing for it - which left the YOUR TURN panel's
@@ -136,15 +137,15 @@ export function reviewAnswersRequest(questions: readonly ReviewAnswerSaveQuestio
   return {
     method: "PUT",
     body: JSON.stringify({
-      // Only the fields the route accepts. Everything else on a question is either display-only
-      // (the pre-script's option list and explanation) or a claim the server wrote and a client
-      // must not be able to restate.
+      // Only the fields the route accepts. Employer options and explanations remain display-only,
+      // while answer_state records the applicant's reversible choice to skip an optional row.
       questions: questions.map((question) => ({
         id: question.id,
         question: question.question,
         answer: question.answer,
         kind: question.kind,
         required: question.required,
+        ...(question.answer_state ? { answer_state: question.answer_state } : {}),
         /* Present only when true, because absent is the only other honest state: the route's schema
            takes `confirmed: true` or nothing, and a posted `false` would be refused. */
         ...(question.confirmed === true ? { confirmed: true as const } : {}),

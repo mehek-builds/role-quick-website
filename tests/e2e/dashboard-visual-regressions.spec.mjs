@@ -151,10 +151,33 @@ const LOCKED_BILLING_STATE_FIXTURE = {
   },
 };
 
+const APPLICATION_PACKET_ID = "d6693be1-9d1d-4f61-9911-8d95f1ad1b01";
+const APPLICATION_PACKET_ATTEMPT_ID = "b6693be1-9d1d-4f61-9911-8d95f1ad1b01";
+const APPLICATION_PACKET_CANONICAL_ID = "c6693be1-9d1d-4f61-9911-8d95f1ad1b01";
+const APPLICATION_PACKET_CAPTURED_AT = "2026-07-21T12:05:00.000Z";
+const APPLICATION_PACKET_SUBMISSION_PROJECTION = {
+  state: "confirmed",
+  attempt_id: APPLICATION_PACKET_ATTEMPT_ID,
+  canonical_application_id: APPLICATION_PACKET_CANONICAL_ID,
+  packet_id: APPLICATION_PACKET_ID,
+  submitted_at: APPLICATION_PACKET_CAPTURED_AT,
+  receipt: {
+    confirmation_text: "Application received",
+    final_url: "https://jobs.example.test/applications/received",
+    captured_at: APPLICATION_PACKET_CAPTURED_AT,
+    source: "managed_browser",
+  },
+  source: "managed_browser",
+  tracker_stage: "applied",
+};
+
 const APPLICATION_PACKET_BOARD_FIXTURE = {
+  schema_version: "submission-authority-v1",
+  submission_authority_revision: "4",
+  build_revision: "dashboard-visual-fixture",
   stages: ["applied", "interview", "offer"],
   cards: [{
-    id: "d6693be1-9d1d-4f61-9911-8d95f1ad1b01",
+    id: APPLICATION_PACKET_ID,
     job_id: null,
     company: "Acme Labs",
     role: "Product Engineer",
@@ -162,8 +185,32 @@ const APPLICATION_PACKET_BOARD_FIXTURE = {
     moved_at: "2026-07-21T12:00:00.000Z",
     reviewable: true,
     submission_status: "questions_ready",
+    submission_projection: APPLICATION_PACKET_SUBMISSION_PROJECTION,
+    submission_authority: {
+      schema_version: "submission-authority-v1",
+      revision: "4",
+      state: "confirmed",
+      application_id: APPLICATION_PACKET_ID,
+      packet_id: APPLICATION_PACKET_ID,
+      projection: APPLICATION_PACKET_SUBMISSION_PROJECTION,
+      retry_safety: {
+        kind: "blocked_confirmed",
+        attemptId: APPLICATION_PACKET_ATTEMPT_ID,
+        confirmedAt: APPLICATION_PACKET_CAPTURED_AT,
+      },
+    },
     stage: "applied",
   }],
+};
+
+const APPLICATION_PACKET = {
+  ...RESUMES[0],
+  id: APPLICATION_PACKET_BOARD_FIXTURE.cards[0].id,
+  job_context: {
+    ...RESUMES[0].job_context,
+    company: APPLICATION_PACKET_BOARD_FIXTURE.cards[0].company,
+    role: APPLICATION_PACKET_BOARD_FIXTURE.cards[0].role,
+  },
 };
 
 const TRANSCRIPT_PACKET = {
@@ -1352,6 +1399,35 @@ async function waitForStableGeometry(locator, label) {
   assert.equal(stable, true, `${label} did not settle before visual capture`);
 }
 
+/* Geometry stability is not content stability, and this suite needed both.
+ *
+ * waitForStableGeometry watches ONE node's bounding rect. The delayed-denial upgrade case waited on
+ * the dialog that way and then captured the whole PAGE, so the Applications list BEHIND the dialog
+ * was never waited on at all. A pixel diff at an identical rendering commit put every differing
+ * pixel outside the dialog: the applied-today line, Read job, Hide, Tailor resume first, Open and
+ * fill employer form. Controls appearing and moving, at stable geometry for the dialog itself, is
+ * exactly what a rect check cannot see.
+ *
+ * So this signs the rendered TEXT and the child count of a region and waits for both to hold still
+ * across consecutive frames. */
+async function waitForStableContent(locator, label) {
+  const stable = await locator.evaluate(async (node) => {
+    const deadline = performance.now() + 4_000;
+    let previous = "";
+    let consecutive = 0;
+    while (performance.now() < deadline) {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const signature = `${node.querySelectorAll("*").length}:${node.innerText ?? ""}`;
+      if (signature === previous) consecutive += 1;
+      else consecutive = 0;
+      previous = signature;
+      if (consecutive >= 5) return true;
+    }
+    return false;
+  });
+  assert.equal(stable, true, `${label} did not settle before visual capture`);
+}
+
 async function resizeForCapture(page, width, height) {
   await page.setViewportSize({ width, height });
   await page.waitForFunction(
@@ -1637,7 +1713,7 @@ test("hand-built application overlays retain an inert exit and restore their exa
   const { context, page, state } = await newDashboardPage({
     viewport: { width: 1280, height: 900 },
     boardFixture: APPLICATION_PACKET_BOARD_FIXTURE,
-    resumeHistoryFixture: [TRANSCRIPT_PACKET, OFFICIAL_TRANSCRIPT_PACKET],
+    resumeHistoryFixture: [APPLICATION_PACKET, TRANSCRIPT_PACKET, OFFICIAL_TRANSCRIPT_PACKET],
     submissionFixtures: {
       [TRANSCRIPT_PACKET.id]: {
         application_id: TRANSCRIPT_PACKET.id,
@@ -1661,7 +1737,16 @@ test("hand-built application overlays retain an inert exit and restore their exa
     const packetTrigger = page.getByRole("button", {
       name: /See the application built for Product Engineer at Acme Labs/,
     });
-    await packetTrigger.waitFor({ state: "visible" });
+    await packetTrigger.waitFor({ state: "visible" }).catch(async (reason) => {
+      const diagnostic = await page.evaluate(() => ({
+        url: location.href,
+        buttons: [...document.querySelectorAll("button")]
+          .map((button) => button.getAttribute("aria-label") ?? button.textContent?.trim())
+          .filter(Boolean),
+        mainText: document.querySelector("main")?.textContent?.trim().slice(0, 2_000),
+      }));
+      assert.fail(`Application packet trigger did not render: ${reason.message}\n${JSON.stringify(diagnostic)}`);
+    });
     await packetTrigger.evaluate((node) => node.setAttribute("data-focus-probe", "application-packet-trigger"));
     const packetTriggerPoint = await packetTrigger.evaluate((node) => {
       const rect = node.getBoundingClientRect();
@@ -1963,6 +2048,7 @@ test("reduced motion closes hand-built and native overlays without retained anim
     viewport: { width: 1280, height: 900 },
     reducedMotion: "reduce",
     boardFixture: APPLICATION_PACKET_BOARD_FIXTURE,
+    resumeHistoryFixture: [APPLICATION_PACKET],
   });
   try {
     await page.goto(`${QA_ORIGIN}/dashboard/applications?qa=1`, { waitUntil: "domcontentloaded" });
@@ -2714,7 +2800,7 @@ test("The manual composer reveals requirements before an action can fail", async
     assert.equal(await fill.isDisabled(), true, "the empty composer exposed an active fill action");
     assert.equal(await tailor.isDisabled(), true, "the empty composer exposed an active tailoring action");
     assert.equal(await page.getByLabel("Job description").count(), 0, "the optional tailoring field dominated the default mobile form");
-    await page.getByText("Company, role, and a complete HTTPS job URL unlock the employer form.", { exact: false }).waitFor({ state: "visible" });
+    await page.getByText("Company, role, and a complete HTTPS job URL unlock the extension fallback.", { exact: false }).waitFor({ state: "visible" });
 
     await page.getByLabel("Company").fill("Fixture Systems");
     await page.getByLabel("Role").fill("Product Engineering Intern");
@@ -3863,6 +3949,16 @@ test("delayed resume denials restore focus after the initiating control changes"
       const closeRect = close.getBoundingClientRect();
       return closeRect.left > dialogRect.left + dialogRect.width * 0.75;
     });
+    /* The page behind the dialog, not just the dialog. This capture is full-page, and the
+       Applications list under it kept arriving after the dialog had settled.
+
+       The bistable part was the AppliedToday counter. It renders null until its count fetch
+       resolves, and whether that fetch beat the capture decided between two STABLE layouts about
+       120px apart, which is why two runs at one commit produced exactly the same 35,738-pixel
+       diff again and again: the page always settled, on one of two sides of the race. A stability
+       wait cannot pick a side; only waiting for the terminal state can. */
+    await applications.page.getByText("applied today").first().waitFor({ state: "visible", timeout: 15_000 });
+    await waitForStableContent(applications.page.locator("main").first(), "Applications delayed-denial page behind the dialog");
     await capturePass(applications.page, "applications-delayed-denial-upgrade");
     await applicationUpgrade.getByRole("button", { name: "Close Litos+ options" }).click();
     await applicationUpgrade.waitFor({ state: "detached" });

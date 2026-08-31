@@ -4,6 +4,7 @@ import {
   answerWithExactOptionToggled,
   exactQuestionOption,
   exactSelectedQuestionOptions,
+  optionalQuestionNeedsDecision,
   questionReviewPresentation,
   requiredQuestionReviewRoute,
 } from "./question-review-presentation.ts";
@@ -149,21 +150,58 @@ test("multi-value answers decompose against exact labels, including labels that 
   );
 });
 
-test("an ambiguous or stale multi-value answer fails closed", () => {
+test("an ambiguous or stale multi-value answer stays in Litos for exact reselection", () => {
   const ambiguousOptions = ["A", "A, B", "B"];
   assert.equal(exactSelectedQuestionOptions("A, B", ambiguousOptions), null);
   assert.equal(exactSelectedQuestionOptions("Seattle", ["Chicago", "New York"]), null);
 
-  const result = questionReviewPresentation([
-    question({
+  const stored = question({
       question: "Select every location where you can work",
       answer: "A, B",
       portal_input_type: "select-multiple",
+      portal_selector: "#locations",
       options: ambiguousOptions,
-    }),
-  ]);
-  assert.deepEqual(result.editableQuestions, []);
-  assert.equal(result.metadataBlockers[0]?.kind, "unsupported_multi_value");
+    });
+  const result = questionReviewPresentation([stored], [{
+    kind: "unsupported_multi_value",
+    required: true,
+    portal_input_type: "select-multiple",
+    portal_selector: "#locations",
+    question: "Select every location where you can work",
+  }]);
+  assert.deepEqual(result.metadataBlockers, []);
+  assert.equal(result.editableQuestions[0]?.answer, "");
+  assert.equal(result.editableQuestions[0]?.answer_draft, "A, B");
+  assert.deepEqual(result.editableQuestions[0]?.options, ambiguousOptions);
+});
+
+test("a partial employer option inventory stays metadata-incomplete", () => {
+  for (const completeness of [
+    { options_complete: false },
+    { optionsComplete: false },
+  ]) {
+    const result = questionReviewPresentation([
+      question({
+        question: "Select every location where you can work",
+        answer: "Chicago",
+        portal_input_type: "select-multiple",
+        portal_selector: "#locations",
+        options: ["Chicago", "New York"],
+        ...completeness,
+      }),
+    ]);
+
+    assert.deepEqual(result.editableQuestions, []);
+    assert.equal(result.metadataBlockers[0]?.kind, "missing_exact_options");
+  }
+});
+
+test("an optional question requires an explicit answer or persisted Skip", () => {
+  const optional = question({ required: false, answer: "", answer_state: "unanswered" });
+  assert.equal(optionalQuestionNeedsDecision(optional), true);
+  assert.equal(optionalQuestionNeedsDecision({ ...optional, answer_state: "litos_refused" }), true);
+  assert.equal(optionalQuestionNeedsDecision({ ...optional, answer_state: "skipped" }), false);
+  assert.equal(optionalQuestionNeedsDecision({ ...optional, answer: "Applicant answer", answer_state: undefined }), false);
 });
 
 test("a server blocker suppresses the matching historical question without duplicating the card", () => {

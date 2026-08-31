@@ -417,8 +417,82 @@ export type DocumentSummary = {
   deleted_at: string | null;
 };
 
+export type AuthoritativeSubmissionReceipt = {
+  confirmation_text: string;
+  final_url: string;
+  captured_at: string;
+  source?: string;
+};
+
+export type AuthoritativeSubmissionProjection =
+  | {
+    state: "confirmed";
+    attempt_id: string;
+    canonical_application_id: string;
+    packet_id: string | null;
+    submitted_at: string;
+    receipt: AuthoritativeSubmissionReceipt;
+    source: string;
+    tracker_stage: string;
+  }
+  | {
+    state: "unverified";
+    attempt_id: string;
+    observed_at: string;
+    reason: "opened" | "boundary_authorized" | "pressed" | "invalid_sequence";
+  }
+  | {
+    state: "repair_required";
+    attempt_id?: string;
+    canonical_application_id?: string;
+    packet_id?: string | null;
+    reasons: readonly string[];
+  }
+  | { state: "none" };
+
+export type SubmissionRetrySafetyProofKind =
+  | "typed_pre_click_stop"
+  | "applicant_checked_not_sent"
+  | "applicant_checked_all_possible_destinations_not_sent"
+  | "employer_rejected_not_filed"
+  | "employer_verification_pending_not_filed"
+  | "provider_definitive_rejection"
+  | "extension_cancelled_before_press";
+
+export type SubmissionRetrySafety =
+  | { kind: "no_evidence" }
+  | {
+    kind: "safe_not_sent";
+    attemptId: string;
+    proofKind: SubmissionRetrySafetyProofKind;
+    resolvedAt: string;
+  }
+  | {
+    kind: "blocked_unverified";
+    attemptId: string;
+    at: string;
+    reason: "opened" | "pressed" | "invalid_sequence";
+  }
+  | {
+    kind: "blocked_unverified";
+    attemptId: string;
+    at: string;
+    reason: "boundary_authorized";
+    leaseId: string;
+    expiresAt: string;
+  }
+  | {
+    kind: "blocked_confirmed";
+    attemptId: string;
+    confirmedAt: string;
+  };
+
 export type GeneratedResume = {
   id: string;
+  submission_authority?: unknown;
+  submission_projection?: AuthoritativeSubmissionProjection;
+  retry_safety?: SubmissionRetrySafety | null;
+  submission_authority_quarantined?: true;
   /* job_id is the monitored posting this packet was built for. Absent on everything generated
      before 2026-07-28 and on anything from the extension, which has no posting to point at, so
      every reader needs a path that works without it. */
@@ -453,6 +527,9 @@ export type GeneratedResume = {
  */
 export type CanonicalApplication = {
   id: string;
+  submission_authority?: unknown;
+  submission_projection?: AuthoritativeSubmissionProjection;
+  retry_safety?: SubmissionRetrySafety | null;
   legacy_generated_resume_id?: string | null;
   job_id?: string | null;
   company: string;
@@ -748,6 +825,10 @@ export type ApplicationQuestion = {
    * writes it onto the review questions too (see the backend's discoverAndResolveQuestions), so a
    * stalled run's unanswered question carries the same menu the Apply screen always had. */
   options?: string[] | null;
+  /** False means discovery saw more employer choices than it could retain exactly. */
+  options_complete?: boolean;
+  /** Discovery-native spelling retained during mixed-version deployments. */
+  optionsComplete?: boolean;
   /** One line under the label saying why Litos did not answer this. */
   explanation?: string;
   /* Her own removed words, preserved when the backend re-opened a closed-choice question whose
@@ -757,6 +838,8 @@ export type ApplicationQuestion = {
      `answer` - a re-opened question's answer is genuinely blank, and a question with a valid
      stored `answer` never carries a draft the server intends anything by. */
   answer_draft?: string;
+  /** Applicant workflow state for an optional question with no employer-facing answer. */
+  answer_state?: "unanswered" | "skipped" | "litos_refused";
   /** True when the answer shown is one she gave on an earlier posting. */
   remembered?: boolean;
   /* ---- the server's word on who put this answer here ----
@@ -788,6 +871,10 @@ export type PostingPrescriptQuestion = {
   question: string;
   input_type: string;
   options: string[] | null;
+  /** False means the option inventory is partial and must not be presented as complete. */
+  options_complete?: boolean;
+  /** Discovery-native spelling retained during mixed-version deployments. */
+  optionsComplete?: boolean;
   required: boolean;
   max_length: number | null;
   answer: string;
@@ -809,7 +896,8 @@ export type PostingPrescript = {
   role: string;
   apply_url: string;
   portal: string | null;
-  discovery_status: "ok" | "form_not_reached" | "failed";
+  discovery_status: "ok" | "metadata_incomplete" | "form_not_reached" | "failed";
+  metadata_blockers: ApplicationQuestionMetadataBlocker[];
   discovered_at: string | null;
   scanned_now: boolean;
   question_count: number;
@@ -1038,6 +1126,7 @@ export type ApplicationReview = {
     tracked: boolean;
     decided_at: string;
   };
+  submission_claim_id?: string;
   submission_claimed_at?: string;
   /** Set when a run may have reached the employer and stopped before it could confirm it, e.g. a
    *  managed session that timed out or errored at the submit step. `resolution` is the applicant's
@@ -1711,16 +1800,9 @@ export function getApplicationProfile() {
   });
 }
 
-/**
- * The extra questions this posting asks, and which of them only she can answer.
- *
- * Never fatal. Every failure mode here - the posting is gone, the scan could not reach the form,
- * the endpoint is not deployed yet - means the same thing to the Apply flow: there is nothing extra
- * to ask, which is exactly the behaviour that exists today. Failing the whole Apply because a
- * lookahead did not work would trade a stall for a wall.
- */
-export function getPostingQuestions(jobId: string): Promise<PostingPrescript | null> {
-  return api<PostingPrescript>(`/postings/${jobId}/questions`).catch(() => null);
+/** The exact employer questions and discovery blockers known before Apply can continue. */
+export function getPostingQuestions(jobId: string): Promise<PostingPrescript> {
+  return api<PostingPrescript>(`/postings/${jobId}/questions`);
 }
 
 export function putApplicationProfile(body: Partial<ApplicationProfile>) {

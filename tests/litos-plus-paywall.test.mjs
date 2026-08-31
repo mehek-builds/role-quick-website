@@ -154,7 +154,7 @@ test("Free filling uses canonical application seams and never generation", async
     applications.indexOf("/* Fail closed during query-only navigation."),
   );
   assert.doesNotMatch(routedJob, /fillApplication\(draft\)/, "a route effect cannot open a popup reliably");
-  assert.match(routedJob, /Choose Fill application to verify the extension and open the employer form/);
+  assert.match(routedJob, /Choose Prepare in Litos to use your main resume without opening another tab/);
 });
 
 test("Tracker merges canonical Free applications with legacy packets", async () => {

@@ -9,7 +9,7 @@
  * re-measures it. Exits non-zero, so it can gate a deploy.
  */
 
-const API = (process.argv[2] ?? "https://api.trylitos.com").replace(/\/+$/, "");
+const API = (process.argv[2] ?? "https://student-outreach-backend.vercel.app").replace(/\/+$/, "");
 const { JOB_TITLES, OTHER } = await import("../lib/job-titles.ts");
 
 const count = async (field, value) => {

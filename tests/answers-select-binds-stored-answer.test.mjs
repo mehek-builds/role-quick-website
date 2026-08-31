@@ -164,12 +164,13 @@ describe("an untouched save neither edits nor blanks the stored answer", () => {
 });
 
 describe("answer_draft stays display-only", () => {
-  test("the dashboard never reads the draft, so it can never override a stored answer", () => {
+  test("the dashboard displays the draft without binding it as an answer", () => {
     /* The backend's re-open (its PR #763) preserves removed text on answer_draft. Its contract is
        display-only: it must never feed a control's value or stand in for `answer`. Today the page
-       does not read it at all; a future use that renders it as helper copy must keep it out of
-       every value binding, and updating this pin is the deliberate act that records that. */
-    assert.doesNotMatch(page, /answer_draft/);
+       now renders it as helper copy while the exact control stays blank for reselection. */
+    assert.match(page, /Your previous answer did not match the employer/);
+    assert.doesNotMatch(page, /value=\{[^}\n]*answer_draft/);
+    assert.doesNotMatch(page, /checked=\{[^}\n]*answer_draft/);
   });
 
   test("a draft beside a valid stored answer changes nothing the screen binds", () => {

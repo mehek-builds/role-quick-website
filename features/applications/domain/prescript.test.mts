@@ -1,7 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  prescriptBlocksProgress,
   prescriptEditableQuestions,
+  prescriptMetadataBlockers,
   prescriptNeedsHer,
   prescriptQuestionId,
   prescriptSummary,
@@ -10,6 +12,8 @@ import {
 /* The four questions below are verbatim from the production run of 2026-08-08, which stalled 21 of
  * 25 applications. Each is the shape this screen exists to catch before a browser ever opens. */
 const prescript = {
+  discovery_status: "ok" as const,
+  metadata_blockers: [],
   ask: [
     {
       question: "Astranis complies with U.S. Government space technology export regulations, including the International Traffic in Arms Regulations (ITAR). Are you a U.S. person as defined by these regulations?",
@@ -112,10 +116,49 @@ test("the summary counts what Litos handled as well as what is left", () => {
 });
 
 test("nothing to ask means nothing happens", () => {
-  assert.equal(prescriptNeedsHer({ ask: [], already_answered: 40 }), false);
+  assert.equal(prescriptNeedsHer({ discovery_status: "ok", metadata_blockers: [], ask: [], already_answered: 40 }), false);
   assert.equal(prescriptNeedsHer(null), false);
   assert.equal(prescriptNeedsHer(undefined), false);
   assert.equal(prescriptSummary({ ask: [], already_answered: 40 }), "");
   assert.deepEqual(prescriptEditableQuestions(null), []);
   assert.equal(prescriptNeedsHer(prescript), true);
+});
+
+test("a response without a discovery result fails closed", () => {
+  assert.equal(prescriptBlocksProgress({ ask: [], already_answered: 0 }), true);
+  assert.equal(prescriptNeedsHer({ ask: [], already_answered: 0 }), true);
+});
+
+test("metadata-incomplete lookahead blocks Apply even when no answer is currently visible", () => {
+  const blocker = {
+    kind: "missing_exact_options" as const,
+    required: true,
+    portal_input_type: "select-multiple",
+    portal_selector: "#locations",
+    question: "Select every location where you can work",
+  };
+  const incomplete = {
+    discovery_status: "metadata_incomplete" as const,
+    metadata_blockers: [blocker],
+    ask: [],
+    already_answered: 4,
+  };
+
+  assert.equal(prescriptBlocksProgress(incomplete), true);
+  assert.equal(prescriptNeedsHer(incomplete), true);
+  assert.deepEqual(prescriptMetadataBlockers(incomplete), [blocker]);
+});
+
+test("a failed or unreached lookahead blocks Apply instead of becoming an empty question list", () => {
+  for (const discovery_status of ["failed", "form_not_reached"] as const) {
+    const failed = { discovery_status, metadata_blockers: [], ask: [], already_answered: 0 };
+    assert.equal(prescriptBlocksProgress(failed), true);
+    assert.equal(prescriptNeedsHer(failed), true);
+  }
+  assert.equal(prescriptBlocksProgress({
+    discovery_status: "ok",
+    metadata_blockers: [],
+    ask: [],
+    already_answered: 2,
+  }), false);
 });

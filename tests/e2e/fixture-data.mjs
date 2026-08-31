@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 /**
  * The fabricated account the click-path spec drives.
  *
@@ -40,9 +41,131 @@ const REALISTIC_JD_PARAGRAPH =
   "Experience with Node.js, PostgreSQL, and customer-facing product engineering is preferred. ";
 export const REALISTIC_JD = REALISTIC_JD_PARAGRAPH.repeat(14).trim();
 
+/* Ids are UUIDs, and each packet carries a submission-authority envelope.
+ *
+ * The dashboard stopped trusting a bare `_review.status`. `packetForSubmissionDisplay` parses an
+ * envelope and routes the review through `reviewForSubmissionProjection`, which downgrades any
+ * review CLAIMING sent to `needs_attention` unless the projection is confirmed for that exact
+ * identity, and quarantines a packet whose envelope does not parse. Three rules bite here:
+ *   1. the id must match /^[0-9a-f]{8}-.../i, so it is hashed rather than spelled;
+ *   2. a confirmed projection needs a UUID canonical_application_id, never null;
+ *   3. a "none" projection is only valid beside a no_evidence or safe_not_sent retry verdict.
+ * Miss any one and the packet renders the needs-attention screen while its review looks fine. */
+function fixtureUuid(prefix, key) {
+  const h = createHash("sha256").update(`${prefix}:${key}`).digest("hex");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-8${h.slice(17, 20)}-${h.slice(20, 32)}`;
+}
+export const fixturePacketId = (key) => fixtureUuid("packet", key);
+const fixtureAttemptId = (key) => fixtureUuid("attempt", key);
+const fixtureCanonicalId = (key) => fixtureUuid("canonical", key);
+
+/* One revision for the packets and the board envelope. boardSubmissionAuthorityCollectionIsComplete
+ * requires the collection revision on the RESPONSE and every card's authority to match it, so these
+ * drifting apart takes fetchBoard into its throw and the whole board renders as failed. */
+export const BOARD_AUTHORITY_REVISION = "4";
+
+export function fixtureAuthority(key, status) {
+  const packetId = fixturePacketId(key);
+  if (status !== "submitted") {
+    const projection = { state: "none" };
+    const retrySafety = { kind: "no_evidence" };
+    return {
+      submission_projection: projection,
+      retry_safety: retrySafety,
+      submission_authority: {
+        schema_version: "submission-authority-v1",
+        revision: BOARD_AUTHORITY_REVISION,
+        state: "none",
+        application_id: packetId,
+        packet_id: packetId,
+        projection,
+        retry_safety: retrySafety,
+      },
+    };
+  }
+  const attemptId = fixtureAttemptId(key);
+  const capturedAt = "2026-07-21T12:30:05.000Z";
+  const projection = {
+    state: "confirmed",
+    attempt_id: attemptId,
+    canonical_application_id: fixtureCanonicalId(key),
+    packet_id: packetId,
+    submitted_at: "2026-07-21T12:30:00.000Z",
+    receipt: {
+      confirmation_text: "Your application has been received.",
+      final_url: "https://jobs.example.com/confirmation",
+      captured_at: capturedAt,
+      source: "managed_browser",
+    },
+    source: "managed_browser",
+    tracker_stage: "applied",
+  };
+  const retrySafety = { kind: "blocked_confirmed", attemptId, confirmedAt: capturedAt };
+  return {
+    submission_projection: projection,
+    retry_safety: retrySafety,
+    submission_authority: {
+      schema_version: "submission-authority-v1",
+      revision: BOARD_AUTHORITY_REVISION,
+      state: "confirmed",
+      application_id: packetId,
+      packet_id: packetId,
+      projection,
+      retry_safety: retrySafety,
+    },
+  };
+}
+
+/* A confirmed envelope for a RESPONSE that reports a landed send, for specs whose stub answers a
+ * submit-request. A response that merely sets `status: "submitted"` is downgraded on sight, for
+ * the same reason a packet is: `reviewForSubmissionProjection` returns "submitted" only for a
+ * confirmed projection of that exact identity. Callers must also copy the returned `attemptId`
+ * into `review.submission_claim_id`.
+ *
+ * The projection receipt is NOT the displayed receipt: it may hold only confirmation_text,
+ * final_url, captured_at and an optional source. Any other key (`reference_id`, say) fails
+ * `exactProjectionShape` and quarantines the response. `confirmedAt` must repeat `captured_at`
+ * exactly; `projectionMatchesContext` compares them. */
+export function confirmedAuthorityFor(applicationId, seed, { confirmationText, finalUrl, capturedAt }) {
+  const attemptId = fixtureUuid("landed-attempt", seed);
+  const projection = {
+    state: "confirmed",
+    attempt_id: attemptId,
+    canonical_application_id: fixtureUuid("landed-canonical", seed),
+    packet_id: applicationId,
+    submitted_at: capturedAt,
+    receipt: {
+      confirmation_text: confirmationText,
+      final_url: finalUrl,
+      captured_at: capturedAt,
+      source: "managed_browser",
+    },
+    source: "managed_browser",
+    tracker_stage: "applied",
+  };
+  const retrySafety = { kind: "blocked_confirmed", attemptId, confirmedAt: capturedAt };
+  return {
+    attemptId,
+    envelope: {
+      submission_projection: projection,
+      retry_safety: retrySafety,
+      submission_authority: {
+        schema_version: "submission-authority-v1",
+        revision: BOARD_AUTHORITY_REVISION,
+        state: "confirmed",
+        application_id: applicationId,
+        packet_id: applicationId,
+        projection,
+        retry_safety: retrySafety,
+      },
+    },
+  };
+}
+
 function packet(key, status) {
   return {
-    id: `fixture-packet-${key}`,
+    id: fixturePacketId(key),
+    ...fixtureAuthority(key, status),
     job_context: { company: `Fixture Company ${key}`, role: `Fixture Role ${key}`, jd_hash: `hash-${key}` },
     resume_object_key: `fixture/${key}`,
     created_at: "2026-07-21T12:00:00.000Z",
@@ -84,7 +207,9 @@ function packet(key, status) {
            disable the button just as thoroughly. */
         preview_screenshot_url: "/qa/portal-preview.svg",
         updated_at: "2026-07-21T12:00:00.000Z",
-        ...(status === "submitted" ? { submitted_at: "2026-07-21T12:30:00.000Z" } : {}),
+        ...(status === "submitted"
+          ? { submitted_at: "2026-07-21T12:30:00.000Z", submission_claim_id: fixtureAttemptId(key) }
+          : {}),
       },
     },
   };
@@ -196,7 +321,13 @@ export const STUB = {
   "/profile/targeting": TARGETING,
   /* Two arrays, not one. The Tracker's board reads `stages` and `cards` separately and filters both
      on render, so an object with either key missing takes the whole route into its error boundary. */
-  "/applications/board": { stages: [], cards: [] },
+  "/applications/board": {
+    schema_version: "submission-authority-v1",
+    submission_authority_revision: "4",
+    build_revision: "dashboard-browser-fixture",
+    stages: [],
+    cards: [],
+  },
   "/track/events": [],
   /* Resume checks, inside the review screen's right pane. The shape is the one
      features/applications/infrastructure/response-shape.ts insists on: `findings` an array and

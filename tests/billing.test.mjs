@@ -11,13 +11,13 @@ test("accepts only reusable HTTPS Lemon Squeezy checkout links", () => {
 });
 
 test("accepts first-party Litos Pay checkout intents from the configured backend only", () => {
-  const intent = "https://api.trylitos.com/billing/litos-pay/checkout/6d58c1f5-e885-41f7-a16a-dac37f98ab17?token=signed";
+  const intent = "https://student-outreach-backend.vercel.app/billing/litos-pay/checkout/6d58c1f5-e885-41f7-a16a-dac37f98ab17?token=signed";
   assert.equal(isLitosPayCheckoutUrl(intent), true);
   assert.equal(isSafeCheckoutUrl(intent), true);
   assert.equal(isLitosPayCheckoutUrl(intent.replace("https://", "http://")), false);
-  assert.equal(isLitosPayCheckoutUrl(intent.replace("api.trylitos.com", "evil.example")), false);
-  assert.equal(isLitosPayCheckoutUrl("https://api.trylitos.com/billing/litos-pay/checkout/6d58c1f5-e885-41f7-a16a-dac37f98ab17"), false);
-  assert.equal(isLitosPayCheckoutUrl("https://api.trylitos.com/billing/litos-pay/checkout/not-a-uuid?token=signed"), false);
+  assert.equal(isLitosPayCheckoutUrl(intent.replace("student-outreach-backend.vercel.app", "evil.example")), false);
+  assert.equal(isLitosPayCheckoutUrl("https://student-outreach-backend.vercel.app/billing/litos-pay/checkout/6d58c1f5-e885-41f7-a16a-dac37f98ab17"), false);
+  assert.equal(isLitosPayCheckoutUrl("https://student-outreach-backend.vercel.app/billing/litos-pay/checkout/not-a-uuid?token=signed"), false);
 });
 
 test("accepts Litos Pay intents from an explicitly configured backend origin", () => {

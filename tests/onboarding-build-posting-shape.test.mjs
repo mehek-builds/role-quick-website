@@ -42,3 +42,12 @@ test("the build sends the three fields the resume route requires", async () => {
     assert.ok(deps.includes(field), `the generate call stopped sending ${field}`);
   }
 });
+
+test("the build reads metadata blockers through the mixed-version defensive helper", async () => {
+  const build = await read("components/start/BuildStep.tsx");
+  const questions = build.slice(build.indexOf("loadQuestions:"), build.indexOf("},\n      },", build.indexOf("loadQuestions:")));
+
+  assert.match(build, /import \{ prescriptMetadataBlockers, type ProfileIdentity \} from "@\/features\/applications"/);
+  assert.match(questions, /prescriptMetadataBlockers\(prescript\)\.length > 0/);
+  assert.doesNotMatch(questions, /prescript\.metadata_blockers\.length/);
+});

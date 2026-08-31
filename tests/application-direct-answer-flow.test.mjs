@@ -100,9 +100,10 @@ test("Applications asks one trusted employer question at a time with explicit sa
   assert.match(prompt, /<Button type="submit" block className="sm:w-auto" disabled=\{busy \|\| answerBlocked\}>/);
   assert.equal(
     [...prompt.matchAll(/type="button"/g)].length,
-    2,
-    "Previous and Next must be non-submit controls",
+    3,
+    "Previous, Next, and optional Skip must be non-submit controls",
   );
+  assert.match(prompt, /\? "Saving\.\.\." : "Skip"/);
   assert.match(prompt, /aria-label="Previous question"[\s\S]*?disabled=\{busy\}[\s\S]*?onClick=\{\(\) => navigate\(onPrevious\)\}/);
   assert.match(prompt, /\{saved && !answerDirty \? \([\s\S]*?type="button"[\s\S]*?aria-label=\{hasNext \? "Next question" : "Review application"\}[\s\S]*?disabled=\{busy\}[\s\S]*?onClick=\{\(\) => hasNext \? navigate\(onNext\) : onReviewApplication\(\)\}/);
   assert.match(prompt, /\{hasNext \? "Next question" : "Review application"\}/);
@@ -271,7 +272,7 @@ test("accepted answer writes stay owned by their application and latest submissi
     "switching back to an application must restore its full remembered snapshot before falling back to the partial row seed",
   );
 
-  const normalizedPoll = requiredIndex(poll, "let result: SubmissionResponse = { ...raw, review: reviewWithLists(raw.review) }", "normalized full poll response");
+  const normalizedPoll = requiredIndex(poll, "let result = submissionResponseForDisplay(raw, { packetId: requestedId })", "authority-normalized full poll response");
   const mutationGuard = requiredIndex(poll, "if (submissionMutationGenerationRef.current !== requestedMutationGeneration) return", "nonvisual poll mutation guard", normalizedPoll);
   const rememberedBeforeRead = requiredIndex(poll, "const rememberedBeforeRead = submissionSnapshotsRef.current.get(requestedId)", "remembered snapshot before poll read", mutationGuard);
   const rememberedAfterRead = requiredIndex(poll, "const rememberedAfterRead = nextSubmissionState(rememberedBeforeRead, result)", "poll snapshot reconciliation", rememberedBeforeRead);
@@ -607,7 +608,7 @@ test("direct answer progress survives application switches without double-counti
   const remainingFilter = requiredIndex(save, "!completedDirectPromptFingerprints.has(directQuestionPromptFingerprint(task))", "completed prompt exclusion", remaining);
   const answeredQuestion = requiredIndex(save, "const answeredQuestion = saved.review.questions.find", "saved review question lookup", remainingFilter);
   const answeredPromptMatch = requiredIndex(save, "directQuestionPromptFingerprint({ question }) === safeDirectPromptFingerprint", "saved prompt identity", answeredQuestion);
-  const answeredFallback = requiredIndex(save, "?? { ...safeDirectTask.question, answer: direct.answer }", "submitted answer fallback", answeredPromptMatch);
+  const answeredFallback = requiredIndex(save, "?? { ...safeDirectTask.question, answer: direct.answer, answer_state: direct.answerState }", "submitted answer fallback with optional decision state", answeredPromptMatch);
   const answeredTask = requiredIndex(save, "const answeredTask = { ...safeDirectTask, question: answeredQuestion }", "resolved answered task", answeredFallback);
   const historyDedupe = requiredIndex(save, "activeAnsweredTasks.some((task)", "answered history dedupe", answeredTask);
   const historyReplace = requiredIndex(save, "? activeAnsweredTasks.map((task)", "answered history replacement", historyDedupe);

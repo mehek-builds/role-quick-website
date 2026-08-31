@@ -48,9 +48,108 @@ export type AttachedDocumentLike = {
   ordered_at?: string | null;
 };
 
+export type SubmissionRetrySafetyProofKindLike =
+  | "typed_pre_click_stop"
+  | "applicant_checked_not_sent"
+  | "applicant_checked_all_possible_destinations_not_sent"
+  | "employer_rejected_not_filed"
+  | "employer_verification_pending_not_filed"
+  | "provider_definitive_rejection"
+  | "extension_cancelled_before_press";
+
+export type SubmissionRetrySafetyLike =
+  | { kind: "no_evidence" }
+  | { kind: "safe_not_sent"; attemptId: string; proofKind: SubmissionRetrySafetyProofKindLike; resolvedAt: string }
+  | { kind: "blocked_unverified"; attemptId: string; at: string; reason: "opened" | "pressed" | "invalid_sequence" }
+  | {
+    kind: "blocked_unverified";
+    attemptId: string;
+    at: string;
+    reason: "boundary_authorized";
+    leaseId: string;
+    expiresAt: string;
+  }
+  | { kind: "blocked_confirmed"; attemptId: string; confirmedAt: string };
+
+const SUBMISSION_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function strictSubmissionTimestamp(value: unknown): value is string {
+  return typeof value === "string"
+    && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)
+    && Number.isFinite(Date.parse(value));
+}
+
+function exactObjectKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
+  const actual = Object.keys(value).sort();
+  const expected = [...keys].sort();
+  return actual.length === expected.length && actual.every((key, index) => key === expected[index]);
+}
+
+function retryProofKind(value: unknown): value is SubmissionRetrySafetyProofKindLike {
+  return value === "typed_pre_click_stop"
+    || value === "applicant_checked_not_sent"
+    || value === "applicant_checked_all_possible_destinations_not_sent"
+    || value === "employer_rejected_not_filed"
+    || value === "employer_verification_pending_not_filed"
+    || value === "provider_definitive_rejection"
+    || value === "extension_cancelled_before_press";
+}
+
+export function submissionRetrySafetyFromUnknown(value: unknown): SubmissionRetrySafetyLike | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const safety = value as Record<string, unknown>;
+  if (safety.kind === "no_evidence" && exactObjectKeys(safety, ["kind"])) {
+    return safety as SubmissionRetrySafetyLike;
+  }
+  if (safety.kind === "safe_not_sent"
+    && exactObjectKeys(safety, ["kind", "attemptId", "proofKind", "resolvedAt"])
+    && typeof safety.attemptId === "string"
+    && SUBMISSION_UUID.test(safety.attemptId)
+    && retryProofKind(safety.proofKind)
+    && strictSubmissionTimestamp(safety.resolvedAt)) {
+    return safety as SubmissionRetrySafetyLike;
+  }
+  if (safety.kind === "blocked_unverified"
+    && exactObjectKeys(safety, ["kind", "attemptId", "at", "reason"])
+    && typeof safety.attemptId === "string"
+    && SUBMISSION_UUID.test(safety.attemptId)
+    && strictSubmissionTimestamp(safety.at)
+    && (safety.reason === "opened" || safety.reason === "pressed" || safety.reason === "invalid_sequence")) {
+    return safety as SubmissionRetrySafetyLike;
+  }
+  if (safety.kind === "blocked_unverified"
+    && safety.reason === "boundary_authorized"
+    && exactObjectKeys(safety, ["kind", "attemptId", "at", "reason", "leaseId", "expiresAt"])
+    && typeof safety.attemptId === "string"
+    && SUBMISSION_UUID.test(safety.attemptId)
+    && strictSubmissionTimestamp(safety.at)
+    && typeof safety.leaseId === "string"
+    && SUBMISSION_UUID.test(safety.leaseId)
+    && strictSubmissionTimestamp(safety.expiresAt)) {
+    return safety as SubmissionRetrySafetyLike;
+  }
+  if (safety.kind === "blocked_confirmed"
+    && exactObjectKeys(safety, ["kind", "attemptId", "confirmedAt"])
+    && typeof safety.attemptId === "string"
+    && SUBMISSION_UUID.test(safety.attemptId)
+    && strictSubmissionTimestamp(safety.confirmedAt)) {
+    return safety as SubmissionRetrySafetyLike;
+  }
+  return null;
+}
+
+export function submissionRetrySafetyAllowsRetry(value: unknown): boolean {
+  const safety = submissionRetrySafetyFromUnknown(value);
+  return safety?.kind === "no_evidence" || safety?.kind === "safe_not_sent";
+}
+
 export type SubmissionSnapshot = {
   application_id: string;
   review: { updated_at: string };
+  submission_authority?: unknown;
+  submission_projection?: unknown;
+  retry_safety?: unknown;
+  submission_authority_quarantined?: true;
   cover_letter?: CoverLetterLike | null;
   /**
    * What this application already carries, keyed by document kind. Tri-state the way
@@ -278,6 +377,10 @@ export function nextSubmissionState<T extends SubmissionSnapshot>(current: T | n
   if (current.review.updated_at !== nextIncoming.review.updated_at) return nextIncoming;
   if (coverLetterIdentity(current.cover_letter) !== coverLetterIdentity(nextIncoming.cover_letter)) return nextIncoming;
   if (submissionReviewPacketIdentity(current.review) !== submissionReviewPacketIdentity(nextIncoming.review)) return nextIncoming;
+  if (JSON.stringify(current.submission_authority) !== JSON.stringify(nextIncoming.submission_authority)) return nextIncoming;
+  if (JSON.stringify(current.submission_projection) !== JSON.stringify(nextIncoming.submission_projection)) return nextIncoming;
+  if (JSON.stringify(current.retry_safety) !== JSON.stringify(nextIncoming.retry_safety)) return nextIncoming;
+  if (current.submission_authority_quarantined !== nextIncoming.submission_authority_quarantined) return nextIncoming;
   /* `documents` lives outside `review` and is versioned by nothing, exactly like `cover_letter`
      above, so it gets its own comparison for the reason the header states. Left out, a poll whose
      only news was a newly attached transcript matched on review.updated_at (which nothing advances

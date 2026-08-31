@@ -1,7 +1,8 @@
 import { api } from "@/lib/api";
-import type { ResumeSpec } from "@/lib/api";
+import type { AuthoritativeSubmissionProjection, ResumeSpec } from "@/lib/api";
 import type { JdMatchResponse } from "../domain/match-model";
 import { ACTIVE_BOARD_STAGES } from "../domain/board-stages";
+import { boardSubmissionAuthorityCollectionIsComplete } from "../domain/board-submission-authority";
 /* Every response below that a component MAPS OVER goes through response-shape.ts on the way out.
    That file is the single parse boundary for this feature: it is the only place a wire shape is
    checked, so a `?? []` is never needed at a call site and the next component to read one of these
@@ -186,13 +187,21 @@ export type BoardCard = {
   moved_at: string | null;
   reviewable: boolean;
   submission_status: string | null;
+  submission_authority?: unknown;
+  submission_projection?: AuthoritativeSubmissionProjection;
+  authorityNeedsReview?: boolean;
   stage: Stage;
 };
 
 export async function fetchBoard(): Promise<{ stages: Stage[]; cards: BoardCard[] }> {
   /* The client's own canonical stage list is the fallback when the backend omits `stages`. See
      normalizeBoard for why deriving the columns from the cards was worse than useless. */
-  return normalizeBoard(await api<unknown>("/applications/board"), ACTIVE_BOARD_STAGES);
+  const raw = await api<unknown>("/applications/board");
+  const board = normalizeBoard<{ stages: Stage[]; cards: BoardCard[] }>(raw, ACTIVE_BOARD_STAGES);
+  if (!boardSubmissionAuthorityCollectionIsComplete(raw, board.cards)) {
+    throw new Error("Application board authority was incomplete.");
+  }
+  return board;
 }
 
 export async function moveCard(id: string, stage: Stage): Promise<void> {

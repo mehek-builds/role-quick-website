@@ -115,6 +115,30 @@ test("the endpoint it posts to is the only one that may move this state", () => 
   assert.match(handler, /JSON\.stringify\(\{ code \}\)/);
 });
 
+test("the security-code response is exact, authority-normalized, and confirmed before publication", () => {
+  const handler = source.slice(
+    source.indexOf("async function submitSecurityCode"),
+    source.indexOf("async function retryPreparation"),
+  );
+  const fetch = handler.indexOf("const rawResult = await api<unknown>");
+  const shapeGate = handler.indexOf("submissionMutationResponseMatchesApplication(rawResult, requestedId)");
+  const normalize = handler.indexOf("submissionResponseForDisplay(");
+  const confirmation = handler.indexOf("confirmedProjectionForPacket(result.submission_projection");
+  const quarantine = handler.indexOf("result.submission_authority_quarantined === true");
+  const publish = handler.indexOf("submissionRef.current = result");
+  const navigate = handler.indexOf("moveToScreen(screenForStatus(result.review.status, \"portal\"))");
+
+  assert.ok(fetch >= 0, "the wire response must remain unknown until runtime validation");
+  assert.ok(shapeGate > fetch, "the requested application and review shape must be checked after the fetch");
+  assert.ok(normalize > shapeGate, "the review must be normalized through the authority boundary");
+  assert.ok(confirmation > normalize, "the normalized response must carry an exact confirmed projection");
+  assert.ok(quarantine > confirmation, "a quarantined response must be refused");
+  assert.ok(publish > quarantine, "authority refusal must happen before submission state is written");
+  assert.ok(navigate > publish, "navigation must happen only after confirmed state is published");
+  assert.match(handler, /result\.application_id !== requestedId/);
+  assert.match(handler, /packetId: requestedId,[\s\S]*retrySafety: result\.retry_safety \?\? null/);
+});
+
 test("a stale exact packet leaves security-code mode without rendering the server sentence", () => {
   const handler = source.slice(
     source.indexOf("async function submitSecurityCode"),
