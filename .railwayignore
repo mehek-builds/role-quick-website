@@ -1,0 +1,17 @@
+# Railway builds from the Dockerfile, which runs its own `npm ci` and `npm run build`.
+# Uploading these only slows the deploy; the image never uses them.
+.git
+.github
+.env
+.env*
+.vercel
+node_modules
+node_modules/
+.next
+.next/
+test-results
+test-results/
+playwright-report
+playwright-report/
+coverage
+coverage/
