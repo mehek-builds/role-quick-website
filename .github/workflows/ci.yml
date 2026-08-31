@@ -150,6 +150,27 @@ jobs:
       - name: Quality refactor regression spec
         run: npm run test:quality-refactor
 
+      # Row-opens-in-place, focused-workspace identity above the fold on desktop and mobile, and
+      # browser Back/Forward between an application and the ledger. Absent from this job until now,
+      # which is how a change to the dashboard's whole submission-display contract reached PR #466
+      # with nothing red: CI never looked at these, so eleven behaviours went unobserved.
+      - name: Tracker row opens detail spec
+        run: npm run test:tracker-row
+
+      # "A slow send cannot be sent twice" and "the progress screen does not claim nothing is sent
+      # while it is sending" live here. Those are the guards against submitting one application to
+      # an employer twice and against an operator believing nothing happened and pressing again,
+      # which are the two failure modes this whole product is built to prevent. They were not in
+      # CI either.
+      - name: Approve resolves spec
+        run: npm run test:approve
+
+      # Same gap: every case walks a packet to its audited control and through an accepted or
+      # refused send, so all six went red the moment a response had to carry submission authority
+      # rather than just claim a status, and CI saw none of it.
+      - name: Packet flow refusals spec
+        run: npm run test:packet-flow-refusals
+
       # Same job, same Chromium, same build. The base resume step's build start is a RACE between
       # two fetches, so it has no source-level cover at all: tests/start-onboarding-defects.test.mjs
       # can only pin the shape of the fix. This spec forces the losing ordering and is the only

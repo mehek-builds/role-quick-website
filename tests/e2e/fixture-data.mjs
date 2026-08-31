@@ -116,6 +116,52 @@ export function fixtureAuthority(key, status) {
   };
 }
 
+/* A confirmed envelope for a RESPONSE that reports a landed send, for specs whose stub answers a
+ * submit-request. A response that merely sets `status: "submitted"` is downgraded on sight, for
+ * the same reason a packet is: `reviewForSubmissionProjection` returns "submitted" only for a
+ * confirmed projection of that exact identity. Callers must also copy the returned `attemptId`
+ * into `review.submission_claim_id`.
+ *
+ * The projection receipt is NOT the displayed receipt: it may hold only confirmation_text,
+ * final_url, captured_at and an optional source. Any other key (`reference_id`, say) fails
+ * `exactProjectionShape` and quarantines the response. `confirmedAt` must repeat `captured_at`
+ * exactly; `projectionMatchesContext` compares them. */
+export function confirmedAuthorityFor(applicationId, seed, { confirmationText, finalUrl, capturedAt }) {
+  const attemptId = fixtureUuid("landed-attempt", seed);
+  const projection = {
+    state: "confirmed",
+    attempt_id: attemptId,
+    canonical_application_id: fixtureUuid("landed-canonical", seed),
+    packet_id: applicationId,
+    submitted_at: capturedAt,
+    receipt: {
+      confirmation_text: confirmationText,
+      final_url: finalUrl,
+      captured_at: capturedAt,
+      source: "managed_browser",
+    },
+    source: "managed_browser",
+    tracker_stage: "applied",
+  };
+  const retrySafety = { kind: "blocked_confirmed", attemptId, confirmedAt: capturedAt };
+  return {
+    attemptId,
+    envelope: {
+      submission_projection: projection,
+      retry_safety: retrySafety,
+      submission_authority: {
+        schema_version: "submission-authority-v1",
+        revision: BOARD_AUTHORITY_REVISION,
+        state: "confirmed",
+        application_id: applicationId,
+        packet_id: applicationId,
+        projection,
+        retry_safety: retrySafety,
+      },
+    },
+  };
+}
+
 function packet(key, status) {
   return {
     id: fixturePacketId(key),
