@@ -868,7 +868,9 @@ test("the walk: every step in order, each one advancing the rail by one", async 
       mimeType: "application/pdf",
       buffer: Buffer.from("%PDF-1.4 fixture, never parsed: the backend is stubbed"),
     });
-    await page.locator("button", { hasText: "See my matches" }).click();
+    /* No press after the upload: a clean parse advances on its own (2026-09-01). The recap and its
+       "See my matches" button render only when the parse needs the student's eyes first, a
+       local-fallback parse or one too thin to advance, and this fixture parses clean. */
 
     /* ── Step 3, Done ──────────────────────────────────────────────────────
        Setup is TWO screens now, and everything that used to sit between here and Done was cut or
