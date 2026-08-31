@@ -20,7 +20,7 @@ import { ThinkingOrb } from "thinking-orbs";
 import { ErrorNote } from "@/components/app/ui";
 import { ResumePaper, type ContactHeader } from "./ResumePaper";
 import { api, getJob, getPostingQuestions, isGuestSession, type MonitoredJob, type ResumeSpec } from "@/lib/api";
-import { type ProfileIdentity } from "@/features/applications";
+import { prescriptMetadataBlockers, type ProfileIdentity } from "@/features/applications";
 import {
   BuildPreconditionError,
   buildActionLabel,
@@ -92,7 +92,7 @@ export function BuildStep({
         },
         loadQuestions: async (jobId) => {
           const prescript = await getPostingQuestions(jobId);
-          if (prescript.discovery_status !== "ok" || prescript.metadata_blockers.length > 0) {
+          if (prescript.discovery_status !== "ok" || prescriptMetadataBlockers(prescript).length > 0) {
             throw new Error("Litos could not verify every employer question yet. Try reading the company form again.");
           }
           return {

@@ -80,7 +80,7 @@ import { acknowledgePacketEvidence, packetAuditAcknowledgementAccepted, packetQu
 import { useBilling } from "@/components/billing/BillingProvider";
 import { isStructuredUpgradeDenial } from "@/features/billing";
 import { completeOperationId, operationIdFor } from "@/lib/operation-id";
-import { applicationPacketAuthorityState, confirmedProjectionForPacket, quarantinedSubmissionAuthority, reviewClaimsSubmissionSent, reviewForSubmissionProjection, submissionAuthorityEnvelopeFromUnknown, submissionProjectionIsConfirmed } from "@/features/applications";
+import { applicationPacketAuthorityState, confirmedProjectionForPacket, managedPrepareAuthorityEnvelopeFromUnknown, managedPrepareAuthorityMatchesPacket, quarantinedSubmissionAuthority, reviewClaimsSubmissionSent, reviewForSubmissionProjection, submissionAuthorityEnvelopeFromUnknown, submissionMutationResponseMatchesApplication, submissionProjectionIsConfirmed } from "@/features/applications";
 
 type Screen = "review" | "questions" | "submitting" | "portal" | "submitted";
 type ApplicationSort = "next" | "recent" | "company";
@@ -344,13 +344,6 @@ type ApplicationFillResponse = {
   selected_resume_artifact_id: string | null;
   handoff?: ApplicationFillHandoff;
   application?: CanonicalApplication;
-};
-type ManagedPrepareResponse = {
-  application_id: string;
-  packet_id: string;
-  state: "preparing" | "ready_for_review" | "needs_attention";
-  review: ApplicationReview;
-  reused: boolean;
 };
 type FillReceipt = ApplicationFillResponse & { company: string; role: string; portalUrl: string };
 
@@ -3153,16 +3146,31 @@ function Applications() {
     setError(null);
     setNotice("Litos is preparing this application with your main resume. Nothing has been sent.");
     try {
-      const prepared = await api<ManagedPrepareResponse>("/applications/managed-prepare", {
+      const rawPrepared = await api<unknown>("/applications/managed-prepare", {
         method: "POST",
         body: JSON.stringify({ job_id: jobId, resume_source: "main_resume" }),
       });
+      const prepared = managedPrepareAuthorityEnvelopeFromUnknown(rawPrepared);
+      if (!prepared
+        || (draft.canonicalApplicationId && prepared.application_id !== draft.canonicalApplicationId)) {
+        throw new Error("Litos could not verify that the prepared packet belongs to this application. Nothing was opened or sent.");
+      }
       if (managedPrepareRef.current !== jobId) return;
       const [history, canonical] = await Promise.all([
         api<{ resumes: GeneratedResume[] }>(`/resume/history?application=${encodeURIComponent(prepared.packet_id)}`),
         api<{ applications: CanonicalApplication[] }>("/applications?limit=200"),
       ]);
       if (managedPrepareRef.current !== jobId) return;
+      const preparedCanonical = canonical.applications.find((application) => application.id === prepared.application_id);
+      const storedPacket = history.resumes.find((packet) => packet.id === prepared.packet_id);
+      if (!managedPrepareAuthorityMatchesPacket(
+        prepared,
+        draft.canonicalApplicationId,
+        preparedCanonical,
+        storedPacket,
+      )) {
+        throw new Error("Litos could not verify that the prepared packet belongs to this application. Nothing was opened or sent.");
+      }
       const exactReview = reviewWithLists(prepared.review);
       const legacy = history.resumes.map((packet) => packet.id === prepared.packet_id
         ? { ...packet, spec: { ...packet.spec, _review: exactReview } }
@@ -4766,10 +4774,26 @@ function Applications() {
     setSecurityCodeId(requestedId);
     setSecurityCodeError(null);
     try {
-      const result = await api<SubmissionResponse & { already_attempted?: boolean; outcome?: string }>(
+      const rawResult = await api<unknown>(
         `/applications/${requestedId}/security-code`,
         { method: "POST", body: JSON.stringify({ code }) },
       );
+      if (!submissionMutationResponseMatchesApplication(rawResult, requestedId)) {
+        throw new Error("Litos could not verify the employer's response for this application. Nothing was shown as sent.");
+      }
+      const result = submissionResponseForDisplay(
+        rawResult as SubmissionResponse & { already_attempted?: boolean; outcome?: string },
+        { packetId: requestedId },
+      ) as SubmissionResponse & { already_attempted?: boolean; outcome?: string };
+      const confirmed = confirmedProjectionForPacket(result.submission_projection, {
+        packetId: requestedId,
+        retrySafety: result.retry_safety ?? null,
+      });
+      if (result.application_id !== requestedId
+        || result.submission_authority_quarantined === true
+        || !confirmed) {
+        throw new Error("Litos could not confirm that the employer received this application. Nothing was shown as sent.");
+      }
       // The packet on screen after a multi-minute run need not be the one this started on: the
       // switcher renders above this screen, so tapping another row mid-run is a single tap. Same
       // guard, same reason, as approveFinalSubmission.
