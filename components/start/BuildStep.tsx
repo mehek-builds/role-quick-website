@@ -30,6 +30,7 @@ import {
   type ProfileIdentity,
 } from "@/features/applications";
 import { MatchLegend, RequirementProvider, RequirementText } from "@/components/app/RequirementText";
+import { isStructuredUpgradeDenial } from "@/features/billing";
 import {
   BuildPreconditionError,
   buildActionLabel,
@@ -87,7 +88,7 @@ export function BuildStep({
 }) {
   const [stages, setStages] = useState<BuildStage[]>(() => initialStages());
   const [result, setResult] = useState<BuildResult | null>(null);
-  const [error, setError] = useState<{ message: string; fixable: boolean; field: "full_name" | "resume_email" | null } | null>(null);
+  const [error, setError] = useState<{ message: string; fixable: boolean; field: "full_name" | "resume_email" | null; entitlement: boolean } | null>(null);
   const [posting, setPosting] = useState<MonitoredJob>(match.job);
   /* THE APPLICANT'S NAME, held here because ResumeSpec has no name field.
    *
@@ -167,14 +168,23 @@ export function BuildStep({
         /* A precondition is a one-line fix the student can make, so it is presented as one rather
            than as a failed build. Everything else is a genuine failure and offers a retry. */
         const fixable = reason instanceof BuildPreconditionError;
+        /* A 402 IS NOT A VERDICT ON THE POSTING, and presenting it as one sent a student in a loop.
+           Measured live 2026-09-01: an account whose one setup build was already spent got the
+           generic failure screen, whose copy blamed the fit ("not a fit Litos can write honestly")
+           and whose only forward control re-ran the same entitlement check against a different
+           posting, which refuses identically for every posting there is. Only the structured
+           denial shape takes this branch, for the same reason the dashboard checks it: an
+           unrelated 402 must not become an upsell. */
+        const entitlement = isStructuredUpgradeDenial(reason, "ai_resume_tailoring");
         setError({
           message: reason instanceof Error ? reason.message : "Litos could not build this application.",
           fixable,
           /* WHICH precondition, not just that there was one. A missing name and a missing email are
              fixed in different places, and for a guest the email is not fixable in Account at all. */
           field: reason instanceof BuildPreconditionError ? reason.field : null,
+          entitlement,
         });
-        track("onboarding_build_failed", { fixable });
+        track("onboarding_build_failed", { fixable, entitlement });
       });
     return () => { cancelled = true; };
   }, [match.job.id]);
@@ -208,6 +218,30 @@ export function BuildStep({
   /* The one precondition a guest cannot satisfy from Account, because a guest has no account email.
      Read at render rather than stored: the student may have claimed one in another tab. */
   const guestNeedsEmail = error?.fixable === true && error.field === "resume_email" && isGuestSession();
+
+  /* THE PAYWALL SAYS IT IS A PAYWALL. The generic failure screen below blames the posting and
+     offers another one, and both halves are false here: the refusal is about the account, and the
+     next posting refuses identically. Setup's own argument (see the free build first, card at step
+     10) is intact for a fresh account, which never sees this; it appears only when the free build
+     is no longer available, and the honest forward control is the plans page, where the ask
+     already lives. Nothing is lost by leaving: the flow resumes from this same step. */
+  if (error?.entitlement) {
+    return (
+      <StartShell step="build" title="This one needs Litos+.">
+        <p className="text-sm leading-6 text-muted">
+          The free build that comes with setup is not available on this account anymore, so
+          tailoring another application is a Litos+ action. Nothing was sent and nothing was lost:
+          your resume, your roles, and everything else you set up are saved.
+        </p>
+        <div className="mt-6 flex flex-wrap items-center gap-4">
+          <PrimaryButton onClick={() => { track("onboarding_build_upgrade_opened", {}); window.location.assign("/pricing"); }}>
+            See Litos+ plans
+          </PrimaryButton>
+          <LaterLink onClick={onLater} />
+        </div>
+      </StartShell>
+    );
+  }
 
   if (error) {
     /* A FAILED BUILD USED TO BE A DEAD END, and it is step 3 of 10.
