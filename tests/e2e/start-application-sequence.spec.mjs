@@ -353,7 +353,7 @@ describe("the application sequence, end to end", () => {
      * stub holds generation open until releaseGeneration(), so waiting cannot hang past that. */
     await page.getByText(/composing/i).waitFor({ timeout: 20_000 });
     const mid = await page.locator("main").innerText();
-    assert.match(mid, /Writing your one page for it/i);
+    assert.match(mid, /Writing your resume for it/i);
     assert.match(mid, /composing/i, "the resume stage is not active while generation is in flight");
     assert.equal(generationCalls, 1, "generation ran more than once for one build");
 
