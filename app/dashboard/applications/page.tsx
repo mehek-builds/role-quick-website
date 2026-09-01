@@ -8263,7 +8263,17 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
             onError={() => setPreviewState({ url: previewUrl, loaded: false, failed: true })}
           />
         )
-      ) : <div className="p-10 text-center text-sm text-muted">Litos is still taking the picture.</div>}
+      ) : <div className="p-10 text-center text-sm text-muted">
+          {/* THIS CARD ONLY RENDERS ONCE THE RUN HAS STOPPED (the live view owns the filling
+              states), so a missing picture here is one that was never saved, not one still being
+              taken. Measured 2026-09-01 on Zeus, DSI Innovations, Jump Trading and TixTrack: every
+              stopped run showed "still taking the picture" under a Stopped card, forever. */}
+          {/* awaiting_security_code reaches this card too and is not a stopped attempt: the form is
+              with the employer and the next step is the emailed code, never Try again. */}
+          {review.status === "ready_for_final_approval" || review.status === "awaiting_security_code"
+            ? "Litos did not save a picture of the filled form this time."
+            : "This attempt stopped before Litos took a picture of the form. Try again and it will take one."}
+        </div>}
     </Card>
   );
   return (
