@@ -99,8 +99,8 @@ function writeSkipped(next: boolean) {
    thing a student cannot already guess from the word "Litos". */
 const HIGHLIGHTS: { what: string; how: string }[] = [
   {
-    what: "One page",
-    how: "Litos rewrites the resume you upload into a single page, tailored to the job you are applying to.",
+    what: "Your resume",
+    how: "Litos rewrites the resume you upload, tailored to the job you are applying to.",
   },
   {
     what: "Your matches",

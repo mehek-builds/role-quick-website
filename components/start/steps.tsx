@@ -1405,7 +1405,7 @@ const RECEIPT_ROWS = ["focus", "resume", "base", "sponsorship"] as const;
 const RECEIPT_LABEL: Record<(typeof RECEIPT_ROWS)[number], string> = {
   focus: "Your roles",
   resume: "Your resume",
-  base: "Your one page",
+  base: "Your Litos resume",
   sponsorship: "Work visa",
 };
 

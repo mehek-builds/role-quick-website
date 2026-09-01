@@ -441,7 +441,7 @@ describe("the application sequence, end to end", () => {
        it moved to. */
     assert.match(body, /We build with TypeScript and React/i, "the posting's words are not on the review screen");
     assert.match(body, /Cut PostgreSQL query time 60%/i, "the resume itself is not on the review screen");
-    assert.doesNotMatch(body, /Your one page, written for this posting from your own resume/i, "the review still describes the resume instead of showing it");
+    assert.doesNotMatch(body, /Your resume, written for this posting from the one you uploaded/i, "the review still describes the resume instead of showing it");
     assert.ok(await page.locator("mark", { hasText: /TypeScript/i }).count() >= 2, "the review panes lost their requirement marks");
     assert.match(body, /cannot be unsent/i, "the irreversible screen must say so above the button");
     assert.match(body, /Anything Litos guessed/i);

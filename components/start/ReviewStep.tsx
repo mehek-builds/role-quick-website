@@ -177,7 +177,7 @@ export function ReviewStep({
           <section className="overflow-hidden rounded-inner border border-border">
             <header className="flex min-h-[38px] items-center justify-between gap-3 border-b border-border bg-surface-alt px-3.5 py-2">
               <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Attached</span>
-              {resumeSpec && <span className="font-mono text-[11px] text-positive">1 page</span>}
+              {resumeSpec && <span className="font-mono text-[11px] text-positive">Resume</span>}
             </header>
             {/* THE PAGE IS THE POINT ON THIS SCREEN, so it is drawn at the full width of its
                 column rather than at the build screen's 0.62 thumbnail. This is the screen that
@@ -191,7 +191,7 @@ export function ReviewStep({
                 <ResumePaper spec={resumeSpec} contact={contactHeaderOf(resumeSpec, applicantName)} />
               ) : (
                 <p className="text-[13px] leading-6 text-muted">
-                  Your one page, written for this posting from your own resume.
+                  Your resume, written for this posting from the one you uploaded.
                 </p>
               )}
             </div>

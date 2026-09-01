@@ -46,9 +46,14 @@ test("approval still saves the base resume before advancing", () => {
 });
 
 test("onboarding shows ATS readability facts and no target-role coverage percentage", () => {
+  /* THE PAGE COUNT IS DELIBERATELY GONE (Mehek, 2026-09-01). This line used to end "on one page",
+     and the page count was the second of its two numbers. The product no longer sells itself on
+     being one page anywhere in the flow, so the fact retired with the phrasing. The guardrail it
+     was serving is unchanged and still asserted below: this line states a number the student can
+     check (extractable_chars), never an adjective, and never a coverage percentage. */
   assert.match(source, /applicant tracking system can read this/);
   assert.match(source, /ats\.extractable_chars/);
-  assert.match(source, /ats\.pages/);
+  assert.doesNotMatch(source, /one page/i, "the one-page claim came back to the ATS fact line");
   assert.doesNotMatch(source, /ats\.keyword_coverage_pct/);
   assert.doesNotMatch(source, /matches .*% of the words in the roles you picked/);
 });
