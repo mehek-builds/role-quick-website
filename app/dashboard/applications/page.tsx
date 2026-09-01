@@ -81,6 +81,7 @@ import { useBilling } from "@/components/billing/BillingProvider";
 import { isStructuredUpgradeDenial } from "@/features/billing";
 import { completeOperationId, operationIdFor } from "@/lib/operation-id";
 import { applicationPacketAuthorityState, confirmedProjectionForPacket, managedPrepareAuthorityEnvelopeFromUnknown, managedPrepareAuthorityMatchesPacket, quarantinedSubmissionAuthority, reviewClaimsSubmissionSent, reviewForSubmissionProjection, submissionAuthorityEnvelopeFromUnknown, submissionMutationResponseMatchesApplication, submissionProjectionIsConfirmed } from "@/features/applications";
+import { useSidebarCollapse } from "@/app/dashboard/dashboard-shell";
 
 type Screen = "review" | "questions" | "submitting" | "portal" | "submitted";
 type ApplicationSort = "next" | "recent" | "company";
@@ -2570,6 +2571,18 @@ function Applications() {
   // legacy-resumes banner go, because together they cost roughly 120px of the one screen the JD and
   // the resume are supposed to share.
   const reviewOpen = Boolean(selected && spec && review) && screen === "review";
+  /* The rail folds itself down the moment this side-by-side view is what's on screen: the JD pane
+     and the resume pane are the whole reason the review surface above gave up its own vertical
+     space, and a 272px rail was the same trade horizontally. Keyed to the RISING edge of reviewOpen
+     (an ref, not the dependency array alone) so it fires once on arrival rather than on every
+     render the pane stays open, which is what let a student's own click on the rail's arrow hold
+     once they'd asked for the labels back. */
+  const wasReviewOpenRef = useRef(false);
+  const { setCollapsed: setSidebarCollapsed } = useSidebarCollapse();
+  useEffect(() => {
+    if (reviewOpen && !wasReviewOpenRef.current) setSidebarCollapsed(true);
+    wasReviewOpenRef.current = reviewOpen;
+  }, [reviewOpen, setSidebarCollapsed]);
   const applicationTaskOpen = Boolean(openingApplicationId || canonicalSelected || selectedId);
   const applicationTaskPacket = selected
     ?? reviewablePackets.find((packet) => packet.id === openingApplicationId || packet.id === selectedId)

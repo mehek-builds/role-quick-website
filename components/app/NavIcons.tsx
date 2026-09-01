@@ -103,3 +103,13 @@ export function GearIcon(props: IconProps) {
     </Glyph>
   );
 }
+
+/** The rail's own collapse toggle. Left-pointing at rest; the caller rotates it 180 for the
+    collapsed state rather than this needing two glyphs for one chevron. */
+export function ChevronIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M14.5 5.5 8 12l6.5 6.5" />
+    </Glyph>
+  );
+}
