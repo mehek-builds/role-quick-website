@@ -43,7 +43,7 @@ export type BuildStage = {
 export const BUILD_STAGES: readonly { key: BuildStageKey; label: string; orb: BuildStage["orb"] }[] = [
   { key: "posting", label: "Reading the posting", orb: "working" },
   { key: "questions", label: "Reading the employer's application", orb: "solving" },
-  { key: "resume", label: "Writing your one page for it", orb: "composing" },
+  { key: "resume", label: "Writing your resume for it", orb: "composing" },
 ];
 
 export type BuildResult = {
