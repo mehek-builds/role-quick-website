@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, ViewTransition } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, ViewTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -18,6 +18,7 @@ import { isQaRender } from "@/lib/qa-mode";
 import { currentKeyboardInset } from "@/lib/keyboard-inset";
 import {
   ChatIcon,
+  ChevronIcon,
   ClipboardIcon,
   DocumentIcon,
   GearIcon,
@@ -44,6 +45,27 @@ const NAV = [
 const MOBILE_NAV = NAV.slice(0, 4);
 const MORE_EXIT_MS = 130;
 
+type SidebarCollapse = {
+  collapsed: boolean;
+  requestCollapse: () => void;
+};
+
+const SidebarCollapseContext = createContext<SidebarCollapse | null>(null);
+
+/**
+ * Lets a page reach past the shell to fold the rail down to icons, for a screen that needs the
+ * width back more than it needs the labels (the JD/resume review pane is the one that does today).
+ * `requestCollapse` only ever collapses: it is not a toggle, and there is no `expand` counterpart
+ * here, so a page literally cannot call its way into re-opening the rail. The only path back out is
+ * the rail's own arrow, whose full setState lives in DashboardShell's own closure and never crosses
+ * this context boundary.
+ */
+export function useSidebarCollapse(): SidebarCollapse {
+  const context = useContext(SidebarCollapseContext);
+  if (!context) throw new Error("useSidebarCollapse must be used within DashboardShell");
+  return context;
+}
+
 function isActive(href: string, pathname: string): boolean {
   // /dashboard prefix-matches every child, so it alone is compared exactly.
   return href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(href);
@@ -66,6 +88,7 @@ export function DashboardShell({
   const router = useRouter();
   const [ready, setReady] = useState(false);
   const [qaMode, setQaMode] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [moreClosing, setMoreClosing] = useState(false);
   const moreButtonRef = useRef<HTMLButtonElement>(null);
@@ -105,6 +128,13 @@ export function DashboardShell({
     setMoreClosing(false);
     setMoreOpen(true);
   }, []);
+
+  const requestCollapse = useCallback(() => setCollapsed(true), []);
+  /* Without this, `children` (the applications page today) re-renders on every DashboardShell
+     render that produces a new object literal here, even ones this context has nothing to do with,
+     such as moreOpen/moreClosing toggling for the mobile "More" sheet: a plain object literal as
+     the Provider's value defeats React's usual children-reference bailout for every consumer. */
+  const sidebarCollapse = useMemo(() => ({ collapsed, requestCollapse }), [collapsed, requestCollapse]);
 
   useEffect(() => () => {
     if (moreCloseTimer.current !== null) window.clearTimeout(moreCloseTimer.current);
@@ -281,33 +311,57 @@ export function DashboardShell({
     .some((destination) => isActive(destination, pathname));
 
   return (
+    <SidebarCollapseContext.Provider value={sidebarCollapse}>
     <BillingProvider>
     <OutreachOperationProvider>
     <ResumeMutationProvider>
     {/* The rail is a real grid column, not a fixed overlay, so the page's own scrollbar belongs to
         the content and the two never fight over it. Below lg the column collapses and the bottom bar
-        takes over: a 272px rail on a laptop is orientation, on a phone it is the whole screen. */}
-    <div className="dashboard-shell min-h-screen lg:grid lg:grid-cols-[17rem_1fr]">
-      <aside className="sticky top-0 hidden h-screen flex-col border-r border-border bg-surface lg:flex">
-        <Link href="/" className="flex items-center gap-2.5 px-5 py-5">
+        takes over: a 272px rail on a laptop is orientation, on a phone it is the whole screen.
+        Collapsed shrinks that same track to an icon-only width rather than overlaying or hiding it,
+        so the content column still only ever has one column to its left to reason about. */}
+    <div className={collapsed
+      ? "dashboard-shell min-h-screen transition-[grid-template-columns] duration-200 ease-out lg:grid lg:grid-cols-[4.5rem_1fr]"
+      : "dashboard-shell min-h-screen transition-[grid-template-columns] duration-200 ease-out lg:grid lg:grid-cols-[17rem_1fr]"}>
+      <aside className="sticky top-0 relative hidden h-screen flex-col border-r border-border bg-surface lg:flex">
+        <Link href="/" className="flex items-center gap-2.5 overflow-hidden px-5 py-5">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand/litos-mark.svg" alt="" className="h-7 w-7" />
+          <img src="/brand/litos-mark.svg" alt="" className="h-7 w-7 shrink-0" />
           {/* DESIGN.md: display weight is 450, never bold. */}
-          <span className="text-[17px] font-medium tracking-tight text-ink">Litos</span>
+          {!collapsed && <span className="whitespace-nowrap text-[17px] font-medium tracking-tight text-ink">Litos</span>}
         </Link>
 
         <nav className="flex-1 overflow-y-auto px-3 pb-4">
-          <p className="px-3 pb-1 pt-3 font-mono text-label uppercase tracking-[0.08em] text-muted">Menu</p>
+          {!collapsed && <p className="px-3 pb-1 pt-3 font-mono text-label uppercase tracking-[0.08em] text-muted">Menu</p>}
           <ul className="space-y-0.5">
             {NAV.map((item) => (
               <li key={item.href}>
-                <RailLink item={item} href={href(item.href)} active={isActive(item.href, pathname)} />
+                <RailLink item={item} href={href(item.href)} active={isActive(item.href, pathname)} collapsed={collapsed} />
               </li>
             ))}
           </ul>
         </nav>
 
-        <AccountFooter qaMode={qaMode} active={isActive("/dashboard/settings", pathname)} />
+        <AccountFooter qaMode={qaMode} active={isActive("/dashboard/settings", pathname)} collapsed={collapsed} />
+
+        {/* Sits on the rail's own border rather than inside it, so folding the rail never costs it
+            the row of width it would need to keep an in-flow button clear of the nav links. The
+            arrow is the ONLY way back out of collapsed: nothing else in the shell calls
+            setCollapsed(false), by design (see useSidebarCollapse). aria-expanded (not aria-pressed)
+            to match the "More" toggle above: both are disclosure controls governing a region's
+            visibility, not a stateful preference toggle. ChevronIcon renders at its family default
+            18px (no size override on the className, which would lose to Glyph's own `h-[18px]
+            w-[18px]` under Tailwind's real cascade order regardless of source position) inside a
+            28px button, matching DESIGN.md's icon-family size and giving it real clearance. */}
+        <button
+          type="button"
+          onClick={() => setCollapsed((current) => !current)}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-expanded={!collapsed}
+          className="absolute -right-3.5 top-16 z-10 hidden h-7 w-7 items-center justify-center rounded-full border border-border bg-surface text-muted shadow-rest transition-colors hover:bg-surface-alt hover:text-ink lg:flex"
+        >
+          <ChevronIcon className={collapsed ? "rotate-180" : ""} />
+        </button>
       </aside>
 
       <div className="flex min-h-screen flex-col">
@@ -423,6 +477,7 @@ export function DashboardShell({
     </ResumeMutationProvider>
     </OutreachOperationProvider>
     </BillingProvider>
+    </SidebarCollapseContext.Provider>
   );
 }
 
@@ -431,23 +486,33 @@ function RailLink({
   item,
   href,
   active,
+  collapsed,
 }: {
   item: { label: string; Icon: (props: { className?: string }) => React.ReactElement };
   href: string;
   active: boolean;
+  collapsed: boolean;
 }) {
   const { Icon, label } = item;
   return (
     <Link
       href={href}
       aria-current={active ? "page" : undefined}
+      /* Collapsed drops the label but the row still needs a name: the visible text is what named it
+         before, so an aria-label only has to stand in once that text is gone. */
+      aria-label={collapsed ? label : undefined}
+      title={collapsed ? label : undefined}
       /* Where you are is not an action, so it reads as a quiet surface rather than a second filled
          pill competing with the page's real blue one. The icon is the single place colour is
          allowed to mark position: it is the difference between two rows that both carry ink text.
          The rail is a pill (rounded-control), matching every other control in the product. */
-      className={`relative flex min-h-10 items-center gap-3 rounded-control px-3 text-[15px] transition-colors ${
-        active ? "bg-surface-alt font-medium text-ink" : "text-muted hover:bg-surface-alt hover:text-ink"
-      }`}
+      /* `px-3`/`px-0` must be mutually exclusive in one ternary, never one unconditional and one
+         conditional: Tailwind orders conflicting utilities in the compiled stylesheet by its own
+         internal scale, not by position in this string, so an always-present `px-3` sitting
+         alongside a conditional `px-0` would have `px-3` win regardless of `collapsed`. */
+      className={`relative flex min-h-10 items-center gap-3 rounded-control text-[15px] transition-colors ${
+        collapsed ? "justify-center px-0" : "px-3"
+      } ${active ? "bg-surface-alt font-medium text-ink" : "text-muted hover:bg-surface-alt hover:text-ink"}`}
     >
       {/* The one place in the rail colour marks position. It sits in the gutter outside the pill,
           so it reads as an edge marker against the rail's border rather than as a filled control. */}
@@ -457,7 +522,7 @@ function RailLink({
         </ViewTransition>
       )}
       <Icon className={active ? "text-brand-ink" : "text-muted"} />
-      {label}
+      {!collapsed && label}
     </Link>
   );
 }
@@ -473,7 +538,7 @@ function RailLink({
  * Momentum panel already reports that number labelled and in context. Say it once, where it means
  * something. The rail's job is identity and plan.
  */
-function AccountFooter({ qaMode, active }: { qaMode: boolean; active: boolean }) {
+function AccountFooter({ qaMode, active, collapsed }: { qaMode: boolean; active: boolean; collapsed: boolean }) {
   const [me, setMe] = useState<Me | null>(null);
   const [email, setEmail] = useState<string | null>(null);
 
@@ -507,12 +572,17 @@ function AccountFooter({ qaMode, active }: { qaMode: boolean; active: boolean })
 
   const address = me?.email ?? email;
   const tier = me ? (me.is_guest ? "Litos+ trial" : me.tier === "pro" || me.tier === "plus" ? "Litos+" : "Free") : null;
+  /* Collapsed drops the visible text, so the accessible name has to carry BOTH facts the doc
+     comment above says are this component's job, identity and plan, not just identity. */
+  const collapsedName = `${address ?? "Your account"}${tier ? ` · ${tier}` : ""}`;
 
   return (
     <Link
       href={qaMode ? "/dashboard/settings?qa=1" : "/dashboard/settings"}
       aria-current={active ? "page" : undefined}
-      className={`relative flex items-center gap-3 border-t border-border px-4 py-3.5 transition-colors hover:bg-surface-alt ${active ? "bg-surface-alt" : ""}`}
+      aria-label={collapsed ? collapsedName : undefined}
+      title={collapsed ? collapsedName : undefined}
+      className={`relative flex items-center gap-3 border-t border-border py-3.5 transition-colors hover:bg-surface-alt ${collapsed ? "justify-center px-0" : "px-4"} ${active ? "bg-surface-alt" : ""}`}
     >
       {active && (
         <ViewTransition name="dashboard-route-trace" share="rq-dashboard-route-trace" default="none">
@@ -525,10 +595,12 @@ function AccountFooter({ qaMode, active }: { qaMode: boolean; active: boolean })
       >
         {(address ?? "?").charAt(0).toUpperCase()}
       </span>
-      <span className="min-w-0">
-        <span className="block truncate text-sm font-medium text-ink">{address ?? "Your account"}</span>
-        {tier && <span className="block truncate font-mono text-[11px] text-muted">{tier}</span>}
-      </span>
+      {!collapsed && (
+        <span className="min-w-0">
+          <span className="block truncate text-sm font-medium text-ink">{address ?? "Your account"}</span>
+          {tier && <span className="block truncate font-mono text-[11px] text-muted">{tier}</span>}
+        </span>
+      )}
     </Link>
   );
 }

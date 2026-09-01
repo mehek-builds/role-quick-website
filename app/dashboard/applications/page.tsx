@@ -81,6 +81,7 @@ import { useBilling } from "@/components/billing/BillingProvider";
 import { isStructuredUpgradeDenial } from "@/features/billing";
 import { completeOperationId, operationIdFor } from "@/lib/operation-id";
 import { applicationPacketAuthorityState, confirmedProjectionForPacket, managedPrepareAuthorityEnvelopeFromUnknown, managedPrepareAuthorityMatchesPacket, quarantinedSubmissionAuthority, reviewClaimsSubmissionSent, reviewForSubmissionProjection, submissionAuthorityEnvelopeFromUnknown, submissionMutationResponseMatchesApplication, submissionProjectionIsConfirmed } from "@/features/applications";
+import { useSidebarCollapse } from "@/app/dashboard/dashboard-shell";
 
 type Screen = "review" | "questions" | "submitting" | "portal" | "submitted";
 type ApplicationSort = "next" | "recent" | "company";
@@ -2570,6 +2571,16 @@ function Applications() {
   // legacy-resumes banner go, because together they cost roughly 120px of the one screen the JD and
   // the resume are supposed to share.
   const reviewOpen = Boolean(selected && spec && review) && screen === "review";
+  /* The rail folds itself down the moment this side-by-side view is what's on screen: the JD pane
+     and the resume pane are the whole reason the review surface above gave up its own vertical
+     space, and a 272px rail was the same trade horizontally. No rising-edge tracking needed: this
+     effect's dependency array already only re-runs on a reviewOpen value change, and requestCollapse
+     only ever collapses, so a student's own click back open during an already-open review is never
+     clobbered by a render where reviewOpen hasn't changed. */
+  const { requestCollapse } = useSidebarCollapse();
+  useEffect(() => {
+    if (reviewOpen) requestCollapse();
+  }, [reviewOpen, requestCollapse]);
   const applicationTaskOpen = Boolean(openingApplicationId || canonicalSelected || selectedId);
   const applicationTaskPacket = selected
     ?? reviewablePackets.find((packet) => packet.id === openingApplicationId || packet.id === selectedId)
