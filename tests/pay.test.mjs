@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 /* Imported straight from the .ts, the way lib/daily-matches is: `npm test` runs node with
    --experimental-strip-types, so there is no build step between this test and the code the pages
    actually import. */
-import { formatPay, jobTypeLabel } from "../features/jobs/domain/pay.ts";
+import { EMPLOYMENT_TYPES, formatPay, jobTypeLabel } from "../features/jobs/domain/pay.ts";
 
 const pay = (min, max, currency, interval) => ({
   salary_min: min,
@@ -78,6 +78,29 @@ test("a job type shows only when the posting stated one", () => {
   assert.equal(jobTypeLabel(null), null);
   assert.equal(jobTypeLabel(undefined), null);
   assert.equal(jobTypeLabel("  "), null);
+});
+
+test("a chip shows a category, never the raw string the board sent", () => {
+  /* Measured against prod 2026-09-01: 875 distinct unrecognised values on 41,933 active postings.
+     The backend keeps them in the column on purpose (it never discards an employer statement), so
+     this is the backstop that keeps them off a tile. Each value below was live. */
+  assert.equal(jobTypeLabel("fulltime_permanent"), null);   // 11,164 live, the one that was seen
+  assert.equal(jobTypeLabel("parttime_fixed_term"), null);  //  1,886 live
+  assert.equal(jobTypeLabel("Other"), null);                //  1,384 live
+  assert.equal(jobTypeLabel("Homeoffice"), null);           //    137 live, a work arrangement
+  assert.equal(jobTypeLabel("Mid-Senior Level"), null);     //     55 live, a seniority band
+  assert.equal(jobTypeLabel("Investment Banking"), null);   //      8 live, a department
+});
+
+test("the five filterable types and Volunteer are the only things that render", () => {
+  for (const type of EMPLOYMENT_TYPES) assert.equal(jobTypeLabel(type), type);
+  /* A real category the backend emits, readable on a tile but deliberately not a filter: offering
+     it would promise a curated set of volunteer postings that does not exist. */
+  assert.equal(jobTypeLabel("Volunteer"), "Volunteer");
+  /* Answered with this file's spelling, so a differently-cased row cannot put a second chip on
+     the board reading "full-time" beside one reading "Full-time". */
+  assert.equal(jobTypeLabel("full-time"), "Full-time");
+  assert.equal(jobTypeLabel("INTERNSHIP"), "Internship");
 });
 
 test("every job surface imports the one formatter, so a job cannot read two ways", () => {
