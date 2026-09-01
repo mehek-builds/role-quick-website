@@ -25,6 +25,7 @@ import {
   EMPTY_REQUIREMENT_INDEX,
   fetchJdMatch,
   prescriptMetadataBlockers,
+  prescriptReadNothing,
   resumeSpecText,
   type JdMatchResponse,
   type ProfileIdentity,
@@ -146,17 +147,23 @@ export function BuildStep({
         },
         loadQuestions: async (jobId) => {
           const prescript = await getPostingQuestions(jobId);
-          if (prescript.discovery_status !== "ok" || prescriptMetadataBlockers(prescript).length > 0) {
-            /* Typed, so the failure screen can offer the recovery this actually has: read the form
-               again (the stage runs before anything is spent now, so a retry costs nothing), or
-               pick another posting. The generic screen's copy blames the fit, which a scan failure
-               says nothing about. */
-            throw new PostingReadError("Litos could not verify every employer question yet. Try reading the company form again.");
+          /* PROCEED AND ASK, don't block on an imperfect read (Mehek, 2026-09-01). A scan that read
+             the employer's questions but could not verify every option is exactly what the
+             follow-up questions screen is for: it asks those in the same boxes the dashboard uses.
+             The build only stops when the scan read NOTHING (the provider did not complete the run,
+             so there is nothing to ask and nothing safe to submit), which is a genuine "could not
+             read the form" state, not a fit verdict. See prescriptReadNothing. */
+          if (prescriptReadNothing(prescript)) {
+            throw new PostingReadError("Litos could not read the company's application form yet. Try reading it again.");
           }
           return {
             total: prescript.question_count,
             alreadyAnswered: prescript.already_answered,
             ask: prescript.ask,
+            /* The employer fields whose exact options Litos could not read on this pass. Not
+               blocking: they are confirmed against the live form at send time. Surfaced on the
+               questions screen so the count is honest rather than hidden. */
+            deferredFields: prescriptMetadataBlockers(prescript).length,
           };
         },
       },

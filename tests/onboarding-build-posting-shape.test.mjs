@@ -51,6 +51,11 @@ test("the build reads metadata blockers through the mixed-version defensive help
      marking, so this matches the helper inside the braces rather than one exact line. */
   assert.match(build, /import \{[\s\S]*?\bprescriptMetadataBlockers\b[\s\S]*?\} from "@\/features\/applications"/);
   assert.match(build, /import \{[\s\S]*?\btype ProfileIdentity\b[\s\S]*?\} from "@\/features\/applications"/);
-  assert.match(questions, /prescriptMetadataBlockers\(prescript\)\.length > 0/);
+  /* The blocker count is now read through the defensive helper for `deferredFields` rather than
+     gating the whole build (2026-09-01: a scan that read questions but not every option no longer
+     dead-ends; see prescriptReadNothing). The invariant that survives is that the count comes from
+     the helper, never from the raw field. */
+  assert.match(questions, /deferredFields: prescriptMetadataBlockers\(prescript\)\.length/);
+  assert.match(questions, /prescriptReadNothing\(prescript\)/);
   assert.doesNotMatch(questions, /prescript\.metadata_blockers\.length/);
 });

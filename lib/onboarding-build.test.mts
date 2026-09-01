@@ -28,6 +28,7 @@ function deps(overrides: Partial<BuildDeps> = {}): BuildDeps {
       total: 17,
       alreadyAnswered: 14,
       ask: [ask("Sponsorship?"), ask("GPA?"), ask("Anything else?")],
+      deferredFields: 0,
     }),
     ...overrides,
   };
