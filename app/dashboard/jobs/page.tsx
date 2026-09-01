@@ -521,6 +521,7 @@ function JobRow({ job, application, applied, match }: { job: MonitoredJob; appli
         </h2>
         <MatchBadge match={match} />
         <SponsorBadge evidence={job.sponsorship_evidence} countryCode={job.sponsorship_country_code} />
+        <AssistedBadge submitMode={job.submit_mode} />
       </div>
       <p className="mt-1 truncate text-sm text-muted">
         {job.company_name}
@@ -582,6 +583,26 @@ function JobRow({ job, application, applied, match }: { job: MonitoredJob; appli
         </Link>
       )}
     </Card>
+  );
+}
+
+/**
+ * Marks a posting Litos fills but does not send on its own.
+ *
+ * The board is autonomous by default, so this badge only ever appears on an assisted-tier posting
+ * (currently rippling, whose Apply press is gated by a Cloudflare human check Litos does not
+ * complete, by policy). Grey, not green or red: it is neither an outcome nor a warning, just an
+ * honest heads-up that the last click is the student's. DESIGN.md reserves green for "it happened".
+ */
+function AssistedBadge({ submitMode }: { submitMode?: MonitoredJob["submit_mode"] }) {
+  if (submitMode !== "assisted") return null;
+  return (
+    <span
+      className="shrink-0 rounded-full bg-surface-alt px-2.5 py-0.5 font-mono text-[11px] font-medium text-muted"
+      title="Litos fills this whole application for you. The final human check and the send button are yours: this company gates the send behind a check Litos does not complete."
+    >
+      Litos fills · you send
+    </span>
   );
 }
 

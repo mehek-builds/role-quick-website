@@ -632,7 +632,16 @@ export type MonitoredJob = {
   remote: boolean;
   posted_at: string | null;
   first_seen_at: string;
-  ats_name: "greenhouse" | "lever" | "ashby" | "workable";
+  ats_name: "greenhouse" | "lever" | "ashby" | "workable" | "rippling";
+  /**
+   * How Litos submits this posting.
+   *
+   * 'autonomous' - Litos fills AND sends it end to end. 'assisted' - Litos fills the whole form, then
+   * the final human-check and the send button are yours (e.g. rippling gates the send behind a
+   * Cloudflare human check Litos does not complete, by policy). Absent on older payloads and on the
+   * public/onboarding board, which only ever carries autonomous jobs; treat missing as 'autonomous'.
+   */
+  submit_mode?: "autonomous" | "assisted";
   is_active?: boolean;
   /** The company's own careers page. Every other URL here belongs to the job board. */
   career_url?: string | null;
