@@ -34,7 +34,6 @@ import { MatchLegend, RequirementProvider, RequirementText } from "@/components/
 import { isStructuredUpgradeDenial } from "@/features/billing";
 import {
   BuildPreconditionError,
-  PostingReadError,
   buildActionLabel,
   initialStages,
   runOnboardingBuild,
@@ -44,6 +43,15 @@ import {
 import { track } from "@/lib/analytics";
 import { LaterLink, PrimaryButton, StartShell } from "./ui";
 import type { OnboardingMatch } from "@/lib/onboarding-match";
+
+/* The employer-form pre-scan is a flaky live read (a managed-browser pass that times out, loads
+   slow, or drops a run). It is a PREVIEW, never a gate, so onboarding retries it a bounded few
+   times - re-reading genuinely often succeeds and the server caches a good one - and then proceeds
+   regardless. Small counts on purpose: each attempt is a real scan and there is an hourly server
+   cap, so this recovers the common transient miss without hammering the provider. */
+const POSTING_SCAN_RETRIES = 2;
+const POSTING_SCAN_RETRY_DELAY_MS = 700;
+const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 /* What this screen learned that the screens after it need: the full posting (the match feed's row
    may not carry the description), the requirement match both panes were marked with, and the
@@ -90,7 +98,7 @@ export function BuildStep({
 }) {
   const [stages, setStages] = useState<BuildStage[]>(() => initialStages());
   const [result, setResult] = useState<BuildResult | null>(null);
-  const [error, setError] = useState<{ message: string; fixable: boolean; field: "full_name" | "resume_email" | null; entitlement: boolean; postingRead: boolean } | null>(null);
+  const [error, setError] = useState<{ message: string; fixable: boolean; field: "full_name" | "resume_email" | null; entitlement: boolean } | null>(null);
   /* Bumped by "Read the form again". The scan stage runs before anything is spent, so re-running
      the whole build after a scan failure costs nothing until the scan actually passes. */
   const [attempt, setAttempt] = useState(0);
@@ -146,15 +154,33 @@ export function BuildStep({
           };
         },
         loadQuestions: async (jobId) => {
-          const prescript = await getPostingQuestions(jobId);
-          /* PROCEED AND ASK, don't block on an imperfect read (Mehek, 2026-09-01). A scan that read
-             the employer's questions but could not verify every option is exactly what the
-             follow-up questions screen is for: it asks those in the same boxes the dashboard uses.
-             The build only stops when the scan read NOTHING (the provider did not complete the run,
-             so there is nothing to ask and nothing safe to submit), which is a genuine "could not
-             read the form" state, not a fit verdict. See prescriptReadNothing. */
-          if (prescriptReadNothing(prescript)) {
-            throw new PostingReadError("Litos could not read the company's application form yet. Try reading it again.");
+          /* THE PRE-SCAN IS A PREVIEW, NEVER A GATE (Mehek, 2026-09-01). Reading the employer's form
+             ahead of time lets onboarding pre-answer questions, but it is a flaky live read and it
+             used to DEAD-END this screen ("could not read the form") whenever it came up empty - a
+             student hit that across many different jobs in a row. Onboarding must never dead-end here.
+
+             So: retry a bounded few times (re-reading often succeeds and a good scan is cached), and
+             if it STILL reads nothing - or the request itself fails - PROCEED with an empty ask. An
+             empty ask skips the questions screen straight to Review and send, where the form is
+             opened and read fresh anyway: a form we could not PREVIEW is not a form we cannot SUBMIT,
+             and the send is the authority on what it asks. A scan that read SOME questions but could
+             not verify every option is untouched - prescriptReadNothing is false, so it still
+             proceeds-and-asks in the follow-up boxes. */
+          let prescript: Awaited<ReturnType<typeof getPostingQuestions>> | null = null;
+          for (let attempt = 0; attempt <= POSTING_SCAN_RETRIES; attempt++) {
+            try {
+              prescript = await getPostingQuestions(jobId);
+            } catch {
+              prescript = null;
+            }
+            if (prescript && !prescriptReadNothing(prescript)) break;
+            if (attempt < POSTING_SCAN_RETRIES) await delay(POSTING_SCAN_RETRY_DELAY_MS);
+          }
+          if (!prescript || prescriptReadNothing(prescript)) {
+            /* Deferred entirely to send. No questions surfaced now: outstandingQuestions becomes 0,
+               which is the case that skips the questions screen straight to Review and send. The live
+               form is read there. */
+            return { total: 0, alreadyAnswered: 0, ask: [], deferredFields: 0 };
           }
           return {
             total: prescript.question_count,
@@ -191,7 +217,6 @@ export function BuildStep({
            denial shape takes this branch, for the same reason the dashboard checks it: an
            unrelated 402 must not become an upsell. */
         const entitlement = isStructuredUpgradeDenial(reason, "ai_resume_tailoring");
-        const postingRead = reason instanceof PostingReadError;
         setError({
           message: reason instanceof Error ? reason.message : "Litos could not build this application.",
           fixable,
@@ -199,9 +224,8 @@ export function BuildStep({
              fixed in different places, and for a guest the email is not fixable in Account at all. */
           field: reason instanceof BuildPreconditionError ? reason.field : null,
           entitlement,
-          postingRead,
         });
-        track("onboarding_build_failed", { fixable, entitlement, posting_read: postingRead });
+        track("onboarding_build_failed", { fixable, entitlement });
       });
     return () => { cancelled = true; };
     /* `attempt` re-runs the whole sequence for "Read the form again". Safe by construction: every
@@ -263,46 +287,10 @@ export function BuildStep({
     );
   }
 
-  /* A SCAN FAILURE IS ABOUT THE EMPLOYER'S PAGE, NOT THE STUDENT'S FIT. The generic screen below
-     says "this one is not a fit Litos can write honestly", which is the right sentence for a
-     resume-quality refusal and a falsehood for a form Litos could not read. This branch says what
-     happened and offers the recovery it actually has: the read runs before anything is spent, so
-     trying again is free, and a protected form that will never read (a Cloudflare-gated portal)
-     still has "Show me a different one" as the way on. */
-  if (error?.postingRead) {
-    return (
-      <StartShell step="build" title="That build did not finish.">
-        <ErrorNote message={error.message} />
-        <p className="mt-4 text-sm leading-6 text-muted">
-          Litos reads the employer&apos;s application form before writing anything, and this read
-          could not verify every question. That is about {posting.company_name}&apos;s page, not
-          about your fit. Reading it again often works; nothing was spent and nothing was lost.
-        </p>
-        <div className="mt-6 flex flex-wrap items-center gap-4">
-          <PrimaryButton
-            onClick={() => {
-              track("onboarding_build_form_reread", {});
-              setError(null);
-              setResult(null);
-              setJdMatch(null);
-              setStages(initialStages());
-              setAttempt((n) => n + 1);
-            }}
-          >
-            Read the form again
-          </PrimaryButton>
-          <button
-            type="button"
-            onClick={onPickAnother}
-            className="text-sm text-muted underline underline-offset-4 hover:text-ink"
-          >
-            Show me a different one
-          </button>
-          <LaterLink onClick={onLater} />
-        </div>
-      </StartShell>
-    );
-  }
+  /* The employer form pre-scan no longer has a failure screen of its own: it is a preview, not a
+     gate, so a scan that reads nothing PROCEEDS straight to Review and send (see loadQuestions)
+     rather than dead-ending here. What remains below is the genuine build failure - a resume the
+     engine would not write - which is a different sentence with a different recovery. */
 
   if (error) {
     /* A FAILED BUILD USED TO BE A DEAD END, and it is step 3 of 10.

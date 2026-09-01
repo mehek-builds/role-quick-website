@@ -31,11 +31,10 @@ test("the paywall branch renders before the generic failure and offers no postin
   assert.ok(genericAt !== -1, "the generic failure branch is gone");
   assert.ok(entitlementAt < genericAt, "the generic branch shadows the entitlement branch");
 
-  /* The slice ends at the entitlement branch's own closing, found as the next branch's opening
-     comment (the posting-read screen sits between this branch and the generic one now), so this
-     asserts the entitlement branch alone rather than its neighbours' prose. */
-  const branchEnd = build.indexOf("A SCAN FAILURE IS ABOUT", entitlementAt);
-  const branch = build.slice(entitlementAt, branchEnd === -1 ? genericAt : branchEnd);
+  /* The entitlement branch runs up to the generic failure branch. The employer-form pre-scan no
+     longer has a screen of its own between them (it proceeds rather than dead-ending), so the slice
+     is simply entitlement-branch-to-generic and still asserts the entitlement branch alone. */
+  const branch = build.slice(entitlementAt, genericAt);
   /* The honest forward control is the plans page, where the ask already lives (the
      paywall-sequence decision keeps it on /pricing). Never another posting: the refusal is about
      the account, so every posting refuses identically. */
