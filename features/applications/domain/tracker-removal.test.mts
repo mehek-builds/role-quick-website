@@ -42,3 +42,15 @@ test("the client rule is never stricter than the server's own list", () => {
     ["applied", "closed", "interview", "offer"],
   );
 });
+
+test("both surfaces ask the same question", () => {
+  /* The Tracker renders visiblePackets twice: a chip strip below lg and a table at lg and above.
+     Both gate their Remove control on this one function, so a row cannot offer removal at one width
+     and refuse it at another. This test exists to state that as a requirement rather than to
+     exercise new logic: if a second predicate ever appears for the chip strip, this is the comment
+     that says why it should not. */
+  const sent = { submission_state: "submitted", tracker_state: "applied" };
+  const fresh = { submission_state: "not_started", tracker_state: "saved" };
+  assert.equal(canRemoveFromTracker(sent), false);
+  assert.equal(canRemoveFromTracker(fresh), true);
+});

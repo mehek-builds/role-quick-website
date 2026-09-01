@@ -597,6 +597,70 @@ function resumeGenerationActionKey(draft: NewApplicationDraft): string {
  * when there is no canonical row yet nothing is offered, because there is nothing to address the
  * request to.
  */
+/**
+ * The chip-strip Remove control, for the surface below `lg`.
+ *
+ * IT CANNOT COPY THE DESKTOP ONE, and the reason is the input device rather than the width. The row
+ * control is hidden until hover, which on a touch screen means hidden forever: there is no hover
+ * state to reveal it, so a hover-gated control on this strip would be unreachable by every user who
+ * actually sees this strip. So it is always visible, as a small dismiss affordance in the chip's
+ * corner.
+ *
+ * ALWAYS VISIBLE MEANS ALWAYS TAPPABLE, and this strip SCROLLS HORIZONTALLY, so a thumb dragging
+ * the strip sideways passes over every one of these. That is what the confirm step is carrying here
+ * - on the desktop row it guards against a misread, here it guards against a scroll that landed on
+ * a target. A stray tap costs one more tap to dismiss and can never remove anything on its own.
+ *
+ * The confirm state COVERS THE CHIP rather than sitting inside it. A chip is at most 15rem wide and
+ * already stacks role, company and status; adding two buttons inside would either overflow it or
+ * force it to grow and shove the rest of the strip sideways under the user's finger.
+ */
+function TrackerChipRemove({ packet, pending, confirming, onAsk, onCancel, onConfirm }: {
+  packet: GeneratedResume;
+  pending: boolean;
+  confirming: boolean;
+  onAsk: () => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  if (!canRemoveFromTracker(canonicalApplicationFromPacket(packet))) return null;
+
+  if (confirming) {
+    return (
+      <span className="absolute inset-0 flex items-center justify-center gap-1.5 rounded-inner bg-surface/95 px-2">
+        <button
+          type="button"
+          onClick={onConfirm}
+          disabled={pending}
+          className="rounded-full px-2.5 py-1 text-[12px] font-medium text-danger hover:bg-danger-soft disabled:opacity-60"
+        >
+          {pending ? "Removing" : "Remove"}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={pending}
+          className="rounded-full px-2.5 py-1 text-[12px] text-muted hover:bg-surface-alt disabled:opacity-60"
+        >
+          Cancel
+        </button>
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={onAsk}
+      aria-label={`Remove ${packet.job_context.role || "this application"} at ${packet.job_context.company || "this company"} from your tracker`}
+      /* -top-1 -right-1 so the touch target overhangs the chip's corner instead of eating into the
+         text beside it, which is already truncating at this width. */
+      className="absolute -right-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-surface text-[13px] leading-none text-muted hover:text-ink"
+    >
+      <span aria-hidden="true">&times;</span>
+    </button>
+  );
+}
+
 function TrackerRowRemove({ packet, pending, confirming, onAsk, onCancel, onConfirm }: {
   packet: GeneratedResume;
   pending: boolean;
@@ -5428,8 +5492,13 @@ function Applications() {
             ) : (
               <div className="flex min-w-max gap-2">
                 {visiblePackets.map((packet) => (
+                  /* Wrapped for the same reason as the desktop row: a button inside a button is
+                     invalid markup and the inner one is dropped. `shrink-0` moves UP to the wrapper
+                     because the wrapper is now the flex item - left on the chip alone, the strip
+                     would compress the chips instead of overflowing, and this strip exists to
+                     overflow and scroll. */
+                  <div key={packet.id} className="relative shrink-0">
                   <button
-                    key={packet.id}
                     type="button"
                     data-application-row-id={packet.id}
                     onClick={() => openApplication(packet)}
@@ -5458,6 +5527,15 @@ function Applications() {
                       </span>
                     )}
                   </button>
+                  <TrackerChipRemove
+                    packet={packet}
+                    pending={removingApplicationId === packet.id}
+                    confirming={confirmRemoveId === packet.id}
+                    onAsk={() => { setRemoveError(null); setConfirmRemoveId(packet.id); }}
+                    onCancel={() => setConfirmRemoveId(null)}
+                    onConfirm={() => removeFromTracker(packet)}
+                  />
+                  </div>
                 ))}
               </div>
             )}
@@ -5542,12 +5620,17 @@ function Applications() {
                     </div>
                   ))}
                 </div>
-                {removeError && (
-                  <p role="status" className="px-2 py-2 text-xs text-danger">{removeError}</p>
-                )}
               </>
             )}
           </div>
+          {/* OUTSIDE BOTH LISTS, because there are two of them and only one is on screen at a time.
+              This lived inside the `lg:block` table, so a refusal on the chip strip - the only
+              surface below lg - produced no message at all: the row simply stayed and nothing said
+              why. It is one message for one shared piece of state, so it belongs where both
+              surfaces can show it. */}
+          {removeError && (
+            <p role="status" className="px-2 pt-2 text-xs text-danger">{removeError}</p>
+          )}
           </div>}
         </section>
       )}
