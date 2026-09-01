@@ -15,6 +15,8 @@ const {
   locationSummary,
   countLabel,
   parseJobsPageBody,
+  fetchWithOneRetry,
+  RETRY_PAUSE_MS,
   PER_PAGE,
 } =
   await import("../lib/browse-jobs.ts");
@@ -175,6 +177,110 @@ describe("parseJobsPageBody", () => {
         ok: false,
       });
     }
+  });
+});
+
+describe("the board's one retry", () => {
+  /* Measured 2026-09-01: for the first minutes after a litos-api deploy, a cold
+     /jobs/grouped query intermittently exceeds the 10s timeout and the same URL
+     succeeds seconds later. Without a retry, real visitors landing right after
+     any deploy were shown the failure page for a backend seconds from healthy.
+     These tests drive fetchWithOneRetry directly because fetchJobs cannot be
+     loaded here: its ./config import does not resolve under strip-types. */
+
+  /* A pause that answers instantly but keeps count, so the tests neither sleep
+     for the real backoff nor let a retry sneak through without one. */
+  const countingPause = () => {
+    const record = { count: 0 };
+    record.pause = () => {
+      record.count += 1;
+      return Promise.resolve();
+    };
+    return record;
+  };
+
+  test("a request that dies in transit gets exactly one more try", async () => {
+    let calls = 0;
+    const pauses = countingPause();
+    const response = await fetchWithOneRetry(() => {
+      calls += 1;
+      if (calls === 1) return Promise.reject(new DOMException("timeout", "TimeoutError"));
+      return Promise.resolve(new Response('{"jobs":[],"total":0}', { status: 200 }));
+    }, pauses.pause);
+    assert.equal(calls, 2);
+    assert.equal(pauses.count, 1, "the retry must wait out the pause first");
+    assert.equal(response.ok, true);
+  });
+
+  test("a 5xx is treated as in transit: the deploy window answers 502 too", async () => {
+    let calls = 0;
+    const response = await fetchWithOneRetry(() => {
+      calls += 1;
+      if (calls === 1) return Promise.resolve(new Response("bad gateway", { status: 502 }));
+      return Promise.resolve(new Response("{}", { status: 200 }));
+    }, countingPause().pause);
+    assert.equal(calls, 2);
+    assert.equal(response.ok, true);
+  });
+
+  test("two dead attempts mean the backend is down, and the page says so", async () => {
+    /* Null is the caller's cue to render the honest failure copy, which stays
+       reserved for genuine outages. */
+    let calls = 0;
+    const response = await fetchWithOneRetry(() => {
+      calls += 1;
+      return Promise.reject(new TypeError("fetch failed"));
+    }, countingPause().pause);
+    assert.equal(calls, 2, "one retry, never a loop");
+    assert.equal(response, null);
+  });
+
+  test("a 4xx is an answer, not an outage, and is not asked twice", async () => {
+    let calls = 0;
+    const response = await fetchWithOneRetry(() => {
+      calls += 1;
+      return Promise.resolve(new Response("no", { status: 404 }));
+    }, countingPause().pause);
+    assert.equal(calls, 1);
+    assert.equal(response.status, 404);
+  });
+
+  test("a healthy answer is served immediately, with no pause", async () => {
+    const pauses = countingPause();
+    const response = await fetchWithOneRetry(
+      () => Promise.resolve(new Response("{}", { status: 200 })),
+      pauses.pause,
+    );
+    assert.equal(response.ok, true);
+    assert.equal(pauses.count, 0);
+  });
+
+  test("the grouped fetch is actually the one being retried", () => {
+    /* The unit tests above would stay green against an unused helper. This
+       binds fetchJobs to it, so inlining the fetch again cannot silently
+       drop the retry. Comments are stripped first, matching the cache-window
+       tests: prose about the helper must not count as a call. */
+    const lib = readFileSync(new URL("../lib/browse-jobs.ts", import.meta.url), "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^[ \t]*\/\/.*$/gm, "");
+    const body = lib.slice(lib.indexOf("function fetchJobs"), lib.indexOf("function agoLabel"));
+    assert.match(
+      body,
+      /fetchWithOneRetry\(\(\) =>/,
+      "fetchJobs must send /jobs/grouped through fetchWithOneRetry",
+    );
+    /* And each attempt must build its own timeout signal: one created outside
+       the thunk carries the first attempt's spent clock into the second. */
+    const thunk = body.slice(body.indexOf("fetchWithOneRetry"), body.indexOf("parseJobsPageBody"));
+    assert.match(thunk, /AbortSignal\.timeout\(/, "the timeout must be created per attempt, inside the thunk");
+  });
+
+  test("the pause is short, because a visitor is holding the page open", () => {
+    /* Exact value, matching the argued number in lib/browse-jobs.ts. The ceiling
+       matters more than the figure: worst case a visitor already waited out a
+       10s timeout, and the retry must not turn the failure page into a half
+       minute of blank. */
+    assert.equal(RETRY_PAUSE_MS, 750);
   });
 });
 
