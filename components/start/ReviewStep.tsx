@@ -13,7 +13,9 @@
  * flow ask the same question twice on two screens, and the second time with less to look at. The
  * screen now draws the same two panes the build screen draws, posting left and the actual one page
  * right, with the same requirement marking, and puts the consequence and the button under them. A
- * student says yes to the document they can see.
+ * student says yes to the document they can see. The page is drawn here at the full width of its
+ * column, not at the build screen's thumbnail scale, because this is the screen where it has to be
+ * readable rather than merely recognisable.
  *
  * The rest is built around irreversibility rather than conversion:
  *
@@ -130,7 +132,9 @@ export function ReviewStep({
             <header className="border-b border-border bg-surface-alt px-3.5 py-2">
               <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Going to</span>
             </header>
-            <div className="flex max-h-[380px] flex-col gap-2 overflow-y-auto p-3.5">
+            {/* Sized by the sheet beside it, not by a pixel clamp: same aspect as a page, so the
+                two panes end level at every column width and the description scrolls inside it. */}
+            <div className="flex aspect-[612/792] flex-col gap-2 overflow-y-auto p-3.5">
               <p className="text-[15px] leading-snug text-ink">{posting.title}</p>
               <p className="font-mono text-[11px] leading-relaxed text-muted">
                 {[posting.company_name, posting.location].filter(Boolean).join(" · ")}
@@ -148,11 +152,16 @@ export function ReviewStep({
               <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Attached</span>
               {resumeSpec && <span className="font-mono text-[11px] text-positive">1 page</span>}
             </header>
-            <div className="flex max-h-[380px] min-h-[170px] flex-col gap-3 overflow-y-auto p-3.5">
+            {/* THE PAGE IS THE POINT ON THIS SCREEN, so it is drawn at the full width of its
+                column rather than at the build screen's 0.62 thumbnail. This is the screen that
+                asks the student to approve the document, and a document too small to read cannot
+                be approved: the paper sizes itself from `aspect-[612/792]` and its type from cqw,
+                so dropping the transform enlarges the words with the sheet instead of blowing up
+                a scaled-down picture of them. No scroll here either - the fit solver keeps the
+                resume to exactly one page, so the whole of what is being sent is on screen. */}
+            <div className="flex min-h-[170px] flex-col gap-3 p-3.5">
               {resumeSpec ? (
-                <div className="origin-top scale-[0.62] [transform-box:content-box]">
-                  <ResumePaper spec={resumeSpec} contact={contactHeaderOf(resumeSpec, applicantName)} />
-                </div>
+                <ResumePaper spec={resumeSpec} contact={contactHeaderOf(resumeSpec, applicantName)} />
               ) : (
                 <p className="text-[13px] leading-6 text-muted">
                   Your one page, written for this posting from your own resume.
