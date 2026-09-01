@@ -12,7 +12,11 @@ test("Applications gates the next send through the current preference-ranked job
      unattended stops being chosen forever, but the RANKING argument is what this pins. */
   assert.match(page, /nextPreferredReadyPacket\(autopilotCandidates, currentMatches \?\? \[\]\)/);
   assert.match(page, /autopilotCandidates = useMemo/);
-  assert.match(page, /reviewablePackets\.filter\(\(packet\) => !unsendable\.has\(packet\.id\)\)/);
+  assert.match(page, /reviewablePackets\.filter\(\(packet\) =>/);
+  assert.match(page, /!unsendable\.has\(packet\.id\)/);
+  /* And a badged duplicate is dropped too: it would be refused at send (409) or is a redundant
+     repeat, so the autopilot must never elect one as the next match. */
+  assert.match(page, /duplicateBadge\(duplicateMarks\.get\(packet\.id\)\) === null/);
   // Parked on the audit CODE, never on the sentence: matching copy is how `packet_stale` shipped.
   assert.match(page, /auditRefusalCode\(reason\)/);
   assert.match(page, /Automatic sending is paused/);
