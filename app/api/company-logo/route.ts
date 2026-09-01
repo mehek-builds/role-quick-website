@@ -158,8 +158,8 @@ type Mark = { bytes: Uint8Array<ArrayBuffer>; type: string };
 
 /* One URL to bytes the tile can draw, shared by every resolution step: sniff
    the type rather than trusting the header (Lever's S3 serves image bytes as
-   application/octet-stream), unwrap an .ico to its embedded PNG where the
-   caller allows one, and refuse everything else. `finalUrlAllowed` re-checks
+   application/octet-stream), prefer an .ico's embedded PNG where the caller
+   allows icons at all, and refuse everything else. `finalUrlAllowed` re-checks
    the response's FINAL URL: `get` follows redirects, and a host gate that only
    sees the first hop guarantees nothing about where the bytes came from. */
 async function fetchImage(
@@ -180,9 +180,19 @@ async function fetchImage(
     if (type === "image/x-icon") {
       if (!opts.allowIco) return null;
       const inner = pngInsideIco(raw);
-      if (!inner) return null;
-      bytes = inner;
-      type = "image/png";
+      if (inner) {
+        /* The embedded PNG is the better citizen when it exists: it scales
+           cleanly and every consumer understands it. */
+        bytes = inner;
+        type = "image/png";
+      }
+      /* No PNG inside means a raw DIB container, and it is served AS-IS rather
+         than dropped. Browsers draw .ico in an <img>, and for the employers
+         whose only first-party mark is such a favicon (Gensyn, West Cancer
+         Center, FirstSteps for Kids, measured 2026-09-01) the alternative is
+         not a nicer image, it is a monogram on rows whose verified evidence
+         is sitting right there. Icons rank last in iconUrls, so a crisper
+         SVG or PNG candidate has always been tried before this executes. */
     }
     if (!type) return null;
     return { bytes, type };
