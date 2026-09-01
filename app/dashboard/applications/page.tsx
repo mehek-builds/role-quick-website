@@ -3040,11 +3040,22 @@ function Applications() {
     setError(null);
     setNotice(null);
     try {
-      const extracted = await api<{ jd_text: string; page_title?: string }>("/jobs/extract", {
+      const extracted = await api<{ jd_text: string; page_title?: string; company?: string; role?: string }>("/jobs/extract", {
         method: "POST",
         body: JSON.stringify({ job_url: portalUrl }),
       });
-      setNewApplication((current) => ({ ...current, jobDescription: extracted.jd_text }));
+      /* The posting's identity rides with its text when the monitor holds the posting. Only a blank
+         box is filled: a company or role the student already typed is hers, and a read that came
+         back with neither leaves both boxes exactly as they were. Measured 2026-09-02 on a Crelate
+         link: the description arrived, both boxes stayed empty, and "Tailor resume first" stayed
+         disabled until she typed the company and role back in by hand. */
+      const fillBlank = (current: string, found: string | undefined) => (current.trim() ? current : (found ?? "").trim());
+      setNewApplication((current) => ({
+        ...current,
+        jobDescription: extracted.jd_text,
+        company: fillBlank(current.company, extracted.company),
+        role: fillBlank(current.role, extracted.role),
+      }));
       setNotice("Pulled the job description from that URL. Skim it before generating - some boards need a manual paste instead.");
     } catch (err) {
       // A 502 here is expected for some client-rendered boards (see backend jobExtract.ts) - the
