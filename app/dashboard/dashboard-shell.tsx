@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState, ViewTransition } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, ViewTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -47,7 +47,7 @@ const MORE_EXIT_MS = 130;
 
 type SidebarCollapse = {
   collapsed: boolean;
-  setCollapsed: (collapsed: boolean) => void;
+  requestCollapse: () => void;
 };
 
 const SidebarCollapseContext = createContext<SidebarCollapse | null>(null);
@@ -55,8 +55,10 @@ const SidebarCollapseContext = createContext<SidebarCollapse | null>(null);
 /**
  * Lets a page reach past the shell to fold the rail down to icons, for a screen that needs the
  * width back more than it needs the labels (the JD/resume review pane is the one that does today).
- * Collapsing is a one-way push: this hook only exposes the setter, so a page can request it but the
- * only way OUT of collapsed is the rail's own arrow, never a page auto-expanding behind someone.
+ * `requestCollapse` only ever collapses: it is not a toggle, and there is no `expand` counterpart
+ * here, so a page literally cannot call its way into re-opening the rail. The only path back out is
+ * the rail's own arrow, whose full setState lives in DashboardShell's own closure and never crosses
+ * this context boundary.
  */
 export function useSidebarCollapse(): SidebarCollapse {
   const context = useContext(SidebarCollapseContext);
@@ -126,6 +128,13 @@ export function DashboardShell({
     setMoreClosing(false);
     setMoreOpen(true);
   }, []);
+
+  const requestCollapse = useCallback(() => setCollapsed(true), []);
+  /* Without this, `children` (the applications page today) re-renders on every DashboardShell
+     render that produces a new object literal here, even ones this context has nothing to do with
+     (moreOpen/moreClosing toggling for the mobile "More" sheet, for one) — a plain object literal
+     as the Provider's value defeats React's usual children-reference bailout for every consumer. */
+  const sidebarCollapse = useMemo(() => ({ collapsed, requestCollapse }), [collapsed, requestCollapse]);
 
   useEffect(() => () => {
     if (moreCloseTimer.current !== null) window.clearTimeout(moreCloseTimer.current);
@@ -302,7 +311,7 @@ export function DashboardShell({
     .some((destination) => isActive(destination, pathname));
 
   return (
-    <SidebarCollapseContext.Provider value={{ collapsed, setCollapsed }}>
+    <SidebarCollapseContext.Provider value={sidebarCollapse}>
     <BillingProvider>
     <OutreachOperationProvider>
     <ResumeMutationProvider>
@@ -338,15 +347,20 @@ export function DashboardShell({
         {/* Sits on the rail's own border rather than inside it, so folding the rail never costs it
             the row of width it would need to keep an in-flow button clear of the nav links. The
             arrow is the ONLY way back out of collapsed: nothing else in the shell calls
-            setCollapsed(false), by design (see useSidebarCollapse). */}
+            setCollapsed(false), by design (see useSidebarCollapse). aria-expanded (not aria-pressed)
+            to match the "More" toggle above: both are disclosure controls governing a region's
+            visibility, not a stateful preference toggle. ChevronIcon renders at its family default
+            18px (no size override on the className, which would lose to Glyph's own `h-[18px]
+            w-[18px]` under Tailwind's real cascade order regardless of source position) inside a
+            28px button, matching DESIGN.md's icon-family size and giving it real clearance. */}
         <button
           type="button"
           onClick={() => setCollapsed((current) => !current)}
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          aria-pressed={collapsed}
-          className="absolute -right-3 top-16 z-10 hidden h-6 w-6 items-center justify-center rounded-full border border-border bg-surface text-muted shadow-sm transition-colors hover:bg-surface-alt hover:text-ink lg:flex"
+          aria-expanded={!collapsed}
+          className="absolute -right-3.5 top-16 z-10 hidden h-7 w-7 items-center justify-center rounded-full border border-border bg-surface text-muted shadow-rest transition-colors hover:bg-surface-alt hover:text-ink lg:flex"
         >
-          <ChevronIcon className={`h-3.5 w-3.5 ${collapsed ? "rotate-180" : ""}`} />
+          <ChevronIcon className={collapsed ? "rotate-180" : ""} />
         </button>
       </aside>
 
@@ -492,8 +506,12 @@ function RailLink({
          pill competing with the page's real blue one. The icon is the single place colour is
          allowed to mark position: it is the difference between two rows that both carry ink text.
          The rail is a pill (rounded-control), matching every other control in the product. */
-      className={`relative flex min-h-10 items-center gap-3 rounded-control px-3 text-[15px] transition-colors ${
-        collapsed ? "justify-center px-0" : ""
+      /* `px-3`/`px-0` must be mutually exclusive in one ternary, never one unconditional and one
+         conditional: Tailwind orders conflicting utilities in the compiled stylesheet by its own
+         internal scale, not by position in this string, so an always-present `px-3` sitting
+         alongside a conditional `px-0` would have `px-3` win regardless of `collapsed`. */
+      className={`relative flex min-h-10 items-center gap-3 rounded-control text-[15px] transition-colors ${
+        collapsed ? "justify-center px-0" : "px-3"
       } ${active ? "bg-surface-alt font-medium text-ink" : "text-muted hover:bg-surface-alt hover:text-ink"}`}
     >
       {/* The one place in the rail colour marks position. It sits in the gutter outside the pill,
@@ -554,14 +572,17 @@ function AccountFooter({ qaMode, active, collapsed }: { qaMode: boolean; active:
 
   const address = me?.email ?? email;
   const tier = me ? (me.is_guest ? "Litos+ trial" : me.tier === "pro" || me.tier === "plus" ? "Litos+" : "Free") : null;
+  /* Collapsed drops the visible text, so the accessible name has to carry BOTH facts the doc
+     comment above says are this component's job, identity and plan, not just identity. */
+  const collapsedName = `${address ?? "Your account"}${tier ? ` · ${tier}` : ""}`;
 
   return (
     <Link
       href={qaMode ? "/dashboard/settings?qa=1" : "/dashboard/settings"}
       aria-current={active ? "page" : undefined}
-      aria-label={collapsed ? (address ?? "Your account") : undefined}
-      title={collapsed ? (address ?? "Your account") : undefined}
-      className={`relative flex items-center gap-3 border-t border-border px-4 py-3.5 transition-colors hover:bg-surface-alt ${collapsed ? "justify-center px-0" : ""} ${active ? "bg-surface-alt" : ""}`}
+      aria-label={collapsed ? collapsedName : undefined}
+      title={collapsed ? collapsedName : undefined}
+      className={`relative flex items-center gap-3 border-t border-border py-3.5 transition-colors hover:bg-surface-alt ${collapsed ? "justify-center px-0" : "px-4"} ${active ? "bg-surface-alt" : ""}`}
     >
       {active && (
         <ViewTransition name="dashboard-route-trace" share="rq-dashboard-route-trace" default="none">

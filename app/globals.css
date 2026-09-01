@@ -563,6 +563,9 @@ dialog.rq-dashboard-dialog-exit::backdrop {
     scroll-behavior: auto;
   }
   .rq-skeleton { animation: none; }
+  /* The sidebar collapse/expand grid-column resize is the one other motion source DashboardShell
+     adds; every other one in that file already checks matchMedia in JS before animating. */
+  .dashboard-shell { transition: none; }
   /* The film collapses to one static viewport: hero card on the poster
      frame, no pin, no chapters, no grain movement, no dust. */
   .rq-cine {

@@ -2573,16 +2573,14 @@ function Applications() {
   const reviewOpen = Boolean(selected && spec && review) && screen === "review";
   /* The rail folds itself down the moment this side-by-side view is what's on screen: the JD pane
      and the resume pane are the whole reason the review surface above gave up its own vertical
-     space, and a 272px rail was the same trade horizontally. Keyed to the RISING edge of reviewOpen
-     (an ref, not the dependency array alone) so it fires once on arrival rather than on every
-     render the pane stays open, which is what let a student's own click on the rail's arrow hold
-     once they'd asked for the labels back. */
-  const wasReviewOpenRef = useRef(false);
-  const { setCollapsed: setSidebarCollapsed } = useSidebarCollapse();
+     space, and a 272px rail was the same trade horizontally. No rising-edge tracking needed: this
+     effect's dependency array already only re-runs on a reviewOpen value change, and requestCollapse
+     only ever collapses, so a student's own click back open during an already-open review is never
+     clobbered by a render where reviewOpen hasn't changed. */
+  const { requestCollapse } = useSidebarCollapse();
   useEffect(() => {
-    if (reviewOpen && !wasReviewOpenRef.current) setSidebarCollapsed(true);
-    wasReviewOpenRef.current = reviewOpen;
-  }, [reviewOpen, setSidebarCollapsed]);
+    if (reviewOpen) requestCollapse();
+  }, [reviewOpen, requestCollapse]);
   const applicationTaskOpen = Boolean(openingApplicationId || canonicalSelected || selectedId);
   const applicationTaskPacket = selected
     ?? reviewablePackets.find((packet) => packet.id === openingApplicationId || packet.id === selectedId)
