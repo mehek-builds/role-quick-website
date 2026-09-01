@@ -937,7 +937,7 @@ export function BaseResumeStep({
         {/* ── The original, only while comparing ──────────────────────────── */}
         {phase === "compare" && hasSource && (
           <div key="source" className={`order-2 mx-auto min-w-0 w-full ${SHEET_CAP.compare}`}>
-            <PaneLabel>What you uploaded{sourcePages > 0 ? ` · ${sourcePages} ${sourcePages === 1 ? "page" : "pages"}` : ""}</PaneLabel>
+            <PaneLabel>What you uploaded</PaneLabel>
             <SourceResume url={sourceUrl} pages={sourcePages} />
           </div>
         )}
@@ -948,9 +948,15 @@ export function BaseResumeStep({
             what keeps the aspect ratio honest - a height cap plus w-auto collapses on the narrow
             screens where `min(100%, ...)` needs to hand control back to the column.
 
-            This matters more here than it looks. The screen's entire claim is "your three pages are
-            now one page", and a sheet that runs off the bottom of the window disproves it at a
-            glance. The student has to be able to see the whole page at once. */}
+            This matters more here than it looks. The screen's claim is that the resume on the
+            right is the whole of what gets sent, and a sheet that runs off the bottom of the
+            window disproves it at a glance. The student has to see all of it at once.
+
+            NEITHER PANE STATES A PAGE COUNT (2026-09-01). The screen used to read "3 pages" on the
+            left against "1 page" on the right, which was the comparison. The product no longer
+            sells itself on being one page, so the right-hand count went; the left-hand count went
+            with it, because a before-value with no after-value is a contrast the screen sets up
+            and then never answers. */}
         <div
           key="new"
           className={`order-3 mx-auto min-w-0 w-full ${

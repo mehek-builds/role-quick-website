@@ -53,7 +53,13 @@ test("onboarding shows ATS readability facts and no target-role coverage percent
      check (extractable_chars), never an adjective, and never a coverage percentage. */
   assert.match(source, /applicant tracking system can read this/);
   assert.match(source, /ats\.extractable_chars/);
-  assert.doesNotMatch(source, /one page/i, "the one-page claim came back to the ATS fact line");
+
+  /* Scoped to the fact line itself, not the whole file: a file-wide sweep here would fail on any
+     unrelated future mention and blame this line for it. */
+  const factAt = source.indexOf("Checked: an applicant tracking system");
+  assert.ok(factAt >= 0, "the ATS fact line went missing");
+  const factLine = source.slice(factAt, factAt + 400);
+  assert.doesNotMatch(factLine, /one page|ats\.pages/i, "the one-page claim came back to the ATS fact line");
   assert.doesNotMatch(source, /ats\.keyword_coverage_pct/);
   assert.doesNotMatch(source, /matches .*% of the words in the roles you picked/);
 });
