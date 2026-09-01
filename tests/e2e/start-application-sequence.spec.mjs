@@ -361,37 +361,33 @@ describe("the application sequence, end to end", () => {
 
     await page.getByRole("button", { name: /questions? needs? you/i }).waitFor({ timeout: 20_000 });
     const done = await page.locator("main").innerText();
-    assert.match(done, /Here is your application/i);
+    assert.match(done, /Your application is built/i);
+    // It still names what it built against, so the screen is not anonymous while it works.
+    assert.match(done, /Software Engineer Intern/i, "the build screen does not name the posting");
+    assert.match(done, /Ramp/i, "the build screen does not name the employer");
 
-    /* THE SCREEN SHOWS THE REAL DOCUMENT, drawn by the paper the rest of the product draws.
+    /* IT DOES NOT DRAW THE DOCUMENT, AND THAT IS THE GUARANTEE (Mehek, 2026-09-01).
      *
-     * This pane used to be one sentence of prose asserting that tailoring had happened. Then it was
-     * a hand-rolled reading view with its own markup, which drifted from the real thing immediately
-     * - it had no contact line at all. It is `components/start/ResumePaper` now, the same component
-     * the base-resume screen and the packet viewer use, so the header, the one-page fit and every
-     * block come from one place.
+     * This screen used to draw the posting and the finished resume in two panes, and the review
+     * screen drew the same two panes again after the questions, that time with "it cannot be
+     * unsent" attached. The student met the document twice and the warning landed only on the
+     * repeat, so the repeat read as a screen they had already dealt with. The panes belong to the
+     * review screen alone now, which is where test 06 asserts them in full.
      *
-     * TERM MARKING IS BACK, AND ASSERTED AS A PAIRING (Mehek, 2026-09-01). ISSUE-047 took it out
-     * because the shared paper drew an unmarked document, so a colour in the posting pointed at
-     * nothing in the resume. The paper now renders its read-only text through RequirementText
-     * under the same provider, so what is asserted below is the pairing itself: the same term
-     * marked in the job description AND in the resume beside it. */
-    assert.match(done, /Cut PostgreSQL query time 60%/i, "the resume's own bullets are not on screen");
-    assert.match(done, /Software Engineering Intern/i, "the experience the resume was built from is not shown");
-    assert.doesNotMatch(done, /Written for this posting from your own resume/i, "the pane still describes instead of showing");
-    // The header the applicant is reachable at, which the hand-rolled view omitted entirely.
-    assert.match(done, /a@example\.com/i, "the contact line is missing from the resume header");
-    assert.match(done, /A Candidate/i, "the applicant is not named on their own resume");
+     * Asserted as absence rather than by counting screens, because the failure this guards is
+     * exactly a pane quietly coming back here: the resume's own bullets, the applicant's contact
+     * line, and the requirement marks are the three things that only the document can produce. */
+    assert.doesNotMatch(done, /Cut PostgreSQL query time 60%/i, "the resume is being drawn on the build screen again");
+    assert.doesNotMatch(done, /a@example\.com/i, "the resume header is being drawn on the build screen again");
+    assert.doesNotMatch(done, /We build with TypeScript and React/i, "the posting's body is being drawn on the build screen again");
+    /* The resume's own experience entry, which is one letter away from the posting's title above:
+       "Software Engineering Intern" is on the paper, "Software Engineer Intern" is the job. Only
+       the paper can produce the first, so it is the sharpest absence to assert here. */
+    assert.doesNotMatch(done, /Software Engineering Intern/i, "the resume's experience is being drawn on the build screen again");
+    assert.equal(await page.locator("mark").count(), 0, "requirement marks belong to the review screen's panes");
 
-    /* The colouring lands after the build (its own fetch), so the first mark is waited for. */
-    await page.locator("mark").first().waitFor({ timeout: 20_000 });
-    const tsMarks = await page.locator("mark", { hasText: /TypeScript/i }).count();
-    assert.ok(tsMarks >= 2, `TypeScript must be marked in both panes, found ${tsMarks} mark(s)`);
-    /* The missing requirement is marked only where it is asked for: Kubernetes is not on the
-       fixture resume, so exactly one pane can support a mark for it. */
-    assert.equal(await page.locator("mark", { hasText: /Kubernetes/i }).count(), 1);
-    // The legend names what the colours mean, in draft wording.
-    assert.match(await page.locator("main").innerText(), /asked for, and on your resume/i);
+    // What it promises instead, which is what makes one document screen enough.
+    assert.match(done, /before anything is sent/i, "the build screen does not promise the document is still coming");
 
     await page.getByRole("button", { name: "2 questions need you" }).click();
   });
@@ -438,8 +434,11 @@ describe("the application sequence, end to end", () => {
     /* THE SCREEN SHOWS WHAT IT ASKS ABOUT (Mehek, 2026-09-01). This used to be a bare recap: two
        labelled boxes naming the posting and asserting a resume existed, one screen after both had
        been shown in full, which asked the same question twice with less to look at the second
-       time. The review now draws the same two panes the build drew: the posting's own words and
-       the actual one page, marked the same way. */
+       time. The review draws the real panes: the posting's own words and the actual one page,
+       marked the same way. It is also the ONLY screen that draws them - the build screen used to
+       draw the same two panes before the questions, so the document arrived twice and the warning
+       only ever landed on the second one. Test 04 asserts that absence; this asserts the presence
+       it moved to. */
     assert.match(body, /We build with TypeScript and React/i, "the posting's words are not on the review screen");
     assert.match(body, /Cut PostgreSQL query time 60%/i, "the resume itself is not on the review screen");
     assert.doesNotMatch(body, /Your one page, written for this posting from your own resume/i, "the review still describes the resume instead of showing it");
