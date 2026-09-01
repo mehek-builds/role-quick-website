@@ -141,7 +141,38 @@ export const EMPLOYMENT_TYPES = [
   "Contract",
 ] as const;
 
+/* The chip renders a CATEGORY, never whatever string arrived in the column.
+ *
+ * The employment_type column is deliberately lossless: the backend normalizes the vocabulary it
+ * recognises and PASSES THROUGH anything it does not, because a board that discards employer
+ * statements it has not seen before is how the field goes stale without anyone noticing. That is
+ * the right call for the data and the wrong thing to print. Measured against prod 2026-09-01, 875
+ * distinct unrecognised values sat on 41,933 active postings, so tiles were rendering chips reading
+ * `fulltime_permanent` (11,164 of them), `parttime_fixed_term`, "Homeoffice", "Mid-Senior Level",
+ * "Investment Banking" and a literal "Other" - database columns, work arrangements, seniority bands
+ * and department names, shown to a student as though they were the kind of job.
+ *
+ * So the two halves of the fix live on opposite sides. The backend learns the real vocabulary, which
+ * is what makes the FILTER work - `employment_type` is matched by equality there, so a posting typed
+ * `fulltime_permanent` was invisible to "Full-time" no matter what the tile said. This function is
+ * the backstop that holds regardless: the set of things employers write is open and will keep
+ * growing, and an unrecognised value must never reach a tile again.
+ *
+ * SHOWING NOTHING IS THE CORRECT ANSWER here, and it is the rule the board already follows. Around
+ * 84% of postings state no type at all because Greenhouse has no such field, and those show no chip
+ * rather than being defaulted to Full-time. A value this product cannot name as a category is in
+ * exactly that position: the employer said something, and the board has nothing honest to call it.
+ *
+ * Volunteer is recognised without being filterable. It is a real, unambiguous category the backend
+ * emits, so it reads correctly on a tile; it is not in EMPLOYMENT_TYPES because offering it as a
+ * filter would promise a curated set of volunteer postings that does not exist.
+ */
+const LABELLED_TYPES: readonly string[] = [...EMPLOYMENT_TYPES, "Volunteer"];
+
 export function jobTypeLabel(employmentType?: string | null): string | null {
   const value = employmentType?.trim();
-  return value ? value : null;
+  if (!value) return null;
+  /* Matched case-insensitively and answered with THIS file's spelling, so a board or a backfill
+     that sends "full-time" cannot put a second, differently-cased chip on the board. */
+  return LABELLED_TYPES.find((type) => type.toLowerCase() === value.toLowerCase()) ?? null;
 }
