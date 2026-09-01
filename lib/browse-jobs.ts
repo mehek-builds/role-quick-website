@@ -146,6 +146,48 @@ export function parseJobsPageBody(body: unknown): JobsPage {
   };
 }
 
+/* HOW LONG THE BOARD WAITS BEFORE ITS ONE RETRY, in milliseconds.
+ *
+ * The retry exists for exactly one measured failure mode. For the first minutes
+ * after a litos-api deploy, a cold /jobs/grouped query (empty ranking cache)
+ * intermittently exceeds the 10s timeout, and the SAME url succeeds seconds
+ * later at 0.7-3s warm (measured 2026-09-01): the aborted first query still ran
+ * to completion on the backend and warmed the cache for the second. So a
+ * visitor landing right after any deploy was shown the failure page for a
+ * backend that was seconds from healthy.
+ *
+ * One retry, not a loop: a backend that fails twice in a row eleven seconds
+ * apart is genuinely down, and the failure copy exists to say so. And only a
+ * request that died in transit (timeout, network fault) or a 5xx is worth
+ * asking again; a 4xx is the API answering that the request itself is wrong,
+ * and repeating it cannot change its mind. */
+export const RETRY_PAUSE_MS = 750;
+
+/* Exported because fetchJobs itself cannot be unit-tested: it imports ./config,
+   whose extensionless specifier the strip-types test runner cannot resolve.
+   `send` is a thunk rather than a Response so each attempt builds its OWN
+   AbortSignal.timeout: a signal created once would carry the first attempt's
+   spent clock, or its abort, into the second.
+   Null means both attempts died in transit, which callers must map to their
+   own failure value. */
+export async function fetchWithOneRetry(
+  send: () => Promise<Response>,
+  pause: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
+): Promise<Response | null> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      const response = await send();
+      if (response.ok || response.status < 500 || attempt > 0) return response;
+      /* This 5xx is about to be replaced by the retry's answer, but undici
+         holds its connection until the body is read or collected. Cancel it. */
+      await response.body?.cancel().catch(() => {});
+    } catch {
+      if (attempt > 0) return null;
+    }
+    await pause(RETRY_PAUSE_MS);
+  }
+}
+
 export async function fetchJobs(
   filters: Filters = {},
   page = 1,
@@ -168,12 +210,14 @@ export async function fetchJobs(
   const { API_URL } = await import("./config");
 
   try {
-    const response = await fetch(`${API_URL}/jobs/grouped?${params}`, {
-      headers: { Accept: "application/json" },
-      next: { revalidate: LISTINGS_REVALIDATE },
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!response.ok) return { jobs: [], total: 0, postingsTotal: null, ok: false };
+    const response = await fetchWithOneRetry(() =>
+      fetch(`${API_URL}/jobs/grouped?${params}`, {
+        headers: { Accept: "application/json" },
+        next: { revalidate: LISTINGS_REVALIDATE },
+        signal: AbortSignal.timeout(10_000),
+      }),
+    );
+    if (!response?.ok) return { jobs: [], total: 0, postingsTotal: null, ok: false };
     return parseJobsPageBody(await response.json());
   } catch {
     return { jobs: [], total: 0, postingsTotal: null, ok: false };
