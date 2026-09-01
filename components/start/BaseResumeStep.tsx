@@ -62,7 +62,7 @@ const STAGE_COPY: Record<BuildStage, { label: string; orb: "searching" | "solvin
   selecting: { label: "Choosing what earns a place", orb: "solving" },
   writing: { label: "Writing it so a robot can read it", orb: "composing" },
   polishing: { label: "Sharpening how each line opens", orb: "composing" },
-  fitting: { label: "Fitting it to one page", orb: "shaping" },
+  fitting: { label: "Laying it out", orb: "shaping" },
   checking: { label: "Checking a robot can read every word", orb: "shaping" },
   done: { label: "Done", orb: "shaping" },
   failed: { label: "Stopped", orb: "shaping" },
@@ -467,7 +467,7 @@ export function BaseResumeStep({
           setAts(frame);
           note(
             frame.passed
-              ? `A robot can read every word of this, and it fits one page`
+              ? `A robot can read every word of this`
               : `Did not pass the ATS check: ${frame.issues.join("; ")}`,
           );
           break;
@@ -477,7 +477,7 @@ export function BaseResumeStep({
           setMetricGaps(frame.metrics ?? []);
           setFinished(true);
           setStage("done");
-          note("One page, ready");
+          note("Your resume is ready");
           break;
         case "error":
           setError(frame.message);
@@ -929,7 +929,7 @@ export function BaseResumeStep({
           <PhaseLabel>{phase === "compare" ? "Compare" : "Review and edit"}</PhaseLabel>
           <h1 className="max-w-full text-section font-normal leading-[1.12] tracking-[-0.02em] text-ink sm:text-section">
             {phase === "compare"
-              ? hasSource ? "Same you. One page." : "One page, ready."
+              ? hasSource ? "Same you. New resume." : "Your resume is ready."
               : "This is your resume now."}
           </h1>
         </div>
@@ -937,7 +937,7 @@ export function BaseResumeStep({
         {/* ── The original, only while comparing ──────────────────────────── */}
         {phase === "compare" && hasSource && (
           <div key="source" className={`order-2 mx-auto min-w-0 w-full ${SHEET_CAP.compare}`}>
-            <PaneLabel>What you uploaded{sourcePages > 0 ? ` · ${sourcePages} ${sourcePages === 1 ? "page" : "pages"}` : ""}</PaneLabel>
+            <PaneLabel>What you uploaded</PaneLabel>
             <SourceResume url={sourceUrl} pages={sourcePages} />
           </div>
         )}
@@ -948,9 +948,15 @@ export function BaseResumeStep({
             what keeps the aspect ratio honest - a height cap plus w-auto collapses on the narrow
             screens where `min(100%, ...)` needs to hand control back to the column.
 
-            This matters more here than it looks. The screen's entire claim is "your three pages are
-            now one page", and a sheet that runs off the bottom of the window disproves it at a
-            glance. The student has to be able to see the whole page at once. */}
+            This matters more here than it looks. The screen's claim is that the resume on the
+            right is the whole of what gets sent, and a sheet that runs off the bottom of the
+            window disproves it at a glance. The student has to see all of it at once.
+
+            NEITHER PANE STATES A PAGE COUNT (2026-09-01). The screen used to read "3 pages" on the
+            left against "1 page" on the right, which was the comparison. The product no longer
+            sells itself on being one page, so the right-hand count went; the left-hand count went
+            with it, because a before-value with no after-value is a contrast the screen sets up
+            and then never answers. */}
         <div
           key="new"
           className={`order-3 mx-auto min-w-0 w-full ${
@@ -960,7 +966,7 @@ export function BaseResumeStep({
           }`}
         >
           {phase === "compare" && (
-            <PaneLabel>Your Litos resume · 1 page</PaneLabel>
+            <PaneLabel>Your Litos resume</PaneLabel>
           )}
           {/* The ref wraps ONLY the sheet. Labels and buttons around it differ between phases, so
               including them would make the FLIP measure two different boxes and jump. */}
@@ -1111,8 +1117,7 @@ export function BaseResumeStep({
               show the working for. */}
           {finished && ats && (
             <p className="mt-5 text-xs leading-5 text-muted">
-              Checked: an applicant tracking system can read this, {ats.extractable_chars} characters
-              on {ats.pages === 1 ? "one page" : `${ats.pages} pages`}.
+              Checked: an applicant tracking system can read this, {ats.extractable_chars} characters.
             </p>
           )}
 

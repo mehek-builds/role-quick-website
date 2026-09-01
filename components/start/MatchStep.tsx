@@ -189,7 +189,7 @@ export function MatchStep({
 
       <p className="mt-6 text-[15px] leading-7 text-ink">Would you like us to build your application?</p>
       <p className="mt-2 text-sm leading-6 text-muted">
-        Litos will write a one-page resume for this exact posting and fill the form in. You will see
+        Litos will write a resume for this exact posting and fill the form in. You will see
         all of it before anything is sent.
       </p>
 

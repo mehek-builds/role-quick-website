@@ -601,7 +601,7 @@ export function TailoredResumeMockup() {
     <Paper
       chip="Tailored · 5/5 keywords placed"
       chipClass="bg-positive-soft text-positive"
-      note="John_Doe_Northline_Resume.pdf · 1 page"
+      note="John_Doe_Northline_Resume.pdf"
     >
       <div className="flex h-full flex-col font-sans">
         <p className="text-center text-[12.5px] font-semibold tracking-tight text-ink">

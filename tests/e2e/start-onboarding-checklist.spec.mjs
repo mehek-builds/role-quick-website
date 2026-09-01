@@ -671,7 +671,7 @@ test("criteria 1-4: the first screen welcomes, orients, and asks for one thing",
        nesting any unrelated grid, silently changes the number without changing what a student
        reads. These three strings ARE the criterion. */
     const walkthrough = await highlights.innerText();
-    for (const feature of ["One page", "Your matches", "The forms"]) {
+    for (const feature of ["Your resume", "Your matches", "The forms"]) {
       assert.match(walkthrough, new RegExp(feature), `the walkthrough never introduces "${feature}"`);
     }
     assert.match(walkthrough, /you review before anything is submitted/i, "the walkthrough never reaches the review promise");
@@ -969,7 +969,7 @@ test("criterion 6: the receipt reports the account, not a fixed list", async () 
     await screen("Done");
     const main = await page.locator("main").innerText();
 
-    assert.match(main, /Your one page\s*\n?\s*Not built/i, "a resume that was never built reports as Built");
+    assert.match(main, /Your Litos resume\s*\n?\s*Not built/i, "a resume that was never built reports as Built");
     /* The unknown branch. "Answered" here would be the receipt stating that a student answered a
        work-authorization question they were never asked, which is the worst row on the screen to
        invent. */

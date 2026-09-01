@@ -74,7 +74,7 @@ export const FREE_FEATURES = [
 
 export const PLUS_FEATURES = [
   "Everything in Free",
-  "Unlimited tailored one-page resumes",
+  "Unlimited tailored resumes",
   "Cover letters and application answers",
   "Resume feedback and saved versions",
   "Hover-started tailoring on job cards",
