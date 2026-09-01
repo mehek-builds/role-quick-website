@@ -5538,7 +5538,14 @@ function Applications() {
                     data-application-row-id={packet.id}
                     onClick={() => openApplication(packet)}
                     aria-pressed={packet.id === selectedApplicationRowId}
-                    className={`flex min-h-11 max-w-[15rem] shrink-0 flex-col justify-center rounded-inner border px-3 py-2 text-left ${packet.id === selectedApplicationRowId ? "border-brand bg-brand-soft" : "border-border"}`}
+                    /* min-w-[9rem] BOUNDS THE REMOVE TARGET, and is not decoration. The dismiss
+                       control reaches a FIXED 40px inward from the chip's right edge, while this
+                       chip is sized by its content and `max-w` is a ceiling with no floor. A short
+                       role ("PM") would size a chip near 100px, where that fixed reach is most of
+                       it and tapping the right-hand side stops opening the application. A floor of
+                       144px keeps the target under a third of any chip. It also makes the strip
+                       read as a row of cards rather than of ragged offcuts. */
+                    className={`flex min-h-11 min-w-[9rem] max-w-[15rem] shrink-0 flex-col justify-center rounded-inner border px-3 py-2 text-left ${packet.id === selectedApplicationRowId ? "border-brand bg-brand-soft" : "border-border"}`}
                   >
                     <span className={`truncate text-[13px] font-medium ${packet.id === selectedApplicationRowId ? "text-brand-ink" : "text-ink"}`}>{packet.job_context.role || "Role"}</span>
                     {/* Same pairing as the desktop row, so a company is recognised by the same mark
