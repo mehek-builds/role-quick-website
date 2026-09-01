@@ -78,6 +78,10 @@ export type BuildResult = {
   outstandingQuestions: number;
   /** Total questions the posting asks, so the screen can say "14 of 17" rather than a bare count. */
   totalQuestions: number;
+  /** Employer fields whose exact options the scan could not read on this pass. Zero for a clean
+   *  read. Not blocking: they are confirmed against the live form when the application is sent, and
+   *  the questions screen names the count so the student is not surprised at send time. */
+  deferredFields: number;
 };
 
 export type BuildDeps = {
@@ -99,6 +103,7 @@ export type BuildDeps = {
     total: number;
     alreadyAnswered: number;
     ask: PostingPrescriptQuestion[];
+    deferredFields: number;
   }>;
 };
 
@@ -219,6 +224,7 @@ export async function runOnboardingBuild(
        list on the next screen can never disagree about how many questions there are. */
     outstandingQuestions: questions.ask.length,
     totalQuestions: questions.total,
+    deferredFields: questions.deferredFields,
   };
 }
 

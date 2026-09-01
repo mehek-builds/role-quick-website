@@ -844,6 +844,7 @@ export default function Start() {
                has always been. */
             given={answersGiven}
             alreadyAnswered={built.alreadyAnswered}
+            deferredFields={built.deferredFields}
             onLater={later}
             onSaved={async (answers) => {
               /* THE WRITE THAT WAS MISSING. This screen used to count the answers and discard them,

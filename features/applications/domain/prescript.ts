@@ -29,6 +29,7 @@ type Prescript = {
   metadata_blockers?: PrescriptMetadataBlocker[];
   ask: PrescriptQuestion[];
   already_answered: number;
+  question_count?: number;
 };
 
 type PrescriptMetadataBlocker = {
@@ -143,4 +144,22 @@ export function prescriptBlocksProgress(prescript: Prescript | null | undefined)
 /** Whether the Apply flow should stop for an answer or an incomplete employer-form read. */
 export function prescriptNeedsHer(prescript: Prescript | null | undefined): boolean {
   return (prescript?.ask?.length ?? 0) > 0 || prescriptBlocksProgress(prescript);
+}
+
+/**
+ * The ONE scan outcome the onboarding build cannot proceed past: the form was not read at all, so
+ * there is nothing to ask and nothing that could be safely submitted. Everything else proceeds.
+ *
+ * This is deliberately much narrower than prescriptBlocksProgress (2026-09-01, Mehek). Blocking the
+ * whole build on any imperfect read was wrong: a scan that DID read the employer's questions but
+ * could not verify every option is exactly the case the follow-up questions screen exists for, so
+ * the build should go there and ask them in the same boxes the dashboard uses, not dead-end on a
+ * failure screen. The build only truly cannot continue when the scan read NOTHING: no questions
+ * counted and none to ask, on a run the provider did not complete. An `ok` scan with zero questions
+ * is not this case, it is a form that asks nothing extra, and it proceeds straight to review.
+ */
+export function prescriptReadNothing(prescript: Prescript | null | undefined): boolean {
+  if (!prescript) return true;
+  const questionsRead = (prescript.question_count ?? 0) > 0 || (prescript.ask?.length ?? 0) > 0;
+  return !questionsRead && prescript.discovery_status !== "ok";
 }

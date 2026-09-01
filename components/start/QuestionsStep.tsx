@@ -48,6 +48,7 @@ export function QuestionsStep({
   questions,
   given,
   alreadyAnswered,
+  deferredFields = 0,
   onSaved,
   onLater,
 }: {
@@ -58,6 +59,10 @@ export function QuestionsStep({
   /** How many Litos already answered. The honest counterweight that makes a three-question screen
    *  read as progress rather than as a form. */
   alreadyAnswered: number;
+  /** Employer fields whose exact options the scan could not read on this pass. Not asked here
+   *  (Litos never presents an answer to a list it has not read), but named so the student is not
+   *  surprised when the send re-opens the form to confirm them. */
+  deferredFields?: number;
   onSaved: (answers: { question: string; answer: string }[]) => Promise<void> | void;
   onLater: () => void;
 }) {
@@ -144,6 +149,17 @@ export function QuestionsStep({
         application, and Litos keeps what it can reuse so the next one is shorter.
         {alreadyAnswered > 0 && ` It already answered ${alreadyAnswered} for you.`}
       </p>
+
+      {/* Honest about the fields the scan could not fully read. Not asked here, because Litos never
+          presents an answer to a list it has not read, and not a blocker: the send re-opens the
+          form and confirms them then. Naming the count is what keeps that from being a surprise. */}
+      {deferredFields > 0 && (
+        <p className="mb-6 rounded-inner bg-surface-alt px-4 py-3 text-[13px] leading-6 text-muted">
+          {deferredFields === 1
+            ? `One more field on ${company}'s form needs its exact wording read from the live page. Litos confirms it with you when it opens the form to send, so nothing is guessed.`
+            : `${deferredFields} more fields on ${company}'s form need their exact wording read from the live page. Litos confirms them with you when it opens the form to send, so nothing is guessed.`}
+        </p>
+      )}
 
       <section
         aria-live="polite"
