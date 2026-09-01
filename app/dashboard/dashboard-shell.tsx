@@ -131,9 +131,9 @@ export function DashboardShell({
 
   const requestCollapse = useCallback(() => setCollapsed(true), []);
   /* Without this, `children` (the applications page today) re-renders on every DashboardShell
-     render that produces a new object literal here, even ones this context has nothing to do with
-     (moreOpen/moreClosing toggling for the mobile "More" sheet, for one) — a plain object literal
-     as the Provider's value defeats React's usual children-reference bailout for every consumer. */
+     render that produces a new object literal here, even ones this context has nothing to do with,
+     such as moreOpen/moreClosing toggling for the mobile "More" sheet: a plain object literal as
+     the Provider's value defeats React's usual children-reference bailout for every consumer. */
   const sidebarCollapse = useMemo(() => ({ collapsed, requestCollapse }), [collapsed, requestCollapse]);
 
   useEffect(() => () => {
