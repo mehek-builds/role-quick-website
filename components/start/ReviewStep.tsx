@@ -7,15 +7,16 @@
  * employer's system under the student's name, and it cannot be undone by anything Litos can do
  * afterwards.
  *
- * IT SHOWS THE EVIDENCE IT ASKS ABOUT (Mehek, 2026-09-01). The first version of this screen was a
- * bare recap: two labelled boxes naming the posting and asserting a resume was attached, one screen
- * after the build had shown both in full. Asking "happy with this?" while hiding the this made the
- * flow ask the same question twice on two screens, and the second time with less to look at. The
- * screen now draws the same two panes the build screen draws, posting left and the actual one page
- * right, with the same requirement marking, and puts the consequence and the button under them. A
- * student says yes to the document they can see. The page is drawn here at the full width of its
- * column, not at the build screen's thumbnail scale, because this is the screen where it has to be
- * readable rather than merely recognisable.
+ * IT SHOWS THE EVIDENCE IT ASKS ABOUT, AND IT IS THE ONLY SCREEN THAT DOES (Mehek, 2026-09-01).
+ * The first version was a bare recap: two labelled boxes naming the posting and asserting a resume
+ * was attached, one screen after the build had shown both in full. Asking "happy with this?" while
+ * hiding the this made the flow ask the same question twice, the second time with less to look at.
+ * Drawing the real panes here fixed the second half of that and left the first: the build screen
+ * drew the same two panes before the questions, so the student met the document twice and the
+ * warning only landed on the repeat. The build screen no longer draws it. The posting and the one
+ * page appear exactly once in the flow, here, at the full width of the column, on the screen that
+ * states the consequence and carries the button. A student says yes to a document they are seeing,
+ * once, at the moment it matters.
  *
  * The rest is built around irreversibility rather than conversion:
  *
@@ -41,11 +42,37 @@ import {
   type EducationProfile,
   type JdMatchResponse,
 } from "@/features/applications";
-import { RequirementProvider } from "@/components/app/RequirementText";
+import { MatchLegend, RequirementProvider, RequirementText } from "@/components/app/RequirementText";
 import { track } from "@/lib/analytics";
 import { PrimaryButton, Receipt, StartShell } from "./ui";
-import { ResumePaper } from "./ResumePaper";
-import { contactHeaderOf, MarkedPostingBody } from "./BuildStep";
+import { ResumePaper, type ContactHeader } from "./ResumePaper";
+
+/* The posting's words with their requirement marks and legend, drawn once, here, on the only screen in the flow
+   that shows the posting. Callers wrap it in a RequirementProvider. */
+function MarkedPostingBody({ description, jdMatch }: { description: string; jdMatch: JdMatchResponse | null }) {
+  return (
+    <>
+      {jdMatch?.scorable && (
+        <div className="mt-1">
+          <MatchLegend missingCount={jdMatch.missing.length} />
+        </div>
+      )}
+      <p className="mt-1 whitespace-pre-line text-[12.5px] leading-6 text-ink">
+        <RequirementText text={description} />
+      </p>
+    </>
+  );
+}
+
+/* The contact block for the paper, off the spec the generator just returned.
+ *
+ * `_contact` is what the backend rendered the PDF's own header from (engine/resumeRender.ts), so
+ * reading it here is what keeps this preview and the document the employer receives saying the same
+ * thing. The name falls back to the loaded identity for a spec that predates `_contact`. */
+function contactHeaderOf(spec: ResumeSpec, fallbackName: string | null): ContactHeader {
+  const contact = (spec as ResumeSpec & { _contact?: Partial<ContactHeader> })._contact ?? {};
+  return { ...contact, full_name: contact.full_name?.trim() || fallbackName || "" };
+}
 
 type SubmitOutcome = { sent: boolean };
 

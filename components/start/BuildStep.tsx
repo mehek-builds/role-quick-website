@@ -2,8 +2,15 @@
 
 /* 04 WATCH IT BUILD: the screen the product stops being described on and starts being watched.
  *
- * One screen, two phases, no route change. The posting stays pinned on the left the whole time so
- * the student can read what Litos is reading; the right pane is where the resume assembles.
+ * One screen, two phases, no route change: it names the posting, runs the stages, and hands off.
+ *
+ * IT NO LONGER DRAWS THE DOCUMENT (Mehek, 2026-09-01). This screen used to show the posting and
+ * the finished resume in two panes, and the review screen showed the same two panes again after
+ * the questions, the second time with "it cannot be unsent" attached. Two screens deep in a
+ * ten-step flow, drawing the same thing twice made the second one read as a repeat the student
+ * had already dealt with rather than as the decision it is. The panes now live on the review
+ * screen alone, which is the screen that asks for the irreversible yes, and this one is what it
+ * always actually was: the progress of a real build.
  *
  * THE SEQUENCE LIVES IN lib/onboarding-build.ts, not here. That is deliberate: generating a
  * tailored resume costs money and consumes one of the trial's five, so the orchestration has to be
@@ -18,11 +25,8 @@
 import { useEffect, useState } from "react";
 import { ThinkingOrb } from "thinking-orbs";
 import { ErrorNote } from "@/components/app/ui";
-import { ResumePaper, type ContactHeader } from "./ResumePaper";
 import { api, getJob, getPostingQuestions, isGuestSession, type MonitoredJob, type ResumeSpec } from "@/lib/api";
 import {
-  buildRequirementIndex,
-  EMPTY_REQUIREMENT_INDEX,
   fetchJdMatch,
   prescriptMetadataBlockers,
   prescriptReadNothing,
@@ -30,7 +34,6 @@ import {
   type JdMatchResponse,
   type ProfileIdentity,
 } from "@/features/applications";
-import { MatchLegend, RequirementProvider, RequirementText } from "@/components/app/RequirementText";
 import { isStructuredUpgradeDenial } from "@/features/billing";
 import {
   BuildPreconditionError,
@@ -55,32 +58,14 @@ const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
 
 /* What this screen learned that the screens after it need: the full posting (the match feed's row
    may not carry the description), the requirement match both panes were marked with, and the
-   applicant's name for the paper header. Passed up rather than re-fetched, because the review
-   screen draws the same two panes and re-asking the network for what is already in hand would make
-   the transition between them flicker. */
+   applicant's name for the paper header. Passed up rather than re-fetched: the review screen is the
+   only screen that draws the posting and the paper, and it should not have to re-ask the network
+   for what this screen already has in hand. */
 export type BuildContext = {
   posting: MonitoredJob;
   jdMatch: JdMatchResponse | null;
   applicantName: string | null;
 };
-
-/* The posting's words with their requirement marks and legend, shared by the build screen and the
-   review screen so the two panes cannot drift apart: what the student approves on review is
-   rendered by the same code that showed it building. Callers wrap it in a RequirementProvider. */
-export function MarkedPostingBody({ description, jdMatch }: { description: string; jdMatch: JdMatchResponse | null }) {
-  return (
-    <>
-      {jdMatch?.scorable && (
-        <div className="mt-1">
-          <MatchLegend missingCount={jdMatch.missing.length} />
-        </div>
-      )}
-      <p className="mt-1 whitespace-pre-line text-[12.5px] leading-6 text-ink">
-        <RequirementText text={description} />
-      </p>
-    </>
-  );
-}
 
 export function BuildStep({
   match,
@@ -344,88 +329,32 @@ export function BuildStep({
   }
 
   const building = result === null;
-  const requirementIndex = jdMatch
-    ? buildRequirementIndex(jdMatch.matched, jdMatch.missing)
-    : EMPTY_REQUIREMENT_INDEX;
 
   return (
     <StartShell
       step="build"
-      title={building ? "Building your application." : "Here is your application."}
-      wide
+      title={building ? "Building your application." : "Your application is built."}
     >
-      {/* ONE PROVIDER OVER BOTH PANES, which is the whole feature: the same index colours a term
-          in the posting and in the paper, and hovering either side lifts it on both. */}
-      <RequirementProvider index={requirementIndex}>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {/* LEFT: the posting, pinned. Unchanged between phases on purpose, so the student can read
-            what Litos is reading rather than watching it disappear at the moment it matters. */}
-        <section className="overflow-hidden rounded-inner border border-border">
-          <header className="flex items-center justify-between gap-3 border-b border-border bg-surface-alt px-3.5 py-2">
-            <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">The posting</span>
-            {typeof posting.match_score === "number" && (
-              <span className="font-mono text-[11px] text-teal-ink">{posting.match_score}</span>
-            )}
-          </header>
-          <div className="flex max-h-[380px] flex-col gap-2 overflow-y-auto p-3.5">
-            <p className="text-[15px] leading-snug text-ink">{posting.title}</p>
-            <p className="font-mono text-[11px] leading-relaxed text-muted">
-              {[posting.company_name, posting.location].filter(Boolean).join(" · ")}
-              <br />
-              {posting.ats_name}
-            </p>
-            {/* THE POSTING'S OWN WORDS, which is what makes the left pane a job description rather
-                than a job title. There is something to compare against on the right now, so the
-                text has to actually be here.
+      {/* ONE LINE, NOT A PANE. The posting and the paper are drawn exactly once in this flow, on
+          the review screen, and this screen no longer draws either: showing them here and again
+          after the questions asked the student to approve the same document twice, the second time
+          with a warning attached, which read as a repeat rather than a decision (Mehek,
+          2026-09-01). What this screen owes them is which posting is being worked on and what is
+          actually happening, so it names the posting and shows the stages doing it. */}
+      <p className="font-mono text-[11px] leading-relaxed text-muted">
+        {posting.title}
+        <br />
+        {[posting.company_name, posting.location].filter(Boolean).join(" \u00b7 ")}
+      </p>
 
-                MARKED, and the mark has support on the other side (Mehek, 2026-09-01). ISSUE-047
-                took the marking out because ResumePaper drew an unmarked document, so a colour here
-                pointed at nothing there. ResumePaper now renders its read-only text through
-                RequirementText under the same provider, so both panes carry the same colours for
-                the same meanings, which is what closes the issue instead of re-opening it. */}
-            {!building && posting.description && (
-              <MarkedPostingBody description={posting.description} jdMatch={jdMatch} />
-            )}
-          </div>
-        </section>
-
-        {/* RIGHT: the resume itself. Skeleton while building, the student's own real lines after.
-            Marked through the same index as the posting on the left. */}
-        <section className="overflow-hidden rounded-inner border border-border">
-          <header className="flex min-h-[38px] items-center justify-between gap-3 border-b border-border bg-surface-alt px-3.5 py-2">
-            <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Your resume for it</span>
-            {building
-              ? <ThinkingOrb state="composing" size={20} />
-              : <span className="font-mono text-[11px] text-positive">1 page</span>}
-          </header>
-          <div className="flex max-h-[380px] min-h-[170px] flex-col gap-3 overflow-y-auto p-3.5">
-            {building ? (
-              <>
-                <span className="rq-shimmer h-1.5 w-3/5 rounded-full" />
-                <span className="rq-shimmer h-1.5 w-full rounded-full" />
-                <span className="rq-shimmer h-1.5 w-11/12 rounded-full" />
-                <span className="rq-shimmer h-1.5 w-2/5 rounded-full" />
-              </>
-            ) : result?.resumeSpec ? (
-              /* THE SAME PAPER THE REST OF THE PRODUCT DRAWS, not a second one written for this
-                 screen. It already lays out the header the way a resume lays it out - name centred,
-                 contact line beneath - and it already owns the education, experience and skills
-                 blocks and the one-page fit. A parallel implementation here would drift from it on
-                 the first change to either, and mine already had: no contact line at all. */
-              <div className="origin-top scale-[0.62] [transform-box:content-box]">
-                <ResumePaper spec={result.resumeSpec} contact={contactHeaderOf(result.resumeSpec, applicantName)} />
-              </div>
-            ) : (
-              /* Generation succeeded but returned no spec to show. Says so rather than printing an
-                 empty pane that reads as a failure, and the packet is still real. */
-              <p className="text-[13px] leading-6 text-muted">
-                Built for this posting. You will see every line of it on the next screen.
-              </p>
-            )}
-          </div>
-        </section>
-      </div>
-      </RequirementProvider>
+      {!building && (
+        /* The promise that makes one document screen enough: nothing is sent before they have
+           read it. The button below carries them to the questions when there are any, and to the
+           document itself when there are not. */
+        <p className="mt-4 text-[13px] leading-6 text-muted">
+          You will see every line of it, and what it is going to, before anything is sent.
+        </p>
+      )}
 
       {/* The stage list. Each row is a real call, and its orb runs only while that call is in
           flight. Five of the six shipped orb states map onto real work here; the three used are
@@ -465,14 +394,4 @@ export function BuildStep({
       </div>
     </StartShell>
   );
-}
-
-/* The contact block for the paper, off the spec the generator just returned.
- *
- * `_contact` is what the backend rendered the PDF's own header from (engine/resumeRender.ts), so
- * reading it here is what keeps this preview and the document the employer receives saying the same
- * thing. The name falls back to the loaded identity for a spec that predates `_contact`. */
-export function contactHeaderOf(spec: ResumeSpec, fallbackName: string | null): ContactHeader {
-  const contact = (spec as ResumeSpec & { _contact?: Partial<ContactHeader> })._contact ?? {};
-  return { ...contact, full_name: contact.full_name?.trim() || fallbackName || "" };
 }
