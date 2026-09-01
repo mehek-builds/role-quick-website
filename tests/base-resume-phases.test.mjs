@@ -59,7 +59,13 @@ test("onboarding shows ATS readability facts and no target-role coverage percent
   const factAt = source.indexOf("Checked: an applicant tracking system");
   assert.ok(factAt >= 0, "the ATS fact line went missing");
   const factLine = source.slice(factAt, factAt + 400);
-  assert.doesNotMatch(factLine, /one page|ats\.pages/i, "the one-page claim came back to the ATS fact line");
+
+  /* THE PAGE COUNT STAYS, THE WORDS "one page" DO NOT (Mehek, 2026-09-01). Both halves matter.
+     The count is a number the student can check, which is what this line exists to give them.
+     The spelled-out form was the product selling itself on being one page, which it no longer
+     does anywhere else in the flow, so the fact is printed as a numeral instead. */
+  assert.match(factLine, /ats\.pages/, "the ATS line stopped stating the page count");
+  assert.doesNotMatch(factLine, /one page/i, "the spelled-out one-page claim came back to the ATS line");
   assert.doesNotMatch(source, /ats\.keyword_coverage_pct/);
   assert.doesNotMatch(source, /matches .*% of the words in the roles you picked/);
 });
