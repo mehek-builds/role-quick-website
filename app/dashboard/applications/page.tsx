@@ -2967,7 +2967,8 @@ function Applications() {
   function saveApplyAnswers() {
     if (prescriptLookaheadIssue
       || requiredQuestionReviewRoute(questions, prescriptMetadata).kind !== "continue"
-      || questions.some(optionalQuestionNeedsDecision)) return;
+      // Editable questions only: a metadata-blocked control owes the refresh run a read, not her a decision.
+      || questionReviewPresentation(questions, prescriptMetadata).editableQuestions.some(optionalQuestionNeedsDecision)) return;
     setPrescriptNote("");
     setFocusQuestion(null);
     moveToScreen("review");
@@ -3786,7 +3787,18 @@ function Applications() {
       activeQuestionMetadataBlockers,
     );
     const firstMissingId = nextRoute.kind === "answer" ? nextRoute.questionId : null;
-    const optionalDecisionId = candidateQuestions.find(optionalQuestionNeedsDecision)?.id ?? null;
+    /* A metadata-blocked question cannot be decided by the applicant: the presentation refuses to
+       render it as editable ("Litos did not guess or fill this field"), so demanding an
+       answer-or-skip decision on it routed her to a screen holding no control that could satisfy
+       the demand. Measured live on the Breezy packet f04623c3 (2026-09-01): one checkbox's exact
+       options were unreadable, and this exact line bounced every audit attempt back to the
+       questions screen, which re-sent her here, forever. Only questions she can actually edit owe
+       a decision; the blocked one belongs to the metadata-refresh run. */
+    const decisionEligibleQuestions = questionReviewPresentation(
+      candidateQuestions,
+      activeQuestionMetadataBlockers,
+    ).editableQuestions;
+    const optionalDecisionId = decisionEligibleQuestions.find(optionalQuestionNeedsDecision)?.id ?? null;
     const requiredMetadataMissing = nextRoute.kind === "metadata_refresh";
     if (!firstMissingId && !optionalDecisionId && !requiredMetadataMissing) return false;
     setError(null);
@@ -7762,7 +7774,12 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
   const coverLetterWaited = coverLetterMissing && coverLetterWaitedFor === waitedApplicationId;
   const coverLetterState = coverLetterGate({ supported: review.cover_letter_supported, required: review.cover_letter_required, coverLetter: submission.cover_letter, waited: coverLetterWaited });
   const coverLetterPending = coverLetterBlocks(coverLetterState);
-  const optionalAnswerDecisionMissing = review.questions.some(optionalQuestionNeedsDecision);
+  // Same eligibility rule as routeMissingRequiredAnswers: a metadata-blocked question owes the
+  // metadata-refresh run a read, not the applicant a decision.
+  const optionalAnswerDecisionMissing = questionReviewPresentation(
+    review.questions,
+    review.question_metadata_blockers ?? [],
+  ).editableQuestions.some(optionalQuestionNeedsDecision);
   const requiredAnswerMissing = review.questions.some((question) => question.required && !(question.answer ?? "").trim())
     || optionalAnswerDecisionMissing;
   const safeAttentionReason = review.attention_reason
