@@ -34,8 +34,10 @@ test("a fixture row is never stamped in the future", () => {
 
 test("the day buckets the fixture intends still exist", () => {
   /* Three rows reading as today (the "3 new today" badge), then older ones spread across distinct
-     days so the relative-date formatting is exercised. */
+     days so the relative-date formatting is exercised. The assisted-tier row (qa-7) sits one day
+     back, which both keeps it above the desktop fold for the badge screenshot and fills the day-1
+     bucket the older rows had skipped. */
   const days = [...fixture.matchAll(/first_seen_at: daysAgo\((\d+)\)/g)].map((m) => Number(m[1]));
   assert.equal(days.filter((d) => d === 0).length, 3, "three postings read as new today");
-  assert.deepEqual([...new Set(days)].sort((a, b) => a - b), [0, 2, 3, 4]);
+  assert.deepEqual([...new Set(days)].sort((a, b) => a - b), [0, 1, 2, 3, 4]);
 });
