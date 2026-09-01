@@ -2657,10 +2657,27 @@ function Applications() {
     && selectedSubmission.application_id === selected?.id
     && currentQuestionsSnapshot !== packetQuestionsSnapshot(selectedSubmission.review.questions),
   );
-  const activeQuestionMetadataBlockers = [
-    ...(selectedSubmission?.review.question_metadata_blockers ?? []),
-    ...prescriptMetadata,
-  ];
+  /* A COMPLETED MEASUREMENT SUPERSEDES THE PRE-SCAN, and the field's tri-state says which one
+     this is. The backend writes `question_metadata_blockers` onto the review ONLY when a run's
+     discovery metadata measurement is complete, so `undefined` means no run has measured the form
+     yet and the pre-scan's client-side blockers are the best knowledge there is. A present list,
+     empty included, is the run's own reading of the same form and outranks the pre-scan it
+     re-measured. Unioning the two forever deadlocked a live Breezy packet on 2026-09-01: the
+     pre-scan had recorded one field's choices unreadable, a later fill run read the whole form and
+     reported no blockers, and the client still gated every screen on the stale pre-scan entry.
+     "Waiting for a complete form read" then pointed at a read that had already happened, and the
+     only control that could clear prescriptMetadata was hidden behind the packet review that the
+     same stale blocker kept voiding. */
+  const measuredQuestionMetadataBlockers = selectedSubmission?.review.question_metadata_blockers;
+  const activeQuestionMetadataBlockers = measuredQuestionMetadataBlockers !== undefined
+    ? measuredQuestionMetadataBlockers
+    : prescriptMetadata;
+  /* The lookahead issue is the pre-scan's own progress verdict, so it is superseded on exactly the
+     same tri-state: once a run has measured the form, a pre-scan that could not finish reading it
+     is history, not a gate. */
+  const activePrescriptLookaheadIssue = measuredQuestionMetadataBlockers !== undefined
+    ? null
+    : prescriptLookaheadIssue;
   const canRefreshRequiredMetadataFromReview = requiredQuestionReviewRoute(
     questions,
     activeQuestionMetadataBlockers,
@@ -3757,7 +3774,7 @@ function Applications() {
      stopped managed run uses the server-backed question editor so Save persists the answers. A
      pre-fill packet keeps the answers locally until its submit request, as before. */
   function routeMissingRequiredAnswers(candidateQuestions: ApplicationQuestion[] = questions): boolean {
-    if (prescriptLookaheadIssue) {
+    if (activePrescriptLookaheadIssue) {
       setError(null);
       setQuestions(candidateQuestions);
       setFocusQuestion(null);
@@ -5591,15 +5608,15 @@ function Applications() {
           }}
           saving={selected ? savingAnswerIds.has(selected.id) : false}
           onRefreshMetadata={() => {
-            if (prescriptLookaheadIssue) void askPrescriptQuestions(prescriptLookaheadIssue.jobId);
+            if (activePrescriptLookaheadIssue) void askPrescriptQuestions(activePrescriptLookaheadIssue.jobId);
             else void refreshEmployerQuestionMetadata();
           }}
-          refreshingMetadata={prescriptLookaheadIssue ? prescriptRetrying : metadataRefreshId === selected?.id}
-          metadataRefreshDisabled={prescriptLookaheadIssue ? false : questionEditsUnsaved}
-          metadataRefreshNeedsPacketReview={prescriptLookaheadIssue ? false : !packetEvidenceReady}
+          refreshingMetadata={activePrescriptLookaheadIssue ? prescriptRetrying : metadataRefreshId === selected?.id}
+          metadataRefreshDisabled={activePrescriptLookaheadIssue ? false : questionEditsUnsaved}
+          metadataRefreshNeedsPacketReview={activePrescriptLookaheadIssue ? false : !packetEvidenceReady}
           metadataRefreshError={metadataRefreshError?.applicationId === selected?.id ? metadataRefreshError.message : null}
-          lookaheadError={prescriptLookaheadIssue?.message ?? null}
-          blockContinuation={Boolean(prescriptLookaheadIssue)}
+          lookaheadError={activePrescriptLookaheadIssue?.message ?? null}
+          blockContinuation={Boolean(activePrescriptLookaheadIssue)}
           reviewDiscovered={selectedSubmission?.review.status === "needs_attention"}
           focusQuestion={focusQuestion}
           prescriptNote={prescriptNote}

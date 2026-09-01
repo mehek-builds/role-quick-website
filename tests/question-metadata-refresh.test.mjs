@@ -60,7 +60,7 @@ test("the metadata recovery action is explicit, accessible, and stays beside its
 });
 
 test("unsaved edits cannot ride a metadata refresh and the refresh is the blocker screen primary", () => {
-  assert.match(PAGE, /metadataRefreshDisabled=\{prescriptLookaheadIssue \? false : questionEditsUnsaved\}/);
+  assert.match(PAGE, /metadataRefreshDisabled=\{activePrescriptLookaheadIssue \? false : questionEditsUnsaved\}/);
   assert.match(PAGE, /currentQuestionsSnapshot !== packetQuestionsSnapshot\(selectedSubmission\.review\.questions\)/);
 
   const screen = functionBody(PAGE, "function QuestionsScreen(");
@@ -109,7 +109,12 @@ test("review creates evidence and then starts the scoped employer metadata read"
 });
 
 test("metadata-only eligibility is recalculated from the current audited question snapshot", () => {
-  assert.match(PAGE, /const activeQuestionMetadataBlockers = \[[\s\S]*?selectedSubmission\?\.review\.question_metadata_blockers \?\? \[\][\s\S]*?prescriptMetadata/);
+  // A completed run measurement (question_metadata_blockers present on the review, empty included)
+  // supersedes the pre-scan's client-side blockers; only an unmeasured form still reads them.
+  // Unioning the two forever deadlocked a live Breezy packet on 2026-09-01.
+  assert.match(PAGE, /const measuredQuestionMetadataBlockers = selectedSubmission\?\.review\.question_metadata_blockers;/);
+  assert.match(PAGE, /const activeQuestionMetadataBlockers = measuredQuestionMetadataBlockers !== undefined[\s\S]*?\? measuredQuestionMetadataBlockers[\s\S]*?: prescriptMetadata;/);
+  assert.match(PAGE, /const activePrescriptLookaheadIssue = measuredQuestionMetadataBlockers !== undefined[\s\S]*?\? null[\s\S]*?: prescriptLookaheadIssue;/);
   assert.match(PAGE, /const canRefreshRequiredMetadataFromReview = requiredQuestionReviewRoute\([\s\S]*?questions,[\s\S]*?activeQuestionMetadataBlockers,[\s\S]*?\)\.kind === "metadata_refresh"/);
   assert.match(PAGE, /const auditedQuestions = Array\.isArray\(response\.questions\) \? response\.questions : questions;[\s\S]*?setQuestions\(auditedQuestions\)/,
     "packet-audit questions must publish before review can recompute the special action");
