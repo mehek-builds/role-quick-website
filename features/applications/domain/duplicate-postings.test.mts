@@ -115,6 +115,25 @@ describe("the marks a Tracker row gets", () => {
     assert.equal(duplicatePostingMarks([packet({ id: "solo" })]).size, 0);
   });
 
+  test("with nothing sent, the packet that needs the applicant stands, not the oldest draft", () => {
+    /* The oldest copy is a quiet READY draft; a newer copy carries the live blocker. If the oldest
+       stood, dropping the badged repeats from the "Needs you" queue would hide the packet that
+       actually needs action. So the actionable one is the record and the older draft is the repeat. */
+    const olderReady = packet({ id: "old", status: "ready_to_submit", created_at: "2026-08-06T08:00:00.000Z" });
+    const newerAction = packet({ id: "new", status: "needs_attention", created_at: "2026-08-06T09:00:00.000Z" });
+    const marks = duplicatePostingMarks([olderReady, newerAction]);
+    assert.equal(duplicateBadge(marks.get("new")), null, "the actionable packet stands, unbadged");
+    assert.deepEqual(duplicateBadge(marks.get("old")), { label: "Duplicate", kind: "duplicate" });
+  });
+
+  test("a sent packet still outranks an actionable one as the record", () => {
+    const actionable = packet({ id: "act", status: "needs_attention", created_at: "2026-08-06T08:00:00.000Z" });
+    const sent = packet({ id: "sent", status: "submitted", created_at: "2026-08-06T09:00:00.000Z" });
+    const marks = duplicatePostingMarks([actionable, sent]);
+    assert.equal(duplicateBadge(marks.get("sent")), null, "the sent packet is the record");
+    assert.deepEqual(duplicateBadge(marks.get("act")), { label: "Already applied", kind: "warn" });
+  });
+
   test("two genuinely different Palantir requisitions stay apart", () => {
     const intel = packet({
       id: "intel", company: "Palantir", role: "Forward Deployed Software Engineer, Internship - Intel",
@@ -158,5 +177,13 @@ describe("the Tracker renders the mark, and computes it over every packet", () =
     // Tracker is the only place they exist and is the wrong place to make them disappear.
     assert.match(page, /visiblePackets\.map\(\(packet\) =>/g);
     assert.doesNotMatch(page, /collapsedPackets|groupedPackets|dedupedPackets/);
+  });
+
+  test('the "Needs you" filter drops the badged repeats, and only that filter', () => {
+    /* An "Already applied" row cannot be sent and a "Duplicate" is a redundant copy, so neither is
+       a live opportunity the actionable queue should carry. The drop is scoped to "action" so
+       Everything still lists and badges every packet (R-066), and it keys off the same
+       duplicateBadge the row renders, so what is hidden is exactly what would have worn a chip. */
+    assert.match(page, /applicationFilter === "action" && duplicateBadge\(duplicateMarks\.get\(packet\.id\)\) !== null/);
   });
 });

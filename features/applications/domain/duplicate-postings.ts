@@ -1,4 +1,5 @@
 import type { GeneratedResume } from "@/lib/api";
+import { statusMatchesApplicationFilter } from "./application-filter.ts";
 
 /* WHY THE TRACKER BADGES DUPLICATES INSTEAD OF COLLAPSING THEM.
  *
@@ -132,7 +133,15 @@ export function duplicatePostingMarks(packets: readonly GeneratedResume[]): Map<
     if (group.length < 2) continue;
     const ordered = [...group].sort((a, b) => packetOrder(a).localeCompare(packetOrder(b)));
     const sent = ordered.find((packet) => packet.spec._review?.status === "submitted");
-    const stands = sent ?? ordered[0];
+    /* The row that STANDS for the posting carries no badge, so it is the one the "Needs you" queue
+     * keeps when the badged repeats are dropped from it. The SENT packet stands when there is one:
+     * it is the record of this posting. With nothing sent, prefer the oldest packet that still NEEDS
+     * the applicant over an older quiet draft, so hiding the badged siblings can never hide the row
+     * that actually holds the live blocker (the exact failure the "collapse" approach was rejected
+     * for). Falls back to the oldest when none in the group needs action. */
+    const needsAction = ordered.find((packet) => packet.spec._review != null
+      && statusMatchesApplicationFilter(packet.spec._review, "action"));
+    const stands = sent ?? needsAction ?? ordered[0];
     for (const packet of ordered) {
       marks.set(packet.id, {
         total: ordered.length,

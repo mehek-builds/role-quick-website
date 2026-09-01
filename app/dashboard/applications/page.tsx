@@ -2390,7 +2390,14 @@ function Applications() {
   const visiblePackets = useMemo(() => {
     const filtered = reviewablePackets.filter((packet) =>
       statusMatchesApplicationFilter(packet.spec._review, applicationFilter)
-      && applicationMatchesQuery(packet, deferredApplicationQuery));
+      && applicationMatchesQuery(packet, deferredApplicationQuery)
+      /* The "Needs you" queue is meant to be live opportunities to act on, and a row that repeats a
+         posting already in the Tracker is not one: an "Already applied" sibling makes the backend
+         refuse this send (409 DUPLICATE_APPLICATION), and a plain "Duplicate" is a redundant copy of
+         the one standing row for that posting (duplicatePostingMarks now keeps the actionable packet
+         as that standing row). Both are dropped from this filter only; Everything still lists and
+         badges every packet, so nothing is lost and R-066's write-once packets never disappear. */
+      && !(applicationFilter === "action" && duplicateBadge(duplicateMarks.get(packet.id)) !== null));
     return [...filtered].sort((a, b) => {
       if (applicationSort === "company") {
         return (a.job_context.company ?? "").localeCompare(b.job_context.company ?? "");
@@ -2401,7 +2408,7 @@ function Applications() {
       }
       return packetTimestamp(b).localeCompare(packetTimestamp(a));
     });
-  }, [applicationFilter, applicationSort, deferredApplicationQuery, reviewablePackets]);
+  }, [applicationFilter, applicationSort, deferredApplicationQuery, reviewablePackets, duplicateMarks]);
   const legacyCount = (packets?.length ?? 0) - reviewablePackets.length;
 
   /* ---- sending without being asked ----
@@ -2423,8 +2430,13 @@ function Applications() {
    * again rather than staying hidden on a stale local decision. */
   const [unsendable, setUnsendable] = useState<ReadonlySet<string>>(() => new Set());
   const autopilotCandidates = useMemo(
-    () => (unsendable.size === 0 ? reviewablePackets : reviewablePackets.filter((packet) => !unsendable.has(packet.id))),
-    [reviewablePackets, unsendable],
+    () => reviewablePackets.filter((packet) =>
+      !unsendable.has(packet.id)
+      /* A badged duplicate would be refused at send (409 DUPLICATE_APPLICATION) or is a redundant
+         repeat of the standing row, so the autopilot must never elect one as the next match: the
+         old loop jammed on exactly this class of un-sendable row. */
+      && duplicateBadge(duplicateMarks.get(packet.id)) === null),
+    [reviewablePackets, unsendable, duplicateMarks],
   );
 
   const nextPacket = useMemo(
@@ -5134,6 +5146,9 @@ function Applications() {
                (see load-dashboard.ts), not a different membership. */
             const count = reviewablePackets.filter((packet) => (
               packet.spec._review != null && statusMatchesApplicationFilter(packet.spec._review, "action")
+              // Same membership the ?state=action view now renders: repeats and already-applied rows
+              // are dropped, so this tile counts live opportunities rather than un-sendable copies.
+              && duplicateBadge(duplicateMarks.get(packet.id)) === null
             )).length;
             return count > 0 ? { count, href: "/dashboard/applications?state=action" } : null;
           })()}
