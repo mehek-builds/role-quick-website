@@ -27,19 +27,26 @@ test("the questions read runs before generation, in the orchestrator and in the 
   );
 });
 
-test("a scan failure is typed, and its screen offers a free re-read instead of blaming the fit", async () => {
+test("an empty employer-form pre-scan proceeds to Review and send, never dead-ends", async () => {
+  /* THE PRE-SCAN IS A PREVIEW, NOT A GATE (Mehek, 2026-09-01). When the flaky live read comes up
+     empty it used to dead-end this screen ("That build did not finish / could not read the form"),
+     and a student hit that across many different jobs in a row. Onboarding must never dead-end
+     here: the read is retried and then, if still empty, the build proceeds with an EMPTY ASK, which
+     is the zero-outstanding case that skips straight to Review and send, where the live form is
+     read fresh. This locks that in so the dead-end cannot come back. */
   const build = await read("lib/onboarding-build.ts");
-  assert.match(build, /export class PostingReadError/);
+  assert.doesNotMatch(build, /PostingReadError/, "the scan dead-end error type must be gone");
 
   const step = await read("components/start/BuildStep.tsx");
-  assert.match(step, /throw new PostingReadError\(/);
-  const branchAt = step.indexOf("if (error?.postingRead)");
-  const genericAt = step.indexOf('title="That build did not finish."', branchAt + 1);
-  assert.ok(branchAt !== -1, "the posting-read branch is gone");
-  const branch = step.slice(branchAt, genericAt === -1 ? undefined : step.indexOf("if (error) {", branchAt));
-  assert.match(branch, /Read the form again/);
-  assert.match(branch, /Show me a different one/);
-  /* The generic copy's verdict on fit must not appear here: a scan failure says nothing about
-     the student. */
-  assert.doesNotMatch(branch, /not a fit/i);
+  assert.doesNotMatch(step, /throw new PostingReadError/, "the pre-scan must not throw a dead-end");
+  assert.doesNotMatch(step, /error\?\.postingRead/, "the pre-scan failure screen must be gone");
+  assert.doesNotMatch(step, /That build did not finish[^]*could not verify every question/,
+    "the empty-read dead-end copy must be gone");
+
+  const loadAt = step.indexOf("loadQuestions: async");
+  assert.ok(loadAt !== -1, "loadQuestions went missing");
+  const loadBody = step.slice(loadAt, loadAt + 2200);
+  assert.match(loadBody, /POSTING_SCAN_RETRIES/, "the flaky pre-scan must be retried before giving up");
+  assert.match(loadBody, /prescriptReadNothing/, "the empty-read proceed path keys on prescriptReadNothing");
+  assert.match(loadBody, /ask: \[\]/, "an empty read must proceed with an empty ask, not throw");
 });
