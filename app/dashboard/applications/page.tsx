@@ -26,11 +26,12 @@ import {
   type ManualHandoffResponse,
   type ResumeSpec,
   type SubmissionRetrySafety,
+  removeApplicationFromTracker,
 } from "@/lib/api";
 import { Card, Chip, EmptyState, ErrorNote, ExtensionStoreLink, PendingLabel, ScrollableRow, ShimmerRows, TerminalActionBar, formatRelativeDate } from "@/components/app/ui";
 import { CompanyLogo } from "@/components/app/CompanyLogo";
 import { ThinkingOrb } from "thinking-orbs";
-import { canonicalApplicationFromPacket, canonicalEnvelopeLegacyHydrationId, canonicalEnvelopeWithMissingLegacyHydration, canonicalTrackerPacket, explicitTerms, sendableLinkedPacketFromCanonicalEnvelope, withRestoredLinkedPackets, linkedLegacyPacketFromCanonicalTrackerPacket, mergeCanonicalApplicationHistory, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, reviewWithLists, screenForStatus, sectionHeading, selectedPacketForRequest, startsNewSection, statusLabel, stripMetadata, upsertCanonicalApplicationHistory } from "@/features/applications";
+import { canonicalApplicationFromPacket, canRemoveFromTracker, canonicalEnvelopeLegacyHydrationId, canonicalEnvelopeWithMissingLegacyHydration, canonicalTrackerPacket, explicitTerms, sendableLinkedPacketFromCanonicalEnvelope, withRestoredLinkedPackets, linkedLegacyPacketFromCanonicalTrackerPacket, mergeCanonicalApplicationHistory, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, reviewWithLists, screenForStatus, sectionHeading, selectedPacketForRequest, startsNewSection, statusLabel, stripMetadata, upsertCanonicalApplicationHistory } from "@/features/applications";
 import { applicationFilterFromSearch, applicationFilterHeading, cleanJdCapture, ledgerRendersOnLanding, pipelineCounts, reviewCanBeSent, sentSince, startOfLocalDay, statusMatchesApplicationFilter, unansweredRequiredQuestionCount, type ApplicationFilter } from "@/features/applications";
 import { nextPreferredReadyPacket, packetMatchesJob } from "@/features/applications";
 import { auditAnswerWrite, reviewAnswersNeedSave, saveReviewAnswers, type ReviewAnswerSaveResponse } from "@/features/applications";
@@ -577,6 +578,70 @@ function resumeGenerationActionKey(draft: NewApplicationDraft): string {
    rendering, that behaviour has moved across Next majors, and the price is a fallback the page
    already showed while its own packets loaded. So the boundary is invisible here and it means a
    future upgrade cannot quietly turn the query read into a blank first paint. */
+/**
+ * The per-row Remove control.
+ *
+ * HIDDEN UNTIL HOVER OR FOCUS, and shown permanently while it is asking. The Tracker is a dense
+ * list and a destructive-looking control on every row reads as a hazard, but it must still be
+ * reachable by keyboard, which is why focus-within counts and why the button is never
+ * `display:none` (a hidden button is not focusable, so a keyboard user could never reach it).
+ *
+ * IT ASKS FIRST. Not window.confirm, which is unstyled, blocks the thread and is suppressed in some
+ * embedded contexts, and not a modal, which is far too much ceremony for one row. The row swaps in
+ * a "Remove?" prompt with its own two buttons, which is reversible with one click and never steals
+ * focus from the page.
+ *
+ * NOT RENDERED AT ALL for an application the employer already has. The server refuses those, and a
+ * control that is always refused is worse than no control: offering it implies the student could
+ * un-send something. `submission_state` and `tracker_state` are read from the canonical row, and
+ * when there is no canonical row yet nothing is offered, because there is nothing to address the
+ * request to.
+ */
+function TrackerRowRemove({ packet, pending, confirming, onAsk, onCancel, onConfirm }: {
+  packet: GeneratedResume;
+  pending: boolean;
+  confirming: boolean;
+  onAsk: () => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  if (!canRemoveFromTracker(canonicalApplicationFromPacket(packet))) return null;
+
+  if (confirming) {
+    return (
+      <span className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1 rounded-full bg-surface px-2 py-1 shadow-sm">
+        <span className="text-[11px] text-muted">Remove?</span>
+        <button
+          type="button"
+          onClick={onConfirm}
+          disabled={pending}
+          className="rounded-full px-2 py-0.5 text-[11px] font-medium text-danger hover:bg-danger-soft disabled:opacity-60"
+        >
+          {pending ? "Removing" : "Yes"}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={pending}
+          className="rounded-full px-2 py-0.5 text-[11px] text-muted hover:bg-surface-alt disabled:opacity-60"
+        >
+          Cancel
+        </button>
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={onAsk}
+      aria-label={`Remove ${packet.job_context.role || "this application"} at ${packet.job_context.company || "this company"} from your tracker`}
+      className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full px-2 py-1 text-[11px] text-muted opacity-0 transition-opacity hover:bg-surface-alt hover:text-ink focus-visible:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100"
+    >
+      Remove
+    </button>
+  );
+}
+
 export default function ApplicationsPage() {
   return (
     <Suspense fallback={<ShimmerRows rows={4} />}>
@@ -893,6 +958,11 @@ function Applications() {
      fixture to /login before it could verify anything. */
   const [qaMode, setQaMode] = useState<boolean | null>(null);
   const [creating, setCreating] = useState<"fill" | "tailor" | null>(null);
+  /* Remove-from-Tracker, held per row id rather than as a boolean so a second row cannot inherit
+     the first row's confirm prompt when the list re-renders. */
+  const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
+  const [removingApplicationId, setRemovingApplicationId] = useState<string | null>(null);
+  const [removeError, setRemoveError] = useState<string | null>(null);
   const managedPrepareRef = useRef<string | null>(null);
   const [extractingJd, setExtractingJd] = useState(false);
   const [showNewApplication, setShowNewApplication] = useState(false);
@@ -2606,6 +2676,39 @@ function Applications() {
     : canonicalSelected?.review_state.replaceAll("_", " ") ?? "Opening";
   const selectedApplicationRowId = canonicalSelected?.id
     ?? (selected ? canonicalIdByPacketId[selected.id] ?? selected.id : openingApplicationId);
+
+  /**
+   * Take the row off the Tracker.
+   *
+   * OPTIMISTIC, and safe to be: the server refuses anything already sent, so the only rows that
+   * reach a success here are ones that never went to an employer. On a refusal the row is put back
+   * and the server's own reason is shown, because "this was already sent" is the answer the student
+   * needs, not a generic failure.
+   */
+  const removeFromTracker = useCallback(async (packet: GeneratedResume) => {
+    const applicationId = canonicalApplicationFromPacket(packet)?.id;
+    if (!applicationId) {
+      setRemoveError("Litos cannot remove this row yet. Reload the page and try again.");
+      return;
+    }
+    setRemovingApplicationId(packet.id);
+    setRemoveError(null);
+    try {
+      await removeApplicationFromTracker(applicationId);
+      /* Drop it locally rather than refetching the whole ledger: the row is gone from the server's
+         list too, so a refetch would only cost a round trip to learn the same thing. */
+      setPackets((current) => current?.filter((row) => row.id !== packet.id) ?? current);
+      setConfirmRemoveId(null);
+      if (packet.id === selectedApplicationRowId) closeApplication();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      setRemoveError(message || "Litos could not remove this application. Try again.");
+      setConfirmRemoveId(null);
+    } finally {
+      setRemovingApplicationId(null);
+    }
+  }, [closeApplication, selectedApplicationRowId]);
+
   /* Only the task surface moves. The packet viewer and document dialog stay outside this keyed
      boundary, so a poll-driven screen change cannot remount an open modal or disturb its focus.
      A stable transition name lets React pair the old and new snapshots, while the key changes only
@@ -5396,7 +5499,13 @@ function Applications() {
                 </div>
                 <div className="divide-y divide-border">
                   {visiblePackets.map((packet) => (
-                    <button key={packet.id} type="button" data-application-row-id={packet.id} onClick={() => openApplication(packet)} aria-pressed={packet.id === selectedApplicationRowId} className={`grid min-h-14 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-l-2 px-2 text-left transition-colors sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_5rem_15rem] ${rowEdgeTone(packet.spec._review?.status)} ${packet.id === selectedApplicationRowId ? "bg-brand-soft/55" : "hover:bg-surface-alt"}`}>
+                    /* The row button is left exactly as it was and WRAPPED rather than reorganised.
+                       Remove has to sit outside it: a button inside a button is invalid markup, and
+                       the browser's own recovery for it drops the inner control, so the obvious
+                       version of this silently does not work. The wrapper is `relative` and the
+                       control is absolutely placed over the row's right edge. */
+                    <div key={packet.id} className="group relative">
+                    <button type="button" data-application-row-id={packet.id} onClick={() => openApplication(packet)} aria-pressed={packet.id === selectedApplicationRowId} className={`grid min-h-14 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-l-2 px-2 text-left transition-colors sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_5rem_15rem] ${rowEdgeTone(packet.spec._review?.status)} ${packet.id === selectedApplicationRowId ? "bg-brand-soft/55" : "hover:bg-surface-alt"}`}>
                       <span className="truncate text-sm font-medium text-ink">{packet.job_context.role || "Role"}</span>
                       {/* The logo travels WITH the name rather than taking a column of its own, so
                           the name still starts on the Company track and the pair reads as one
@@ -5422,8 +5531,20 @@ function Applications() {
                         })()}
                       </span>
                     </button>
+                    <TrackerRowRemove
+                      packet={packet}
+                      pending={removingApplicationId === packet.id}
+                      confirming={confirmRemoveId === packet.id}
+                      onAsk={() => { setRemoveError(null); setConfirmRemoveId(packet.id); }}
+                      onCancel={() => setConfirmRemoveId(null)}
+                      onConfirm={() => removeFromTracker(packet)}
+                    />
+                    </div>
                   ))}
                 </div>
+                {removeError && (
+                  <p role="status" className="px-2 py-2 text-xs text-danger">{removeError}</p>
+                )}
               </>
             )}
           </div>
