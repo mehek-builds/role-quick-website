@@ -1900,6 +1900,28 @@ export function recordOrderedApplicationDocument(
   });
 }
 
+export type ApplicationRemovalResult = {
+  application: CanonicalApplication;
+  removed: true;
+  already_removed: boolean;
+};
+
+/**
+ * Take an application off the Tracker.
+ *
+ * NOT A DELETE, on purpose and on the server's terms. The row stays: the submission attempt ledger,
+ * the billing events and the trial accounting all reference applications with no foreign key, and
+ * that ledger is what stops Litos sending the same application to the same employer twice. So this
+ * sets a stamp the Tracker filters on, and adding the same posting again brings the row back.
+ *
+ * REJECTS ANYTHING ALREADY SENT with 409 and `code: "application_not_removable"`, carrying a
+ * `blockers` list. That is a real answer to show the student, not a failure to swallow: it means
+ * the employer has this application and hiding it would hide the proof it was sent.
+ */
+export function removeApplicationFromTracker(applicationId: string): Promise<ApplicationRemovalResult> {
+  return api<ApplicationRemovalResult>(`/applications/${applicationId}/remove`, { method: "POST" });
+}
+
 /** Stop this application carrying the document. The library file itself is untouched. */
 export function detachApplicationDocument(applicationId: string, kind: string): Promise<{ attachment: null }> {
   return api<{ attachment: null }>(`/applications/${applicationId}/documents/${kind}`, { method: "DELETE" });
