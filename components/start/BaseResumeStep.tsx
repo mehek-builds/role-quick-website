@@ -1117,7 +1117,8 @@ export function BaseResumeStep({
               show the working for. */}
           {finished && ats && (
             <p className="mt-5 text-xs leading-5 text-muted">
-              Checked: an applicant tracking system can read this, {ats.extractable_chars} characters.
+              Checked: an applicant tracking system can read this, {ats.extractable_chars} characters
+              on {ats.pages} {ats.pages === 1 ? "page" : "pages"}.
             </p>
           )}
 
