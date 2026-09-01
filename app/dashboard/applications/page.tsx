@@ -625,25 +625,36 @@ function TrackerChipRemove({ packet, pending, confirming, onAsk, onCancel, onCon
 }) {
   if (!canRemoveFromTracker(canonicalApplicationFromPacket(packet))) return null;
 
+  const subject = `${packet.job_context.role || "this application"} at ${packet.job_context.company || "this company"}`;
   if (confirming) {
     return (
-      <span className="absolute inset-0 flex items-center justify-center gap-1.5 rounded-inner bg-surface/95 px-2">
-        <button
-          type="button"
-          onClick={onConfirm}
-          disabled={pending}
-          className="rounded-full px-2.5 py-1 text-[12px] font-medium text-danger hover:bg-danger-soft disabled:opacity-60"
-        >
-          {pending ? "Removing" : "Remove"}
-        </button>
-        <button
-          type="button"
-          onClick={onCancel}
-          disabled={pending}
-          className="rounded-full px-2.5 py-1 text-[12px] text-muted hover:bg-surface-alt disabled:opacity-60"
-        >
-          Cancel
-        </button>
+      /* THE ROLE STAYS ON SCREEN. The overlay covers the chip, and a confirmation that hides what
+         it is about is a worse prompt than none: this strip scrolls, the chips are small, and
+         position is the only other cue to which application is being removed. Both buttons also
+         carry the full subject as their accessible name, because "Remove" and "Cancel" alone
+         announce nothing about what is being removed. */
+      <span className="absolute inset-0 flex flex-col items-center justify-center gap-1 rounded-inner bg-surface/95 px-2">
+        <span className="max-w-full truncate text-[11px] text-muted">{packet.job_context.role || "This application"}</span>
+        <span className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={pending}
+            aria-label={`Confirm removing ${subject} from your tracker`}
+            className="rounded-full px-2.5 py-1 text-[12px] font-medium text-danger hover:bg-danger-soft disabled:opacity-60"
+          >
+            {pending ? "Removing" : "Remove"}
+          </button>
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={pending}
+            aria-label={`Keep ${subject} on your tracker`}
+            className="rounded-full px-2.5 py-1 text-[12px] text-muted hover:bg-surface-alt disabled:opacity-60"
+          >
+            Cancel
+          </button>
+        </span>
       </span>
     );
   }
@@ -651,7 +662,7 @@ function TrackerChipRemove({ packet, pending, confirming, onAsk, onCancel, onCon
     <button
       type="button"
       onClick={onAsk}
-      aria-label={`Remove ${packet.job_context.role || "this application"} at ${packet.job_context.company || "this company"} from your tracker`}
+      aria-label={`Remove ${subject} from your tracker`}
       /* -top-1 -right-1 so the touch target overhangs the chip's corner instead of eating into the
          text beside it, which is already truncating at this width. */
       className="absolute -right-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-surface text-[13px] leading-none text-muted hover:text-ink"
