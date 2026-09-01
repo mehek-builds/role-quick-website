@@ -261,6 +261,21 @@ const lookupCache = new Map<string, { at: number; value: LogoEvidence | null }>(
  * returns null for the same reason: this lookup can only ever ADD a logo the
  * legacy chain would have missed.
  */
+async function jobsRows(
+  query: URLSearchParams,
+  signal: AbortSignal,
+  fetcher: typeof fetch,
+): Promise<JobsRow[] | null> {
+  const res = await fetcher(`${API_URL}/jobs?${query}`, {
+    signal,
+    headers: { Accept: "application/json" },
+  });
+  if (!res.ok) return null;
+  const body: unknown = await res.json();
+  const jobs = (body as { jobs?: unknown })?.jobs;
+  return Array.isArray(jobs) ? (jobs as JobsRow[]) : null;
+}
+
 export async function backendLogoEvidence(
   company: string,
   boardUrl: string | null,
@@ -270,17 +285,32 @@ export async function backendLogoEvidence(
   const key = `${company.trim()}\n${boardUrl ?? ""}`;
   const cached = lookupCache.get(key);
   if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.value;
-  const query = new URLSearchParams({ limit: "100", company: company.trim() });
   try {
-    const res = await fetcher(`${API_URL}/jobs?${query}`, {
-      signal,
-      headers: { Accept: "application/json" },
-    });
-    if (!res.ok) return null;
-    const body: unknown = await res.json();
-    const jobs = (body as { jobs?: unknown })?.jobs;
-    if (!Array.isArray(jobs)) return null;
-    const value = pickEvidence(jobs as JobsRow[], company, boardUrl);
+    /* THE SOURCE KEY FIRST. The company filter is a substring over display names, and display
+       names collide: several live sources are literally named "Careers", and a common name can
+       push the wanted row past the page. The backend's career_url filter addresses the one
+       source exactly, so when the tile names its board, ask by board. A backend that predates
+       the filter simply ignores the unknown parameter and answers the generic newest page,
+       where the exact-match selection finds nothing and the company query below still runs, so
+       either deploy order stays correct. */
+    let value: LogoEvidence | null = null;
+    if (boardUrl) {
+      const bySource = await jobsRows(
+        new URLSearchParams({ limit: "20", career_url: boardUrl }),
+        signal,
+        fetcher,
+      );
+      if (bySource) value = pickEvidence(bySource, company, boardUrl);
+    }
+    if (!value) {
+      const byName = await jobsRows(
+        new URLSearchParams({ limit: "100", company: company.trim() }),
+        signal,
+        fetcher,
+      );
+      if (!byName) return null;
+      value = pickEvidence(byName, company, boardUrl);
+    }
     if (lookupCache.size >= CACHE_MAX_ENTRIES) {
       const oldest = lookupCache.keys().next().value;
       if (oldest !== undefined) lookupCache.delete(oldest);

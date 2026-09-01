@@ -230,10 +230,13 @@ describe("backendLogoEvidence", () => {
   });
   const ok = (body) => Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
 
-  test("asks /jobs with the company filter and returns the picked evidence", async () => {
-    let asked = "";
+  test("asks /jobs by the SOURCE key first and returns the picked evidence", async () => {
+    /* The company filter is a substring over display names, and names collide (several live
+       sources are literally named "Careers"). When the tile names its board, the board is the
+       key: one exact-match query, no name paging, and the junk-named class resolves. */
+    const asked = [];
     const fetcher = (url) => {
-      asked = String(url);
+      asked.push(String(url));
       return ok({ jobs: [row("Zapier", "https://jobs.ashbyhq.com/zapier")] });
     };
     const evidence = await backendLogoEvidence(
@@ -242,10 +245,47 @@ describe("backendLogoEvidence", () => {
       new AbortController().signal,
       fetcher,
     );
-    assert.ok(asked.includes("/jobs?"));
-    assert.ok(asked.includes("company=Zapier"));
+    assert.equal(asked.length, 1, "a source-keyed hit needs no name query");
+    assert.ok(asked[0].includes("career_url=https%3A%2F%2Fjobs.ashbyhq.com%2Fzapier"));
+    assert.ok(!asked[0].includes("company="));
     assert.equal(evidence?.url, "https://app.ashbyhq.com/api/images/org-theme-logo/x.png");
     assert.equal(evidence?.method, "first_party_ats_employer_logo");
+  });
+
+  test("falls back to the company query when the source key yields nothing", async () => {
+    /* A backend that predates the career_url filter ignores the unknown parameter and answers
+       the generic newest page; the exact-match selection finds nothing there and the company
+       query must still run, so either deploy order stays correct. */
+    const asked = [];
+    const fetcher = (url) => {
+      asked.push(String(url));
+      if (String(url).includes("career_url=")) {
+        return ok({ jobs: [row("Somebody Else", "https://jobs.lever.co/other")] });
+      }
+      return ok({ jobs: [row("Fallback Co", "https://jobs.ashbyhq.com/fallback-co")] });
+    };
+    const evidence = await backendLogoEvidence(
+      "Fallback Co",
+      "https://jobs.ashbyhq.com/fallback-co",
+      new AbortController().signal,
+      fetcher,
+    );
+    assert.equal(asked.length, 2);
+    assert.ok(asked[1].includes("company=Fallback+Co"));
+    assert.ok(evidence?.url);
+  });
+
+  test("a boardless request goes straight to the company query", async () => {
+    const asked = [];
+    const fetcher = (url) => {
+      asked.push(String(url));
+      return ok({ jobs: [row("Solo Co", "https://jobs.ashbyhq.com/solo-co")] });
+    };
+    const evidence = await backendLogoEvidence("Solo Co", null, new AbortController().signal, fetcher);
+    assert.equal(asked.length, 1);
+    assert.ok(asked[0].includes("company=Solo+Co"));
+    assert.ok(!asked[0].includes("career_url="));
+    assert.ok(evidence?.url);
   });
 
   test("a well-formed answer is cached, so repeats cost the backend nothing", async () => {
