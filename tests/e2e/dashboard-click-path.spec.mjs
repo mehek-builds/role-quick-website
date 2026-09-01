@@ -324,7 +324,7 @@ for (const item of CASES) {
     assert.equal(await control.count(), 1, `${item.name} must resolve to exactly one control on Home`);
     await control.waitFor({ state: "visible", timeout: 10_000 });
     await control.click();
-    await page.waitForURL(`${ORIGIN}${item.url}`, { timeout: 15_000 });
+    await page.waitForURL(`${ORIGIN}${item.url}`, { timeout: 15_000, waitUntil: "domcontentloaded" });
 
     /* The whole reason this file exists. If the sentinel is gone the browser did a full document
        load, which is the code path that has always passed and the one students never take. */

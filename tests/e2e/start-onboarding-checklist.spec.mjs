@@ -937,7 +937,7 @@ test("criteria 5-6: the last screen confirms setup is over, then names the first
     await cta.click();
 
     /* The transition into the main product, which is the other half of criterion 6. */
-    await page.waitForURL(/\/dashboard$/, { timeout: 20000 });
+    await page.waitForURL(/\/dashboard$/, { timeout: 20000, waitUntil: "domcontentloaded" });
     assert.equal(completePosts, 1, "finishing setup must complete onboarding exactly once");
   } catch (reason) {
     await captureFailure("last-screen");
@@ -1123,7 +1123,7 @@ test("finishing setup again does not revoke a consent the account already holds"
 
     const before = completeBodies.length;
     await page.getByRole("button", { name: "See my jobs" }).click();
-    await page.waitForURL(/\/dashboard/, { timeout: 15000 });
+    await page.waitForURL(/\/dashboard/, { timeout: 15000, waitUntil: "domcontentloaded" });
 
     const body = completeBodies[before];
     assert.ok(body, "setup must have posted");
@@ -1166,7 +1166,7 @@ test("an API that never reported the columns is never told to turn them off", as
 
     const before = completeBodies.length;
     await page.getByRole("button", { name: "See my jobs" }).click();
-    await page.waitForURL(/\/dashboard/, { timeout: 15000 });
+    await page.waitForURL(/\/dashboard/, { timeout: 15000, waitUntil: "domcontentloaded" });
 
     const body = completeBodies[before];
     assert.ok(body, "setup must have posted");

@@ -2196,9 +2196,9 @@ test("Outreach save ownership survives route remounts without overlap or stale r
   });
   const leaveAndReturn = async () => {
     await page.getByRole("link", { name: "Home", exact: true }).click();
-    await page.waitForURL(`${ORIGIN}/dashboard`);
+    await page.waitForURL(`${ORIGIN}/dashboard`, { waitUntil: "domcontentloaded" });
     await page.getByRole("link", { name: "Outreach", exact: true }).click();
-    await page.waitForURL(`${ORIGIN}/dashboard/outreach`);
+    await page.waitForURL(`${ORIGIN}/dashboard/outreach`, { waitUntil: "domcontentloaded" });
   };
   try {
     await page.goto(`${ORIGIN}/dashboard/outreach`, { waitUntil: "domcontentloaded" });
@@ -3995,7 +3995,7 @@ test("a delayed entitlement denial cannot outlive its initiating route", async (
     await heldDenial.started;
 
     await page.locator('aside a[href="/dashboard/network"]').click();
-    await page.waitForURL(`${ORIGIN}/dashboard/network`);
+    await page.waitForURL(`${ORIGIN}/dashboard/network`, { waitUntil: "domcontentloaded" });
     await page.getByRole("heading", { name: "Network", exact: true }).waitFor({ state: "visible" });
 
     const denialResponse = page.waitForResponse((response) => (
@@ -4286,9 +4286,9 @@ test("Resume upload ownership and its parsed profile survive Documents tab and r
     await capturePass(page, "resume-held-upload-tab-remount");
 
     await page.getByRole("link", { name: "Home", exact: true }).click();
-    await page.waitForURL(`${ORIGIN}/dashboard`);
+    await page.waitForURL(`${ORIGIN}/dashboard`, { waitUntil: "domcontentloaded" });
     await page.getByRole("link", { name: "Documents", exact: true }).click();
-    await page.waitForURL(/\/dashboard\/documents/);
+    await page.waitForURL(/\/dashboard\/documents/, { waitUntil: "domcontentloaded" });
     await page.getByText("new-resume.pdf", { exact: true }).waitFor({ state: "visible" });
     const routeRemountedUploadButton = page.locator("button").filter({ hasText: /^Reading\.\.\.$/ }).first();
     await routeRemountedUploadButton.waitFor({ state: "visible" });
