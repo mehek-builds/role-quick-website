@@ -611,6 +611,28 @@ test.after(async () => {
 
 const LEDGER = 'section[aria-labelledby="application-ledger-heading"]';
 
+/* EVERY waitForURL IN THIS FILE PASSES waitUntil, AND HAS TO.
+ *
+ * page.waitForURL defaults to waitUntil: "load", so without it the call waits for the URL to match
+ * AND for the document's load event. Every navigation in this file is deliberately only taken to
+ * "domcontentloaded" - openTracker below, and the three direct gotos - so the load event is a thing
+ * the spec never waited for and never needed. Asking waitForURL for it silently reintroduced that
+ * wait after the click, against a 10s budget.
+ *
+ * That is a race the suite loses only when the server is cold. It failed on main at 38ad9f11 in
+ * exactly the shape this predicts: "a needs_attention row opens in place" - the FIRST test in the
+ * file, so the one paying for route compilation and a cold chunk fetch - timed out at
+ * `page.waitForURL: Timeout 10000ms exceeded / waiting for navigation until "load"` after 11.6s,
+ * while all four tests behind it passed in about a second each on the warmed server. The same tree
+ * had passed on the PR run twelve minutes earlier, which is what a cold-start race looks like from
+ * the outside: identical code, opposite results.
+ *
+ * These are same-document router pushes that add a query string, so the assertion the tests
+ * actually make is about the ADDRESS, and DOMContentLoaded has long since fired by the time one
+ * happens. Matching the navigations' own lifecycle keeps the wait on the URL, which is the thing
+ * being asserted, instead of on a lifecycle event that is incidental to it.
+ */
+
 /** Land on the Tracker with the sparse fixture loaded and every row drawn. */
 async function openTracker() {
   pageErrors = [];
@@ -632,7 +654,7 @@ for (const item of CASES) {
       url.pathname === "/dashboard/applications"
       && url.searchParams.get("application") === item.packet.id
       && url.searchParams.get("intent") === "apply"
-    ), { timeout: 10_000 });
+    ), { timeout: 10_000, waitUntil: "domcontentloaded" });
 
     /* THE EJECTION CHECK. The report was that the browser left the product entirely on this click,
        so the address is asserted before anything about what rendered. */
@@ -811,19 +833,19 @@ browserTest("fresh server state replaces an immediately opened stale row", async
 browserTest("browser Back returns from an application to the ledger and Forward restores it", async () => {
   await openTracker();
   await page.locator(`${LEDGER} button[aria-pressed]:visible`).filter({ hasText: READY.job_context.role }).click();
-  await page.waitForURL((url) => url.searchParams.get("application") === READY.id, { timeout: 10_000 });
+  await page.waitForURL((url) => url.searchParams.get("application") === READY.id, { timeout: 10_000, waitUntil: "domcontentloaded" });
   await page.goBack();
-  await page.waitForURL((url) => url.pathname === "/dashboard/applications" && !url.searchParams.has("application"), { timeout: 10_000 });
+  await page.waitForURL((url) => url.pathname === "/dashboard/applications" && !url.searchParams.has("application"), { timeout: 10_000, waitUntil: "domcontentloaded" });
   await page.getByRole("heading", { name: "Your applications", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
   await page.goForward();
-  await page.waitForURL((url) => url.searchParams.get("application") === READY.id, { timeout: 10_000 });
+  await page.waitForURL((url) => url.searchParams.get("application") === READY.id, { timeout: 10_000, waitUntil: "domcontentloaded" });
   await page.getByRole("button", { name: "Review and send", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
 });
 
 browserTest("closing one application and immediately opening another keeps the URL and workspace together", async () => {
   await openTracker();
   await page.locator(`${LEDGER} button[aria-pressed]:visible`).filter({ hasText: NEEDS_YOU.job_context.role }).click();
-  await page.waitForURL((url) => url.searchParams.get("application") === NEEDS_YOU.id, { timeout: 10_000 });
+  await page.waitForURL((url) => url.searchParams.get("application") === NEEDS_YOU.id, { timeout: 10_000, waitUntil: "domcontentloaded" });
   await page.getByRole("heading", { name: NEEDS_YOU.job_context.role, exact: true }).first().waitFor({ state: "visible", timeout: 10_000 });
 
   /* Production repro, Celerant after Truveta: the close paints the ledger synchronously, before its
@@ -838,7 +860,7 @@ browserTest("closing one application and immediately opening another keeps the U
   await page.waitForURL((url) => (
     url.searchParams.get("application") === READY.id
     && url.searchParams.get("intent") === "apply"
-  ), { timeout: 10_000 });
+  ), { timeout: 10_000, waitUntil: "domcontentloaded" });
   await page.getByRole("button", { name: "Review and send", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
   assert.equal(new URL(page.url()).searchParams.get("application"), READY.id);
   assert.equal(await page.getByRole("heading", { name: NEEDS_YOU.job_context.role, exact: true }).count(), 0, "the prior application's identity survived under the new URL");
@@ -849,18 +871,18 @@ browserTest("a failed canonical Back load never leaves the prior application's c
   try {
     await openTracker();
     await page.locator(`${LEDGER} button[aria-pressed]:visible`).filter({ hasText: CANONICAL_A.role }).click();
-    await page.waitForURL((url) => url.searchParams.get("application") === CANONICAL_A.id, { timeout: 10_000 });
+    await page.waitForURL((url) => url.searchParams.get("application") === CANONICAL_A.id, { timeout: 10_000, waitUntil: "domcontentloaded" });
     await page.getByRole("button", { name: "Open and fill application", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     assert.equal(await page.getByRole("button", { name: /All applications/ }).count(), 1, "a canonical detail must not repeat the page-level application escape");
 
     await page.getByRole("button", { name: "Switch applications", exact: true }).click();
     await page.locator(`${LEDGER} button[aria-pressed]:visible`).filter({ hasText: CANONICAL_B.role }).click();
-    await page.waitForURL((url) => url.searchParams.get("application") === CANONICAL_B.id, { timeout: 10_000 });
+    await page.waitForURL((url) => url.searchParams.get("application") === CANONICAL_B.id, { timeout: 10_000, waitUntil: "domcontentloaded" });
     await page.getByRole("heading", { name: CANONICAL_B.role, exact: true }).first().waitFor({ state: "visible", timeout: 10_000 });
 
     failApplicationHistory = true;
     await page.goBack();
-    await page.waitForURL((url) => url.searchParams.get("application") === CANONICAL_A.id, { timeout: 10_000 });
+    await page.waitForURL((url) => url.searchParams.get("application") === CANONICAL_A.id, { timeout: 10_000, waitUntil: "domcontentloaded" });
     await page.getByRole("button", { name: "Open and fill application", exact: true }).waitFor({ state: "hidden", timeout: 10_000 });
     assert.equal(await page.getByRole("button", { name: "Tailor resume", exact: true }).count(), 0, "the previous canonical application kept an active Tailor control after the route changed");
     /* waitFor hidden, not an instant count. The defect this case exists to catch is B's identity
@@ -872,7 +894,7 @@ browserTest("a failed canonical Back load never leaves the prior application's c
 
     failApplicationHistory = false;
     await page.goForward();
-    await page.waitForURL((url) => url.searchParams.get("application") === CANONICAL_B.id, { timeout: 10_000 });
+    await page.waitForURL((url) => url.searchParams.get("application") === CANONICAL_B.id, { timeout: 10_000, waitUntil: "domcontentloaded" });
     await page.getByRole("button", { name: "Open and fill application", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
   } finally {
     failApplicationHistory = false;
@@ -934,7 +956,7 @@ browserTest("a ?job= link carrying an application id opens the application, and 
     !url.searchParams.has("job")
     && url.searchParams.get("application") === NEEDS_YOU.id
     && url.searchParams.get("intent") === "apply"
-  ), { timeout: 10_000 });
+  ), { timeout: 10_000, waitUntil: "domcontentloaded" });
 
   const alerts = (await page.locator('[role="alert"]').allInnerTexts()).filter((text) => text.trim());
   assert.deepEqual(alerts, [], `the page contradicted itself: it opened the application and reported a failure. ${JSON.stringify(alerts)}`);
@@ -973,7 +995,7 @@ browserTest("the switcher still moves between the rows after each has been opene
     if (await switchButton.isVisible().catch(() => false)) await switchButton.click();
     const row = page.locator(`${LEDGER} button[aria-pressed]:visible`).filter({ hasText: item.job_context.role });
     await row.click();
-    await page.waitForURL((url) => url.searchParams.get("application") === item.id && url.searchParams.get("intent") === "apply", { timeout: 10_000 });
+    await page.waitForURL((url) => url.searchParams.get("application") === item.id && url.searchParams.get("intent") === "apply", { timeout: 10_000, waitUntil: "domcontentloaded" });
     assert.equal(new URL(page.url()).pathname, "/dashboard/applications");
     const selectedHeading = page.getByRole("heading", { name: item.job_context.role, exact: true }).first();
     await selectedHeading.waitFor({ state: "visible", timeout: 10_000 });
