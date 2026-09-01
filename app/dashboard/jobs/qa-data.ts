@@ -121,6 +121,34 @@ export function qaJobsPage(): JobsPage {
         salary_interval: "hour",
       },
       {
+        /* ASSISTED TIER, and the only reason it sits high enough to be above the fold: Litos fills
+           this posting but cannot send it, because the employer gates the send behind a human check
+           Litos does not complete. submit_mode='assisted' draws the "Litos fills, you send" badge,
+           which no other fixture row exercises and the live board can only show once the backend is
+           surfacing assisted jobs to an onboarding-completed account. */
+        id: "qa-7",
+        company_name: "Utility",
+        title: "Platform Engineer",
+        location: "London, United Kingdom",
+        department: "Engineering",
+        employment_type: "Full-time",
+        description: "",
+        apply_url: "https://ats.rippling.com/utility/jobs/7/apply",
+        posting_url: "https://ats.rippling.com/utility/jobs/7",
+        remote: false,
+        posted_at: daysAgo(1),
+        first_seen_at: daysAgo(1),
+        ats_name: "rippling",
+        submit_mode: "assisted",
+        career_url: "https://utility.example/careers",
+        preference_score: 84,
+        preference_reasons: ["Platform Engineer", "software engineering"],
+        salary_min: 95000,
+        salary_max: 130000,
+        salary_currency: "GBP",
+        salary_interval: "year",
+      },
+      {
         id: "qa-4",
         company_name: "Vercel",
         title: "Developer Experience Engineer",
