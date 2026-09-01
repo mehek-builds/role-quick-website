@@ -346,4 +346,15 @@ describe("the route uses the evidence", () => {
     assert.match(source, /content-length/);
     assert.match(source, /reader\.cancel\(\)/);
   });
+
+  test("a DIB-only favicon is served as-is, never dropped for a monogram", () => {
+    /* Half of real-world .ico files hold raw bitmaps with no embedded PNG, and
+       browsers draw them in an <img> just fine. Dropping them turned employers
+       whose only first-party mark is such a favicon (Gensyn, West Cancer
+       Center, FirstSteps for Kids, measured 2026-09-01) into monograms while
+       their verified evidence sat unused. The embedded PNG is still preferred
+       when it exists; the container is the fallback, not the first choice. */
+    assert.match(source, /const inner = pngInsideIco\(raw\);\s*if \(inner\) \{/);
+    assert.doesNotMatch(source, /if \(!inner\) return null/);
+  });
 });
