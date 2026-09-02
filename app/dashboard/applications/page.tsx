@@ -659,15 +659,39 @@ function TrackerChipRemove({ packet, pending, confirming, onAsk, onCancel, onCon
     );
   }
   return (
+    /* THE TARGET IS 44px AND THE MARK IS 24px, deliberately not the same box.
+     *
+     * 24 satisfies WCAG 2.2 AA (2.5.8 Target Size Minimum) and misses the AAA and Apple-HIG figure
+     * of 44, which is the one that matters to a thumb. Drawing a 44px circle on a chip that is only
+     * about 173px wide would make the dismiss control compete with the role for the eye, so the
+     * BUTTON is 44 and transparent and the circle inside it stays 24 and exactly where it was.
+     *
+     * THE OFFSETS ARE LOAD-BEARING, and the geometry is what keeps this from stealing taps. The
+     * button is anchored `-right-1 -top-1` with its mark pinned to its own top-right corner, so the
+     * visible circle lands on the identical pixels as before while the target grows INWARD, over
+     * the chip's own top-right corner, rather than outward over its neighbours.
+     *
+     *   right: it overhangs 4px into an 8px `gap-2`, stopping 4px short of the next chip. A target
+     *          centred on the mark instead would have needed 22px and eaten 14px of the neighbour,
+     *          so tapping the next chip's left edge would open a remove prompt for the wrong one.
+     *   top:   it overhangs 4px into the strip's own 10px `py-2.5`, so it neither clips nor gives
+     *          the horizontally-scrolling strip a vertical scrollbar.
+     *
+     * The inward 40x40 does overlap where the role text truncates, and the confirm step is what
+     * makes that trade acceptable: a mistap costs one tap to dismiss, while a target too small to
+     * hit costs the ability to remove anything at all. That is the failure being fixed. */
     <button
       type="button"
       onClick={onAsk}
       aria-label={`Remove ${subject} from your tracker`}
-      /* -top-1 -right-1 so the touch target overhangs the chip's corner instead of eating into the
-         text beside it, which is already truncating at this width. */
-      className="absolute -right-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-surface text-[13px] leading-none text-muted hover:text-ink"
+      className="group/remove absolute -right-1 -top-1 flex h-11 w-11 items-start justify-end"
     >
-      <span aria-hidden="true">&times;</span>
+      <span
+        aria-hidden="true"
+        className="flex h-6 w-6 items-center justify-center rounded-full border border-border bg-surface text-[13px] leading-none text-muted group-hover/remove:text-ink group-focus-visible/remove:outline group-focus-visible/remove:outline-2 group-focus-visible/remove:outline-offset-2 group-focus-visible/remove:outline-brand"
+      >
+        &times;
+      </span>
     </button>
   );
 }
@@ -5525,7 +5549,14 @@ function Applications() {
                     data-application-row-id={packet.id}
                     onClick={() => openApplication(packet)}
                     aria-pressed={packet.id === selectedApplicationRowId}
-                    className={`flex min-h-11 max-w-[15rem] shrink-0 flex-col justify-center rounded-inner border px-3 py-2 text-left ${packet.id === selectedApplicationRowId ? "border-brand bg-brand-soft" : "border-border"}`}
+                    /* min-w-[9rem] BOUNDS THE REMOVE TARGET, and is not decoration. The dismiss
+                       control reaches a FIXED 40px inward from the chip's right edge, while this
+                       chip is sized by its content and `max-w` is a ceiling with no floor. A short
+                       role ("PM") would size a chip near 100px, where that fixed reach is most of
+                       it and tapping the right-hand side stops opening the application. A floor of
+                       144px keeps the target under a third of any chip. It also makes the strip
+                       read as a row of cards rather than of ragged offcuts. */
+                    className={`flex min-h-11 min-w-[9rem] max-w-[15rem] shrink-0 flex-col justify-center rounded-inner border px-3 py-2 text-left ${packet.id === selectedApplicationRowId ? "border-brand bg-brand-soft" : "border-border"}`}
                   >
                     <span className={`truncate text-[13px] font-medium ${packet.id === selectedApplicationRowId ? "text-brand-ink" : "text-ink"}`}>{packet.job_context.role || "Role"}</span>
                     {/* Same pairing as the desktop row, so a company is recognised by the same mark
