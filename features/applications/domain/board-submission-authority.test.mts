@@ -116,3 +116,79 @@ test("Board rejects missing and mixed passive authority revisions", () => {
     cards: [exact, mixed],
   }, [exact, mixed]), false);
 });
+
+/* The granularity cases. A card the server could not publish an envelope for is unreviewable on its
+   own; it is not evidence that the whole snapshot is untrustworthy. The reachable producer is the
+   boundary-authorized hold every managed submission passes through, which the envelope builder
+   refuses, and which the runner dying inside its window makes permanent. */
+const bareCard = (): BoardCard => ({ ...card(undefined), id: otherPacketId });
+
+const collection = (cards: readonly BoardCard[]) => ({
+  schema_version: "submission-authority-v1",
+  submission_authority_revision: "4",
+  build_revision: "deploy-sha",
+  cards,
+});
+
+test("One unpublishable card is one card needing review, not a board that refuses to load", () => {
+  const healthy = card(confirmedProjection());
+  const bare = bareCard();
+  const cards = [healthy, bare];
+  assert.equal(boardSubmissionAuthorityCollectionIsComplete(collection(cards), cards), true);
+
+  const reviewed = publicBoardCard(bare);
+  assert.equal(reviewed.authorityNeedsReview, true);
+  assert.equal(reviewed.submission_status, "needs_attention");
+  assert.equal(reviewed.stage, "saved");
+  assert.equal(boardCardRequiresSubmissionReview(reviewed), true);
+
+  /* The neighbour is untouched, which is the entire point of moving the granularity. */
+  const neighbour = publicBoardCard(healthy);
+  assert.equal(neighbour.authorityNeedsReview, false);
+  assert.equal(neighbour.submission_status, "submitted");
+  assert.equal(neighbour.stage, "applied");
+});
+
+test("The envelope-less card carries the explicit repair_required projection, never a confirmed one", () => {
+  const reviewed = publicBoardCard(bareCard());
+  assert.deepEqual(reviewed.submission_projection, {
+    state: "repair_required",
+    packet_id: otherPacketId,
+    reasons: ["canonical_projection_incomplete"],
+  });
+});
+
+test("An envelope bound to another revision is corruption and still rejects the collection", () => {
+  const healthy = card(confirmedProjection());
+  const stale = {
+    ...card(confirmedProjection()),
+    id: otherPacketId,
+    submission_authority: {
+      ...(card(confirmedProjection()).submission_authority as Record<string, unknown>),
+      revision: "3",
+    },
+  } as BoardCard;
+  const cards = [healthy, stale];
+  assert.equal(boardSubmissionAuthorityCollectionIsComplete(collection(cards), cards), false);
+});
+
+test("An envelope bound to another card is corruption and still rejects the collection", () => {
+  const healthy = card(confirmedProjection());
+  /* Same envelope, re-hung on a different card: it names packetId while riding otherPacketId. */
+  const misbound = { ...card(confirmedProjection()), id: otherPacketId } as BoardCard;
+  const cards = [healthy, misbound];
+  assert.equal(boardSubmissionAuthorityCollectionIsComplete(collection(cards), cards), false);
+});
+
+test("A payload with no collection identity is rejected even when every card is envelope-less", () => {
+  const cards = [bareCard()];
+  assert.equal(boardSubmissionAuthorityCollectionIsComplete({ cards }, cards), false);
+  assert.equal(boardSubmissionAuthorityCollectionIsComplete({
+    submission_authority_revision: "4",
+    cards,
+  }, cards), false);
+  assert.equal(boardSubmissionAuthorityCollectionIsComplete({
+    schema_version: "submission-authority-v1",
+    cards,
+  }, cards), false);
+});
