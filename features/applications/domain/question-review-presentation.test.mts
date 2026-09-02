@@ -1,12 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  answerNamesNoOfferedOption,
   answerWithExactOptionToggled,
   exactQuestionOption,
   exactSelectedQuestionOptions,
   optionalQuestionNeedsDecision,
   questionReviewPresentation,
   requiredQuestionReviewRoute,
+  unansweredRequiredQuestionCount,
 } from "./question-review-presentation.ts";
 
 const question = (overrides: Record<string, unknown> = {}) => ({
@@ -475,4 +477,57 @@ test("a genuinely re-opened question stays fail-closed: the draft cannot satisfy
     { kind: "answer", questionId: "degree-classification" },
     "a blank required answer keeps the answers screen even while a draft is present",
   );
+});
+
+
+/* ── An off-list answer is unanswered ──────────────────────────────────────────────────────────
+   Measured on the Mytos Lever packet (application 55de7c9e, 2026-08-28): a required closed list
+   holding "3.89/4.00 (US 4.0 scale)", which is none of the nine classifications it offers. The
+   controls already showed the placeholder for it; the count, the route and the send gate all read
+   it as answered because the string is not empty. */
+
+const offListDegree = () => question({
+  id: "degree-classification",
+  question: "what was your degree classification? ✱",
+  answer: "3.89/4.00 (US 4.0 scale)",
+  required: true,
+  portal_input_type: "select-one",
+  options: MYTOS_DEGREE_OPTIONS,
+});
+
+test("an answer naming none of the offered options is off-list, and one naming any of them is not", () => {
+  assert.equal(answerNamesNoOfferedOption(offListDegree()), true);
+  // The fill path's own equivalence: edge whitespace and letter case still name the option.
+  assert.equal(answerNamesNoOfferedOption(question({ answer: " gpa 3.5-3.8 ", portal_input_type: "select-one", options: MYTOS_DEGREE_OPTIONS })), false);
+  // A control that takes several reads the whole stored string, never a comma split.
+  const cities = ["New York, NY", "Chicago", "Washington, D.C."];
+  assert.equal(answerNamesNoOfferedOption(question({ answer: "New York, NY, Chicago", portal_input_type: "select-multiple", options: cities })), false);
+  assert.equal(answerNamesNoOfferedOption(question({ answer: "Seattle", portal_input_type: "select-multiple", options: cities })), true);
+});
+
+test("membership only decides where the employer actually offers a fixed list", () => {
+  // Nothing to be off, so nothing is reported: the emptiness test beside this one owns a blank.
+  assert.equal(answerNamesNoOfferedOption(question({ answer: "   ", portal_input_type: "select-one", options: MYTOS_DEGREE_OPTIONS })), false);
+  // A textarea carrying suggestions accepts anything typed into it.
+  assert.equal(answerNamesNoOfferedOption(question({ answer: "anything at all", portal_input_type: "textarea", options: MYTOS_DEGREE_OPTIONS })), false);
+  // options_complete: false is discovery saying it kept fewer choices than the employer offers, so
+  // an answer outside what it kept may still be on the real list.
+  assert.equal(answerNamesNoOfferedOption(question({ answer: "3.89/4.00 (US 4.0 scale)", portal_input_type: "select-one", options: MYTOS_DEGREE_OPTIONS, options_complete: false })), false);
+  assert.equal(answerNamesNoOfferedOption(question({ answer: "3.89/4.00 (US 4.0 scale)", portal_input_type: "select-one", options: [] })), false);
+});
+
+test("the count and the route agree that an off-list required answer is still waiting on her", () => {
+  const offList = offListDegree();
+  assert.equal(unansweredRequiredQuestionCount([offList]), 1, "a packet with this on it is not ready to send");
+  assert.deepEqual(
+    requiredQuestionReviewRoute([offList]),
+    { kind: "answer", questionId: "degree-classification" },
+    "the send gate calls it missing, so the route has to reach the question it means",
+  );
+});
+
+test("an optional off-list answer is hers to leave alone", () => {
+  const optional = question({ ...offListDegree(), required: false, answer_state: "answered" });
+  assert.equal(unansweredRequiredQuestionCount([optional]), 0);
+  assert.deepEqual(requiredQuestionReviewRoute([optional]), { kind: "continue" });
 });

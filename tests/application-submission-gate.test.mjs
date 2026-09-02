@@ -113,6 +113,14 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   assert.match(dashboard, /if \(!packetAuditStillGuardsSend\) \{[\s\S]{0,180}setPollError\(null\);[\s\S]{0,80}setNotice\(null\);/);
   assert.match(dashboard, /disabled=\{finalApprovalBlocked\}/);
   assert.match(dashboard, /const requiredAnswerMissing = review\.questions\.some/);
+  /* An off-list answer is not empty, so emptiness alone left Send ENABLED over a value the
+     employer's form cannot accept. Measured on the Mytos Lever packet: a required closed list
+     holding "3.89/4.00 (US 4.0 scale)", which is none of its nine offered classifications. */
+  assert.match(
+    dashboard,
+    /const requiredAnswerMissing = review\.questions\.some\(\(question\) => question\.required[\s\S]{0,160}answerNamesNoOfferedOption\(question\)/,
+    "the final send gate must treat a required closed answer that names no offered option as missing",
+  );
   assert.match(dashboard, /const sensitiveQuestionPresent = review\.questions\.some/);
   assert.match(dashboard, /requiresSensitiveQuestionReview\(question\.question, question\.answer\)/);
   assert.match(dashboard, /return !\(answer \?\? ""\)\.trim\(\)/);

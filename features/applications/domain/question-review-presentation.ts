@@ -123,6 +123,52 @@ export function exactQuestionOption(
   return usableQuestionOptions(options).find((option) => option.toLowerCase() === target) ?? null;
 }
 
+/**
+ * A closed control whose stored answer names none of the options the employer offers.
+ *
+ * AN OFF-LIST ANSWER IS UNANSWERED, AND UNTIL NOW ONLY THE CONTROLS SAID SO. The question card
+ * already resolves a stored answer through the fill path's own equivalence and falls back to the
+ * placeholder when it names nothing (tests/off-list-answer-reads-as-unanswered.test.mjs). The two
+ * places that decide whether a packet may GO still tested emptiness alone, and an off-list value is
+ * not empty: it read as answered, so the count said nothing was waiting, the route said continue,
+ * and Send rendered enabled over a value the employer's form cannot accept.
+ *
+ * MEASURED on the Mytos Lever packet (application 55de7c9e, 2026-08-28): "what was your degree
+ * classification?", a required closed list offering First-Class Honours through GPA 3.9+ and Other,
+ * carrying the stored "3.89/4.00 (US 4.0 scale)". Three of that form's four closed questions named
+ * a real option; this one named none, and the packet still sat at ready_for_final_approval with
+ * Send live. The send would have been spent on an application the portal refuses.
+ *
+ * The equivalence is the one the rest of this file already uses, not a fourth one: `exactQuestionOption`
+ * for a single choice, `exactSelectedQuestionOptions` for a control that takes several. Two
+ * conditions keep it from blocking a packet that is fine:
+ *
+ *   - the control has to be a CLOSED one. A textarea that happens to carry suggestions accepts
+ *     anything the applicant types, and membership means nothing there;
+ *   - the option list has to be COMPLETE. `options_complete: false` is discovery saying it saw more
+ *     choices than it could keep, so an answer outside what it kept may still be on the employer's
+ *     list, and calling it off-list would be this file inventing a fact.
+ *
+ * A blank answer returns false rather than true. It IS unanswered, but every caller tests emptiness
+ * beside this, and reporting it twice would let one of them drift into calling a blank answer
+ * off-list.
+ */
+export function answerNamesNoOfferedOption(
+  question: Pick<ApplicationQuestion, "answer" | "options" | "options_complete" | "optionsComplete" | "portal_input_type">,
+): boolean {
+  if (!question.answer.trim()) return false;
+  if (!questionOptionsAreComplete(question)) return false;
+  const options = usableQuestionOptions(question.options);
+  if (options.length === 0) return false;
+  if (!CLOSED_QUESTION_CONTROL.test(normalizedControlType(question.portal_input_type))) return false;
+  return questionAcceptsMultipleOptions(question)
+    /* Null is "no single reading of this answer", which covers an answer no combination of options
+       produces AND one that several produce. Both are values this control could not be left
+       holding, and the direct-answer guard above the save path already refuses on the same test. */
+    ? exactSelectedQuestionOptions(question.answer, options) === null
+    : exactQuestionOption(question.answer, options) === null;
+}
+
 export function answerWithExactOptionToggled(
   answer: string,
   options: readonly string[] | null | undefined,
@@ -351,7 +397,7 @@ export function unansweredRequiredQuestionCount(
 ): number {
   const presentation = questionReviewPresentation(questions, serverBlockers);
   const blank = presentation.editableQuestions.filter(
-    (question) => question.required && !question.answer.trim(),
+    (question) => question.required && (!question.answer.trim() || answerNamesNoOfferedOption(question)),
   ).length;
   const unreadable = presentation.metadataBlockers.filter((blocker) => blocker.required).length;
   return blank + unreadable;
@@ -362,8 +408,11 @@ export function requiredQuestionReviewRoute(
   serverBlockers: readonly ApplicationQuestionMetadataBlocker[] = [],
 ): RequiredQuestionReviewRoute {
   const presentation = questionReviewPresentation(questions, serverBlockers);
+  /* An off-list answer is routed to exactly like a blank one, and it has to be: the send gate
+     counts it as missing, so a route that stepped over it would print "required answer missing"
+     over a screen with no way to reach the question it means. */
   const firstMissing = presentation.editableQuestions.find(
-    (question) => question.required && !question.answer.trim(),
+    (question) => question.required && (!question.answer.trim() || answerNamesNoOfferedOption(question)),
   );
   if (firstMissing) return { kind: "answer", questionId: firstMissing.id };
   if (presentation.metadataBlockers.some((blocker) => blocker.required)) {
