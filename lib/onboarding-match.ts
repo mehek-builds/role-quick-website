@@ -40,6 +40,17 @@ const WEEK_HOURS = 24 * 7;
  * to the quieter framing. */
 export const STRONG_MATCH_SCORE = 70;
 
+/* The floor, asked as a question, so the two places that consult it cannot drift.
+ *
+ * A null score is NOT strong, and that is the same answer for both callers even though they want
+ * it for different reasons: pickOnboardingMatch is choosing which row to prefer, matchHeadline is
+ * deciding whether the screen may claim a fit. The scorer returns null for postings listing too
+ * few real requirements, which is a fact about the posting's text - never a reason to skip a row
+ * (see pickOnboardingMatch, which still shows it), and never evidence for an absolute claim. */
+export function isStrongMatch(job: Pick<MonitoredJob, "match_score">): boolean {
+  return (job.match_score ?? 0) >= STRONG_MATCH_SCORE;
+}
+
 /**
  * Hours since Litos first saw the posting, or null if the timestamp cannot be read.
  *
@@ -93,7 +104,7 @@ export function pickOnboardingMatch(
   for (const rung of ["today", "this_week", "open"] as const) {
     const onRung = usable.filter((job) => freshnessOf(job, now) === rung);
     if (onRung.length === 0) continue;
-    const strong = onRung.find((job) => (job.match_score ?? 0) >= STRONG_MATCH_SCORE);
+    const strong = onRung.find(isStrongMatch);
     const job = strong ?? onRung[0];
     return { job, freshness: rung, hoursSinceSeen: hoursSinceSeen(job.first_seen_at, now), widened };
   }
@@ -135,7 +146,7 @@ export function matchHeadline(match: OnboardingMatch): string {
    * reason not to make an absolute claim about fit, because there is nothing here to stand behind.
    * The bottom rung is untouched: "the closest fit to what you asked for" is a statement about
    * rank within what the board returned, which is true by construction at any score. */
-  const earnedFitClaim = (match.job.match_score ?? 0) >= STRONG_MATCH_SCORE;
+  const earnedFitClaim = isStrongMatch(match.job);
 
   if (match.freshness === "today") {
     return earnedFitClaim
