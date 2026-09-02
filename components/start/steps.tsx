@@ -46,7 +46,7 @@ import { Highlights, WelcomeNote } from "./Welcome";
 import { ErrorNote, PendingLabel } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
 import { JOB_TITLES } from "@/lib/job-titles";
-import { FIELDS, categoriesForFields, fieldsForCategories, focusPatch, focusSeed, inferResumeTargeting, titlesForFields, type SavedFocus } from "@/lib/onboarding-role-inference";
+import { FIELDS, categoriesForFields, fieldsForCategories, focusPatch, focusProblem, focusSeed, inferResumeTargeting, titlesForFields, type SavedFocus } from "@/lib/onboarding-role-inference";
 import { rankOnboardingJobs, type OnboardingJob } from "@/lib/onboarding-jobs";
 import { measureElapsed, resumeReadyTiming } from "@/lib/monotonic-timing";
 import { resumeUploadState } from "@/features/onboarding";
@@ -238,7 +238,6 @@ function FocusForm({
 
   /* The location answer, in the one form the rest of the screen asks about. Either half is a real
      answer to "where"; neither is the same as leaving it blank. */
-  const hasPlace = effectiveLocations.length > 0;
 
   /* Saved categories, plus the ones the chosen fields imply. Union, never replacement: the screen
      still has no category control, so it must not be able to remove a category the student cannot
@@ -292,6 +291,19 @@ function FocusForm({
   }
 
   async function save() {
+    /* Answered HERE rather than as standing red text on the screen, which is the whole fix: the
+       student is told what is missing in reply to pressing Continue, not accused of it on arrival.
+       Same shape as SponsorshipStep's countryEligibilityProblem. */
+    const problem = focusProblem({
+      categories: effectiveCategories,
+      titles: selectedTitles,
+      roleTypes,
+      locations: effectiveLocations,
+    });
+    if (problem) {
+      setError(problem);
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -621,21 +633,13 @@ function FocusForm({
         </div>
       </details>
 
-      {ready && effectiveCategories.length === 0 && (
-        <p role="status" className="mb-4 text-xs leading-5 text-warn">Choose at least one job category to continue.</p>
-      )}
-
-      {ready && !hasPlace && (
-        <p role="status" className="mb-4 text-xs leading-5 text-warn">Add at least one place. Pick &quot;{REMOTE_LOCATION}&quot; if you want to work from anywhere.</p>
-      )}
-
       <div className="flex items-center gap-3">
         {/* `!ready` is in here for a reason a browser found and no unit test would have.
             Deselecting every field hides the title list but does NOT clear `selectedTitles`, so a
             student who changed their mind about the field could press Continue and commit titles
             the screen had stopped drawing. Continue never commits anything invisible: while the
             offer is withheld, so is the button. */}
-        <PrimaryButton onClick={() => void save()} disabled={busy || !ready || selectedTitles.length === 0 || roleTypes.length === 0 || effectiveCategories.length === 0 || !hasPlace}>
+        <PrimaryButton onClick={() => void save()} disabled={busy || !ready}>
           {busy ? <PendingLabel onColor>Saving...</PendingLabel> : "Continue"}
         </PrimaryButton>
         <LaterLink onClick={onLater} />

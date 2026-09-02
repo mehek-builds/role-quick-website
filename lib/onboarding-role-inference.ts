@@ -387,3 +387,32 @@ export function focusPatch(saved: SavedFocus, selection: FocusSelection): Pick<T
     role_types: selection.roleTypes,
   };
 }
+
+/* WHAT IS STILL MISSING BEFORE THE ROLES SCREEN CAN BE SAVED, or null when nothing is.
+ *
+ * This exists because the screen used to answer the question in the wrong place and at the wrong
+ * time. Both halves were rendered as `warn`-coloured paragraphs gated only on the data being
+ * absent, so a student who had just arrived - and whose locations are ALWAYS empty on a new
+ * account, because nothing has had a chance to fill them - was told in red that they had left
+ * something out, before they had touched the screen. Continue was disabled at the same moment, so
+ * the first frame of the product read as a failed form.
+ *
+ * SponsorshipStep already had the honest shape of this (`countryEligibilityProblem`): let the
+ * button be pressable, and answer with the specific missing thing when it is pressed. That turns
+ * the same sentence from an accusation on arrival into a reply to an action, and it is why this
+ * returns the message rather than a boolean - the caller has nothing to add.
+ *
+ * Order is the order the screen reads in, so the message always names the highest thing on the
+ * page that is not yet answered rather than whichever check happened to run first. */
+export function focusProblem(input: {
+  categories: readonly string[];
+  titles: readonly string[];
+  roleTypes: readonly string[];
+  locations: readonly string[];
+}): string | null {
+  if (input.categories.length === 0) return "Choose at least one job category to continue.";
+  if (input.roleTypes.length === 0) return "Choose the stage you are looking for.";
+  if (input.titles.length === 0) return "Pick at least one job title.";
+  if (input.locations.length === 0) return 'Add at least one place. Pick "Remote" if you want to work from anywhere.';
+  return null;
+}
