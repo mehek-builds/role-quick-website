@@ -50,13 +50,29 @@ export type AuditedClauseRange = { start: number; end: number; verdict: "covered
  *  can be shown, since the validator below forbids highlight terms on an unscoreable clause). */
 export type AuditedDisplay = { terms: PacketAuditHighlightTerm[]; clauses: AuditedClauseRange[] };
 
+/**
+ * The audit's own verdict on itself: a complete, undegraded pass with nothing rejected.
+ *
+ * ONE COPY, because the two callers must not drift. `status: "passed"` is a compile-time claim in
+ * lib/api.ts and nothing on the wire enforces it, so every surface that is about to put an audit in
+ * front of an applicant has to ask this at runtime. validateAuditForDisplay asks it before it paints
+ * a single clause; the /start review screen asks it before it stores an audit the applicant will
+ * acknowledge. The backend asks the same question a third time at the send gate
+ * (packetAuditIsSubmissionReady), which is what makes a client miss a wasted press rather than a bad
+ * send - but a wasted press on the irreversible screen is still the wrong thing to show her.
+ */
+export function packetAuditPassedCleanly(auditValue: unknown): boolean {
+  return isRecord(auditValue)
+    && auditValue.version === PACKET_AUDIT_VERSION
+    && auditValue.status === "passed"
+    && auditValue.complete === true
+    && auditValue.degraded === false
+    && auditValue.rejectedCount === 0;
+}
+
 function validateAuditForDisplay(jdText: string, auditValue: unknown): AuditedDisplay | null {
-  if (!isRecord(auditValue)
-    || auditValue.version !== PACKET_AUDIT_VERSION
-    || auditValue.status !== "passed"
-    || auditValue.complete !== true
-    || auditValue.degraded !== false
-    || auditValue.rejectedCount !== 0
+  if (!packetAuditPassedCleanly(auditValue)
+    || !isRecord(auditValue)
     || !Array.isArray(auditValue.clauses)
     || auditValue.clauses.length === 0) return null;
 

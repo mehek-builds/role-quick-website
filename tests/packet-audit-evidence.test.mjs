@@ -356,8 +356,13 @@ test("unsupported or overlapping audit colors fail closed", async () => {
   assert.doesNotMatch(source, /role="alert"/);
   assert.match(source, /return <div className="whitespace-pre-line">\{jdText\}<\/div>/);
   assert.match(source, /return null/);
-  assert.match(domain, /auditValue\.status !== "passed"/);
-  assert.match(domain, /auditValue\.rejectedCount !== 0/);
+  /* The verdict checks moved into packetAuditPassedCleanly so the /start review screen could ask the
+     same question before it stores an audit for the applicant to acknowledge. Same checks, one copy,
+     and validateAuditForDisplay still refuses before it paints a clause. Behaviour is asserted
+     directly in features/applications/domain/packet-audit-display.test.mts. */
+  assert.match(domain, /if \(!packetAuditPassedCleanly\(auditValue\)/);
+  assert.match(domain, /auditValue\.status === "passed"/);
+  assert.match(domain, /auditValue\.rejectedCount === 0/);
   assert.match(domain, /isHighlightTone\(term\.tone\)/);
   assert.match(domain, /auditValue\.clauses\.length === 0/);
 });

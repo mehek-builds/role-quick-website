@@ -70,14 +70,15 @@ const POSTING_SCAN_RETRY_DELAY_MS = 700;
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 /* What this screen learned that the screens after it need: the full posting (the match feed's row
-   may not carry the description), the requirement match both panes were marked with, and the
-   applicant's name for the paper header. Passed up rather than re-fetched: the review screen is the
-   only screen that draws the posting and the paper, and it should not have to re-ask the network
-   for what this screen already has in hand. */
+   may not carry the description) and the requirement match its words were marked with. Passed up
+   rather than re-fetched: the review screen is the only screen that draws the posting, and it should
+   not have to re-ask the network for what this screen already has in hand.
+   The applicant's name used to ride along for the review screen's paper header. That screen now
+   draws the audited PDF, whose header comes out of the file itself, so the name had no reader left
+   and carrying it would have been a value passed between three components for nobody. */
 export type BuildContext = {
   posting: MonitoredJob;
   jdMatch: JdMatchResponse | null;
-  applicantName: string | null;
 };
 
 /* CONSECUTIVE QUALITY HOLDS THIS SITTING, across remounts.
@@ -121,16 +122,9 @@ export function BuildStep({
      the whole build after a scan failure costs nothing until the scan actually passes. */
   const [attempt, setAttempt] = useState(0);
   const [posting, setPosting] = useState<MonitoredJob>(match.job);
-  /* THE APPLICANT'S NAME, held here because ResumeSpec has no name field.
-   *
-   * That absence has produced the same bug four times: a resume surface renders `spec.school` in
-   * the top slot and the student reads their university where their name belongs. The build
-   * already loads identity as a precondition of generating at all, so the name is in hand - this
-   * keeps it rather than throwing it away and rendering a headless document. */
-  const [applicantName, setApplicantName] = useState<string | null>(null);
-  /* The requirement match both panes are coloured with: one request, one meaning per colour, the
-     same index driving the posting's marks and the paper's (via RequirementProvider). Null while
-     the build runs and after a failed fetch, in which case both panes render unmarked prose, which
+  /* The requirement match the posting's words are coloured with: one request, one meaning per
+     colour, carried to the review screen so the employer's text reads the same on both. Null while
+     the build runs and after a failed fetch, in which case the posting renders unmarked prose, which
      is the pre-ISSUE-047 state rather than a new failure mode. */
   const [jdMatch, setJdMatch] = useState<JdMatchResponse | null>(null);
   /* The offices this student asked for, out of the ones the employer listed. See
@@ -149,7 +143,6 @@ export function BuildStep({
         },
         loadIdentity: async () => {
           const identity = await api<ProfileIdentity>("/profile");
-          if (!cancelled) setApplicantName(identity.full_name ?? null);
           return { fullName: identity.full_name ?? null, resumeEmail: identity.resume_email ?? null };
         },
         generateResume: async (input) => {
@@ -471,7 +464,7 @@ export function BuildStep({
 
       <div className="mt-7 flex flex-wrap items-center gap-4">
         <PrimaryButton
-          onClick={() => result && onQuestions(result, { posting, jdMatch, applicantName })}
+          onClick={() => result && onQuestions(result, { posting, jdMatch })}
           disabled={building}
         >
           {/* The count is REAL or the button does not claim it. While building it says what is

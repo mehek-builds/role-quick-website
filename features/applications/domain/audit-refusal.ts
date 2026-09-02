@@ -102,6 +102,34 @@ export function withoutHistoricalPacketAuditStaleAttention<
 }
 
 /**
+ * Whether a refused packet audit is worth asking the server about again.
+ *
+ * KEYED ON `code`, NEVER ON THE STATUS ALONE, and the /start review screen is why this lives here
+ * rather than inline beside its one caller. Written there as `status !== 409` it got the single
+ * recoverable 409 exactly backwards: POST /applications/:id/packet-audit answers 409
+ * PACKET_AUDIT_STALE with the sentence "The saved application changed while it was being audited.
+ * Reload it and audit again." - a route asking in words to be called again, under a status the
+ * classifier had already written off. The terminal 409s are the ones carrying no code at all (a
+ * packet that is claimed, submitting or submitted, or a row with no review) and job_not_available.
+ * Everything else - a 5xx, a 429 from the hourly limiter, a 422 the packet build threw - can change
+ * on the next request.
+ *
+ * A retry control shown over a refusal that will answer identically forever is not a way forward,
+ * it is a broken button; and withholding one over a refusal that asks for it is the dead end this
+ * screen was fixed to remove. Both mistakes are one boolean, so the boolean is tested.
+ */
+export function packetAuditRefusalIsRetryable(reason: unknown): boolean {
+  if (typeof reason !== "object" || reason === null) return true;
+  const status = (reason as { status?: unknown }).status;
+  if (status !== 409) return true;
+  const data = (reason as { data?: unknown }).data;
+  const code = typeof data === "object" && data !== null && typeof (data as { code?: unknown }).code === "string"
+    ? (data as { code: string }).code
+    : null;
+  return code === "PACKET_AUDIT_STALE";
+}
+
+/**
  * The audit code on a failed send, or null when this is not an audit refusal.
  *
  * Reads the parsed body rather than the Error, because that is where the backend puts `code`, and

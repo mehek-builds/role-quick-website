@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   auditRefusalCode,
   historicalPacketAuditStaleMessage,
+  packetAuditRefusalIsRetryable,
   packetAuditReviewRecoveryCode,
   packetAuditReviewRecoveryRequired,
   withoutHistoricalPacketAuditStaleAttention,
@@ -120,4 +121,34 @@ test("historical compatibility is exact and preserves unrelated employer blocker
   assert.equal(historicalPacketAuditStaleMessage(new FakeApiError(forbidden, { code: "SENSITIVE_QUESTION" })), false);
   assert.equal(packetAuditReviewRecoveryRequired(new FakeApiError(forbidden, { code: "SENSITIVE_QUESTION" })), false);
   assert.equal(packetAuditReviewRecoveryRequired(new FakeApiError("same words", { code: "SENSITIVE_QUESTION" })), false);
+});
+
+/* THE RETRY BOOLEAN ON A REFUSED PACKET AUDIT.
+ *
+ * Both directions are a real failure the /start review screen has already shipped once: a retry
+ * control over a refusal that answers identically forever is a broken button, and no retry over the
+ * one 409 that asks for another call is a dead end with no way out. */
+test("a 409 carrying PACKET_AUDIT_STALE is the one the route asks to be retried", () => {
+  assert.equal(
+    packetAuditRefusalIsRetryable({ status: 409, data: { code: "PACKET_AUDIT_STALE" } }),
+    true,
+  );
+});
+
+test("a 409 with no code is terminal: the packet has moved past auditing", () => {
+  assert.equal(packetAuditRefusalIsRetryable({ status: 409, data: {} }), false);
+  assert.equal(packetAuditRefusalIsRetryable({ status: 409, data: null }), false);
+  assert.equal(packetAuditRefusalIsRetryable({ status: 409 }), false);
+});
+
+test("a 409 naming a different code stays terminal", () => {
+  assert.equal(packetAuditRefusalIsRetryable({ status: 409, data: { code: "job_not_available" } }), false);
+});
+
+test("everything that is not a 409 can change on the next request", () => {
+  assert.equal(packetAuditRefusalIsRetryable({ status: 500, data: {} }), true);
+  assert.equal(packetAuditRefusalIsRetryable({ status: 429, data: {} }), true);
+  assert.equal(packetAuditRefusalIsRetryable({ status: 422, data: { code: "PACKET_AUDIT_FAILED" } }), true);
+  assert.equal(packetAuditRefusalIsRetryable(new Error("network")), true);
+  assert.equal(packetAuditRefusalIsRetryable(null), true);
 });

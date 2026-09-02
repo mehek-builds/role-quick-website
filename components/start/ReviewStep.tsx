@@ -55,9 +55,10 @@
  *     which is what keeps a refused audit from being a dead end a second time.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ErrorNote, PendingLabel } from "@/components/app/ui";
-import { api, type MonitoredJob, type PacketAuditResponse, type ResumeSpec } from "@/lib/api";
+import { Button } from "@/components/app/Button";
+import { ApiError, api, type MonitoredJob, type PacketAuditResponse, type ResumeSpec } from "@/lib/api";
 import {
   acknowledgePacketEvidence,
   buildRequirementIndex,
@@ -65,6 +66,8 @@ import {
   educationDrift,
   educationDriftMessage,
   packetAuditAcknowledgementAccepted,
+  packetAuditPassedCleanly,
+  packetAuditRefusalIsRetryable,
   packetAuditResponseMatchesApplication,
   packetAuditReviewRecoveryRequired,
   packetQuestionsSnapshot,
@@ -102,20 +105,57 @@ type SubmitOutcome = { sent: boolean };
 /** Why the packet cannot be shown, and whether pressing again could change that. */
 type AuditBlock = { message: string; retryable: boolean };
 
-/* WHAT A FAILED AUDIT IS ALLOWED TO SAY, AND WHETHER IT OFFERS A RETRY.
+/** submitBodySchema's own limit on the server. Past it the send is a 400 with no code to recover on. */
+const MAX_SUBMITTED_QUESTIONS = 100;
+
+/* WHAT A FAILED AUDIT IS ALLOWED TO SAY.
  *
- * The server's own sentence is used wherever it has one, because it names the thing to fix. What is
- * decided here is only whether "check it again" is honest. A 409 on a packet that has moved past
- * auditing (it is already claimed, submitting, or submitted) will answer the same way forever, and a
- * button that cannot change the answer reads as a broken button rather than as a stop. */
+ * The retry half of the question is packetAuditRefusalIsRetryable's, in the domain module beside the
+ * other refusal-code rules, because it is a pure classification with two ways to be wrong and both
+ * of them ship as a broken screen.
+ *
+ * What is decided here is the sentence. The server's own is used wherever it is written for the
+ * applicant, because it names the thing to fix. PACKET_AUDIT_FAILED is the exception: that branch
+ * replies with whatever buildPacket threw, and an internal exception string is not something to put
+ * in front of a student on her first application. */
 function auditBlockFor(reason: unknown): AuditBlock {
-  const status = typeof reason === "object" && reason !== null
-    ? (reason as { status?: unknown }).status
-    : undefined;
-  const message = reason instanceof Error
-    ? reason.message
-    : "Litos could not check the exact packet it is about to send.";
-  return { message, retryable: status !== 409 };
+  const retryable = packetAuditRefusalIsRetryable(reason);
+  const data = reason instanceof ApiError ? reason.data : null;
+  const code = data && typeof data === "object" && typeof (data as { code?: unknown }).code === "string"
+    ? (data as { code: string }).code
+    : null;
+  if (code === "PACKET_AUDIT_FAILED") {
+    return { message: "Litos could not put this packet together to check it. Nothing has been sent.", retryable };
+  }
+  return {
+    message: reason instanceof Error ? reason.message : "Litos could not check the exact packet it is about to send.",
+    retryable,
+  };
+}
+
+/* WHY AN ABSENT QUESTION LIST IS A STOP AND NOT AN EMPTY ONE.
+ *
+ * `questions` is optional on the wire because this site and the backend deploy independently, and
+ * the obvious fallback is `?? []`. It is the wrong one HERE. The dashboard can fall back to the list
+ * it already holds; /start holds none, so `[]` would post the empty body this screen used to post -
+ * the merge strips every stored answer's provenance, refreshKnownQuestionAnswers blanks the ones
+ * nothing proves she supplied, questionsSha256 moves, and the send gate answers PACKET_AUDIT_STALE
+ * against the acknowledgement written seconds earlier. The recovery path then re-audits into the
+ * same absent field and the same refusal, so the old dead end would come back wearing a retry.
+ *
+ * The cap is the other half. submitBodySchema takes at most 100 questions and answers a bare 400
+ * past that, with no code for packetAuditReviewRecoveryRequired to act on - and it would land AFTER
+ * the acknowledgement. Both stop before anything is acknowledged, and both leave the save path. */
+function auditedQuestionsIssue(response: PacketAuditResponse): string | null {
+  if (!Array.isArray(response.questions)) {
+    return "Litos could not read this employer's questions back from the packet, so it will not send it. "
+      + "Save it and send it from your tracker.";
+  }
+  if (response.questions.length > MAX_SUBMITTED_QUESTIONS) {
+    return `This employer asks ${response.questions.length} questions, more than Litos can send in one go. `
+      + "Save it and send it from your tracker.";
+  }
+  return null;
 }
 
 export function ReviewStep({
@@ -137,8 +177,9 @@ export function ReviewStep({
   /** Read for the education drift guard below. The document itself is drawn from the audited PDF,
    *  not from this, so that what is approved is what the employer receives. */
   resumeSpec: ResumeSpec | null;
-  /** The requirement match the build screen already fetched, reused so both screens colour the
-   *  panes identically. Null renders both panes unmarked, never an error. */
+  /** The requirement match the build screen already fetched, reused so the posting reads the same
+   *  on both screens. It colours the POSTING pane only: the pane beside it is the audited PDF, which
+   *  is a picture of a file and carries no marks. Null renders the posting unmarked, never an error. */
   jdMatch: JdMatchResponse | null;
   educationProfile: EducationProfile | null;
   /** How many answers the student gave on the questions screen. */
@@ -153,7 +194,17 @@ export function ReviewStep({
   /* The audited packet for this sitting, and the PDF proof that accumulates onto it. Null while the
      audit is in flight, and null again after a refusal that needs a fresh one. */
   const [evidence, setEvidence] = useState<PacketEvidenceSession | null>(null);
+  /* THE REF IS THE AUTHORITY AND THE STATE IS ITS PICTURE, which is the shape the dashboard already
+     uses (packetEvidenceRef). It exists for one moment: the acknowledge round trip. React state read
+     before an `await` is a photograph of the past, so a check written against it after the await
+     compares the past to itself and always passes. The one thing that check has to catch - the PDF
+     viewer withdrawing its proof while the acknowledgement is in flight - is exactly what only the
+     live value can see. */
+  const evidenceRef = useRef<PacketEvidenceSession | null>(null);
   const [auditBlock, setAuditBlock] = useState<AuditBlock | null>(null);
+  /* A LOCK, NOT A FLAG. `busy` is state and does not exist until React re-renders, so two presses in
+     one frame both read it false. This is the request that reaches an employer. */
+  const sendInFlight = useRef(false);
   /* Bumped to ask for another audit. Nothing else re-runs the effect below, so a retry is always an
      explicit act rather than a render-order accident. */
   const [auditAttempt, setAuditAttempt] = useState(0);
@@ -164,8 +215,16 @@ export function ReviewStep({
 
   /* A STRING, NOT THE SPEC OBJECT, so this cannot become the effect's own reason to re-run. The spec
      arrives as one stable object for the sitting, but keying an audit request on an object identity
-     is a loop waiting for the first caller that rebuilds it per render. */
+     is a loop waiting for the first caller that rebuilds it per render. It is also what the
+     readiness check below compares against, so a spec that moves cannot leave a verified packet
+     from the old one still sendable. */
   const specJson = useMemo(() => JSON.stringify(resumeSpec ?? null), [resumeSpec]);
+
+  /** Ref first, then state, so nothing can read the old value between the two writes. */
+  const writeEvidence = useCallback((next: PacketEvidenceSession | null) => {
+    evidenceRef.current = next;
+    setEvidence(next);
+  }, []);
 
   /* EVERY setState BELOW IS INSIDE A `.then` OR A `.catch`, which is the idiom the rest of /start
      uses (MatchStep, FocusStep) and what react-hooks/set-state-in-effect actually asks for. Clearing
@@ -176,27 +235,38 @@ export function ReviewStep({
   useEffect(() => {
     if (!applicationId) return;
     let active = true;
+    /* Warmed alongside the audit rather than after it. ExactPacketPdf's own `await import` becomes a
+       module-cache hit, so the viewer chunk and its worker stop being a serial tail behind the audit,
+       the download and the hash on the one screen where a first-run student is watching all four. */
+    void import("pdfjs-dist").catch(() => {});
     void api<PacketAuditResponse>(`/applications/${applicationId}/packet-audit`, { method: "POST" })
       .then((response) => {
         if (!active) return;
-        /* The dashboard's own validator, and it is not a formality: it walks the audit's bindings,
-           identities and PDF binding before anything renders or is hashed against them. An audit
-           that does not describe THIS application must never become the thing she approves. */
-        if (!packetAuditResponseMatchesApplication(applicationId, response)) {
+        /* The dashboard's own two validators, and neither is a formality. The first walks the
+           audit's bindings, identities and PDF binding; the second reads the audit's verdict on
+           itself, because `status: "passed"` is a TypeScript claim and nothing on the wire enforces
+           it. An audit that is degraded, incomplete or carrying rejections is not something to put
+           in front of her for approval, and the send gate would refuse it anyway. */
+        if (!packetAuditResponseMatchesApplication(applicationId, response)
+          || !packetAuditPassedCleanly(response.packet_audit)) {
           setAuditBlock({
-            message: "Litos could not confirm this packet belongs to this application. Check it again.",
+            message: "Litos could not confirm this packet is complete and belongs to this application. Check it again.",
             retryable: true,
           });
           return;
         }
-        setEvidence({
+        const questionsIssue = auditedQuestionsIssue(response);
+        if (questionsIssue) {
+          setAuditBlock({ message: questionsIssue, retryable: false });
+          return;
+        }
+        writeEvidence({
           applicationId,
           response,
           specJson,
-          /* THE QUESTIONS THE AUDIT ACTUALLY HASHED, which is also what the send below submits.
-             The field is optional on the wire because this site and the backend deploy
-             independently; an absent one snapshots the empty list, which is exactly what this
-             screen has always submitted and no worse than it. */
+          /* The questions the audit actually hashed, which is also what the send below submits.
+             auditedQuestionsIssue has already refused an absent list, so this is never a stand-in
+             for one Litos could not read. */
           questionsSnapshot: packetQuestionsSnapshot(response.questions ?? []),
           pdfVerified: false,
           acknowledged: false,
@@ -208,37 +278,54 @@ export function ReviewStep({
         setAuditBlock(auditBlockFor(reason));
       });
     return () => { active = false; };
-  }, [applicationId, auditAttempt, specJson]);
+  }, [applicationId, auditAttempt, specJson, writeEvidence]);
 
   /* Only a real verification result or a real revocation moves this. reconcilePacketPdfVerification
      drops the acknowledgement along with the proof when the bytes stop matching, so a packet that
      changes underneath her cannot keep an approval she gave to the old one. */
   const onPdfVerified = useCallback((verified: PacketPdfEvidenceVerification | null) => {
-    setEvidence((current) => reconcilePacketPdfVerification(current, verified));
-  }, []);
+    const next = reconcilePacketPdfVerification(evidenceRef.current, verified);
+    /* A REFUSAL RETIRES WHEN THE THING IT WAS ABOUT IS PROVED AGAIN. Without this the sentence that
+       sent her to re-check the packet sits red at the top of a screen whose pane now reads "Exact
+       audited PDF loaded" in green and whose button has re-opened - three controls describing two
+       different packets. Only the transition counts: an error raised with nothing re-proved after it,
+       education drift being the one that matters, stays where it is. */
+    const becameProvable = Boolean(next?.pdfVerified) && !evidenceRef.current?.pdfVerified;
+    writeEvidence(next);
+    if (becameProvable) setError(null);
+  }, [writeEvidence]);
 
   /* An event handler, so the reset that starts a fresh audit is a real user act rather than a
      synchronous write from inside the effect it triggers. */
   function auditAgain() {
-    setEvidence(null);
+    writeEvidence(null);
     setAuditBlock(null);
     setAuditAttempt((current) => current + 1);
   }
 
-  /* Evidence is only evidence about the application currently on screen. */
+  /* Evidence is only evidence about the application, and the spec, currently on screen. The spec
+     half matters because the audit effect deliberately does not blank the old evidence when its deps
+     change: without this comparison a spec that moved mid-sitting would leave the previous packet
+     verified and sendable for the whole round trip of the new audit. */
   const session = evidence && evidence.applicationId === applicationId ? evidence : null;
-  const packetReady = Boolean(session?.pdfVerified);
-  /* STOPPED, as opposed to still working. The two look identical from the button's side and must
-     not read identically: a spinner over a pane that has already given up is the screen telling the
-     student to wait for something that is not coming. */
-  const stopped = !applicationId || (Boolean(auditBlock) && !session);
+  const packetReady = Boolean(session?.pdfVerified && session.specJson === specJson);
+  /* THE ONLY STATE THIS BUTTON NARRATES IS ITS OWN. It spins while the audit request is in flight,
+     which is the one wait this component owns and can see the end of. From the moment an audit lands,
+     the pane is the narrator - loading, parsing, verified, or failed with a reason and a retry - and
+     the button goes back to its plain label. The first version spun until `pdfVerified`, which put an
+     animated "Checking this exact packet..." under a pane that had already given up, and that is the
+     exact failure its own comment said must not happen: telling a student to wait for something that
+     is not coming. */
+  const auditing = Boolean(applicationId) && !session && !auditBlock;
 
   async function send() {
+    /* Checked and set synchronously, before the first await and before any state write. */
+    if (sendInFlight.current) return;
     if (!applicationId) {
       setError("This packet is not linked to an application yet, so there is nothing to send.");
       return;
     }
-    if (!session?.pdfVerified) {
+    if (!packetReady || !session) {
       setError("Litos is still checking the exact packet. The button opens as soon as the real PDF is on screen.");
       return;
     }
@@ -255,6 +342,7 @@ export function ReviewStep({
         return;
       }
     }
+    sendInFlight.current = true;
     setBusy(true);
     setError(null);
     const audit = session.response.packet_audit;
@@ -275,11 +363,18 @@ export function ReviewStep({
       if (!packetAuditAcknowledgementAccepted(acknowledgement)) {
         throw new Error("Litos did not record your review of this exact packet.");
       }
-      const acknowledged = acknowledgePacketEvidence(session, session);
+      /* THE LIVE EVIDENCE AGAINST THE ONE SHE PRESSED ON, which is the only pairing that catches
+         anything. The first version passed the same snapshot twice, so every comparison inside -
+         application, spec, questions, audit identity - compared a value to itself and the guard whose
+         message says "this packet changed" could not fire. What it has to catch is narrow and real:
+         ExactPacketPdf calls onVerified(null) whenever its bytes stop being provable, and
+         reconcilePacketPdfVerification drops the approval with the proof. If that lands while this
+         request is in flight, `evidenceRef.current` says so and the send stops here. */
+      const acknowledged = acknowledgePacketEvidence(evidenceRef.current, session);
       if (!acknowledged) {
         throw new Error("This packet changed while Litos was recording your review. Check it again before sending.");
       }
-      setEvidence(acknowledged);
+      writeEvidence(acknowledged);
       /* THE AUDITED QUESTIONS, NOT AN EMPTY LIST. This screen used to submit `[]`, and an empty body
          is not "no opinion" to the merge on the other end: every stored question loses its
          provenance, refreshKnownQuestionAnswers then blanks the ones nothing proves she supplied,
@@ -297,6 +392,10 @@ export function ReviewStep({
       onSent({ sent: true });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not send that application. It is still here for you.");
+      /* RELEASED ONLY HERE. On the way out through onSent this screen is finished and the lock stays
+         shut, so nothing that renders between the resolved send and the next step can issue a second
+         one. A refusal is the only case where pressing again is a thing she is allowed to do. */
+      sendInFlight.current = false;
       setBusy(false);
       /* A refusal whose recovery IS a fresh audit opens one, rather than leaving her holding a
          reason with no control that acts on it. The reason stays on screen above the new audit. */
@@ -312,9 +411,10 @@ export function ReviewStep({
     <StartShell step="review" title="Happy with this? Then send it." wide>
       {error && <div className="mb-4"><ErrorNote message={error} /></div>}
 
-      {/* The same two panes the build screen drew, under one provider so a term keeps its colour
-          and its hover link across both. What is being approved stays on screen while it is being
-          approved. */}
+      {/* The same two panes the build screen drew. The provider serves the POSTING pane: the pane
+          beside it is a raster of the audited PDF, so requirement marks live on the employer's words
+          and the resume is met as the document rather than as marked-up text. What is being approved
+          stays on screen while it is being approved. */}
       <RequirementProvider index={requirementIndex}>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <section className="overflow-hidden rounded-inner border border-border">
@@ -348,37 +448,41 @@ export function ReviewStep({
                 painted pixels before it reports a verification, and every one of those steps runs
                 on a deadline that fails loudly instead of hanging. See its own header for the
                 production stall that shape exists for. */}
-            <div className="flex min-h-[170px] flex-col gap-3 p-3.5">
+            <div className="flex flex-col gap-3 p-3.5">
               {session ? (
+                /* SIZED LIKE THE PANE BESIDE IT, not like the dashboard drawer this viewer was
+                   written for. Its own 620px floor beats a `70vh` cap in CSS, which on a 1366x768
+                   laptop puts the sheet alone taller than the usable viewport and the irreversible
+                   button off screen. A page's own ratio is the honest box for a page. */
                 <ExactPacketPdf
                   auditDigest={session.response.packet_audit.audit_digest}
                   binding={{ sha256: session.response.pdf.sha256, size_bytes: session.response.pdf.size_bytes }}
                   downloadUrl={session.response.pdf.download_url}
                   onVerified={onPdfVerified}
+                  pagesClassName="max-h-[70vh] space-y-4 overflow-y-auto rounded-inner bg-panel-soft p-1 sm:aspect-[612/792] sm:max-h-none"
                 />
               ) : auditBlock ? (
-                <div role="alert" className="space-y-3 rounded-inner bg-danger-soft px-4 py-3 text-sm text-danger">
+                <div role="alert" className="min-h-[170px] space-y-3 rounded-inner bg-danger-soft px-4 py-3 text-sm text-danger">
                   <p>{auditBlock.message}</p>
                   <p className="text-xs">Nothing has been sent. You can save this one and send it from your tracker.</p>
+                  {/* The shared primitive, and the same control ExactPacketPdf uses one branch over
+                      for the same job. A bare underlined span here was a 20px tap target in a red
+                      that the design canon reserves for status, two rules broken to save one import. */}
                   {auditBlock.retryable && (
-                    <button
-                      type="button"
-                      onClick={auditAgain}
-                      className="text-sm underline underline-offset-4"
-                    >
+                    <Button type="button" size="sm" variant="secondary" onClick={auditAgain}>
                       Check this packet again
-                    </button>
+                    </Button>
                   )}
                 </div>
               ) : applicationId ? (
-                <p role="status" className="rounded-inner bg-panel-soft px-4 py-3 text-sm text-muted">
+                <p role="status" className="min-h-[170px] rounded-inner bg-panel-soft px-4 py-3 text-sm text-muted">
                   Litos is checking the exact packet it is about to send.
                 </p>
               ) : (
                 /* No packet row, so there is nothing to audit and nothing to send. Said here rather
                    than left for the press to discover, because the button below is now disabled and
                    a disabled control with no stated reason is the dead end this screen just left. */
-                <p className="text-[13px] leading-6 text-muted">
+                <p className="min-h-[170px] text-[13px] leading-6 text-muted">
                   This packet is not linked to an application yet, so there is nothing to send.
                   Save it and Litos will finish linking it in your tracker.
                 </p>
@@ -410,9 +514,9 @@ export function ReviewStep({
         <PrimaryButton onClick={() => void send()} disabled={busy || !packetReady}>
           {busy
             ? <PendingLabel onColor>Sending...</PendingLabel>
-            : packetReady || stopped
-              ? "Send my application"
-              : <PendingLabel onColor>Checking this exact packet...</PendingLabel>}
+            : auditing
+              ? <PendingLabel onColor>Checking this exact packet...</PendingLabel>
+              : "Send my application"}
         </PrimaryButton>
         {/* A real outcome, not a deferral dressed as one: the packet is complete and auditable in
             the tracker, and the student can send it from there whenever they want. Never disabled
