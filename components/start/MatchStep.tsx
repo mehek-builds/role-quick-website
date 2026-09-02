@@ -31,7 +31,8 @@ import {
   type OnboardingMatch,
 } from "@/lib/onboarding-match";
 import { track } from "@/lib/analytics";
-import { LaterLink, PrimaryButton, StartShell } from "./ui";
+import { LaterLink, PrimaryButton, StartShell, usePreferredLocations } from "./ui";
+import { narrowPostingLocation } from "@/lib/posting-location";
 
 /** How many rows to pull per pass. Enough that the freshness ladder has something to choose from
  *  on each rung, small enough that the screen is not paying for a page nobody reads. */
@@ -52,6 +53,10 @@ export function MatchStep({
      and a posting declined today is a perfectly good match tomorrow. */
   const [skipped, setSkipped] = useState<string[]>([]);
   const [attempt, setAttempt] = useState(0);
+  /* The offices this student asked for, out of the ones the employer listed. Read here rather than
+     derived from the row: `preference_reasons` carries at most three signals of every kind mixed
+     together, so it cannot say which of five cities was the one that matched. */
+  const preferredLocations = usePreferredLocations();
 
   /* The read, written as a promise chain inside the effect rather than as a callback the effect
      invokes, which is the idiom the rest of /start uses (see FocusStep).
@@ -169,7 +174,7 @@ export function MatchStep({
         <div className="border-b border-border px-4 py-3">
           <p className="text-base leading-snug text-ink">{job.title}</p>
           <p className="mt-0.5 font-mono text-[11.5px] text-muted">
-            {[job.company_name, job.location].filter(Boolean).join(" · ")}
+            {[job.company_name, narrowPostingLocation(job.location, preferredLocations)].filter(Boolean).join(" · ")}
           </p>
         </div>
 
