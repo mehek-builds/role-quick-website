@@ -1096,6 +1096,32 @@ const GAP_LABEL: Record<string, { label: string; note?: string; placeholder: str
    still needs the right one. */
 const TEST_TYPE_OPTIONS = ["SAT", "ACT", "Both", "None"] as const;
 
+/* THE STORED VALUES ARE THE BACKEND'S ENUM; THESE ARE THE WORDS ON THE SCREEN.
+ *
+ * "None" is the one that had to be named. Rendered as the raw enum member it sits one row under a
+ * placeholder reading "Select one", where it reads as a way of declining the question. It is the
+ * opposite: it is a DECLARATION that she sat neither exam, and it is the only answer that lets
+ * Litos put something in an employer's test-score field at all. Declining is the Skip control at
+ * the bottom of this screen, which stores nothing and hands every test field back to her.
+ *
+ * Picking the wrong one of those two is the difference between an application Litos can finish and
+ * one it cannot, so they must not read as near-synonyms.
+ *
+ * Not a new idea in this codebase: BaseResumeStep already renders this same value as "No
+ * standardized test" rather than as "None". This says it as a sentence about her instead, because
+ * the field it feeds is a claim about her and not about a record. (The Settings page still offers
+ * the raw enum through its generic StringSelect; that surface is not this screen's to change.)
+ *
+ * TEST_TYPE_OPTIONS above is untouched on purpose. It is the wire format, it is pinned by
+ * tests/gaps-standardized-test-question.test.mjs, and a label leaking into the patch would post
+ * "I have not taken either" into a column typed z.enum(['SAT','ACT','Both','None']). */
+const TEST_TYPE_LABELS: Record<(typeof TEST_TYPE_OPTIONS)[number], string> = {
+  SAT: "SAT",
+  ACT: "ACT",
+  Both: "Both the SAT and the ACT",
+  None: "I have not taken either",
+};
+
 export function GapsStep({
   gaps,
   onDone,
@@ -1239,7 +1265,7 @@ export function GapsStep({
             >
               <option value="" disabled>Select one</option>
               {TEST_TYPE_OPTIONS.map((option) => (
-                <option key={option} value={option}>{option}</option>
+                <option key={option} value={option}>{TEST_TYPE_LABELS[option]}</option>
               ))}
             </select>
           </div>
