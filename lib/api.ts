@@ -866,8 +866,11 @@ export type ApplicationQuestion = {
    * checklist to tell a human-only answer she has confirmed from one still waiting on her - without
    * these two fields the CONFIRM ask re-rendered after every save, forever, because nothing the
    * screen could see ever changed. 'applicant_review' is her, on the review screen;
-   * 'consent_permission' is Litos accepting an employer's terms under her standing permission. */
-  answer_source?: "applicant_review" | "consent_permission";
+   * 'consent_permission' is Litos accepting an employer's terms under her standing permission.
+   * 'litos_draft' is a paragraph LITOS WROTE that she has not approved yet: it renders in the
+   * ordinary answer box with a line saying who wrote it, and the backend's send gate counts it as
+   * an unanswered required question until she saves it, which mints 'applicant_review' over it. */
+  answer_source?: "applicant_review" | "consent_permission" | "litos_draft";
   /** When she reviewed it. Only checkable beside the review's own questions_reviewed_at. */
   answer_reviewed_at?: string;
 };
