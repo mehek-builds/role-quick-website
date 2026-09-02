@@ -422,6 +422,25 @@ export default function Home() {
      reconcile with the screen it takes you to is the defect this whole pass is about. Overlapping
      with the block above is the cheaper error: that block is an emphasis, not a partition. */
   const pipeline = useMemo(() => pipelineCounts(packets), [packets]);
+  /* WHETHER `packets` IS AN ANSWER YET, OR JUST ITS INITIAL VALUE.
+   *
+   * `packets` starts as [], so `pipeline.sent` is 0 from first paint until loadDashboardInitialState
+   * resolves. That 0 is not a count of anything - it is the absence of the inventory - and Funnel
+   * cannot tell the two apart, because `sent ?? f.applications_submitted` only falls back on null or
+   * undefined and 0 is neither. Measured on this account 2026-09-02: Home printed "0 sent in total"
+   * beside "1 in the last 7 days" and "286 resume versions prepared" while the API reported 12
+   * submitted. The other two stats come from Funnel's OWN /metrics/funnel fetch, so they were already
+   * live while this one was still the placeholder - and one funnel response can never carry
+   * applications_submitted 0 with submitted_this_week 1 (engine/funnel.ts derives both from the same
+   * array), which is the arithmetic proof the 0 did not come from the backend at all.
+   *
+   * Deliberately NOT fixed by changing Funnel's precedence: the caller's figure must keep winning
+   * once it exists, or the Sent tile and this stat disagree again - see the 13-vs-12 case recorded at
+   * the Stat itself. What changes is only that the caller stops claiming a figure it has not counted.
+   *
+   * loadedAt is the existing load signal (0 until the fetch resolves, already read that way for the
+   * trial banner). QA mode populates packets without it, so it is admitted on its own. */
+  const inventoryLoaded = qaMode || loadedAt > 0;
   const applicationSummary = useMemo(
     () => ({ ready: pipeline.ready, submitted: pipeline.sent, needsAction: pipeline.needsYou }),
     [pipeline],
@@ -793,7 +812,7 @@ export default function Home() {
             {/* The same count the Tracker tile prints, from the same packets, so the two figures on
                 this row can never disagree. It is what turns "N prepared / 0 sent" from two true
                 numbers with an unexplained gap into a sentence with somewhere to go. */}
-            <Funnel sent={pipeline.sent} stopped={{ count: applicationSummary.needsAction, href: "/dashboard/applications?state=action" }} />
+            <Funnel sent={inventoryLoaded ? pipeline.sent : undefined} stopped={{ count: applicationSummary.needsAction, href: "/dashboard/applications?state=action" }} />
           </SectionBoundary>
           {applicationTotal > 0 && (
             <SectionBoundary band="tracker-summary" title="Applications">
