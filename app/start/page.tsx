@@ -941,7 +941,6 @@ export default function Start() {
             applicationId={built?.applicationId ?? null}
             resumeSpec={built?.resumeSpec ?? null}
             jdMatch={built.jdMatch ?? null}
-            applicantName={built.applicantName ?? profile?.full_name ?? null}
             educationProfile={profile}
             answersSaved={answersGiven.length}
             fieldsAnswered={built?.totalQuestions ?? 0}

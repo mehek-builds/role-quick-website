@@ -11,7 +11,8 @@
  *   - the build screen's stages are driven by real calls, and the resume stage does not resolve
  *     until generation does;
  *   - the questions screen shows the EMPLOYER'S options and refuses to auto-advance a declaration;
- *   - the review screen states the consequence and issues exactly one submit-request;
+ *   - the review screen audits the exact packet, shows the real PDF, records the applicant's
+ *     acknowledgement of it and only then issues exactly one submit-request;
  *   - the trial screen counts what is LEFT after the build spent one generation;
  *   - the plan screen's Continue hands off to Stripe with the onboarding return route.
  */
@@ -19,6 +20,8 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 /* playwright-core, not playwright. Only the core package is a dependency here; the full package
    resolves locally because something else in the tree hoists it, and it is simply absent after a
    clean npm ci in CI. */
@@ -46,6 +49,102 @@ let checkoutRequests = 0;
 let generationCalls = 0;
 let releaseGeneration;
 const generationHeld = new Promise((resolve) => { releaseGeneration = resolve; });
+
+/* THE SEND GATE, STUBBED AS THE BACKEND ACTUALLY ENFORCES IT.
+ *
+ * This spec used to answer POST /submit-request with a bare 200, and that single line is why the
+ * walk certified a screen that could not send. In production that route gates on
+ * currentAcknowledgedPacketAudit: no packet audit on the row and it answers 409
+ * PACKET_AUDIT_REQUIRED, "Audit this exact packet before submitting."; an audit with no
+ * acknowledgement and it answers 409 PACKET_AUDIT_ACK_REQUIRED. The onboarding review screen wrote
+ * neither record, so every onboarding send in production was refused, and this file was green
+ * throughout. A stub more permissive than the route it stands in for is a test asserting its own
+ * fiction, so the three counters below reproduce the real order and the submit stub refuses
+ * anything that skips it. */
+let packetAudits = 0;
+const acknowledgements = [];
+const submittedQuestionBodies = [];
+let submitRefusals = 0;
+
+/* The committed PDF the exact-packet viewer suite uses, served by the app's own /public. The
+   review screen downloads it, hashes it against the audit's binding, parses it and counts painted
+   pixels, so this walk exercises the real gate rather than a stubbed claim of one. Read from disk
+   rather than pinned as a literal: a fixture swap should fail on a render assertion, never on a
+   hash this file quietly disagreed with. */
+const FIXTURE_PDF = readFileSync(new URL("../../public/qa/exact-packet-fixture.pdf", import.meta.url));
+const FIXTURE_SHA256 = createHash("sha256").update(FIXTURE_PDF).digest("hex");
+const FIXTURE_SIZE_BYTES = FIXTURE_PDF.length;
+
+/* Fabricated but well-formed. packetAuditResponseMatchesApplication validates every one of these
+   as 64 hex characters before the client renders anything, so a lazier fixture fails closed and
+   proves nothing about the screen. */
+const digest = (seed) => createHash("sha256").update(seed).digest("hex");
+const AUDIT_DIGEST = digest("audit-digest");
+const PACKET_VERSION = digest("packet-version");
+const PACKET_OBJECT_KEY = "users/stub/resumes/app-1.pdf";
+
+/* The questions the audit hashed, which is what the review screen must submit back. The screen
+   used to submit `[]`, and an empty body is not "no opinion" on the other end: the merge strips
+   every stored answer's provenance and the refresh then blanks the ones nothing proves the
+   applicant supplied, so the packet the send gate hashes stops being the packet she acknowledged.
+   Test 06 asserts these arrive verbatim. */
+const AUDITED_QUESTIONS = [
+  {
+    id: "q-sponsorship",
+    question: "Will you now or in the future require sponsorship for employment visa status?",
+    kind: "select",
+    options: ["Yes", "No"],
+    required: true,
+    answer: "Yes",
+  },
+  {
+    id: "q-gpa",
+    question: "What is your cumulative GPA?",
+    kind: "select",
+    options: ["Below 3.0", "3.0 or above", "3.6 or above (out of 4.0)"],
+    required: true,
+    answer: "3.6 or above (out of 4.0)",
+  },
+];
+
+function packetAuditResponse() {
+  const pdf = { objectKey: PACKET_OBJECT_KEY, sha256: FIXTURE_SHA256, sizeBytes: FIXTURE_SIZE_BYTES };
+  return {
+    packet_audit: {
+      version: "packet_audit_v2",
+      status: "passed",
+      complete: true,
+      degraded: false,
+      rejectedCount: 0,
+      clauses: [],
+      identities: { resume_email: "a@example.com", applicant_email: "apply.app-1@litos.email" },
+      audit_digest: AUDIT_DIGEST,
+      packet_version: PACKET_VERSION,
+      bindings: {
+        ownerSha256: digest("owner"),
+        applicationId: "app-1",
+        jdSha256: digest("jd"),
+        specSha256: digest("spec"),
+        jobContextSha256: digest("job-context"),
+        questionsSha256: digest("questions"),
+        applicantSnapshotSha256: digest("applicant-snapshot"),
+        resumeContactEmailSha256: digest("a@example.com"),
+        applicantEmailSha256: digest("apply.app-1@litos.email"),
+        pdf,
+        employerDelivery: { version: "employer_delivery_v1", mode: "browser", sha256: digest("delivery") },
+      },
+    },
+    /* Served by the app's own origin, which this file's interceptor deliberately does not match,
+       so the bytes the viewer hashes are the real file off disk. */
+    pdf: {
+      object_key: PACKET_OBJECT_KEY,
+      sha256: FIXTURE_SHA256,
+      size_bytes: FIXTURE_SIZE_BYTES,
+      download_url: `${ORIGIN}/qa/exact-packet-fixture.pdf`,
+    },
+    questions: AUDITED_QUESTIONS,
+  };
+}
 
 const JOB = {
   id: "job-1",
@@ -276,8 +375,38 @@ before(async () => {
         unsubscribe_configured: true,
       });
     }
+    if (path === "/applications/app-1/packet-audit") {
+      packetAudits += 1;
+      return json(packetAuditResponse());
+    }
+    if (path === "/applications/app-1/packet-audit/acknowledge") {
+      const body = JSON.parse(route.request().postData());
+      /* The route's own exact-CAS, reproduced. An acknowledgement is only an acknowledgement OF a
+         specific audit and a specific file, and one that names anything else is a 409 in
+         production rather than a record. */
+      if (body.audit_digest !== AUDIT_DIGEST
+        || body.packet_version !== PACKET_VERSION
+        || body.pdf_sha256 !== FIXTURE_SHA256
+        || body.size_bytes !== FIXTURE_SIZE_BYTES) {
+        return json({ error: "The rendered packet no longer matches the saved application.", code: "PACKET_AUDIT_STALE" }, 409);
+      }
+      acknowledgements.push(body);
+      return json({ acknowledged: true });
+    }
     if (path === "/applications/app-1/submit-request") {
+      if (packetAudits === 0) {
+        submitRefusals += 1;
+        return json({ error: "Audit this exact packet before submitting.", code: "PACKET_AUDIT_REQUIRED" }, 409);
+      }
+      if (acknowledgements.length === 0) {
+        submitRefusals += 1;
+        return json({
+          error: "Approve the exact packet Litos prepared before it is sent.",
+          code: "PACKET_AUDIT_ACK_REQUIRED",
+        }, 409);
+      }
       submitRequests += 1;
+      submittedQuestionBodies.push(JSON.parse(route.request().postData()).questions);
       return json({ review: {} });
     }
     if (path === "/billing/state") {
@@ -427,7 +556,7 @@ describe("the application sequence, end to end", () => {
     assert.ok(savedAnswers.some((a) => /GPA/i.test(a.question) && /3\.6 or above/.test(a.answer)));
   });
 
-  test("06 review: the evidence stays on screen, the consequence is stated, one send is issued", async () => {
+  test("06 review: the exact packet is audited and shown, approved by the press, and sent once", async () => {
     await page.getByRole("heading", { name: /happy with this/i }).waitFor({ timeout: 20_000 });
 
     const body = await page.locator("main").innerText();
@@ -440,19 +569,48 @@ describe("the application sequence, end to end", () => {
        only ever landed on the second one. Test 04 asserts that absence; this asserts the presence
        it moved to. */
     assert.match(body, /We build with TypeScript and React/i, "the posting's words are not on the review screen");
-    assert.match(body, /Cut PostgreSQL query time 60%/i, "the resume itself is not on the review screen");
     assert.doesNotMatch(body, /Your resume, written for this posting from the one you uploaded/i, "the review still describes the resume instead of showing it");
-    assert.ok(await page.locator("mark", { hasText: /TypeScript/i }).count() >= 2, "the review panes lost their requirement marks");
+    /* ONE PANE MARKS NOW, AND THAT IS THE TRADE THIS SCREEN MADE. Both panes used to mark: the
+       posting's words and the spec re-render of the resume beside it. The Attached pane draws the
+       audited PDF instead, and a canvas carries no marks - so the posting keeps its highlighting and
+       its legend, and what the resume covers is read off the match legend rather than off the
+       document. Asserted as "still marked" rather than deleted, because losing the posting's marks
+       too would leave the requirement colours with nowhere to land. */
+    assert.ok(await page.locator("mark", { hasText: /TypeScript/i }).count() >= 1, "the posting pane lost its requirement marks");
     assert.match(body, /cannot be unsent/i, "the irreversible screen must say so above the button");
     assert.match(body, /Anything Litos guessed/i);
     assert.match(body, /None/i);
     // No countdown anywhere: auto-submit's 15-second timer has no place in a first-run flow.
     assert.doesNotMatch(body, /\bcancel(ling)? in \d|\d+ seconds\b/i);
 
+    /* THE DOCUMENT IS THE REAL FILE, and this assertion is why the resume's own words are no
+       longer read out of `body`. The pane used to draw a re-render of the resume spec, which is
+       faithful but is not the bytes the employer receives - and the acknowledgement this screen now
+       writes binds that file's sha256 and length. So the pane draws the audited PDF through the
+       dashboard's own ExactPacketPdf: these bytes were downloaded, hashed against the audit's
+       binding, parsed, and painted, and the canvas below exists only if all four succeeded. */
+    await page.getByRole("img", { name: /Exact audited resume PDF, page 1 of 1/i }).waitFor({ timeout: 30_000 });
+    assert.equal(packetAudits, 1, "the review screen must audit the exact packet exactly once on arrival");
+
+    /* AN AUDIT APPROVES NOTHING. The backend states an acknowledgement "must never be preceded by a
+       machine-written one", so arriving on this screen must not write one: only her press may. */
+    assert.equal(acknowledgements.length, 0, "the screen acknowledged the packet before the student pressed anything");
     assert.equal(submitRequests, 0, "something sent the application before the button was pressed");
+
+    /* The control is named "Send my application" only once the exact PDF is verified; before that
+       it reads "Checking this exact packet...". Finding it by name is therefore the gate opening. */
     await page.getByRole("button", { name: "Send my application" }).click();
     await page.getByRole("heading", { name: /here's something from us/i }).waitFor({ timeout: 20_000 });
+
+    assert.equal(acknowledgements.length, 1, "the press must record exactly one acknowledgement of the audited packet");
     assert.equal(submitRequests, 1, "the send must be issued exactly once");
+    /* ZERO, and this is the assertion the whole rewrite of this stub exists for. Every onboarding
+       send in production was one of these until 2026-09-03: a submit-request with no audit and no
+       acknowledgement behind it, refused 409 with no control on the screen that could clear it. */
+    assert.equal(submitRefusals, 0, "the send gate refused this application, which is the onboarding dead end");
+    /* The audited questions travelled, not `[]`. See AUDITED_QUESTIONS for what an empty body costs
+       on the other end. */
+    assert.deepEqual(submittedQuestionBodies[0], AUDITED_QUESTIONS, "the send submitted a different packet than the one that was audited");
   });
 
   test("07 the trial: the gift, counted after the build spent one generation", async () => {
