@@ -132,22 +132,42 @@ export function stagesComplete(): BuildStage[] {
  * Run the build, reporting each stage as it genuinely starts and finishes.
  *
  * `onStages` is called with a fresh list on every transition, so the caller renders state it was
- * handed rather than deriving it from a timer. A stage goes `active` before its await and `done`
- * only after that await resolves, which is what makes the list honest: the resume row stays active
- * for exactly as long as the generation takes.
+ * handed rather than deriving it from a timer. A stage goes `active` when its call is genuinely
+ * in flight and `done` only when that call has resolved, which is what makes the list honest: the
+ * resume row stays active for exactly as long as the generation takes.
+ *
+ * THE SCAN AND THE GENERATION RUN TOGETHER, and that is the whole build-time budget. They used to
+ * run in sequence, and the comment defending the order said "everything that can refuse runs
+ * before the one call that spends" - which was true until 2026-09-01, when the scan stopped being
+ * able to refuse: loadQuestions retries and then proceeds with an empty ask, a preview and never a
+ * gate. From that day the ordering bought nothing and cost the whole scan's duration, which is a
+ * live read of the employer's form and the slower half of some builds - measured on a guest walk:
+ * 43s total, ~19s of it the scan sitting in front of a 23s generation. Concurrent, the build costs
+ * max(scan, generation), and the 25-second budget is met by construction rather than by luck.
+ *
+ * What still runs BEFORE the spend is everything that can actually stop it: the posting read, the
+ * identity read, and the two named preconditions. A missing name is known the moment identity
+ * resolves, so it is checked there - not after a scan it never depended on.
  *
  * Failure marks the stage that failed and rethrows. The screen needs to know WHICH step broke,
  * because "we could not read the posting" and "we could not write your resume" are different
- * sentences with different recoveries, and a single generic error would flatten them.
+ * sentences with different recoveries, and a single generic error would flatten them. When both
+ * in-flight calls fail, the generation's error wins: it is the one that spent something.
  */
 export async function runOnboardingBuild(
   deps: BuildDeps,
   jobId: string,
   onStages: (stages: BuildStage[]) => void,
 ): Promise<BuildResult> {
-  const fail = (key: BuildStageKey) => onStages(stagesAt(key, "failed"));
+  /* One mutable map, emitted as a fresh list on every change. With two calls in flight the linear
+     stagesAt helper cannot describe the truth - "everything before X is done" stops being the
+     shape of the work - so each row carries its own status and the emitters below change exactly
+     one at a time. */
+  const statuses: Record<BuildStageKey, BuildStageStatus> = { posting: "active", questions: "waiting", resume: "waiting" };
+  const emit = () => onStages(BUILD_STAGES.map((stage) => ({ ...stage, status: statuses[stage.key] })));
+  const set = (key: BuildStageKey, status: BuildStageStatus) => { statuses[key] = status; emit(); };
+  emit();
 
-  onStages(stagesAt("posting", "active"));
   let posting: Awaited<ReturnType<BuildDeps["loadPosting"]>>;
   let identity: Awaited<ReturnType<BuildDeps["loadIdentity"]>>;
   try {
@@ -156,57 +176,61 @@ export async function runOnboardingBuild(
        because they do not depend on each other. */
     [posting, identity] = await Promise.all([deps.loadPosting(jobId), deps.loadIdentity()]);
   } catch (reason) {
-    fail("posting");
+    set("posting", "failed");
     throw reason;
   }
+  statuses.posting = "done";
 
-  /* THE EMPLOYER'S FORM IS READ BEFORE ANYTHING IS SPENT, as a preview. loadQuestions owns the
-     read's own resilience: it retries a flaky scan and, if it still reads nothing, returns an empty
-     ask so the build proceeds to Review and send rather than dead-ending (updated 2026-09-01). This
-     catch stays as a genuine-error backstop - loadQuestions is not expected to throw for a scan
-     miss - and marks the stage so a real, unforeseen failure still names where it broke. */
-  onStages(stagesAt("questions", "active"));
-  let questions: Awaited<ReturnType<BuildDeps["loadQuestions"]>>;
-  try {
-    questions = await deps.loadQuestions(jobId);
-  } catch (reason) {
-    fail("questions");
-    throw reason;
-  }
-
-  /* Checked HERE, before the expensive call, and named by field.
+  /* Checked BEFORE anything else launches, and named by field.
      Generation rejects a missing name or resume email from deep inside the resume engine, and that
-     error reaches a student as a failed build rather than as the one-line fix it actually is. It
-     also costs nothing to check first, whereas discovering it after a reservation has been taken
-     spends a trial generation on a request that could never have succeeded. Sits after the
-     questions stage so its failure marking is truthful: everything before "resume" really did
-     finish. */
+     error reaches a student as a failed build rather than as the one-line fix it actually is. Both
+     facts are known the moment identity resolves, so this is the earliest they can be checked and
+     the last moment nothing has been spent. The resume row is the one marked, because the resume
+     is what these fields are preconditions OF; the questions row stays waiting, which is truthful:
+     the scan never started. */
   if (!identity.fullName?.trim()) {
-    fail("resume");
+    set("resume", "failed");
     throw new BuildPreconditionError("full_name", "Your resume did not give us a name to put on the page.");
   }
   if (!identity.resumeEmail?.trim()) {
-    fail("resume");
+    set("resume", "failed");
     throw new BuildPreconditionError("resume_email", "Add the email address that should appear on your resume.");
   }
 
-  onStages(stagesAt("resume", "active"));
-  let generated: Awaited<ReturnType<BuildDeps["generateResume"]>>;
-  try {
-    generated = await deps.generateResume({
-      jobId,
-      company: posting.company,
-      role: posting.title,
-      jdText: posting.description,
-      fullName: identity.fullName.trim(),
-      resumeEmail: identity.resumeEmail.trim(),
-    });
-  } catch (reason) {
-    fail("resume");
-    throw reason;
-  }
+  /* Both in flight from the same moment, each marking its own row as it settles. allSettled so a
+     rejection on one side never leaves the other unobserved (an unhandled rejection), and so both
+     outcomes are in hand before deciding whose error to surface. */
+  statuses.questions = "active";
+  statuses.resume = "active";
+  emit();
 
-  onStages(stagesComplete());
+  const questionsRun = deps.loadQuestions(jobId).then(
+    (questions) => { set("questions", "done"); return questions; },
+    (reason) => { set("questions", "failed"); throw reason; },
+  );
+  const generationRun = deps.generateResume({
+    jobId,
+    company: posting.company,
+    role: posting.title,
+    jdText: posting.description,
+    fullName: identity.fullName.trim(),
+    resumeEmail: identity.resumeEmail.trim(),
+  }).then(
+    (generated) => { set("resume", "done"); return generated; },
+    (reason) => { set("resume", "failed"); throw reason; },
+  );
+
+  const [questionsSettled, generationSettled] = await Promise.allSettled([questionsRun, generationRun]);
+  /* The generation's failure outranks the scan's: it is the call that spends, and its refusals
+     (the quality hold, the entitlement denial) carry structured bodies the failure screen routes
+     on. A scan rejection here is a backstop for a genuine unforeseen error only - the shipped
+     loadQuestions catches its own failures and returns an empty ask, so this path asks nothing of
+     it in the common case. */
+  if (generationSettled.status === "rejected") throw generationSettled.reason;
+  if (questionsSettled.status === "rejected") throw questionsSettled.reason;
+  const questions = questionsSettled.value;
+  const generated = generationSettled.value;
+
   return {
     applicationId: generated.applicationId,
     resumeSpec: generated.resumeSpec,

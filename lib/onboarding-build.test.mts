@@ -45,8 +45,9 @@ const statusOf = (stages: BuildStage[], key: string) => stages.find((s) => s.key
 test("there are exactly three stages, because three things actually happen", () => {
   // Not five. POST /resume/generate does the writing and the layout behind one await, so there is
   // no event between them to drive a transition and showing two rows would be theatre.
-  // Questions before resume since 2026-09-01: the form read can refuse, generation costs a free
-  // build, and everything that can refuse runs before the one call that spends.
+  // The order here is DISPLAY order. The scan and the generation run concurrently - the scan
+  // stopped being able to refuse on 2026-09-01 (a preview, never a gate), so sequencing them
+  // bought nothing and cost the whole scan in front of a 23-second generation.
   assert.deepEqual(BUILD_STAGES.map((s) => s.key), ["posting", "questions", "resume"]);
 });
 
@@ -74,7 +75,8 @@ test("a stage is only ever done after its own call resolved", async () => {
     onStages,
   );
 
-  // Let the first stage settle and the resume stage go active.
+  // Let the first stage settle; the scan (instant in this fixture) finishes while the gated
+  // generation honestly stays active.
   await new Promise((r) => setTimeout(r, 0));
   const midway = seen[seen.length - 1];
   assert.equal(statusOf(midway, "posting"), "done");
@@ -87,14 +89,53 @@ test("a stage is only ever done after its own call resolved", async () => {
   assert.deepEqual(final.map((s) => s.status), ["done", "done", "done"]);
 });
 
-test("the stages are reported in order and never go backwards", async () => {
+test("a status settles once and never regresses", async () => {
+  /* With two calls in flight "one active row at a time" stopped being the truth, so what order
+     asserted is now asserted directly: a row that reached done or failed never goes back, and the
+     posting row is the only one that starts. */
   const { seen, onStages } = record();
   await runOnboardingBuild(deps(), "job-1", onStages);
 
-  const activeOrder = seen
-    .map((stages) => stages.find((s) => s.status === "active")?.key)
-    .filter(Boolean);
-  assert.deepEqual(activeOrder, ["posting", "questions", "resume"]);
+  assert.equal(statusOf(seen[0], "posting"), "active");
+  assert.equal(statusOf(seen[0], "questions"), "waiting");
+  const rank = { waiting: 0, active: 1, done: 2, failed: 2 };
+  for (const key of ["posting", "questions", "resume"]) {
+    let prev = -1;
+    for (const snapshot of seen) {
+      const now = rank[statusOf(snapshot, key)];
+      assert.ok(now >= prev, `${key} went backwards`);
+      prev = now;
+    }
+  }
+});
+
+test("the scan and the generation are in flight together, which is the build-time budget", async () => {
+  /* THE LATENCY PROPERTY THIS FILE EXISTS TO KEEP. Sequenced, the build cost scan + generation -
+     measured live at 43 seconds, ~19 of them a live form read sitting in front of the one call
+     that takes 23. Concurrent, it costs max of the two. The gate below holds the scan open and
+     asserts the generation does not wait for it. */
+  let releaseScan: (value: unknown) => void = () => {};
+  const scanGate = new Promise((resolve) => { releaseScan = resolve; });
+  const { seen, onStages } = record();
+
+  const run = runOnboardingBuild(
+    deps({
+      loadQuestions: () => scanGate.then(() => ({ total: 1, alreadyAnswered: 1, ask: [], deferredFields: 0 })),
+    }),
+    "job-1",
+    onStages,
+  );
+
+  await new Promise((r) => setTimeout(r, 0));
+  const midway = seen[seen.length - 1];
+  assert.equal(statusOf(midway, "resume"), "done", "generation waited for a scan it does not depend on");
+  assert.equal(statusOf(midway, "questions"), "active", "the scan should still be honestly in flight");
+
+  releaseScan(null);
+  const result = await run;
+  assert.equal(result.totalQuestions, 1);
+  const final = seen[seen.length - 1];
+  assert.deepEqual(final.map((s) => s.status), ["done", "done", "done"]);
 });
 
 test("the result carries the real counts, not a rounded promise", async () => {
@@ -170,9 +211,29 @@ test("a failure marks the stage that broke, so the screen can say which", async 
   );
   const last = questions.seen[questions.seen.length - 1];
   assert.equal(statusOf(last, "questions"), "failed");
-  /* The load-bearing half of the reorder: a form that could not be read fails BEFORE generation
-     has run, so nothing was spent on a flow that dies here. The resume stage never started. */
-  assert.equal(statusOf(last, "resume"), "waiting");
+  /* The generation DID run here, and that is the deliberate trade of running the two together.
+     This rejection is a backstop for a genuine unforeseen error: the shipped loadQuestions
+     (BuildStep) catches its own failures and proceeds with an empty ask, so no student path
+     reaches it - and the spend-safety the old ordering carried lives in the preconditions now,
+     which are checked before either call launches. */
+  assert.equal(statusOf(last, "resume"), "done");
+});
+
+test("when both in-flight calls fail, the generation's error is the one surfaced", async () => {
+  /* It is the call that spends, and its refusals carry the structured bodies the failure screen
+     routes on - the quality hold, the entitlement denial. Surfacing the scan's error instead
+     would hide the sentence the student actually needs. */
+  await assert.rejects(
+    () => runOnboardingBuild(
+      deps({
+        loadQuestions: async () => { throw new Error("scan died"); },
+        generateResume: async () => { throw new Error("quality hold"); },
+      }),
+      "j",
+      record().onStages,
+    ),
+    /quality hold/,
+  );
 });
 
 test("stagesAt marks everything before the named stage as done", () => {
