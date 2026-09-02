@@ -488,3 +488,115 @@ test("a restored linked packet is selectable by its legacy id", () => {
   // a list with no envelopes is returned as-is
   assert.deepEqual(withRestoredLinkedPackets([packet]).map((entry) => entry.id), [packet.id]);
 });
+
+/* THE MAVEN ROW: a filled employer form that could not reach its send.
+ *
+ * Measured in prod 2026-09-02 on The Maven Group "Cyber Test Engineer". The packet was parked at
+ * ready_for_final_approval with a preview screenshot, no blockers and no attention reason; the
+ * canonical row it points at still read (submission_state not_started, review_state ready). The
+ * flatten replaced the packet's status with needs_attention, so the detail screen drew "One thing
+ * to finish" and no Send control, and 83 more applications sat behind the same demotion. */
+function mavenPacket(): GeneratedResume {
+  return legacy({
+    id: "305dae5e-7d9b-41cf-a9a7-82dcc0a98f15",
+    job_context: {
+      company: "The Maven Group",
+      role: "Cyber Test Engineer",
+      job_id: "22222222-2222-4222-8222-222222222222",
+    },
+    spec: {
+      _review: {
+        jd_text: "",
+        portal_url: "https://app.crelate.com/portal/mavengroup/apply",
+        status: "ready_for_final_approval",
+        preview_screenshot_url: "https://blob.test/preview.png",
+        portal_supported: true,
+        edited_terms: [],
+        questions: [],
+        skipped_reasons: [],
+        updated_at: "2026-09-02T02:45:00.000Z",
+      },
+    } as unknown as GeneratedResume["spec"],
+  });
+}
+
+function mavenCanonical(overrides: Partial<CanonicalApplication> = {}): CanonicalApplication {
+  return canonical({
+    id: "aa04b6ce-7e6c-4ca4-944c-0482031204cf",
+    legacy_generated_resume_id: "305dae5e-7d9b-41cf-a9a7-82dcc0a98f15",
+    company: "The Maven Group",
+    role: "Cyber Test Engineer",
+    portal_url: "https://app.crelate.com/portal/mavengroup/apply",
+    tracker_state: "applying",
+    review_state: "ready",
+    submission_state: "not_started",
+    ...overrides,
+  });
+}
+
+test("a filled packet waiting on the applicant is not flattened to needs_attention", () => {
+  const packet = mavenPacket();
+  const merged = mergeCanonicalApplicationHistory([packet], [mavenCanonical()]);
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].spec._review?.status, "ready_for_final_approval");
+  // The linked packet is still the one the managed screens route to.
+  assert.equal(sendableLinkedPacketFromCanonicalEnvelope(merged[0])?.id, packet.id);
+});
+
+test("the canonical row's own prepared pair reads the same way", () => {
+  // What the backend writes and heals once it projects the hold. Both fields must agree, exactly
+  // as the legacy ready_to_submit pair does.
+  const packet = mavenPacket();
+  const merged = mergeCanonicalApplicationHistory([packet], [mavenCanonical({
+    review_state: "ready_for_final_approval",
+    submission_state: "ready_for_final_approval",
+  })]);
+  assert.equal(merged[0].spec._review?.status, "ready_for_final_approval");
+});
+
+test("the ledger still wins: a sent or failed row is never overridden by its packet", () => {
+  // The refusal half. Without it this becomes a general "trust the packet" path, which is the
+  // double-send hazard canonicalStatus exists to prevent.
+  const packet = mavenPacket();
+  for (const [overrides, expected] of [
+    [{ submission_state: "submitted" as const }, "submitted"],
+    [{ submission_state: "failed" as const }, "failed"],
+    [{ review_state: "failed" as const }, "failed"],
+  ] as const) {
+    const merged = mergeCanonicalApplicationHistory([packet], [mavenCanonical(overrides)]);
+    assert.equal(
+      merged[0].spec._review?.status,
+      expected,
+      `a canonical ${expected} row must outrank its packet's prepared hold`,
+    );
+  }
+});
+
+test("a prepared packet reaches its send control without entering the Ready queue", async () => {
+  const { reviewCanBeSent, statusMatchesApplicationFilter } = await import("./application-filter.ts");
+  const merged = mergeCanonicalApplicationHistory([mavenPacket()], [mavenCanonical()]);
+  const review = merged[0].spec._review!;
+  // ready_for_final_approval is an ACTION status, so autopilot can never elect this row and the
+  // Ready count cannot move. Importing these rather than restating them means the test breaks if
+  // READY_STATUSES ever gains it.
+  assert.equal(reviewCanBeSent(review), false);
+  assert.equal(statusMatchesApplicationFilter(review, "ready"), false);
+  assert.equal(statusMatchesApplicationFilter(review, "action"), true);
+});
+
+test("the guard is scoped to the prepared status, not to the presence of a packet", () => {
+  // The three shapes from "readiness needs BOTH canonical fields" must still stay with the human
+  // when the linked packet is not parked at ready_for_final_approval.
+  const packet = legacy();
+  for (const overrides of [
+    { submission_state: "not_started" as const, review_state: "ready" as const },
+    { submission_state: "not_started" as const, review_state: "ready_to_submit" as const },
+    { submission_state: "ready_to_submit" as const, review_state: "filling" as const },
+  ]) {
+    const merged = mergeCanonicalApplicationHistory([packet], [canonical({
+      legacy_generated_resume_id: packet.id,
+      ...overrides,
+    })]);
+    assert.equal(merged[0].spec._review?.status, "needs_attention");
+  }
+});
