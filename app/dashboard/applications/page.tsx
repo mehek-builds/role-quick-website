@@ -7556,6 +7556,14 @@ export function DirectApplicationQuestion({ task, position, total, saving, saved
      it is still a real edit and still saves; only the untouched pass-through is silent. See
      dependent-questions.ts. */
   const contextOnly = task.context === true && !answerDirty;
+  /* THESE WORDS ARE LITOS'S UNTIL SHE SAYS OTHERWISE.
+     The backend writes answer_source 'litos_draft' on a paragraph it composed from her resume and
+     this job description, and its send gate counts one as an unanswered required question, so an
+     application cannot go out on a draft she never read. This screen's job is the other half: show
+     the draft in the SAME box as every other answer, and say plainly who wrote it. Read off the
+     SAVED answer rather than the live one, so the line does not vanish the moment she starts typing
+     over it: she is still looking at a box Litos filled. */
+  const litosDrafted = task.question.answer_source === "litos_draft" && Boolean(savedAnswer.trim());
   const requiredBlank = task.question.required && !answer.trim();
   const optionalDecisionBlank = !task.question.required
     && task.question.answer_state !== "skipped"
@@ -7642,11 +7650,17 @@ export function DirectApplicationQuestion({ task, position, total, saving, saved
     }
   }
 
+  /* A third arm on the same ternary, not a second control: the press does exactly what Save always
+     did, and the server mints the same applicant_review claim from it. Only the word changes,
+     because "Save answer" describes what she does to her own words and says nothing about the ones
+     already in front of her. An EDITED draft goes back to Save, because by then they are hers. */
   const actionLabel = contextOnly
     ? hasNext ? "Next question" : "Review application"
     : task.intent === "confirm"
       ? hasNext ? "Confirm and next" : "Confirm answer"
-      : saved ? hasNext ? "Save changes and next" : "Save changes" : hasNext ? "Save and next" : "Save answer";
+      : litosDrafted && !answerDirty
+        ? hasNext ? "Approve and next" : "Approve answer"
+        : saved ? hasNext ? "Save changes and next" : "Save changes" : hasNext ? "Save and next" : "Save answer";
 
   function updateAnswer(next: string) {
     if (busy) return;
@@ -7691,6 +7705,14 @@ export function DirectApplicationQuestion({ task, position, total, saving, saved
               ? "Required. Litos saves this answer to this application before showing the next one."
               : "Optional. Answer it or skip it. Litos saves this answer to this application before showing the next one."}
         </p>
+        {litosDrafted && (
+          /* Deliberately the same quiet surface as the other two notices on this screen, and
+             deliberately not a warning: a drafted answer is the product working, not a fault. */
+          <p className="mt-3 rounded-inner border border-control-border bg-surface-alt px-3 py-2 text-small leading-6 text-muted">
+            Litos wrote this answer from your resume and this job. Approve it as it is, or change
+            anything you want first. Nothing is sent until you do.
+          </p>
+        )}
         {task.question.explanation && (
           <p className="mt-2 text-small leading-6 text-muted">{task.question.explanation}</p>
         )}

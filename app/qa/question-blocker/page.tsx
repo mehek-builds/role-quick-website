@@ -94,6 +94,25 @@ const tasks: DirectQuestionTask[] = [
       options_complete: false,
     },
   },
+  /* THE DRAFTED ESSAY, which is the render this harness had no way to reach at all. The measured
+     EQL Tech question (prod, 2026-09-02): required, free text, no options, no Skip. What is new is
+     that the box arrives FILLED, by Litos, from her resume - answer_source 'litos_draft' - and the
+     screen has to say so and let her approve or change it. */
+  {
+    kind: "question",
+    id: "litos-drafted-essay",
+    intent: "review",
+    item: { ...item("litos-drafted-essay", "Multimodal system"), actionKind: "review" as const },
+    question: {
+      id: "litos-drafted-essay",
+      question: "Describe a multimodal/cv system you personally shipped to production, and your role in it.",
+      answer: "The system I would point to is the ingestion pipeline I built at Acme Labs. I owned it end to end, from the Postgres schema through the nightly load, and I was the person paged when it broke.",
+      kind: "essay",
+      required: true,
+      options: null,
+      answer_source: "litos_draft",
+    },
+  },
   {
     kind: "question",
     id: "optional-unknown",
