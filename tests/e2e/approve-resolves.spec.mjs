@@ -378,6 +378,36 @@ async function openApproval(hidden, {
   await reviewFilledForm.click();
   const sendIt = page.getByRole("button", { name: "Send application" });
   await sendIt.waitFor({ state: "visible", timeout: 25_000 });
+  /* The applicant may not press Send until she has actually SEEN the picture of the filled form.
+     `previewReady` is a term of finalApprovalBlocked, and it turns true only when that picture fires
+     its load event, so "Send application" is legitimately rendered VISIBLE BUT DISABLED for the
+     whole gap between this screen mounting and the picture arriving. Waiting on visibility alone
+     therefore hands the caller a control that is still settling.
+
+     Five of the six cases below hide that gap by accident, because `click()` waits for actionability
+     on its own. "an authoritative filled submission outranks a stale packet-list status" is the one
+     that reads `isEnabled()` outright with no retry, and it is also the only one that mounts this
+     screen TWICE (portal, then review, then back), which resets the preview state and starts a
+     second load late. On this Mac that second picture beat the assertion 30 runs out of 30; on a
+     two-core runner, seven browser specs deep into one job, it lost, and that is the red on run
+     33602882385. Delaying the picture by 1.5s reproduces it on origin/main at the same rate, so it
+     was never about the packet change on this branch.
+
+     So wait for the control to settle, which is the same actionability check the other five cases
+     get free from `click()`. A trial click runs that check and presses nothing, so approveCalls and
+     submitRequestCalls stay where the assertions expect them.
+
+     Waiting on the picture directly was tried first and is NOT enough: `img.complete` turns true one
+     React commit before the button re-renders, so `onLoad -> setPreviewState -> enabled` still has a
+     gap on the far side of it. Measured while fixing this, 6 runs at a 1.5s delay: the picture was
+     complete and the button STILL disabled on run 4. The button's own state is the only fact that
+     settles last, so it is the only one worth waiting on.
+
+     Bounded and non-throwing on purpose. If the picture genuinely never arrives, the applicant
+     really is stranded at a dead Send button, and the caller's own assertion is the one that should
+     say so, in its own words. Swallowing here costs a slow path its timeout twice over; it never
+     turns a stuck button green, because every caller still has to click it or assert on it. */
+  await sendIt.click({ trial: true, timeout: 25_000 }).catch(() => {});
 
   return { context, page, sendIt, approveCalls, submitRequestCalls };
 }
