@@ -125,8 +125,16 @@ describe("the board says what it is not drawing", () => {
 
 describe("Home's zero has somewhere to go", () => {
   test("Momentum is told how many are stopped, from Home's own count", () => {
-    /* The same number the Tracker tile prints, so the two figures on one row cannot disagree. */
-    assert.match(home, /<Funnel sent=\{pipeline\.sent\} stopped=\{\{ count: applicationSummary\.needsAction, href: "\/dashboard\/applications\?state=action" \}\} \/>/);
+    /* The same number the Tracker tile prints, so the two figures on one row cannot disagree.
+     *
+     * `sent` is matched LOOSELY, and that is the fix for a break this pinning caused. The contract
+     * this test is named for is the STOPPED half: that Momentum is handed Home's own count and a
+     * route to spend it on. `sent` only has to still come from `pipeline.sent`. Pinning the whole
+     * element meant an unrelated and deliberate change to the OTHER prop failed this assertion:
+     * #503 made the sent figure wait for the inventory, so that a 0 printed before the packets
+     * land stops reading as "you have sent nothing". That is the behaviour this file wants, and it
+     * turned the suite red on main anyway. */
+    assert.match(home, /<Funnel sent=\{[^}]*pipeline\.sent[^}]*\} stopped=\{\{ count: applicationSummary\.needsAction, href: "\/dashboard\/applications\?state=action" \}\} \/>/);
   });
 
   test("the explanation only appears when the zero actually needs explaining", () => {
