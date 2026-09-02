@@ -112,3 +112,39 @@ test("a guest is offered the email they cannot add in Account", async () => {
   /* A missing NAME is still an Account fix for everyone, so the guest wording must not swallow it. */
   assert.match(errorBranch, /Add it in Account and Litos will build this one again/, "the non-guest wording was lost");
 });
+
+test("a missing-education build is classified as a fixable profile gap, not a posting verdict", async () => {
+  /* THE EDUCATION DEAD END, found by walking production 2026-09-02. The engine cannot write a
+   * resume with no school or degree on file and refused with a hold - but the hold shipped as
+   * resume_quality_hold, whose recovery is "try another posting", so a student with no degree was
+   * told the HRT internship was "not a fit Litos can write honestly. Try another posting" and
+   * offered "Show me a different one". That gap follows them to every posting, so it looped.
+   *
+   * The backend now sends a DISTINCT code, resume_profile_incomplete; the classifier must read it
+   * as an account-level fixable gap so the screen routes the student to add their education instead
+   * of on to the next identical failure. */
+  const source = await read("components/start/BuildStep.tsx");
+  const catchBlock = source.slice(source.indexOf(".catch((reason) =>"), source.indexOf("return () => { cancelled = true; };"));
+
+  assert.match(catchBlock, /resume_profile_incomplete/, "the classifier no longer reads the distinct profile-incomplete code");
+  assert.match(catchBlock, /profileIncompleteField/, "the profile-incomplete field is not derived");
+  /* It must join `fixable`, or it takes the "try another posting" branch. */
+  assert.match(catchBlock, /fixable\s*\|\|\s*profileIncompleteField !== null/, "a profile gap is not treated as account-fixable");
+  /* And it must NOT be counted as a quality hold, whose subject is a thin resume, not a blank field. */
+  const qualityHoldLine = catchBlock.slice(catchBlock.indexOf("const qualityHold"), catchBlock.indexOf("consecutiveQualityHolds ="));
+  assert.doesNotMatch(qualityHoldLine, /resume_profile_incomplete/, "a profile gap must not increment the consecutive-quality-hold counter");
+});
+
+test("a missing-education screen sends the student to add it, never to another posting", async () => {
+  const source = await read("components/start/BuildStep.tsx");
+  const errorBranch = source.slice(source.indexOf("const guestNeedsEmail"), source.indexOf("const building ="));
+
+  assert.match(errorBranch, /const needsEducation/, "the education case is not distinguished");
+  assert.match(errorBranch, /field === "education"/, "the education case keys off the wrong field");
+  assert.match(errorBranch, /Add my education/, "there is no control to add education");
+  assert.match(errorBranch, /needsEducation && onReviseResume/, "the education control does not route back to the resume step");
+  /* The way OUT of the loop: the education message must not send them posting-shopping, and because
+     it is a fixable field the "Show me a different one" control (gated on !error.fixable) never
+     renders for it - so the message must offer the real fix instead. */
+  assert.match(errorBranch, /not on your profile yet\. Add them and Litos will build this one again/, "the education wording was lost");
+});

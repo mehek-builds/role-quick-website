@@ -116,7 +116,7 @@ export function BuildStep({
 }) {
   const [stages, setStages] = useState<BuildStage[]>(() => initialStages());
   const [result, setResult] = useState<BuildResult | null>(null);
-  const [error, setError] = useState<{ message: string; fixable: boolean; field: "full_name" | "resume_email" | null; entitlement: boolean; qualityHold: boolean } | null>(null);
+  const [error, setError] = useState<{ message: string; fixable: boolean; field: "full_name" | "resume_email" | "education" | null; entitlement: boolean; qualityHold: boolean } | null>(null);
   /* Bumped by "Read the form again". The scan stage runs before anything is spent, so re-running
      the whole build after a scan failure costs nothing until the scan actually passes. */
   const [attempt, setAttempt] = useState(0);
@@ -240,23 +240,40 @@ export function BuildStep({
            denial shape takes this branch, for the same reason the dashboard checks it: an
            unrelated 402 must not become an upsell. */
         const entitlement = isStructuredUpgradeDenial(reason, "ai_resume_tailoring");
+        /* A PROFILE GAP IS NOT A POSTING VERDICT, the sibling of the 402 rule above and read the
+           same structured way. The engine cannot write a resume with no school or degree on file,
+           and that gap follows the student to every posting - so routes/resume.ts sends a DISTINCT
+           code, "resume_profile_incomplete" (never "resume_quality_hold"), naming the field to fix.
+           It is discovered server-side, unlike the name/email preconditions, because only the
+           server holds the profile; but the recovery is the same one-place fix, so it takes the
+           precondition branch rather than the "try another posting" one. `field` defaults to
+           education, the only field the backend sends today, if a newer server omits it. */
+        const profileIncompleteField = reason instanceof ApiError
+          && typeof reason.data === "object" && reason.data !== null
+          && (reason.data as { code?: string }).code === "resume_profile_incomplete"
+          ? ((reason.data as { field?: "education" }).field ?? "education")
+          : null;
         /* The 422's own name for itself, read from the structured body rather than matched on the
            sentence: routes/resume.ts sends code "resume_quality_hold" with the message, and the
-           message is allowed to be rewritten. */
+           message is allowed to be rewritten. A profile gap is deliberately NOT one of these: it
+           must not increment the consecutive-hold counter, whose whole subject is a resume that is
+           thin against these postings. */
         const qualityHold = reason instanceof ApiError
           && typeof reason.data === "object" && reason.data !== null
           && (reason.data as { code?: string }).code === "resume_quality_hold";
         consecutiveQualityHolds = qualityHold ? consecutiveQualityHolds + 1 : 0;
+        const accountFixable = fixable || profileIncompleteField !== null;
         setError({
           message: reason instanceof Error ? reason.message : "Litos could not build this application.",
-          fixable,
+          fixable: accountFixable,
           qualityHold,
-          /* WHICH precondition, not just that there was one. A missing name and a missing email are
-             fixed in different places, and for a guest the email is not fixable in Account at all. */
-          field: reason instanceof BuildPreconditionError ? reason.field : null,
+          /* WHICH field, not just that there was one. A missing name, a missing email and a missing
+             education are fixed in different places, and for a guest the email is not fixable in
+             Account at all. */
+          field: reason instanceof BuildPreconditionError ? reason.field : profileIncompleteField,
           entitlement,
         });
-        track("onboarding_build_failed", { fixable, entitlement });
+        track("onboarding_build_failed", { fixable: accountFixable, entitlement });
       });
     return () => { cancelled = true; };
     /* `attempt` re-runs the whole sequence for "Read the form again". Safe by construction: every
@@ -293,6 +310,12 @@ export function BuildStep({
   /* The one precondition a guest cannot satisfy from Account, because a guest has no account email.
      Read at render rather than stored: the student may have claimed one in another tab. */
   const guestNeedsEmail = error?.fixable === true && error.field === "resume_email" && isGuestSession();
+
+  /* A missing school or degree is fixed on the resume step, not in Account, and it follows the
+     student to every posting - so this screen must send them back to add it, never on to another
+     posting that will fail on the same gap. The backend proves it with the resume_profile_incomplete
+     code (see the catch above); this is where that becomes a way forward instead of a dead end. */
+  const needsEducation = error?.fixable === true && error.field === "education";
 
   /* THE PAYWALL SAYS IT IS A PAYWALL. The generic failure screen below blames the posting and
      offers another one, and both halves are false here: the refusal is about the account, and the
@@ -346,17 +369,22 @@ export function BuildStep({
         <ErrorNote message={error.message} />
         <p className="mt-4 text-sm leading-6 text-muted">
           {error.fixable
-            ? guestNeedsEmail
-              /* A GUEST HAS NO ACCOUNT EMAIL TO GO AND FIND, which is what made this a dead end.
-               *
-                 `resume_email` is seeded from the login email at upload, so a signed-in student
-                 never sees this screen - measured on prod 2026-08-19, 7 of 7 have one. A guest has
-                 no email anywhere, so "add it in Account" sent them to a page with nothing to add,
-                 three screens into setup. Claiming one is the actual fix, it is the same route the
-                 plan screen already uses for a guest who cannot check out, and an application needs
-                 a contact address anyway: the employer has to be able to reply to it. */
-              ? "An employer needs somewhere to reply. Add your email and Litos will build this one again, with the posting saved."
-              : "Add it in Account and Litos will build this one again. The posting is saved."
+            ? needsEducation
+              /* A profile gap, not a posting verdict. A resume needs a school and a degree, they
+                 are not on this profile yet, and no other posting changes that - so the fix is to
+                 add them, said as the one-line fix it is rather than as a verdict on this job. */
+              ? "A resume needs your school and degree, and they are not on your profile yet. Add them and Litos will build this one again. The posting is saved."
+              : guestNeedsEmail
+                /* A GUEST HAS NO ACCOUNT EMAIL TO GO AND FIND, which is what made this a dead end.
+                 *
+                   `resume_email` is seeded from the login email at upload, so a signed-in student
+                   never sees this screen - measured on prod 2026-08-19, 7 of 7 have one. A guest has
+                   no email anywhere, so "add it in Account" sent them to a page with nothing to add,
+                   three screens into setup. Claiming one is the actual fix, it is the same route the
+                   plan screen already uses for a guest who cannot check out, and an application needs
+                   a contact address anyway: the employer has to be able to reply to it. */
+                ? "An employer needs somewhere to reply. Add your email and Litos will build this one again, with the posting saved."
+                : "Add it in Account and Litos will build this one again. The posting is saved."
             : error.qualityHold && consecutiveQualityHolds >= 2 && onReviseResume
               /* The pattern, said out loud. One hold is a fact about one posting; this many in a
                  row is a fact about the resume, and repeating the posting sentence a third time
@@ -370,6 +398,13 @@ export function BuildStep({
           )}
           {!error.fixable && (
             <PrimaryButton onClick={onPickAnother}>Show me a different one</PrimaryButton>
+          )}
+          {needsEducation && onReviseResume && (
+            /* Back to the resume step, where school and degree come from - not on to another
+               posting, which is the loop this whole branch exists to break. */
+            <PrimaryButton onClick={() => { track("onboarding_build_add_education", {}); onReviseResume(); }}>
+              Add my education
+            </PrimaryButton>
           )}
           {guestNeedsEmail && (
             <PrimaryButton onClick={() => { track("onboarding_build_claim_required", {}); window.location.assign("/login?intent=claim&next=/start"); }}>

@@ -95,6 +95,10 @@ type OnboardingEvent =
   | "onboarding_revisit_opened"
   | "onboarding_revisit_saved"
   | "onboarding_build_claim_required"
+  /* The build could not run because the account has no school/degree on file, and the student took
+     the offered fix back to the resume step rather than being sent posting-shopping. A count here
+     is the profile gap that used to dead-end as a "not a fit, try another posting" loop. */
+  | "onboarding_build_add_education"
   /* The build's entitlement paywall sent somebody to /pricing. A count here is an account whose
      free setup build was gone, which for a fresh student should be nearly never. */
   | "onboarding_build_upgrade_opened";
