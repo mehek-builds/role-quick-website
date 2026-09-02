@@ -41,7 +41,10 @@ const keys = (steps) => steps.map((s) => s.key);
 
 /* The steps a student in the application flow walks. The work visa is the conditional one WITHIN
    that flow and never replaces any of these, so this is the spine and the base denominator. */
-const ALWAYS = ["focus", "resume", "match", "questions", "review", "trial", "notifications", "plan", "done"];
+/* "notifications" left this spine when its two switches moved onto the trial screen (10 -> 9).
+   The step name still exists in the ledger for accounts that acked trial before the fold; the
+   screen that serves them stands on "trial", so the rail never counts it. */
+const ALWAYS = ["focus", "resume", "match", "questions", "review", "trial", "plan", "done"];
 
 /* The steps that are unconditional in STEPS itself, which is a different question. The application
    sequence is conditional on `includes_application_steps` because an account that has already
@@ -64,7 +67,7 @@ test("every conditional step has its own server signal, and no unconditional ste
   const conditional = STEPS.filter((s) => s.conditional).map((s) => s.key);
   assert.deepEqual(
     conditional,
-    ["match", "questions", "sponsorship", "review", "trial", "notifications", "plan"],
+    ["match", "questions", "sponsorship", "review", "trial", "plan"],
   );
 
   const source = await readFile(new URL("../features/onboarding/domain/rail.ts", import.meta.url), "utf8");
@@ -83,18 +86,18 @@ test("every conditional step has its own server signal, and no unconditional ste
   }
 });
 
-test("a flow without the work-visa screen reads nine throughout", () => {
+test("a flow without the work-visa screen reads eight throughout", () => {
   for (const step of ALWAYS) {
     const steps = flowSteps(step, stateAt(step));
-    assert.equal(steps.length, 9, `${step} claims ${steps.length} steps in a flow without the visa screen`);
+    assert.equal(steps.length, 8, `${step} claims ${steps.length} steps in a flow without the visa screen`);
     assert.ok(!keys(steps).includes("sponsorship"));
   }
 });
 
-test("a flow with it reads ten throughout, on every step", () => {
+test("a flow with it reads nine throughout, on every step", () => {
   for (const step of [...ALWAYS, "sponsorship"]) {
     const steps = flowSteps(step, stateAt(step, { includes_sponsorship_step: true }));
-    assert.equal(steps.length, 10, `${step} claims ${steps.length} steps in a flow with the visa screen`);
+    assert.equal(steps.length, 9, `${step} claims ${steps.length} steps in a flow with the visa screen`);
   }
 });
 
@@ -112,7 +115,7 @@ test("the count does not SHRINK once the declaration exists", () => {
      flag is read for the flow, and why the step being RENDERED is always counted. */
   const during = flowSteps("sponsorship", stateAt("sponsorship", { includes_sponsorship_step: false }));
   assert.ok(keys(during).includes("sponsorship"), "the screen being rendered must always be counted");
-  assert.equal(during.length, 10);
+  assert.equal(during.length, 9);
 });
 
 test("the rendered step is always in the result, which is what lets the rail locate itself", () => {
@@ -130,7 +133,7 @@ test("the visa screen is counted in place: after the questions, before the revie
 
 test("a backend that never sends the flag reads as a flow without the screen", () => {
   const steps = flowSteps("review", { step: "review", includes_application_steps: true });
-  assert.equal(steps.length, 9);
+  assert.equal(steps.length, 8);
   assert.ok(!keys(steps).includes("sponsorship"));
 });
 
