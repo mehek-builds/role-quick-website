@@ -210,7 +210,14 @@ function Education({ spec }: { spec: ResumeSpec }) {
 function SectionHeading({ id, eyebrow, title, note }: { id: string; eyebrow: string; title: string; note?: string }) {
   return (
     <div id={id} className="scroll-mt-4">
-      <p className="font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-faint">{eyebrow}</p>
+      {/* text-muted, not text-faint. The eyebrow is not a decorative repeat of the title: it carries
+          "01 · Resume" against a prose title ("The resume they received"), so the ordinal and the
+          section's real name live here and nowhere else, and the jump nav above scrolls people
+          straight to it. That makes it the landing confirmation for a wayfinding control, the same
+          job the /start rail's step count does, and the same reason that one is muted. Faint is
+          #a3a19a, 2.6:1 on this surface, which fails AA for 10px regular text; muted is 5.4:1 and
+          still sits well behind the title. */}
+      <p className="font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-muted">{eyebrow}</p>
       <h3 className="mt-1.5 text-[15px] font-medium tracking-tight text-ink">{title}</h3>
       {note && <p className="mt-1 text-[12px] leading-5 text-muted">{note}</p>}
     </div>
