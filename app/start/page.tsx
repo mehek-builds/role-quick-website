@@ -557,7 +557,7 @@ export default function Start() {
    * mid-sequence: the alternative is carrying a packet the student cannot see and cannot check. */
   const resumeSequence = useCallback(() => {
     if (!chosenMatch) return <MatchStep onLater={later} onBuild={setChosenMatch} />;
-    return <BuildStep match={chosenMatch} onLater={later} onPickAnother={() => setChosenMatch(null)} onQuestions={(result, context) => setBuilt({ ...result, ...context })} />;
+    return <BuildStep match={chosenMatch} onLater={later} onPickAnother={() => setChosenMatch(null)} onReviseResume={() => { track("onboarding_revisit_opened", { step: "resume" }); setRevisiting("resume"); }} onQuestions={(result, context) => setBuilt({ ...result, ...context })} />;
   }, [chosenMatch, later]);
 
   /* An advance that did not land must not leave the sitting marked as having advanced.
@@ -865,6 +865,7 @@ export default function Start() {
               if (state.pinned_target_job_id) setPinnedJobDeclined(true);
               setChosenMatch(null);
             }}
+            onReviseResume={() => { track("onboarding_revisit_opened", { step: "resume" }); setRevisiting("resume"); }}
             onQuestions={(result, context) => {
               setBuilt({ ...result, ...context });
               stepDone("match");
@@ -950,8 +951,12 @@ export default function Start() {
         );
 
       case "trial":
+        /* Both acks in one motion: the trial screen now carries the staying-in-touch switches, so
+           finishing it answers both ledger entries. Sequential rather than parallel because the
+           ledger is a record of order, and refresh only after the second lands so the server never
+           has a window in which it would derive the folded screen. */
         return (
-          <TrialStep sent={applicationSent} onContinue={() => { stepDone("trial"); void ack("trial").then(refresh).catch(fail); }} />
+          <TrialStep sent={applicationSent} onContinue={() => { stepDone("trial"); void (async () => { await ack("trial"); await ack("notifications"); await refresh(); })().catch(fail); }} />
         );
 
       case "notifications":

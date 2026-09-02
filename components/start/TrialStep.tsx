@@ -28,6 +28,7 @@ import { useEffect, useState } from "react";
 import { getBillingState, type EntitlementSnapshot } from "@/features/billing";
 import { localDayKeyOf } from "@/lib/local-day";
 import { PrimaryButton, Receipt, StartShell } from "./ui";
+import { NotificationChoices } from "./NotificationsStep";
 import { track } from "@/lib/analytics";
 
 /* MIRRORS TRIAL_LIMITS in the backend's lib/entitlements.ts, and it is a mirror rather than a read
@@ -114,6 +115,16 @@ export function TrialStep({ onContinue, sent }: { onContinue: () => void; sent: 
           ? "These are what is left, counted after the resume Litos just built for you. The application costs nothing on any plan."
           : "This is what the seven days include. The resume Litos just built for you was free, and the application costs nothing on any plan."}
       </p>
+
+      {/* THE STAYING-IN-TOUCH ASK, folded in from its own screen (10 -> 9). Its doc comment always
+          said it belonged to this moment - "asked between the gift and the price" - and two screens
+          for one moment was the rail counting a pause. The switches save themselves as they are
+          ticked, so the button below stays about one thing. Both ledger entries are acknowledged by
+          onContinue, which is what keeps the server from deriving the folded screen afterwards. */}
+      <div className="mt-8">
+        <p className="mb-4 text-[15px] leading-6 text-ink">Want to know when the next one opens?</p>
+        <NotificationChoices />
+      </div>
 
       <div className="mt-7">
         <PrimaryButton onClick={onContinue}>Start using it</PrimaryButton>

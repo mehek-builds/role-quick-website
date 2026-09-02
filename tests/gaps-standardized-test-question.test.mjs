@@ -35,6 +35,42 @@ describe("the standardized-test question on the gaps screen", () => {
     );
   });
 
+  /* THE TWO ANSWERS THAT LOOK ALIKE AND MEAN OPPOSITE THINGS.
+   *
+   * "None" stores a declaration that she sat neither exam, which is the only answer that lets Litos
+   * put anything in an employer's test-score field. Declining is the Skip control, which stores
+   * nothing. Rendered as the raw enum they read as near-synonyms one row apart, and picking the
+   * wrong one is the difference between an application that can be finished and one that cannot.
+   */
+  test("every offered value is said in words, and None is not left as the enum member", () => {
+    const labels = STEPS.match(/const TEST_TYPE_LABELS: Record<\(typeof TEST_TYPE_OPTIONS\)\[number\], string> = \{([\s\S]*?)\};/);
+    assert.ok(labels, "the screen needs a label for every stored value");
+    for (const option of ["SAT", "ACT", "Both", "None"]) {
+      assert.match(labels[1], new RegExp(`${option}: "[^"]+"`), `${option} needs a label`);
+    }
+    assert.doesNotMatch(labels[1], /None: "None"/, "the declaration must be said in words, not as the enum member");
+    assert.match(labels[1], /None: "[^"]*not taken[^"]*"/, "None must read as having sat neither exam");
+  });
+
+  test("the select renders the label and still submits the stored value", () => {
+    assert.match(
+      STEPS,
+      /<option key=\{option\} value=\{option\}>\{TEST_TYPE_LABELS\[option\]\}<\/option>/,
+      "value stays the backend enum; only the text the applicant reads changes",
+    );
+    assert.doesNotMatch(
+      STEPS,
+      /<option key=\{option\} value=\{option\}>\{option\}<\/option>/,
+      "rendering the raw enum is the defect this pins",
+    );
+  });
+
+  test("the placeholder cannot be confused with the declaration", () => {
+    // "Select one" is disabled and stores nothing; "I have not taken either" is an answer. If these
+    // ever converge, the control's two most important entries become indistinguishable.
+    assert.match(STEPS, /<option value="" disabled>Select one<\/option>/);
+  });
+
   test("score inputs are conditional on the chosen type, not both always shown", () => {
     assert.match(STEPS, /\(testType === "SAT" \|\| testType === "Both"\) && \(/, "SAT score only for SAT or Both");
     assert.match(STEPS, /\(testType === "ACT" \|\| testType === "Both"\) && \(/, "ACT score only for ACT or Both");

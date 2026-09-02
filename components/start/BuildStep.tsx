@@ -25,7 +25,7 @@
 import { useEffect, useState } from "react";
 import { ThinkingOrb } from "thinking-orbs";
 import { ErrorNote } from "@/components/app/ui";
-import { api, getJob, getPostingQuestions, isGuestSession, type MonitoredJob, type ResumeSpec } from "@/lib/api";
+import { api, ApiError, getJob, getPostingQuestions, isGuestSession, type MonitoredJob, type ResumeSpec } from "@/lib/api";
 import {
   fetchJdMatch,
   prescriptMetadataBlockers,
@@ -45,6 +45,18 @@ import {
 } from "@/lib/onboarding-build";
 import { track } from "@/lib/analytics";
 import { LaterLink, PrimaryButton, StartShell, usePreferredLocations } from "./ui";
+
+/* THE RAIL POSITION FOR THIS SCREEN IS "match", NOT "build", and that is not a rename.
+ *
+ * `build` stopped being a rail step when the two phases were folded into one entry
+ * (features/onboarding/domain/rail.ts: "One screen, two phases: the posting, then it building").
+ * STEPS has no `build` key, so StepRail's findIndex returned -1, `known` stayed false, and the rail
+ * rendered its loading shimmer with aria-busy for the WHOLE screen - on the longest wait in
+ * onboarding, around a minute, where a student most wants to know where they are. It was not a
+ * flash before state arrived; there was no key for it to ever resolve to.
+ *
+ * All three shells here take the same position, including the Litos+ and failed-build screens,
+ * because a student on either of those is still standing on the match step of the flow. */
 import { narrowPostingLocation } from "@/lib/posting-location";
 import type { OnboardingMatch } from "@/lib/onboarding-match";
 
@@ -68,10 +80,27 @@ export type BuildContext = {
   applicantName: string | null;
 };
 
+/* CONSECUTIVE QUALITY HOLDS THIS SITTING, across remounts.
+ *
+ * "Show me a different one" unmounts this component and a fresh posting mounts a new one, so a
+ * counter in state forgets exactly the pattern it exists to notice. Module scope survives the
+ * remount and resets on a full page load, the same shape onboarding-flow.ts already uses for its
+ * session deferrals.
+ *
+ * WHY IT EXISTS. The quality hold is per-posting - the backend audits the resume AGAINST this
+ * posting's text - so one hold rightly says "try another posting". But a resume with no bullet
+ * that answers ANY of the board's postings holds every time, and the screen sent the student
+ * round that loop with the same sentence each pass: measured live, three holds in a row, each
+ * blaming the posting while the error above it named the resume. After the second consecutive
+ * hold the pattern points at the resume, so the screen says that and offers the way to fix it.
+ * Reset on any successful build, because one success breaks the pattern honestly. */
+let consecutiveQualityHolds = 0;
+
 export function BuildStep({
   match,
   onQuestions,
   onPickAnother,
+  onReviseResume,
   onLater,
 }: {
   match: OnboardingMatch;
@@ -80,11 +109,14 @@ export function BuildStep({
   /** Back to the match screen to choose a different posting. The way out of a build that cannot
    *  succeed for THIS posting no matter how many times it is retried. */
   onPickAnother: () => void;
+  /** Opens the resume revisit. Offered only once consecutive quality holds say the resume is the
+   *  pattern, and optional so the QA harness renders unchanged. */
+  onReviseResume?: () => void;
   onLater: () => void;
 }) {
   const [stages, setStages] = useState<BuildStage[]>(() => initialStages());
   const [result, setResult] = useState<BuildResult | null>(null);
-  const [error, setError] = useState<{ message: string; fixable: boolean; field: "full_name" | "resume_email" | null; entitlement: boolean } | null>(null);
+  const [error, setError] = useState<{ message: string; fixable: boolean; field: "full_name" | "resume_email" | null; entitlement: boolean; qualityHold: boolean } | null>(null);
   /* Bumped by "Read the form again". The scan stage runs before anything is spent, so re-running
      the whole build after a scan failure costs nothing until the scan actually passes. */
   const [attempt, setAttempt] = useState(0);
@@ -188,6 +220,7 @@ export function BuildStep({
     )
       .then((built) => {
         if (cancelled) return;
+        consecutiveQualityHolds = 0;
         setResult(built);
         track("onboarding_build_completed", {
           outstanding: built.outstandingQuestions,
@@ -207,9 +240,17 @@ export function BuildStep({
            denial shape takes this branch, for the same reason the dashboard checks it: an
            unrelated 402 must not become an upsell. */
         const entitlement = isStructuredUpgradeDenial(reason, "ai_resume_tailoring");
+        /* The 422's own name for itself, read from the structured body rather than matched on the
+           sentence: routes/resume.ts sends code "resume_quality_hold" with the message, and the
+           message is allowed to be rewritten. */
+        const qualityHold = reason instanceof ApiError
+          && typeof reason.data === "object" && reason.data !== null
+          && (reason.data as { code?: string }).code === "resume_quality_hold";
+        consecutiveQualityHolds = qualityHold ? consecutiveQualityHolds + 1 : 0;
         setError({
           message: reason instanceof Error ? reason.message : "Litos could not build this application.",
           fixable,
+          qualityHold,
           /* WHICH precondition, not just that there was one. A missing name and a missing email are
              fixed in different places, and for a guest the email is not fixable in Account at all. */
           field: reason instanceof BuildPreconditionError ? reason.field : null,
@@ -261,7 +302,7 @@ export function BuildStep({
      already lives. Nothing is lost by leaving: the flow resumes from this same step. */
   if (error?.entitlement) {
     return (
-      <StartShell step="build" title="This one needs Litos+.">
+      <StartShell step="match" title="This one needs Litos+.">
         <p className="text-sm leading-6 text-muted">
           The free build that comes with setup is not available on this account anymore, so
           tailoring another application is a Litos+ action. Nothing was sent and nothing was lost:
@@ -301,7 +342,7 @@ export function BuildStep({
      * fixed in Account and follows the student to every posting, so offering a different one would
      * send them round a loop that fails identically. */
     return (
-      <StartShell step="build" title="That build did not finish.">
+      <StartShell step="match" title="That build did not finish.">
         <ErrorNote message={error.message} />
         <p className="mt-4 text-sm leading-6 text-muted">
           {error.fixable
@@ -316,9 +357,17 @@ export function BuildStep({
                  a contact address anyway: the employer has to be able to reply to it. */
               ? "An employer needs somewhere to reply. Add your email and Litos will build this one again, with the posting saved."
               : "Add it in Account and Litos will build this one again. The posting is saved."
-            : "Nothing was sent and nothing was lost. Your resume and roles are saved, and this one is not a fit Litos can write honestly. Try another posting."}
+            : error.qualityHold && consecutiveQualityHolds >= 2 && onReviseResume
+              /* The pattern, said out loud. One hold is a fact about one posting; this many in a
+                 row is a fact about the resume, and repeating the posting sentence a third time
+                 would send the student round the same loop it already failed to fix twice. */
+              ? "Nothing was sent and nothing was lost. This has now happened on more than one posting, which usually means the resume itself is thin where these jobs ask for evidence. You can change it, or try one more posting."
+              : "Nothing was sent and nothing was lost. Your resume and roles are saved, and this one is not a fit Litos can write honestly. Try another posting."}
         </p>
         <div className="mt-6 flex flex-wrap items-center gap-4">
+          {!error.fixable && error.qualityHold && consecutiveQualityHolds >= 2 && onReviseResume && (
+            <PrimaryButton onClick={onReviseResume}>Let me change my resume</PrimaryButton>
+          )}
           {!error.fixable && (
             <PrimaryButton onClick={onPickAnother}>Show me a different one</PrimaryButton>
           )}
@@ -337,7 +386,7 @@ export function BuildStep({
 
   return (
     <StartShell
-      step="build"
+      step="match"
       title={building ? "Building your application." : "Your application is built."}
     >
       {/* ONE LINE, NOT A PANE. The posting and the paper are drawn exactly once in this flow, on

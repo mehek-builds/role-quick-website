@@ -7,13 +7,14 @@
  * presented a partial employer list as the whole menu with nothing going red (fixed in 3a90a2e).
  * The harness page fixes the reachability half; this spec is the CI half.
  *
- * The four fixtures on that page are the render paths that actually differ, and each is asserted
+ * The five fixtures on that page are the render paths that actually differ, and each is asserted
  * by the control set only it produces:
  *
- *   short-choice-list   radios, one per employer option, and nothing else
- *   long-choice-list    a native select opening on a disabled placeholder, never a fake answer
- *   incomplete-options  the partial-list warning, because options_complete is false
- *   optional-unknown    free text with an explicit Skip: a decision, not a default
+ *   short-choice-list    radios, one per employer option, and nothing else
+ *   long-choice-list     a native select opening on a disabled placeholder, never a fake answer
+ *   incomplete-options   the partial-list warning, because options_complete is false
+ *   litos-drafted-essay  the box arrives FILLED by Litos, saying so, waiting on her approval
+ *   optional-unknown     free text with an explicit Skip: a decision, not a default
  *
  * Runs the production Next build with the QA gate satisfied by a fabricated local secret. The
  * backend is stubbed by a catch-all route that RECORDS what it answers, so an on-mount fetch
@@ -116,9 +117,11 @@ const HEADINGS = {
   "long-choice-list": /notice are you required to give/i,
   "incomplete-options": /office location would you prefer/i,
   "optional-unknown": /someone referred you/i,
+  "litos-drafted-essay": /multimodal\/cv system you personally shipped/i,
 };
 
 const INCOMPLETE_WARNING = /could not read this employer.+full list of choices/is;
+const DRAFT_NOTICE = /Litos wrote this answer from your resume and this job/i;
 
 const heading = (page, id) => page.locator("main h2").filter({ hasText: HEADINGS[id] });
 
@@ -157,6 +160,10 @@ async function controlFingerprint(page) {
     selects: await page.locator("main select").count(),
     textareas: await page.locator("main textarea").count(),
     incompleteWarning: (await page.locator("main").innerText()).match(INCOMPLETE_WARNING) !== null,
+    /* Part of the identity, not a bonus assertion. optional-unknown and litos-drafted-essay both
+       render exactly one textarea and nothing else, so without this the pairwise-distinctness test
+       below could not tell them apart and one of the two render paths would go dark. */
+    draftNotice: (await page.locator("main").innerText()).match(DRAFT_NOTICE) !== null,
   };
 }
 
@@ -209,6 +216,7 @@ blockerTest("short choice list: the employer's own options as radios, and the sa
     selects: 0,
     textareas: 0,
     incompleteWarning: false,
+    draftNotice: false,
   });
   /* The employer's vocabulary, not a paraphrase. */
   const labels = await page.locator('main input[type="radio"]').evaluateAll(
@@ -243,6 +251,7 @@ blockerTest("long choice list: past the limit it collapses to a select that read
     selects: 1,
     textareas: 0,
     incompleteWarning: false,
+    draftNotice: false,
   });
 
   const select = page.locator("main select");
@@ -274,10 +283,53 @@ blockerTest("incomplete options: the partial list is presented as partial, not a
     selects: 0,
     textareas: 0,
     incompleteWarning: true,
+    draftNotice: false,
   });
   const labels = await page.locator('main input[type="radio"]').evaluateAll(
     (inputs) => inputs.map((input) => input.value));
   assert.deepEqual(labels, ["Amsterdam", "Rotterdam", "Utrecht"]);
+});
+
+blockerTest("drafted essay: Litos filled the box, said so, and waits on her approval", async (page) => {
+  await openHarness(page);
+  await openCase(page, "short-choice-list", "litos-drafted-essay");
+
+  /* THE SAME BOX AS EVERY OTHER FILL-IN QUESTION. One textarea, no second editor, no accept and
+     reject pair. What is different is that it arrives with words in it and a line naming who
+     wrote them. */
+  assert.deepEqual(await controlFingerprint(page), {
+    radios: 0,
+    selects: 0,
+    textareas: 1,
+    incompleteWarning: false,
+    draftNotice: true,
+  });
+
+  const box = page.locator("main textarea");
+  assert.match(await box.inputValue(), /ingestion pipeline I built at Acme Labs/,
+    "the drafted answer must be in the box she edits, not beside it");
+
+  const body = await page.locator("main").innerText();
+  assert.match(body, DRAFT_NOTICE, "a machine-written answer rendered with no word about who wrote it");
+  assert.match(body, /Approve it as it is, or change/);
+  assert.match(body, /Nothing is sent until you do\./);
+
+  /* The press is live and reads Approve, because there is nothing here for her to save that she
+     wrote. Required, so no Skip: that part of the contract is unchanged. */
+  const approve = page.getByRole("button", { name: "Approve and next" });
+  assert.equal(await approve.count(), 1, "the drafted answer had no approve press");
+  assert.equal(await approve.isDisabled(), false, "a drafted answer must be approvable as it stands");
+  assert.equal(await page.getByRole("button", { name: "Skip" }).count(), 0,
+    "a required question offered a way past itself");
+
+  /* Editing it makes the words hers, and the press says so. */
+  await box.fill("I rewrote this in my own words.");
+  assert.equal(await page.getByRole("button", { name: "Approve and next" }).count(), 0);
+  assert.equal(await page.getByRole("button", { name: "Save and next" }).isDisabled(), false);
+
+  /* And emptying it blocks the save, exactly as a blank required box always did. */
+  await box.fill("");
+  assert.equal(await page.getByRole("button", { name: "Save and next" }).isDisabled(), true);
 });
 
 blockerTest("optional unknown: free text with an explicit answer-or-skip decision", async (page) => {
@@ -289,6 +341,7 @@ blockerTest("optional unknown: free text with an explicit answer-or-skip decisio
     selects: 0,
     textareas: 1,
     incompleteWarning: false,
+    draftNotice: false,
   });
   assert.match(await page.locator("main").innerText(), /Optional\. Answer it or skip it\./);
 
@@ -302,13 +355,16 @@ blockerTest("optional unknown: free text with an explicit answer-or-skip decisio
   assert.equal(await page.getByRole("button", { name: "Save answer" }).isDisabled(), false);
 });
 
-blockerTest("the four cases are four different renders, not four coats of the same paint", async (page) => {
+blockerTest("the five cases are five different renders, not five coats of the same paint", async (page) => {
   await openHarness(page);
 
   /* The direct jumps above never traverse 2 to 3 or 3 to 4, and a fingerprint measured after
      ARRIVING differently is the one place order-dependent contamination between fixtures could
      show. So this walks the tabs adjacently and re-measures every case on the path. */
-  const order = ["short-choice-list", "long-choice-list", "incomplete-options", "optional-unknown"];
+  const order = [
+    "short-choice-list", "long-choice-list", "incomplete-options", "litos-drafted-essay",
+    "optional-unknown",
+  ];
   const fingerprints = new Map([[order[0], await controlFingerprint(page)]]);
   for (let i = 1; i < order.length; i += 1) {
     await openCase(page, order[i - 1], order[i]);
