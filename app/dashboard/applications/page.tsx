@@ -66,7 +66,7 @@ import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX, exactPacketAuditClauses
 import { educationDrift, educationDriftMessage, type EducationProfile } from "@/features/applications";
 import { checklistRowControl, completedSubmissionGroups, directInputTaskPlan, directQuestionPromptFingerprint, directQuestionTaskFingerprint, displayQuestionLabel, documentAsksByKind, documentControls, humanInputItems, metadataRefreshOutranksStandingAttention, QUESTION_CHOICE_LIST_LIMIT, reviewedAnswersSaveLanding, type DirectQuestionTask, type DirectQuestionTaskIntent, type SubmissionChecklistAction, type SubmissionChecklistItem } from "@/features/applications";
 import { prescriptBlocksProgress, prescriptEditableQuestions, prescriptMetadataBlockers, prescriptNeedsHer, prescriptSummary } from "@/features/applications";
-import { answerWithExactOptionToggled, exactQuestionOption, exactSelectedQuestionOptions, optionalQuestionNeedsDecision, questionAcceptsMultipleOptions, questionOptionsAreComplete, questionReviewPresentation, requiredQuestionReviewRoute } from "@/features/applications";
+import { answerNamesNoOfferedOption, answerWithExactOptionToggled, exactQuestionOption, exactSelectedQuestionOptions, optionalQuestionNeedsDecision, questionAcceptsMultipleOptions, questionOptionsAreComplete, questionReviewPresentation, requiredQuestionReviewRoute } from "@/features/applications";
 import type { JdMatchResponse, JobMatch } from "@/features/applications";
 import { userFacingError } from "@/lib/user-facing-error";
 import { APPLICATION_DOCUMENT_ACCEPT_ATTRIBUTE, validateApplicationDocument } from "@/lib/document-size";
@@ -8006,7 +8006,12 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
     review.questions,
     review.question_metadata_blockers ?? [],
   ).editableQuestions.some(optionalQuestionNeedsDecision);
-  const requiredAnswerMissing = review.questions.some((question) => question.required && !(question.answer ?? "").trim())
+  /* THE LAST GATE BEFORE THE EMPLOYER, and emptiness alone was not enough of one. A required closed
+     control carrying a value none of its options offer is not empty, so it read as answered and
+     Send rendered enabled over an application the portal cannot take. `answerNamesNoOfferedOption`
+     is the same membership the question card binds its controls with. */
+  const requiredAnswerMissing = review.questions.some((question) => question.required
+    && (!(question.answer ?? "").trim() || answerNamesNoOfferedOption(question)))
     || optionalAnswerDecisionMissing;
   const safeAttentionReason = review.attention_reason
     ? userFacingError(review.attention_reason, "Litos could not finish the company’s form. Try again in a minute.")

@@ -44,7 +44,8 @@ import {
   type BuildStage,
 } from "@/lib/onboarding-build";
 import { track } from "@/lib/analytics";
-import { LaterLink, PrimaryButton, StartShell } from "./ui";
+import { LaterLink, PrimaryButton, StartShell, usePreferredLocations } from "./ui";
+import { narrowPostingLocation } from "@/lib/posting-location";
 import type { OnboardingMatch } from "@/lib/onboarding-match";
 
 /* The employer-form pre-scan is a flaky live read (a managed-browser pass that times out, loads
@@ -100,6 +101,10 @@ export function BuildStep({
      the build runs and after a failed fetch, in which case both panes render unmarked prose, which
      is the pre-ISSUE-047 state rather than a new failure mode. */
   const [jdMatch, setJdMatch] = useState<JdMatchResponse | null>(null);
+  /* The offices this student asked for, out of the ones the employer listed. See
+     lib/posting-location.ts: an unread preference list narrows nothing, so the line below falls
+     back to the employer's full location field. */
+  const preferredLocations = usePreferredLocations();
 
   useEffect(() => {
     let cancelled = false;
@@ -344,7 +349,7 @@ export function BuildStep({
       <p className="font-mono text-[11px] leading-relaxed text-muted">
         {posting.title}
         <br />
-        {[posting.company_name, posting.location].filter(Boolean).join(" \u00b7 ")}
+        {[posting.company_name, narrowPostingLocation(posting.location, preferredLocations)].filter(Boolean).join(" \u00b7 ")}
       </p>
 
       {!building && (

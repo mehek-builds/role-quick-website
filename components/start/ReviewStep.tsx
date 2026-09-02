@@ -44,7 +44,8 @@ import {
 } from "@/features/applications";
 import { MatchLegend, RequirementProvider, RequirementText } from "@/components/app/RequirementText";
 import { track } from "@/lib/analytics";
-import { PrimaryButton, Receipt, StartShell } from "./ui";
+import { PrimaryButton, Receipt, StartShell, usePreferredLocations } from "./ui";
+import { narrowPostingLocation } from "@/lib/posting-location";
 import { ResumePaper, type ContactHeader } from "./ResumePaper";
 
 /* The posting's words with their requirement marks and legend, drawn once, here, on the only screen in the flow
@@ -108,6 +109,10 @@ export function ReviewStep({
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /* The offices this student asked for, out of the ones the employer listed. Narrowed the same way
+     as the two screens before it: the place the packet is going should not change wording on the
+     screen that sends it. */
+  const preferredLocations = usePreferredLocations();
 
   async function send() {
     if (!applicationId) {
@@ -164,7 +169,7 @@ export function ReviewStep({
             <div className="flex aspect-[612/792] flex-col gap-2 overflow-y-auto p-3.5">
               <p className="text-[15px] leading-snug text-ink">{posting.title}</p>
               <p className="font-mono text-[11px] leading-relaxed text-muted">
-                {[posting.company_name, posting.location].filter(Boolean).join(" · ")}
+                {[posting.company_name, narrowPostingLocation(posting.location, preferredLocations)].filter(Boolean).join(" · ")}
                 <br />
                 {posting.ats_name}
               </p>

@@ -17,10 +17,11 @@
  * a prop, and why it draws itself with no position at all until the state arrives.
  */
 
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/app/Button";
 import { flowSteps } from "@/features/onboarding";
+import { getTargeting, getToken } from "@/lib/api";
 import type { OnboardingState, OnboardingStep } from "@/lib/api";
 
 /* STEPS and `flowSteps` live in features/onboarding/domain/rail.ts and are re-exported here.
@@ -197,6 +198,46 @@ export function StartShell({
       {aside && <div className="mt-8">{aside}</div>}
     </main>
   );
+}
+
+/* THE LAST ANSWER THIS SITTING GOT, so the second and third posting screens do not each start by
+   printing a list they are about to shorten.
+   Seeding rather than caching: every mount still issues its own read and that read always wins, so
+   a student who revisits the roles screen mid-flow (see REVISITABLE below) sees the places they
+   just changed rather than the ones this held. Written only from inside the effect below, which
+   never runs on the server, so a prerender cannot carry one visitor's places into another's HTML
+   and the hydrating first mount always starts from the empty list the static markup was built
+   with. */
+let lastKnownPreferredLocations: string[] = [];
+
+/**
+ * The places this student said they want to work, for the posting headers that print a location.
+ *
+ * Every screen that shows a posting reads it for itself rather than being handed it, which is the
+ * same shape MatchStep's own board fetch already has: one small authenticated GET per screen, and
+ * no argument threaded through app/start/page.tsx to reach a header.
+ *
+ * EMPTY IS THE ANSWER FOR EVERY FAILURE, and it has to be: `narrowPostingLocation` treats no saved
+ * places as nothing to narrow by and prints the employer's full location field, which is exactly
+ * what these headers did before. A read that fails, or one for a session with no token, degrades
+ * to the old behaviour rather than to a header with no location on it at all.
+ */
+export function usePreferredLocations(): string[] {
+  const [locations, setLocations] = useState<string[]>(lastKnownPreferredLocations);
+  useEffect(() => {
+    if (!getToken()) return;
+    let cancelled = false;
+    getTargeting()
+      .then((targeting) => {
+        lastKnownPreferredLocations = targeting.locations ?? [];
+        if (!cancelled) setLocations(lastKnownPreferredLocations);
+      })
+      .catch(() => {
+        /* Nothing to report and nothing to retry: the header simply prints every office. */
+      });
+    return () => { cancelled = true; };
+  }, []);
+  return locations;
 }
 
 /* Going back to change an answer, from wherever the student is standing.
