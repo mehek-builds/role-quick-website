@@ -600,3 +600,41 @@ test("the guard is scoped to the prepared status, not to the presence of a packe
     assert.equal(merged[0].spec._review?.status, "needs_attention");
   }
 });
+
+test("an application with a live run reaches the screen that shows the live browser", () => {
+  /* REGRESSION for a real orphaned run. DSI Innovations, 2026-09-02: Send pressed, run claimed,
+     status 'submitting', Stratus streaming the company form into the live panel. A reload of the
+     exact same deep link routed to the attended detail card, because MID_SUBMISSION_STATUSES named
+     only the security-code pause. The one screen that shows what the browser changes to, including
+     the confirmation reload, was reachable only from the tab that pressed Send; close it and no
+     path on the page led back, while the card underneath invited a second fill against a held
+     claim.
+
+     Same argument as the code admission above, one step earlier: READY says a send may happen,
+     these say one is happening. Refusing them cannot prevent a send, only blind one mid-flight. */
+  for (const status of ["submit_requested", "preparing", "filling", "submitting", "submission_claimed"]) {
+    const packet = legacy();
+    packet.spec._review = { ...packet.spec._review!, status: status as never, portal_supported: true };
+    const merged = mergeCanonicalApplicationHistory([packet], [canonical({
+      legacy_generated_resume_id: packet.id,
+      submission_state: "submitting",
+      review_state: "submitting",
+    })]);
+    assert.equal(
+      sendableLinkedPacketFromCanonicalEnvelope(merged[0])?.id,
+      packet.id,
+      `a '${status}' row must reach the managed screens`,
+    );
+  }
+});
+
+test("an unsupported portal mid-run still keeps the attended detail", () => {
+  const packet = legacy();
+  packet.spec._review = { ...packet.spec._review!, status: "submitting" as never, portal_supported: false };
+  const merged = mergeCanonicalApplicationHistory([packet], [canonical({
+    legacy_generated_resume_id: packet.id,
+    submission_state: "submitting",
+    review_state: "submitting",
+  })]);
+  assert.equal(sendableLinkedPacketFromCanonicalEnvelope(merged[0]), null);
+});
