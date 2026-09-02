@@ -295,6 +295,7 @@ function FocusForm({
        student is told what is missing in reply to pressing Continue, not accused of it on arrival.
        Same shape as SponsorshipStep's countryEligibilityProblem. */
     const problem = focusProblem({
+      fields,
       categories: effectiveCategories,
       titles: selectedTitles,
       roleTypes,
@@ -639,7 +640,7 @@ function FocusForm({
             student who changed their mind about the field could press Continue and commit titles
             the screen had stopped drawing. Continue never commits anything invisible: while the
             offer is withheld, so is the button. */}
-        <PrimaryButton onClick={() => void save()} disabled={busy || !ready}>
+        <PrimaryButton onClick={() => void save()} disabled={busy}>
           {busy ? <PendingLabel onColor>Saving...</PendingLabel> : "Continue"}
         </PrimaryButton>
         <LaterLink onClick={onLater} />

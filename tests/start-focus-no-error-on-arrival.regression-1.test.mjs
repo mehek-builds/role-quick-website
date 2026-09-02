@@ -33,13 +33,15 @@ test("no warn-coloured paragraph renders from absent data alone", () => {
   assert.doesNotMatch(STEPS, /role="status" className="mb-4 text-xs leading-5 text-warn"/);
 });
 
-test("Continue is no longer dead on arrival", () => {
-  /* It keeps `busy` and the documented `!ready` invariant (deselecting every field hides the title
-     list, and Continue must never commit titles the screen has stopped drawing) and drops the four
-     data-completeness terms, which are what made the button unpressable before the student had
-     done anything. */
-  assert.match(STEPS, /disabled=\{busy \|\| !ready\}/);
-  assert.doesNotMatch(STEPS, /disabled=\{busy \|\| !ready \|\| selectedTitles\.length === 0/);
+test("Continue is never dead, so every refusal comes with a sentence", () => {
+  /* `busy` is the only thing left that withholds the button. `!ready` was in here too until review
+     pointed out it recreated the same silence one control over: deselecting every field turned
+     Continue off and printed nothing, and it made focusProblem's field and stage branches
+     unreachable, since the only states that produced them were the states that disabled the
+     button. The invariant that guard protected - never committing titles the screen has stopped
+     drawing - is kept by save() returning on the problem before it writes. */
+  assert.match(STEPS, /disabled=\{busy\}/);
+  assert.doesNotMatch(STEPS, /disabled=\{busy \|\| !ready/);
 });
 
 test("pressing Continue is what answers, and it answers before it writes", () => {

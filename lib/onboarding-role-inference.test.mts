@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { FIELDS, categoriesForFields, categoriesForRoles, experienceYears, fieldsForCategories, focusProblem, inferResumeTargeting, inferRoleType, titlesForFields } from "./onboarding-role-inference.ts";
+import { REMOTE_LOCATION } from "./locations.ts";
 import type { ParsedProfile } from "./api.ts";
 
 function profile(overrides: Partial<ParsedProfile>): ParsedProfile {
@@ -222,6 +223,7 @@ test("every field resolves to a category, so no selection can leave targeting un
  * yet - opened step 1 of 10 with a red error on it and a dead Continue button. Found by walking
  * the flow in a browser. */
 const complete = {
+  fields: ["software"],
   categories: ["software-engineering"],
   titles: ["Software Engineer"],
   roleTypes: ["internship"],
@@ -242,16 +244,34 @@ test("the empty location a new account always starts with is named, not assumed"
 });
 
 test("each missing field names itself", () => {
+  assert.equal(focusProblem({ ...complete, fields: [] }), "Choose at least one field to continue.");
   assert.equal(focusProblem({ ...complete, categories: [] }), "Choose at least one job category to continue.");
   assert.equal(focusProblem({ ...complete, roleTypes: [] }), "Choose the stage you are looking for.");
   assert.equal(focusProblem({ ...complete, titles: [] }), "Pick at least one job title.");
+});
+
+test("field and stage are answered by the sentence, not by a dead button", () => {
+  /* These two used to live in the Continue button's `disabled` expression, so the only states that
+     could produce them were the states in which the button could not be pressed - the branches
+     were unreachable and the student got silence instead. Review of the first commit caught it. */
+  assert.equal(focusProblem({ ...complete, fields: [], roleTypes: [] }), "Choose at least one field to continue.");
+  assert.equal(focusProblem({ ...complete, roleTypes: [] }), "Choose the stage you are looking for.");
+});
+
+test("the place message names the same chip the screen renders", () => {
+  /* Built from REMOTE_LOCATION rather than a second copy of the word, so the sentence cannot drift
+     from the chip it tells the student to press. */
+  assert.equal(
+    focusProblem({ ...complete, locations: [] }),
+    `Add at least one place. Pick "${REMOTE_LOCATION}" if you want to work from anywhere.`,
+  );
 });
 
 test("the message names the highest unanswered thing on the page, not the first check to run", () => {
   /* Order is the screen's reading order. With everything blank the student is sent to the top of
      the form rather than to the bottom of it. */
   assert.equal(
-    focusProblem({ categories: [], titles: [], roleTypes: [], locations: [] }),
-    "Choose at least one job category to continue.",
+    focusProblem({ fields: [], categories: [], titles: [], roleTypes: [], locations: [] }),
+    "Choose at least one field to continue.",
   );
 });

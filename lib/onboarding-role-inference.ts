@@ -1,4 +1,5 @@
 import type { ParsedProfile, RoleType, Targeting } from "./api";
+import { REMOTE_LOCATION } from "./locations.ts";
 
 export type ResumeTargetingGuess = {
   roles: string[];
@@ -405,14 +406,26 @@ export function focusPatch(saved: SavedFocus, selection: FocusSelection): Pick<T
  * Order is the order the screen reads in, so the message always names the highest thing on the
  * page that is not yet answered rather than whichever check happened to run first. */
 export function focusProblem(input: {
+  fields: readonly string[];
   categories: readonly string[];
   titles: readonly string[];
   roleTypes: readonly string[];
   locations: readonly string[];
 }): string | null {
-  if (input.categories.length === 0) return "Choose at least one job category to continue.";
+  /* FIELD AND STAGE ARE CHECKED HERE RATHER THAN BY DISABLING THE BUTTON, and that is the whole
+     point of the screen keeping a pressable Continue. They used to sit in the `disabled`
+     expression, which meant deselecting every field left a dead button and NO sentence saying why
+     - the same silence this function exists to end, just moved one control over. It also made two
+     of the branches below unreachable, because the only states that could produce them were the
+     states that turned the button off. */
+  if (input.fields.length === 0) return "Choose at least one field to continue.";
   if (input.roleTypes.length === 0) return "Choose the stage you are looking for.";
+  if (input.categories.length === 0) return "Choose at least one job category to continue.";
   if (input.titles.length === 0) return "Pick at least one job title.";
-  if (input.locations.length === 0) return 'Add at least one place. Pick "Remote" if you want to work from anywhere.';
+  if (input.locations.length === 0) {
+    /* The constant, not a second copy of the word: the chip the student is told to press is
+       rendered from REMOTE_LOCATION, and a literal here drifts from it silently. */
+    return `Add at least one place. Pick "${REMOTE_LOCATION}" if you want to work from anywhere.`;
+  }
   return null;
 }
