@@ -183,3 +183,108 @@ test("a failed canonical fetch keeps the history window instead of failing Home"
   assert.equal(state.packets.length, 1);
   assert.equal(state.packets[0]?.id, "only");
 });
+
+/* ─── whether the inventory answered at all ──────────────────────────────────────────────────────
+ *
+ * Every packet source here fails soft to an empty list so a dead dependency cannot blank Home. The
+ * cost is that "your inventory did not load" and "you have generated nothing" arrive as the same
+ * `packets: []`, and Momentum's "sent in total" prints that as a counted 0 - it renders
+ * `pipeline.sent`, and 0 is not nullish, so Funnel's `sent ?? f.applications_submitted` cannot
+ * reach the backend's own figure. inventoryObserved is what lets the caller tell them apart. */
+
+test("a bootstrap that carried an empty history measured an empty inventory", () => {
+  assert.equal(dashboardStateFromBootstrap(completeBootstrap).inventoryObserved, true);
+});
+
+test("a bootstrap with no usable resume_history measured nothing", () => {
+  /* isBootstrapV1 validates schema_version, me and jobs - never resume_history - so this shape
+     reaches the projection as a successful load. */
+  const state = dashboardStateFromBootstrap({
+    ...completeBootstrap,
+    resume_history: {} as DashboardBootstrap["resume_history"],
+  });
+  assert.deepEqual(state.packets, []);
+  assert.equal(state.inventoryObserved, false, "an absent history is not an empty one");
+});
+
+test("a failed history fetch on the legacy path is not reported as an empty inventory", async () => {
+  const state = await loadDashboardInitialState(async <T,>(path: string) => {
+    if (path === "/dashboard/bootstrap") throw Object.assign(new Error("gone"), { status: 404 });
+    if (path === "/resume/history") throw new Error("history route down");
+    if (path === "/me") return completeBootstrap.me as T;
+    if (path === "/jobs?offset=0") return completeBootstrap.jobs as T;
+    if (path === "/profile/targeting") return completeBootstrap.targeting as T;
+    if (path === "/profile") return completeBootstrap.profile as T;
+    if (path === "/profile/application") return {} as T;
+    if (path === "/track/events") return [] as T;
+    if (path === "/onboarding/state") return { automatic_submission_enabled: false } as T;
+    throw new Error(`unexpected request: ${path}`);
+  });
+
+  assert.deepEqual(state.packets, [], "the page still renders rather than failing on one dead route");
+  assert.equal(state.inventoryObserved, false, "nothing counted this account's packets");
+});
+
+test("a history fetch that answered empty IS an empty inventory", async () => {
+  const state = await loadDashboardInitialState(async <T,>(path: string) => {
+    if (path === "/dashboard/bootstrap") throw Object.assign(new Error("gone"), { status: 404 });
+    if (path === "/resume/history") return { resumes: [] } as T;
+    if (path === "/me") return completeBootstrap.me as T;
+    if (path === "/jobs?offset=0") return completeBootstrap.jobs as T;
+    if (path === "/profile/targeting") return completeBootstrap.targeting as T;
+    if (path === "/profile") return completeBootstrap.profile as T;
+    if (path === "/profile/application") return {} as T;
+    if (path === "/track/events") return [] as T;
+    if (path === "/onboarding/state") return { automatic_submission_enabled: false } as T;
+    throw new Error(`unexpected request: ${path}`);
+  });
+
+  assert.equal(state.inventoryObserved, true, "0 sent is a true sentence about this account");
+});
+
+test("the canonical list answering is enough on its own", async () => {
+  /* The canonical fetch can carry applications the history window never held, so it counts as an
+     observation even when the history half failed. */
+  const canonicalApplication = {
+    id: "canonical-only",
+    legacy_generated_resume_id: null,
+    job_id: null,
+    company: "Acme",
+    role: "Product Intern",
+    portal_url: "https://jobs.lever.co/acme/requisition-3",
+    tracker_state: "applying",
+    review_state: "filling",
+    submission_state: "not_started",
+    created_at: "2026-08-14T00:00:00.000Z",
+    updated_at: "2026-08-14T00:00:00.000Z",
+  };
+  const state = await loadDashboardInitialState(async <T,>(path: string) => {
+    if (path === "/dashboard/bootstrap") throw Object.assign(new Error("gone"), { status: 404 });
+    if (path === "/applications?limit=200") return { applications: [canonicalApplication] } as T;
+    if (path === "/resume/history") throw new Error("history route down");
+    if (path === "/me") return completeBootstrap.me as T;
+    if (path === "/jobs?offset=0") return completeBootstrap.jobs as T;
+    if (path === "/profile/targeting") return completeBootstrap.targeting as T;
+    if (path === "/profile") return completeBootstrap.profile as T;
+    if (path === "/profile/application") return {} as T;
+    if (path === "/track/events") return [] as T;
+    if (path === "/onboarding/state") return { automatic_submission_enabled: false } as T;
+    throw new Error(`unexpected request: ${path}`);
+  }, appendCanonicalStub as never);
+
+  assert.equal(state.packets.length, 1);
+  assert.equal(state.inventoryObserved, true);
+});
+
+test("both inventory sources failing leaves nothing observed", async () => {
+  const state = await loadDashboardInitialState(async <T,>(path: string) => {
+    if (path === "/dashboard/bootstrap") {
+      return { ...completeBootstrap, resume_history: {} } as T;
+    }
+    if (path === "/applications?limit=200") throw new Error("canonical route down");
+    throw new Error(`unexpected request: ${path}`);
+  }, appendCanonicalStub as never);
+
+  assert.deepEqual(state.packets, []);
+  assert.equal(state.inventoryObserved, false);
+});

@@ -100,8 +100,13 @@ test("Height comes from content, not from the viewport", async () => {
 test("Home does not claim a sent figure before its inventory has loaded", async () => {
   const home = await readFile(homeUrl, "utf8");
 
-  assert.match(home, /const inventoryLoaded = qaMode \|\| loadedAt > 0;/,
+  assert.match(home, /const inventoryLoaded = qaMode \|\| \(loadedAt > 0 && inventoryObserved\);/,
     "the load signal has to be explicit; `packets.length` cannot tell empty from unloaded");
+  /* loadedAt alone is not the signal. Every packet source in the loader fails soft to [], so a dead
+     /resume/history resolves the load and stamps loadedAt over an empty inventory - the same 0,
+     printed as a count, just after the load window instead of during it. */
+  assert.doesNotMatch(home, /const inventoryLoaded = qaMode \|\| loadedAt > 0;/,
+    "a resolved load is not a counted one; the inventory has to have actually answered");
   assert.match(home, /<Funnel sent=\{inventoryLoaded \? pipeline\.sent : undefined\}/,
     "undefined is what lets Funnel's ?? reach the backend figure while the inventory is still loading");
   assert.doesNotMatch(home, /<Funnel sent=\{pipeline\.sent\}/,
