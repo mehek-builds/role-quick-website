@@ -120,6 +120,25 @@ export default function Start() {
   // mounts, tears down, and re-mounts effects, and getToken() still reads null on the second
   // mount because the first createGuestSession call has not resolved yet.
   const guestBootstrapStarted = useRef(false);
+  /* Whether the student reached this sitting's current step by WALKING FORWARD through the flow,
+     as opposed to a refresh handing them a step they never walked to.
+   *
+   * It exists for one transition: arriving at `done`. The mount effect below already refuses to
+   * show a completed account the receipt screen and sends it to the dashboard instead, and that is
+   * the right answer every time /start is loaded fresh. But it only ran on mount, so every LATER
+   * refresh that came back `done` rendered the receipt in place - including the refresh a revisit
+   * fires on its way back. A student who stepped back from "Your match" to change their roles, on
+   * an account the server considers finished, pressed "Done, take me back" and landed on "Setup
+   * complete." with the rail shrinking from 3 OF 10 to 3 OF 3 underneath them. The button did the
+   * opposite of what it says, and the receipt asserted they had walked seven screens they had
+   * never seen.
+   *
+   * A first-time finisher must still see that receipt, so the redirect cannot be unconditional.
+   * This is the difference between the two, and it is deliberately NOT read from `stepDone`: a
+   * revisit's own Continue calls that too (see `completedRevisit`), so keying on it would leave
+   * the save-and-return path with exactly the bug this fixes. Forward movement is the only thing
+   * that sets it, which is why the write below is guarded on not revisiting. */
+  const advancedHere = useRef(false);
   // The signed-in twin of guestBootstrapStarted, and a separate ref on purpose: the two branches
   // guard different requests, and sharing one flag would let a StrictMode re-mount that took the
   // guest path first silently swallow the signed-in attach (or the reverse).
@@ -376,6 +395,30 @@ export default function Start() {
   }, [loadProfile, router, refresh]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
+  /* THE MOUNT CHECK'S RULE, APPLIED TO EVERY LATER REFRESH RATHER THAN ONLY THE FIRST READ.
+   *
+   * The check inside the effect above is the right answer to "this account is finished": send it
+   * to the dashboard instead of showing it a receipt for work it did not just do. It ran once, on
+   * mount, and `refresh()` is called from a dozen places afterwards - every screen's Continue, the
+   * install poll, and both halves of a revisit. Any of those coming back `done` re-rendered
+   * /start's default arm in place, which is `DoneStep`.
+   *
+   * What that looked like, and it is the bug this fixes: a student standing on "Your match" at
+   * STEP 3 OF 10 opened "Change something you answered", changed their roles, and pressed "Done,
+   * take me back". The return refreshed, the refresh answered `done`, and the rail redrew as STEP
+   * 3 OF 3 "Setup complete." - seven screens gone, a receipt claiming a work-visa answer and a
+   * built resume they had never been shown, and an escape-hatch button that had done the opposite
+   * of the one thing its label promises.
+   *
+   * `advancedHere` is what keeps the first-time finisher's receipt intact: walking the last screen
+   * sets it, and this then stands aside. Nothing else does, so being MOVED to `done` is the only
+   * case that redirects. */
+  useEffect(() => {
+    if (!state || advancedHere.current) return;
+    if (state.step !== "done" || state.requires_onboarding !== false) return;
+    router.replace("/dashboard");
+  }, [state, router]);
+
   // Set only when loading the PINNED job (job-first entry) fails. Kept apart from the general
   // `error` state above because that one has its own top-level "no state yet" rendering path,
   // and this failure is local to one step and needs its own retry rather than a full-page one.
@@ -461,7 +504,17 @@ export default function Start() {
     router.push("/dashboard");
   }, [router, state]);
 
-  const stepDone = useCallback((step: OnboardingStep) => track("onboarding_step_done", { step }), []);
+  /* Forward movement, and the one place that records it. A revisit's Continue reaches here too, so
+     the flag is written only while no revisit is open: stepping back to change an answer and saving
+     it is a trip, not progress, and must not buy the receipt screen the way finishing the last step
+     does. See `advancedHere`. */
+  const stepDone = useCallback(
+    (step: OnboardingStep) => {
+      if (revisiting === null) advancedHere.current = true;
+      track("onboarding_step_done", { step });
+    },
+    [revisiting],
+  );
 
   /* Acknowledging an application-sequence screen. Thin on purpose: every one of the six advances
      the same way, and repeating the ternary six times is how the ten hardcoded flow_version checks
