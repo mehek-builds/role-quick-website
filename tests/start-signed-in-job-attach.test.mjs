@@ -141,10 +141,14 @@ describe("the two paths the fix promised not to touch", () => {
       'router.replace("/dashboard");',
       "the ordinary signed-in flow",
     );
+    /* The comparison this used to spell out moved into isFinishedAccount (lib/start-arrival.ts) so
+       the mount read and every later refresh share one definition of "finished" instead of writing
+       it twice in opposite polarity. The REDIRECT is what this test is about, and it is unchanged;
+       only the name of the condition is. */
     assert.match(
       ordinaryFlow,
-      /if \(s\.requires_onboarding === false && s\.step === "done"\) \{\s*\n\s*router\.replace\("\/dashboard"\);/,
-      "the no-param redirect must survive exactly as it was",
+      /if \(isFinishedAccount\(s\)\) \{\s*\n\s*router\.replace\("\/dashboard"\);/,
+      "the no-param redirect must survive, now behind the shared finished-account predicate",
     );
     assert.match(
       attachBranch,

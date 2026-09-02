@@ -51,6 +51,7 @@ import { SponsorshipStep } from "@/components/start/SponsorshipStep";
 import { RevisitProvider, StartFlowProvider, StepRail } from "@/components/start/ui";
 import { RecentExperienceStep } from "@/components/start/RecentExperienceStep";
 import { deferOnboardingForSession } from "@/lib/onboarding-flow";
+import { isFinishedAccount, startArrival } from "@/lib/start-arrival";
 import { saveOnboardingAnswers } from "@/lib/api";
 import { MatchStep } from "@/components/start/MatchStep";
 import { BuildStep } from "@/components/start/BuildStep";
@@ -379,7 +380,7 @@ export default function Start() {
     (async () => {
       try {
         const s = await refresh();
-        if (s.requires_onboarding === false && s.step === "done") {
+        if (isFinishedAccount(s)) {
           router.replace("/dashboard");
           return;
         }
@@ -412,11 +413,14 @@ export default function Start() {
    *
    * `advancedHere` is what keeps the first-time finisher's receipt intact: walking the last screen
    * sets it, and this then stands aside. Nothing else does, so being MOVED to `done` is the only
-   * case that redirects. */
+   * case that redirects. The rule itself lives in lib/start-arrival.ts, where it can be tested for
+   * what it does - including the clearing, which is what stops the flag going permanently true on
+   * the student's first Continue and quietly restoring the bug for the rest of the sitting. */
   useEffect(() => {
-    if (!state || advancedHere.current) return;
-    if (state.step !== "done" || state.requires_onboarding !== false) return;
-    router.replace("/dashboard");
+    if (!state) return;
+    const arrival = startArrival(state, advancedHere.current);
+    advancedHere.current = arrival.advanced;
+    if (arrival.leave) router.replace("/dashboard");
   }, [state, router]);
 
   // Set only when loading the PINNED job (job-first entry) fails. Kept apart from the general
@@ -556,10 +560,17 @@ export default function Start() {
     return <BuildStep match={chosenMatch} onLater={later} onPickAnother={() => setChosenMatch(null)} onQuestions={(result, context) => setBuilt({ ...result, ...context })} />;
   }, [chosenMatch, later]);
 
-  const fail = useCallback(
-    (reason: unknown) => setError(reason instanceof Error ? reason.message : "Could not continue."),
-    [],
-  );
+  /* An advance that did not land must not leave the sitting marked as having advanced.
+   *
+   * `stepDone` records the student PRESSING Continue, which is the right signal for analytics and
+   * the wrong one on its own for the receipt: the acknowledge-and-refresh chain that follows can
+   * reject, and then they are still standing on the same screen. Without this the flag stays true
+   * with no new state to clear it, so the next arrival at `done` - a revisit's return, say - would
+   * spend a receipt on a step that never completed. */
+  const fail = useCallback((reason: unknown) => {
+    advancedHere.current = false;
+    setError(reason instanceof Error ? reason.message : "Could not continue.");
+  }, []);
   if (error && !state) {
     return (
       <div className="mx-auto max-w-2xl px-6 py-16">

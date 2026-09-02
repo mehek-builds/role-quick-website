@@ -208,7 +208,15 @@ describe("a reset review preserves stored profile data", () => {
       page.indexOf("// One step_view"),
     );
 
-    assert.match(production, /requires_onboarding/, "the production route never reads requires_onboarding");
+    /* isFinishedAccount (lib/start-arrival.ts) IS the requires_onboarding read: the comparison was
+       lifted out so the mount read and every later refresh share one definition of "finished".
+       What this pins is that the route decides from that flag rather than from completed_at, and
+       either spelling satisfies it. */
+    assert.match(
+      production,
+      /requires_onboarding|isFinishedAccount/,
+      "the production route never consults requires_onboarding, directly or through isFinishedAccount",
+    );
     assert.doesNotMatch(production, /completed_at\s*=\s*null|completed_at:\s*null/);
     assert.doesNotMatch(production, /setProfile\(null\)|setAppProfile\(null\)/);
   });
