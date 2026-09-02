@@ -92,13 +92,6 @@ const MID_SUBMISSION_STATUSES = [
   'submission_claimed',
 ];
 
-function reviewIsMidSubmission(review: GeneratedResume['spec']['_review']): boolean {
-  return MID_SUBMISSION_STATUSES.includes(review?.status ?? '')
-    // The same server-owned answer the READY path defers to. A portal Litos may not submit on has no
-    // code step to finish, so an unsupported row stays with the attended handoff either way.
-    && review?.portal_supported !== false;
-}
-
 /* THE DASHBOARD IS SELF-SUFFICIENT, and the extension is separate software.
  *
  * Product decision by the owner, 2026-08-18, reversing the narrower READY-only admission above it:
