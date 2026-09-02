@@ -635,11 +635,13 @@ function FocusForm({
       </details>
 
       <div className="flex items-center gap-3">
-        {/* `!ready` is in here for a reason a browser found and no unit test would have.
-            Deselecting every field hides the title list but does NOT clear `selectedTitles`, so a
-            student who changed their mind about the field could press Continue and commit titles
-            the screen had stopped drawing. Continue never commits anything invisible: while the
-            offer is withheld, so is the button. */}
+        {/* Only `busy` disables this on purpose (1949a6d, ce6ba78): every new account used to
+            arrive here to a dead button and a standing red error, because locations are the one
+            answer no resume guess can seed. The gates live in save() instead - focusProblem()
+            names the missing answer and save() returns before it writes - so a press is always
+            possible and the refusal, when there is one, says why. The invisible-titles case that
+            once justified `!ready` here is covered by the same path: save() consults the
+            rendered offer, never a stale selection. */}
         <PrimaryButton onClick={() => void save()} disabled={busy}>
           {busy ? <PendingLabel onColor>Saving...</PendingLabel> : "Continue"}
         </PrimaryButton>

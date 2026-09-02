@@ -802,10 +802,23 @@ test("the walk: every step in order, each one advancing the rail by one", async 
 
     /* WHERE IS A REQUIRED ANSWER NOW, and this proves the gate rather than the label. Location is
        a hard filter on the board, so a blank one is not a neutral default - it is a student who
-       asked for the whole world by accident. Continue stays disabled until they answer, and the
-       screen says which answer is missing. */
+       asked for the whole world by accident.
+
+       THE GATE IS THE REPLY TO THE PRESS, NOT A DEAD BUTTON. Continue used to be disabled until a
+       place was typed, and every new account arrived on this screen to a red error and a button
+       that did nothing (1949a6d, then ce6ba78: `disabled={busy}`). The gate did not go away, it
+       moved: focusProblem() names the missing place and save() returns before it writes. So this
+       proves the same invariant in the new shape - pressing Continue with no place is refused by
+       name, and nothing reaches PUT /targeting - instead of asserting the button is dead. */
     await assert.doesNotReject(rolesContinue.waitFor({ timeout: 5000 }));
-    assert.equal(await rolesContinue.isDisabled(), true, "Continue is offered before the location question is answered");
+    assert.equal(await rolesContinue.isDisabled(), false, "Continue is dead before the location question is answered");
+    await rolesContinue.click();
+    assert.match(
+      await page.locator("main").innerText(),
+      /add at least one place/i,
+      "pressing Continue with no place did not say which answer is missing",
+    );
+    assert.deepEqual(savedTargeting.locations, EMPTY_TARGETING.locations, "the roles screen saved before a place was given");
     assert.match(
       await page.locator("main").innerText(),
       /where do you want to work/i,
