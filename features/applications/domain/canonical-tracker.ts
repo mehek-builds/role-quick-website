@@ -273,7 +273,7 @@ function legacyMatchesCanonical(packet: GeneratedResume, application: CanonicalA
   return canonicalMatchStrength(packet, application) > 0;
 }
 
-function canonicalStatus(application: CanonicalApplication): "submitted" | "failed" | "ready_to_submit" | "needs_attention" {
+function canonicalStatus(application: CanonicalApplication): "submitted" | "failed" | "ready_to_submit" | "ready_for_final_approval" | "needs_attention" {
   if (application.submission_state === "submitted") return "submitted";
   if (
     application.submission_state === "failed"
@@ -309,6 +309,25 @@ function canonicalStatus(application: CanonicalApplication): "submitted" | "fail
   if (application.submission_state === "ready_to_submit" && application.review_state === "ready_to_submit") {
     return "ready_to_submit";
   }
+  /* A FILLED EMPLOYER FORM WAITING ON THE APPLICANT IS INSIDE THE SEND WORKFLOW.
+   *
+   * The pair above is the LEGACY shape: only rows migrated by the one-time Litos Plus v2 backfill
+   * ever wore it, because that script copied the packet's _review.status into both columns. Every
+   * application created since is inserted at (not_started, ready) and, until the backend learned to
+   * project the prepared hold, stayed there however far a managed prepare got. The backend now
+   * writes and heals this pair instead, named after the applicant's next action.
+   *
+   * IT IS NOT THE READY QUEUE. ready_for_final_approval is an ACTION status, not a READY one
+   * (application-filter.ts), so reviewCanBeSent and nextPreferredReadyPacket still refuse it and
+   * autopilot still never elects it. The only thing this changes is that the detail screen draws
+   * the Send control the applicant is being asked for, instead of a card telling her to fill a
+   * form that is already filled. */
+  if (
+    application.submission_state === "ready_for_final_approval"
+    && application.review_state === "ready_for_final_approval"
+  ) {
+    return "ready_for_final_approval";
+  }
   // A canonical record outside the legacy send workflow always has a next human step: open the
   // employer form, review the fill, or press the final submit control. It must never enter the
   // Ready/autopilot packet queue merely because a linked packet still carries an older status.
@@ -342,9 +361,31 @@ export function canonicalTrackerPacket(
        * Scoped to exactly this state. Every other status still defers to the canonical row, so this
        * cannot become a general "trust the packet" path - which is the defect canonicalStatus exists
        * to prevent. */
+      /* THE SAME EXCEPTION, ONE STEP EARLIER IN THE SAME RUN.
+       *
+       * A linked packet at `ready_for_final_approval` is not carrying an older status either. It
+       * means the managed run has already read the employer form, filled it and taken the preview
+       * screenshot, and is holding it for the applicant to press Send. The canonical row saying
+       * not_started is the side that is behind, not the packet.
+       *
+       * Measured on The Maven Group "Cyber Test Engineer" 2026-09-02: canonical
+       * submission_state=not_started / review_state=ready, packet _review.status
+       * ready_for_final_approval with a preview_screenshot_url, no blockers and no attention
+       * reason. The flatten replaced the second with needs_attention, SubmissionScreen drew "One
+       * thing to finish" with only "Open packet review" and "Try again", the Send control at
+       * review.status === "ready_for_final_approval" was never drawn, and following the card's own
+       * instruction asked the server for a fresh fill it correctly refused. A closed loop, on 83
+       * applications.
+       *
+       * SCOPED TO THE DEMOTION, exactly like the override above. It applies only when the canonical
+       * lifecycle resolved to needs_attention, so a row the ledger has moved to submitted or failed
+       * still wins and this can never become a general "trust the packet" path - which is the
+       * defect canonicalStatus exists to prevent. */
       status: linkedReview.status === "awaiting_security_code"
         ? ("awaiting_security_code" as const)
-        : canonicalStatus(application),
+        : linkedReview.status === "ready_for_final_approval" && canonicalStatus(application) === "needs_attention"
+          ? ("ready_for_final_approval" as const)
+          : canonicalStatus(application),
       updated_at: updatedAt,
     }
     : {
