@@ -45,6 +45,18 @@ import {
 } from "@/lib/onboarding-build";
 import { track } from "@/lib/analytics";
 import { LaterLink, PrimaryButton, StartShell, usePreferredLocations } from "./ui";
+
+/* THE RAIL POSITION FOR THIS SCREEN IS "match", NOT "build", and that is not a rename.
+ *
+ * `build` stopped being a rail step when the two phases were folded into one entry
+ * (features/onboarding/domain/rail.ts: "One screen, two phases: the posting, then it building").
+ * STEPS has no `build` key, so StepRail's findIndex returned -1, `known` stayed false, and the rail
+ * rendered its loading shimmer with aria-busy for the WHOLE screen - on the longest wait in
+ * onboarding, around a minute, where a student most wants to know where they are. It was not a
+ * flash before state arrived; there was no key for it to ever resolve to.
+ *
+ * All three shells here take the same position, including the Litos+ and failed-build screens,
+ * because a student on either of those is still standing on the match step of the flow. */
 import { narrowPostingLocation } from "@/lib/posting-location";
 import type { OnboardingMatch } from "@/lib/onboarding-match";
 
@@ -261,7 +273,7 @@ export function BuildStep({
      already lives. Nothing is lost by leaving: the flow resumes from this same step. */
   if (error?.entitlement) {
     return (
-      <StartShell step="build" title="This one needs Litos+.">
+      <StartShell step="match" title="This one needs Litos+.">
         <p className="text-sm leading-6 text-muted">
           The free build that comes with setup is not available on this account anymore, so
           tailoring another application is a Litos+ action. Nothing was sent and nothing was lost:
@@ -301,7 +313,7 @@ export function BuildStep({
      * fixed in Account and follows the student to every posting, so offering a different one would
      * send them round a loop that fails identically. */
     return (
-      <StartShell step="build" title="That build did not finish.">
+      <StartShell step="match" title="That build did not finish.">
         <ErrorNote message={error.message} />
         <p className="mt-4 text-sm leading-6 text-muted">
           {error.fixable
@@ -337,7 +349,7 @@ export function BuildStep({
 
   return (
     <StartShell
-      step="build"
+      step="match"
       title={building ? "Building your application." : "Your application is built."}
     >
       {/* ONE LINE, NOT A PANE. The posting and the paper are drawn exactly once in this flow, on
