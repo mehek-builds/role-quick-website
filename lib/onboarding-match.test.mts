@@ -185,3 +185,58 @@ test("an empty board on both passes yields null, and the caller decides what to 
   const match = await fetchOnboardingMatch(async () => ({ jobs: [] }), { now: NOW });
   assert.equal(match, null);
 });
+
+/* The fit clause has to be earned by the score, not by the clock.
+ *
+ * STRONG_MATCH_SCORE was declared for this sentence and nothing read it: the floor only ever
+ * PREFERRED a strong row inside a rung, and pickOnboardingMatch falls back to onRung[0] when the
+ * rung has nothing strong. A student whose board had no strong row today was still told the
+ * weakest posting on it was "a perfect fit" - and told it again on every "Show me a different one".
+ */
+test("a weak row found today keeps the recency claim and loses the fit claim", () => {
+  const weak = pickOnboardingMatch([job({ id: "w", first_seen_at: hoursAgo(3), match_score: 20 })], NOW)!;
+  assert.match(matchHeadline(weak), /just detected/i);
+  assert.doesNotMatch(matchHeadline(weak), /perfect fit/i);
+});
+
+test("a strong row found today earns the sentence the floor exists for", () => {
+  const strong = pickOnboardingMatch(
+    [job({ id: "s", first_seen_at: hoursAgo(3), match_score: STRONG_MATCH_SCORE })],
+    NOW,
+  )!;
+  assert.match(matchHeadline(strong), /perfect fit/i);
+});
+
+test("the floor is a floor: one point under it does not get the claim", () => {
+  const under = pickOnboardingMatch(
+    [job({ id: "u", first_seen_at: hoursAgo(3), match_score: STRONG_MATCH_SCORE - 1 })],
+    NOW,
+  )!;
+  assert.doesNotMatch(matchHeadline(under), /perfect fit/i);
+});
+
+test("the same rule governs the middle rung's strong fit claim", () => {
+  const weak = pickOnboardingMatch([job({ id: "mw", first_seen_at: hoursAgo(48), match_score: 10 })], NOW)!;
+  assert.match(matchHeadline(weak), /this week/i);
+  assert.doesNotMatch(matchHeadline(weak), /strong fit/i);
+
+  const strong = pickOnboardingMatch(
+    [job({ id: "ms", first_seen_at: hoursAgo(48), match_score: STRONG_MATCH_SCORE + 5 })],
+    NOW,
+  )!;
+  assert.match(matchHeadline(strong), /strong fit/i);
+});
+
+test("an unscored posting is unproven rather than strong, and makes no fit claim", () => {
+  /* The scorer returns null when a posting lists too few real requirements. That is no reason to
+     skip the row - pickOnboardingMatch is right about that - and equally no basis for an absolute
+     claim about how well it fits. */
+  const unscored = pickOnboardingMatch([job({ id: "n", first_seen_at: hoursAgo(2), match_score: null })], NOW)!;
+  assert.match(matchHeadline(unscored), /just detected/i);
+  assert.doesNotMatch(matchHeadline(unscored), /perfect fit/i);
+});
+
+test("the bottom rung is untouched, because rank is true at any score", () => {
+  const open = pickOnboardingMatch([job({ id: "o", first_seen_at: hoursAgo(24 * 30), match_score: 5 })], NOW)!;
+  assert.match(matchHeadline(open), /closest fit to what you asked for/i);
+});

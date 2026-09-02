@@ -40,6 +40,17 @@ const WEEK_HOURS = 24 * 7;
  * to the quieter framing. */
 export const STRONG_MATCH_SCORE = 70;
 
+/* The floor, asked as a question, so the two places that consult it cannot drift.
+ *
+ * A null score is NOT strong, and that is the same answer for both callers even though they want
+ * it for different reasons: pickOnboardingMatch is choosing which row to prefer, matchHeadline is
+ * deciding whether the screen may claim a fit. The scorer returns null for postings listing too
+ * few real requirements, which is a fact about the posting's text - never a reason to skip a row
+ * (see pickOnboardingMatch, which still shows it), and never evidence for an absolute claim. */
+export function isStrongMatch(job: Pick<MonitoredJob, "match_score">): boolean {
+  return (job.match_score ?? 0) >= STRONG_MATCH_SCORE;
+}
+
 /**
  * Hours since Litos first saw the posting, or null if the timestamp cannot be read.
  *
@@ -93,7 +104,7 @@ export function pickOnboardingMatch(
   for (const rung of ["today", "this_week", "open"] as const) {
     const onRung = usable.filter((job) => freshnessOf(job, now) === rung);
     if (onRung.length === 0) continue;
-    const strong = onRung.find((job) => (job.match_score ?? 0) >= STRONG_MATCH_SCORE);
+    const strong = onRung.find(isStrongMatch);
     const job = strong ?? onRung[0];
     return { job, freshness: rung, hoursSinceSeen: hoursSinceSeen(job.first_seen_at, now), widened };
   }
@@ -115,8 +126,38 @@ export function matchHeadline(match: OnboardingMatch): string {
      "to what you asked for" would be the specific untruth. Naming the widening is also the more
      useful sentence, because the fix is one they can act on. */
   if (match.widened) return "Nothing open matches your filters exactly right now, so here is the closest thing.";
-  if (match.freshness === "today") return "We just detected this one, and we think it is a perfect fit.";
-  if (match.freshness === "this_week") return "We found this one for you this week, and it is a strong fit.";
+
+  /* THE FIT HALF OF THESE SENTENCES IS NOW EARNED, and it was not before.
+   *
+   * STRONG_MATCH_SCORE was declared for exactly this sentence - its own comment says a row below
+   * the floor "simply does not get that sentence" - but nothing ever read it here. The floor was
+   * used only by pickOnboardingMatch to PREFER a strong row within a rung, and that function falls
+   * back to `onRung[0]` when no row on the rung clears it. So the moment a student's board had
+   * nothing strong on the top rung, the weakest posting on it was still introduced as the one "we
+   * think is a perfect fit", and pressing "Show me a different one" served another and said it
+   * again. The claim was a function of the clock, not of the match.
+   *
+   * Recency stays asserted either way, because Litos does know when it saw the row. Only the fit
+   * clause is withheld, which is the half the score is evidence for.
+   *
+   * A NULL SCORE READS AS UNPROVEN, NOT AS WEAK, and it lands on the same side. The scorer returns
+   * null for postings listing too few real requirements, which pickOnboardingMatch is right to
+   * treat as no reason to skip a row - that is a fact about the posting's text. It is equally a
+   * reason not to make an absolute claim about fit, because there is nothing here to stand behind.
+   * The bottom rung is untouched: "the closest fit to what you asked for" is a statement about
+   * rank within what the board returned, which is true by construction at any score. */
+  const earnedFitClaim = isStrongMatch(match.job);
+
+  if (match.freshness === "today") {
+    return earnedFitClaim
+      ? "We just detected this one, and we think it is a perfect fit."
+      : "We just detected this one.";
+  }
+  if (match.freshness === "this_week") {
+    return earnedFitClaim
+      ? "We found this one for you this week, and it is a strong fit."
+      : "We found this one for you this week.";
+  }
   return "This one is open now, and it is the closest fit to what you asked for.";
 }
 
