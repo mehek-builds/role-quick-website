@@ -200,14 +200,22 @@ export function StartShell({
   );
 }
 
+/* THE LAST ANSWER THIS SITTING GOT, so the second and third posting screens do not each start by
+   printing a list they are about to shorten.
+   Seeding rather than caching: every mount still issues its own read and that read always wins, so
+   a student who revisits the roles screen mid-flow (see REVISITABLE below) sees the places they
+   just changed rather than the ones this held. Written only from inside the effect below, which
+   never runs on the server, so a prerender cannot carry one visitor's places into another's HTML
+   and the hydrating first mount always starts from the empty list the static markup was built
+   with. */
+let lastKnownPreferredLocations: string[] = [];
+
 /**
  * The places this student said they want to work, for the posting headers that print a location.
  *
  * Every screen that shows a posting reads it for itself rather than being handed it, which is the
- * same shape MatchStep's own board fetch already has: three screens over one sitting, one small
- * authenticated GET each, and no argument threaded through app/start/page.tsx to reach a header.
- * It is deliberately not cached across mounts either. The roles screen can be revisited mid-flow
- * (see REVISITABLE below), and a cached answer would print the locations the student just changed.
+ * same shape MatchStep's own board fetch already has: one small authenticated GET per screen, and
+ * no argument threaded through app/start/page.tsx to reach a header.
  *
  * EMPTY IS THE ANSWER FOR EVERY FAILURE, and it has to be: `narrowPostingLocation` treats no saved
  * places as nothing to narrow by and prints the employer's full location field, which is exactly
@@ -215,13 +223,14 @@ export function StartShell({
  * to the old behaviour rather than to a header with no location on it at all.
  */
 export function usePreferredLocations(): string[] {
-  const [locations, setLocations] = useState<string[]>([]);
+  const [locations, setLocations] = useState<string[]>(lastKnownPreferredLocations);
   useEffect(() => {
     if (!getToken()) return;
     let cancelled = false;
     getTargeting()
       .then((targeting) => {
-        if (!cancelled) setLocations(targeting.locations ?? []);
+        lastKnownPreferredLocations = targeting.locations ?? [];
+        if (!cancelled) setLocations(lastKnownPreferredLocations);
       })
       .catch(() => {
         /* Nothing to report and nothing to retry: the header simply prints every office. */

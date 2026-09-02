@@ -386,7 +386,9 @@ export function questionReviewPresentation(
  *
  * Counts the same two things `requiredQuestionReviewRoute` routes on, and in the same order of
  * authority, so the sentence on the card and the screen the button reaches cannot disagree:
- *   - required questions rendered as editable controls whose answer is blank, and
+ *   - required questions rendered as editable controls whose answer is blank OR names none of the
+ *     options the employer offers (see `answerNamesNoOfferedOption`: an off-list answer is not
+ *     empty, and it is not something the portal can take either), and
  *   - required metadata blockers, which are questions whose label or options could not be read at
  *     all. Those need a managed re-read rather than typing, but they equally stop a send, and
  *     leaving them out would print "0 required questions" over a packet that cannot go.
