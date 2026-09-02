@@ -89,3 +89,30 @@ test("Height comes from content, not from the viewport", async () => {
   assert.match(funnel, /className="flex h-8 items-end gap-1"/);
   assert.doesNotMatch(funnel, /mt-auto/);
 });
+
+/* THE PLACEHOLDER 0 MUST NOT BE PRINTED AS A COUNT.
+ *
+ * `packets` starts as [], so pipeline.sent is 0 from first paint until the inventory resolves, and
+ * Funnel's `sent ?? f.applications_submitted` cannot fall back because 0 is neither null nor
+ * undefined. Measured 2026-09-02: Home read "0 sent in total" beside a live "1 in the last 7 days"
+ * while the API reported 12 submitted. One funnel response cannot carry applications_submitted 0
+ * with submitted_this_week 1 (both derive from the same array), so the 0 was the placeholder. */
+test("Home does not claim a sent figure before its inventory has loaded", async () => {
+  const home = await readFile(homeUrl, "utf8");
+
+  assert.match(home, /const inventoryLoaded = qaMode \|\| loadedAt > 0;/,
+    "the load signal has to be explicit; `packets.length` cannot tell empty from unloaded");
+  assert.match(home, /<Funnel sent=\{inventoryLoaded \? pipeline\.sent : undefined\}/,
+    "undefined is what lets Funnel's ?? reach the backend figure while the inventory is still loading");
+  assert.doesNotMatch(home, /<Funnel sent=\{pipeline\.sent\}/,
+    "passing the raw count republishes the placeholder 0 as a real answer");
+});
+
+test("Funnel still prefers the caller's figure once it has one", async () => {
+  const funnel = await readFile(funnelUrl, "utf8");
+
+  // Precedence is deliberate: Home's Sent tile and this stat count the same inventory, and the
+  // 13-vs-12 disagreement recorded at this Stat is what happens when the backend figure wins.
+  assert.match(funnel, /value=\{sent \?\? f\.applications_submitted\}/,
+    "the fix belongs in the caller, not in this precedence");
+});
