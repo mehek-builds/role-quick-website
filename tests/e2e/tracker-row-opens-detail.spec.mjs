@@ -633,6 +633,59 @@ const LEDGER = 'section[aria-labelledby="application-ledger-heading"]';
  * being asserted, instead of on a lifecycle event that is incidental to it.
  */
 
+/** Wait for the address to name `applicationId`, and SAY WHAT HAPPENED when it never does.
+ *
+ * THE BUDGET. 10s here has now failed twice on CI, both times on the first case in this file and
+ * both times at about 11.6s: once at 38ad9f11 waiting on "load" (the note above), once on
+ * 2026-09-03 waiting on "domcontentloaded" after that was fixed. Two different lifecycles, the same
+ * ~11.6s, which says the lifecycle was never the thing - the address itself had not changed yet.
+ * Every other wait in this file that covers a cold first paint is given 20s; this one covers a cold
+ * FIRST NAVIGATION and was given half that, which is the inconsistency rather than a measured
+ * choice. It is 20s now, and only the first case pays it: cases 2 and 3 return in about a second.
+ *
+ * WHY IT CAN BE SLOW AT ALL, which is not obvious from here. The row does not navigate. It calls
+ * window.history.pushState INSIDE runDashboardTransition (app/dashboard/applications/page.tsx),
+ * and Next patches native history writes into its own transition, so the address is written when
+ * REACT commits that transition rather than when the click returns. A cold, loaded runner can defer
+ * that commit; a warm one commits it in a frame.
+ *
+ * AND THE DIAGNOSTIC, which matters more than the budget. A bare waitForURL timeout reports "the
+ * URL did not change", which is the one fact that cannot separate the two ways this fails: a click
+ * that was swallowed, and a history write that committed late. Those want opposite fixes. The
+ * workspace and the pressed row tell them apart, so they are read on the way out and put in the
+ * message. Both CI failures left nothing behind to say which it was, and that is why this note has
+ * to speculate about the second one.
+ *
+ * NOT REPRODUCED LOCALLY, and the attempts are recorded so the next person does not repeat them:
+ * delaying the client chunks 3s and 12s, delaying every _rsc navigation 12s, and 20x CPU throttling
+ * all left this file at 17/17. React replays a click captured during hydration, and openTracker
+ * already waits for rows that only exist after the client fetch, so neither a hydration gap nor a
+ * slow document reproduces it from outside. */
+async function waitForApplicationUrl(applicationId, { intent = null, timeout = 20_000 } = {}) {
+  const matches = (url) => (
+    url.pathname === "/dashboard/applications"
+    && url.searchParams.get("application") === applicationId
+    && (intent === null || url.searchParams.get("intent") === intent)
+  );
+  try {
+    await page.waitForURL(matches, { timeout, waitUntil: "domcontentloaded" });
+  } catch (reason) {
+    const workspaceOpen = await page.getByRole("button", { name: "Switch applications", exact: true })
+      .isVisible().catch(() => false);
+    const pressedRows = await page.locator(`${LEDGER} button[aria-pressed="true"]:visible`).count().catch(() => -1);
+    reason.message += [
+      "",
+      "",
+      `at timeout: url=${page.url()}`,
+      `            workspaceOpen=${workspaceOpen} pressedRows=${pressedRows}`,
+      "workspaceOpen true with the old address means the click LANDED and the history write was",
+      "deferred, so the budget is the problem. workspaceOpen false means the click never took",
+      "effect at all, which is a different bug and a different fix.",
+    ].join("\n");
+    throw reason;
+  }
+}
+
 /** Land on the Tracker with the sparse fixture loaded and every row drawn. */
 async function openTracker() {
   pageErrors = [];
@@ -650,11 +703,7 @@ for (const item of CASES) {
     assert.equal(await row.count(), 1, `${item.packet.job_context.role} must be exactly one visible row`);
     await row.click();
 
-    await page.waitForURL((url) => (
-      url.pathname === "/dashboard/applications"
-      && url.searchParams.get("application") === item.packet.id
-      && url.searchParams.get("intent") === "apply"
-    ), { timeout: 10_000, waitUntil: "domcontentloaded" });
+    await waitForApplicationUrl(item.packet.id, { intent: "apply" });
 
     /* THE EJECTION CHECK. The report was that the browser left the product entirely on this click,
        so the address is asserted before anything about what rendered. */
