@@ -1482,11 +1482,19 @@ export type ChecklistResumeRecord = Readonly<{
  * WHAT THE FIELD ACTUALLY MEANS, read off the backend rather than guessed from the name. The column
  * is `boolean not null default false` with a CHECK constraint tying it to `resume_source`
  * (`false`/'none', or `true`/'artifact' with a selected artifact id, or `true`/'base_resume'), and
- * exactly two things write it: `linkExactPacket` in managedPrepare.ts, at PREPARE time on the
- * managed path, and canonicalApplicationSync.ts, off the application_artifacts links. So `true`
- * means an artifact row is linked. `false` means no such row is linked YET, which on a packet that
- * never went through a managed prepare is the ORDINARY state of a perfectly healthy application, not
- * a measurement that anything is missing. It is the schema default.
+ * six places write it, four of which can write `true`: `linkExactPacket` in managedPrepare.ts at
+ * PREPARE time on the managed path, `updateCanonicalApplicationAfterFill` in
+ * canonicalApplications.ts on the POST /applications/:id/fill path, submissionConfirmationRepair.ts,
+ * and canonicalApplicationSync.ts off the application_artifacts links, which runs inside the
+ * CONFIRMED-RECEIPT transaction rather than at prepare.
+ *
+ * So `true` means an artifact row is linked to the record. `false` is THREE different states, not
+ * one: the schema default on a packet that never went through a managed prepare, which is the
+ * ORDINARY state of a perfectly healthy application; the applicant having explicitly chosen to
+ * continue without attaching; and a confirmed send that genuinely carried no resume. Only the first
+ * two are reachable on this screen, because a receipt silences this row entirely, so the rendered
+ * calibration below is right either way. But `false` is not one fact, and a reader who treats it as
+ * one will over-trust it.
  *
  * Which is why this only ever sharpens a row that is ALREADY not verified, and why it does not raise
  * the badge. A row that got here is a file nothing has confirmed; the record having nothing either
