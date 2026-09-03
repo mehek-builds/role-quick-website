@@ -1,6 +1,13 @@
 import type { ApplicationQuestion, ApplicationReview, RequiredDocumentAsk } from "@/lib/api";
 import { screenForStatus, type ReviewScreen } from "./application-review.ts";
-import { questionReviewPresentation, requiredQuestionReviewRoute } from "./question-review-presentation.ts";
+import {
+  applicantConfirmedAnswer,
+  sensitiveConfirmationQuestionIds,
+  SENSITIVE_CONFIRMATION_ANSWERED_DETAIL,
+  SENSITIVE_CONFIRMATION_BADGE,
+  SENSITIVE_CONFIRMATION_UNANSWERED_DETAIL,
+} from "./sensitive-confirmation.ts";
+import { questionReadsAsAnswered, questionReviewPresentation, requiredQuestionReviewRoute } from "./question-review-presentation.ts";
 import { withRequiredParentQuestionIds } from "./dependent-questions.ts";
 import { cleanScrapedLabel, cleanScrapedPrompt } from "./scraped-text.ts";
 
@@ -560,6 +567,28 @@ function questionReportedEmpty(question: string, emptySubjects: ReadonlySet<stri
 export type ChecklistDocumentMarks = Readonly<Record<string, { file_name?: string | null; attached_at?: string | null; ordered_at?: string | null }>>;
 
 /**
+ * What the checklist needs that the REVIEW does not carry.
+ *
+ * The employer and the role live on the packet's job_context, the document marks and the
+ * confirmation labels ride on the GET /applications/:id/submission envelope, and none of the four
+ * is a field on `ApplicationReview`. So the caller supplies them, and every default is the honest
+ * one: with no company the sentence still names an employer as its subject, with no document marks
+ * nothing is claimed to be attached, and with no labels nothing is claimed to be waiting on her.
+ *
+ * `sensitiveConfirmations` IS AN ENVELOPE FIELD, not a review field, which is why it arrives here
+ * and not through the `review` parameter. The backend derives it on every read of that envelope
+ * (volley #906), so it exists on a GET /submission response and on nothing else the dashboard
+ * installs - not the board seed, not the submit-request reply, not the approve reply. An absent
+ * value is NONE, never "the server did not check".
+ */
+export type ChecklistContext = {
+  company?: string;
+  role?: string;
+  documents?: ChecklistDocumentMarks;
+  sensitiveConfirmations?: readonly string[];
+};
+
+/**
  * The document controls a screen with no Your turn panel has to offer, ONE PER KIND.
  *
  * WHY THIS IS A FUNCTION AND NOT TWO EXPRESSIONS ON THE SCREEN. It shipped as `find` plus a
@@ -739,7 +768,7 @@ function attachedDocumentItem(
  */
 function documentAskItems(
   rawAsks: readonly RequiredDocumentAsk[],
-  context: { company?: string; role?: string; documents?: ChecklistDocumentMarks },
+  context: ChecklistContext,
   review: Pick<ApplicationReview, "transcript_supported">,
 ): SubmissionChecklistItem[] {
   /* The employer is the SUBJECT of the sentence. "Transcript required" is a form validation
@@ -839,34 +868,6 @@ function documentAskItems(
   }).concat(carried);
 }
 
-/**
- * SHE ALREADY CONFIRMED THIS ONE, says the server, and only the server may say it.
- *
- * The CONFIRM row below used to be decided by the label class alone, which cannot change: confirm,
- * save, "Saved.", and the same amber ask again, indefinitely - driven four full cycles on the DV
- * Trading packet on 2026-08-17. What a confirmation actually leaves behind is the backend's
- * applicant-claim (`answer_source: 'applicant_review'`, minted by the save when the request carries
- * her explicit `confirmed` flag), so that claim is what this reads.
- *
- * THE ROUND CHECK MATCHES THE SERVER'S OWN. A claim is only checkable beside the review round it
- * was minted against; the backend's refreshKnownQuestionAnswers discards a mismatched one, and a
- * looser client test would show "confirmed" for a claim every server reader is about to throw away.
- * A review that carries no round cannot have minted any claim, so a claim without a round to match
- * reads as unconfirmed rather than trusted.
- */
-function applicantConfirmedAnswer(
-  question: Pick<ApplicationQuestion, "answer" | "answer_source" | "answer_reviewed_at">,
-  questionsReviewedAt: string | undefined,
-): boolean {
-  return Boolean(
-    (question.answer ?? "").trim()
-    && question.answer_source === "applicant_review"
-    && typeof question.answer_reviewed_at === "string"
-    && questionsReviewedAt
-    && question.answer_reviewed_at === questionsReviewedAt,
-  );
-}
-
 export function humanInputItems(
   review: Pick<ApplicationReview, "attention_reason" | "attention_categories" | "attention_acknowledgements" | "cover_letter_supported" | "filled_fields" | "questions" | "question_metadata_blockers" | "questions_reviewed_at" | "required_documents" | "transcript_supported" | "stall" | "status">,
   /* The employer, the role, and what the application already carries. None of the three is on the
@@ -874,7 +875,7 @@ export function humanInputItems(
      so the caller supplies them. Optional, and every default is the honest one: with no company the
      sentence still names an employer as its subject, and with no document marks nothing is claimed
      to be attached. */
-  context: { company?: string; role?: string; documents?: ChecklistDocumentMarks } = {},
+  context: ChecklistContext = {},
 ): SubmissionChecklistItem[] {
   const items: SubmissionChecklistItem[] = [];
   for (const item of documentAskItems(review.required_documents ?? [], context, review)) addUnique(items, item);
@@ -940,10 +941,41 @@ export function humanInputItems(
     });
   }
 
+  /* THE SERVER'S OWN LIST OF QUESTIONS IT WILL NOT ANSWER FOR HER, resolved once for the loop
+     below. See sensitive-confirmation.ts for the measurement: on the Hudson River Trading packet
+     this requirement existed only as 422 text after the press, so the row it should have produced
+     was the one thing missing from a screen that otherwise showed a finished application.
+
+     Empty today, on every live response, because volley #906 is not merged. */
+  const sensitiveConfirmationIds = new Set(sensitiveConfirmationQuestionIds(review, context.sensitiveConfirmations));
+
   for (const storedQuestion of review.questions ?? []) {
     const question = presentedQuestions.get(storedQuestion.id) ?? storedQuestion;
     if (review.cover_letter_supported === false && isCoverLetterFieldLabel(question.question)) continue;
     const answer = (question.answer ?? "").trim();
+    /* ABOVE the required/blank and essay branches, because the server naming a question outranks
+       every guess this file makes about it. A row that said "Required answer missing" over the
+       answered sponsorship question would be the screen accusing her of the product's own caution,
+       and one that said "Drafted answer ready for review" would be describing an editorial ask
+       where the actual ask is a legal declaration.
+       BOTH SHAPES CARRY actionKind "confirm", including the one whose caption reads "Answer": the
+       caption describes what she does, the kind decides what the press MEANS. Routing a blank one
+       through "answer" instead would open the editor without recording a confirm intent, her save
+       would post no `confirmed` flag, the server would mint no applicant claim, and the same ask
+       would come back on the next round - the DV Trading loop, re-entered through the blank door. */
+    if (review.status !== "submitted" && sensitiveConfirmationIds.has(question.id)) {
+      const answerStands = questionReadsAsAnswered(question);
+      addUnique(items, {
+        id: `confirm-${question.id}`,
+        label: displayQuestionLabel(question.question),
+        detail: answerStands ? SENSITIVE_CONFIRMATION_ANSWERED_DETAIL : SENSITIVE_CONFIRMATION_UNANSWERED_DETAIL,
+        action: answerStands ? "Confirm" : "Answer",
+        actionKind: "confirm",
+        questionId: question.id,
+        badge: SENSITIVE_CONFIRMATION_BADGE,
+      });
+      continue;
+    }
     if (question.required && !answer) {
       addUnique(items, {
         id: `missing-${question.id}`,
@@ -1035,6 +1067,38 @@ export function humanInputItems(
 }
 
 /**
+ * The confirmation rows, for the screen that has no "Your turn" panel to put them on.
+ *
+ * WHY A SECOND ENTRY POINT AND NOT A SECOND BUILDER. BlockerList renders only on needs_attention.
+ * The packet measured here sat at ready_for_final_approval, where the whole amber panel is absent,
+ * which is exactly why nothing on screen ever said a question was waiting on her. So the rows have
+ * to reach that screen too - but built by `humanInputItems`, not beside it: one builder means the
+ * words, the control and the id on the packet screen are the SAME OBJECT the Your turn panel would
+ * have drawn, and two screens cannot describe one requirement differently.
+ *
+ * THE SEND GATE READS THIS, NOT THE PREDICATE UNDER IT, and that is deliberate. Gating on
+ * `sensitiveConfirmationPending` alone would let the button go grey over a row that `addUnique`
+ * deduped away or that a captcha short-circuit dropped, which is a wall: no control on screen and
+ * no press that clears it. Gating on the rows themselves makes "the button is grey" and "there is a
+ * Confirm control on this screen" the same fact. When a requirement produces no row, the button
+ * stays live and the SERVER refuses the send - and that refusal is now a route back to the
+ * question rather than a paragraph.
+ */
+export function sensitiveConfirmationItems(
+  review: Pick<ApplicationReview, "attention_reason" | "attention_categories" | "attention_acknowledgements" | "cover_letter_supported" | "filled_fields" | "questions" | "question_metadata_blockers" | "questions_reviewed_at" | "required_documents" | "transcript_supported" | "stall" | "status">,
+  context: ChecklistContext = {},
+): SubmissionChecklistItem[] {
+  const wanted = new Set(sensitiveConfirmationQuestionIds(review, context.sensitiveConfirmations));
+  if (wanted.size === 0) return [];
+  return humanInputItems(review, context).filter((item) => (
+    item.actionKind === "confirm"
+    && item.settled !== true
+    && Boolean(item.questionId)
+    && wanted.has(item.questionId!)
+  ));
+}
+
+/**
  * Builds the one-question-at-a-time queue without turning uncertain employer metadata into a text
  * box. `humanInputItems` decides whether a review row still needs the applicant, while
  * `questionReviewPresentation` decides whether the employer's exact prompt and accepted answers are
@@ -1042,7 +1106,7 @@ export function humanInputItems(
  */
 export function directInputTaskPlan(
   review: Pick<ApplicationReview, "attention_reason" | "attention_categories" | "attention_acknowledgements" | "cover_letter_supported" | "filled_fields" | "questions" | "question_metadata_blockers" | "questions_reviewed_at" | "required_documents" | "transcript_supported" | "stall" | "status">,
-  context: { company?: string; role?: string; documents?: ChecklistDocumentMarks } = {},
+  context: ChecklistContext = {},
 ): DirectInputTaskPlan {
   const items = humanInputItems(review, context);
   const presentation = questionReviewPresentation(
@@ -1213,13 +1277,14 @@ export function metadataRefreshOutranksStandingAttention(
     | "question_metadata_blockers"
     | "questions_reviewed_at"
     | "required_documents"
+   
     | "transcript_supported"
     | "stall"
     | "status"
     | "unverified_submission"
   >,
   packetAuditAcknowledged: boolean,
-  context: { company?: string; role?: string; documents?: ChecklistDocumentMarks } = {},
+  context: ChecklistContext = {},
 ): boolean {
   if (!packetAuditAcknowledged) return false;
   if (review.status !== "needs_attention") return false;
@@ -1289,13 +1354,14 @@ export function reviewedAnswersSaveLanding(
     | "question_metadata_blockers"
     | "questions_reviewed_at"
     | "required_documents"
+   
     | "transcript_supported"
     | "stall"
     | "status"
     | "unverified_submission"
   >,
   packetAuditAcknowledged: boolean,
-  context: { company?: string; role?: string; documents?: ChecklistDocumentMarks } = {},
+  context: ChecklistContext = {},
 ): ReviewedAnswersSaveLanding {
   if (review.status === "needs_attention") {
     const route = requiredQuestionReviewRoute(review.questions ?? [], review.question_metadata_blockers ?? []);

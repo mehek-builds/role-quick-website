@@ -66,6 +66,7 @@ import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX, exactPacketAuditClauses
 import { educationDrift, educationDriftMessage, type EducationProfile } from "@/features/applications";
 import { checklistRowControl, completedSubmissionGroups, directInputTaskPlan, directQuestionPromptFingerprint, directQuestionTaskFingerprint, displayQuestionLabel, documentAsksByKind, documentControls, documentStepsInPlan, humanInputItems, metadataRefreshOutranksStandingAttention, QUESTION_CHOICE_LIST_LIMIT, reviewedAnswersSaveLanding, unconfirmedDocumentItems, type ChecklistResumeRecord, type DirectQuestionTask, type DirectQuestionTaskIntent, type SubmissionChecklistAction, type SubmissionChecklistItem } from "@/features/applications";
 import { prescriptBlocksProgress, prescriptEditableQuestions, prescriptMetadataBlockers, prescriptNeedsHer, prescriptSummary } from "@/features/applications";
+import { sensitiveConfirmationItems, sensitiveConfirmationQuestionIds, sensitiveConfirmationScreenLine, sensitiveConfirmationSendGateLine, sensitiveConfirmationSendRouteQuestionId, SENSITIVE_CONFIRMATION_BLOCK_CAPTION, SENSITIVE_CONFIRMATION_BLOCK_HEADING, SENSITIVE_CONFIRMATION_CARD_NOTE, SENSITIVE_CONFIRMATION_QUESTION_NOTE } from "@/features/applications";
 import { answerWithExactOptionToggled, exactQuestionOption, exactSelectedQuestionOptions, optionalQuestionNeedsDecision, questionAcceptsMultipleOptions, questionOptionsAreComplete, questionReadsAsAnswered, questionReviewPresentation, requiredQuestionReviewRoute } from "@/features/applications";
 import type { JdMatchResponse, JobMatch } from "@/features/applications";
 import { userFacingError } from "@/lib/user-facing-error";
@@ -245,6 +246,26 @@ export type SubmissionResponse = {
   documents?: Record<string, AttachedDocument>;
   handoff_url?: string;
   configured?: boolean;
+  /* THE QUESTIONS THE SEND GATE IS WAITING ON HER FOR, BY LABEL.
+   *
+   * A SIBLING OF `review`, NOT A FIELD ON IT, and that placement is the backend's (volley #906, GET
+   * /applications/:id/submission). It is DERIVED on every read from the stored questions and her
+   * profile, exactly like `documents` and `handoff_url` are derived from the row, so it rides on
+   * the envelope and never on the stored review. Anything that reads it off `review` would be
+   * reading a field that is never there.
+   *
+   * A question named here is one Litos refuses to declare on her behalf - a legal, demographic or
+   * identity statement whose truth is hers - and the send refuses until PUT
+   * /applications/:id/review/answers carries that question with `confirmed: true`.
+   *
+   * ABSENT IS THE ORDINARY STATE OF THIS FIELD TODAY, because #906 is not merged, and it is also
+   * the ordinary state of every envelope this page installs that is not a GET /submission response:
+   * the board seed, the submit-request reply, the approve reply. Absent means NONE and must never
+   * be read as "the server did not check". Every reader goes through
+   * features/applications/domain/sensitive-confirmation.ts, which returns nothing for an absent or
+   * malformed value, so the badge, the queue, the checklist block and the send gate all stay dark
+   * until the backend ships it. */
+  sensitive_questions_requiring_confirmation?: string[];
   partial?: boolean;
 };
 
@@ -2382,10 +2403,21 @@ function Applications() {
       company: selected.job_context.company,
       role: selected.job_context.role,
       documents: selectedSubmission.documents,
+      sensitiveConfirmations: selectedSubmission.sensitive_questions_requiring_confirmation,
     })
       .filter((item) => item.settled !== true && item.questionId)
       .map((item) => item.questionId!);
   }, [selected, selectedSubmission]);
+  /* The questions the SERVER says its own send gate is waiting on her for, off the envelope this
+     page is holding. Read here rather than at each of the three use sites so the answers screen's
+     marks, its heading line and its Save all decide from one list. Empty on every live response
+     until volley #906 merges, and empty on every envelope that is not a GET /submission response. */
+  const sensitiveConfirmationIds = useMemo(
+    () => (selectedSubmission
+      ? sensitiveConfirmationQuestionIds(selectedSubmission.review, selectedSubmission.sensitive_questions_requiring_confirmation)
+      : []),
+    [selectedSubmission],
+  );
   const reviewablePackets = useMemo(() => onlyReviewablePackets(packets ?? []), [packets]);
   const canonicalEnvelopePacket = useMemo(() => (canonicalSelected
     ? (packets ?? []).find((packet) => canonicalApplicationFromPacket(packet)?.id === canonicalSelected.id) ?? null
@@ -4505,6 +4537,38 @@ function Applications() {
     moveToScreen("questions", { scrollToTop: !focusQuestionId });
   }
 
+  /* A REFUSED SEND THAT NAMES A QUESTION IS A ROUTE, NOT A RED PARAGRAPH.
+   *
+   * The measured shape (Hudson River Trading, packet 4a79eec1, 2026-09-03): every press of Send
+   * application returned 422 with a sentence beginning "Sensitive question requires your
+   * attention:" and the sponsorship prompt after it. That sentence went under the button, where it
+   * read as a fault report about an application that looked finished, and three sessions failed to
+   * turn it into an action. The one thing it never did was put her in front of the question.
+   *
+   * So this does what recoverPacketAuditReview does for a stale packet: reads the MACHINE CODE,
+   * and on a match opens the answers screen focused on the named question with the confirm intent
+   * recorded, so her next Save carries `confirmed: true`. Nothing is acknowledged, nothing is
+   * retried, and nothing is sent. It never guesses: an unresolvable label returns false and the
+   * server's own sentence is printed beside the button exactly as it is today.
+   */
+  function routeToSensitiveConfirmation(applicationId: string, reason: unknown): boolean {
+    /* The refusal for packet A can arrive after the switcher moved to B. Every guard the approve
+       handler already applies to its success path applies here, and it precedes every write. */
+    if (!selected || !submission) return false;
+    if (selectedIdRef.current !== applicationId) return false;
+    if (submission.application_id !== applicationId) return false;
+    const questionId = sensitiveConfirmationSendRouteQuestionId(reason, submission.review.questions);
+    if (!questionId) return false;
+    setError(null);
+    setPollError(null);
+    setSendRefusal(null);
+    /* "confirm", not "answer": the intent word is what records the per-question confirm press, and
+       without it her Save on the screen this opens would post the same bytes with no claim attached
+       and the send would be refused again on the next press. */
+    reviewPortalQuestions(questionId, "confirm");
+    return true;
+  }
+
   /* A Your turn row drew the employer's own options and she pressed one. This is a ROUTE, not a
      write: it opens the same editor the Answer pill opens, focused on the same question, with her
      pick already selected, and the editor's Save is still the only thing that persists an answer.
@@ -4622,6 +4686,7 @@ function Applications() {
         company: selected.job_context.company,
         role: selected.job_context.role,
         documents: activeSubmission.documents,
+        sensitiveConfirmations: activeSubmission.sensitive_questions_requiring_confirmation,
       })
       : null;
     const activeDirectPassKey = direct ? directAnswerPassKey(activeSubmission.review) : null;
@@ -4807,6 +4872,7 @@ function Applications() {
           company: selected.job_context.company,
           role: selected.job_context.role,
           documents: latestSubmission.documents,
+          sensitiveConfirmations: latestSubmission.sensitive_questions_requiring_confirmation,
         })
         : null;
       const latestDirectTask = direct
@@ -4878,6 +4944,7 @@ function Applications() {
           company: selected.job_context.company,
           role: selected.job_context.role,
           documents: saved.documents,
+          sensitiveConfirmations: saved.sensitive_questions_requiring_confirmation,
         });
         const remainingDirectQuestions = savedDirectTaskPlan.questionTasks.filter((task) => (
           !completedDirectPromptFingerprints.has(directQuestionPromptFingerprint(task))
@@ -5014,6 +5081,7 @@ function Applications() {
             company: selected.job_context.company,
             role: selected.job_context.role,
             documents: published.documents,
+            sensitiveConfirmations: published.sensitive_questions_requiring_confirmation,
           }).screen);
         if (!direct) setNotice(result.notice);
       };
@@ -5240,6 +5308,7 @@ function Applications() {
          would caption the NEXT run of the progress screen as a send that is not happening. */
       setSubmittingPhase("preparing");
       if (await recoverPacketAuditReview(requestedId, reason)) return;
+      if (routeToSensitiveConfirmation(requestedId, reason)) return;
       moveToScreen("portal");
       /* WHERE A REFUSED SEND IS SAID, and it is beside the button rather than at the top of the
          page. The same argument ISSUE-043 settled for the composer: this screen is long, the Send
@@ -5866,6 +5935,11 @@ function Applications() {
           questions={questions}
           metadataBlockers={activeQuestionMetadataBlockers}
           actionableQuestionIds={actionableQuestionIds}
+          /* Read off the OWNED submission review, never off the packet's stored copy: this list is
+             a live send-gate fact, and marking a card from a stale envelope would put an amber
+             declaration notice on a question the server has already been told about. Empty when no
+             submission is loaded, which is also the Apply-time case. */
+          confirmationRequiredQuestionIds={sensitiveConfirmationIds}
           onChange={setQuestions}
           onBack={() => {
             /* Back abandons the confirm presses that led here. Left standing, a CONFIRM pressed and
@@ -5886,7 +5960,18 @@ function Applications() {
              the metadata-refresh launch needs (the Mytos loop, application 55de7c9e). Until the
              response lands, packetEvidenceReady already fails closed on the local edit. */
           onSubmit={() => {
-            if (selectedSubmission?.review.status === "needs_attention") {
+            /* A CONFIRMATION MUST NOT BE SAVED LOCALLY AND CALLED SAVED.
+               The `else` arm is the Apply-time save, and it is correct there for the reason above:
+               those answers ride into the packet on the submit-request she is about to press, so
+               keeping them locally IS keeping them. A CONFIRMATION rides on nothing. It exists only
+               as the `confirmed: true` flag on this one PUT, so a confirmation that took that arm
+               would show "Saved.", clear nothing, and leave the send refusing with the screen
+               claiming otherwise - the exact shape of the defect that made this route a local
+               handler in the first place.
+               So the presence of an outstanding confirmation, on any status, sends the save to the
+               server. On a status the route refuses it comes back with the server's own sentence
+               beside her typing, which is the honest outcome and not the silent one. */
+            if (selectedSubmission?.review.status === "needs_attention" || sensitiveConfirmationIds.length > 0) {
               void saveReviewedAnswers();
             } else {
               setPacketEvidence(null);
@@ -5999,6 +6084,7 @@ function Applications() {
                       company: selected.job_context.company,
                       role: selected.job_context.role,
                       documents: selectedSubmission.documents,
+                      sensitiveConfirmations: selectedSubmission.sensitive_questions_requiring_confirmation,
                     }).questionTasks.length,
                   };
                 const next = new Map(current);
@@ -7060,12 +7146,18 @@ function EditableHighlight({ value, terms, onChange, className = "" }: { value: 
   );
 }
 
-function QuestionsScreen({ applicationRole, applicationCompany, questions, metadataBlockers = [], actionableQuestionIds = [], onChange, onBack, onSubmit, onRefreshMetadata, saving = false, refreshingMetadata = false, metadataRefreshDisabled = false, metadataRefreshNeedsPacketReview = false, metadataRefreshError = null, lookaheadError = null, blockContinuation = false, reviewDiscovered = false, focusQuestion = null, prescriptNote = "" }: {
+function QuestionsScreen({ applicationRole, applicationCompany, questions, metadataBlockers = [], actionableQuestionIds = [], confirmationRequiredQuestionIds = [], onChange, onBack, onSubmit, onRefreshMetadata, saving = false, refreshingMetadata = false, metadataRefreshDisabled = false, metadataRefreshNeedsPacketReview = false, metadataRefreshError = null, lookaheadError = null, blockContinuation = false, reviewDiscovered = false, focusQuestion = null, prescriptNote = "" }: {
   applicationRole: string;
   applicationCompany: string;
   questions: ApplicationQuestion[];
   metadataBlockers?: ApplicationQuestionMetadataBlocker[];
   actionableQuestionIds?: string[];
+  /* The questions the SERVER says are waiting on her explicit confirmation, by id. Carried as ids
+     rather than as the whole review for the same reason actionableQuestionIds is: this screen is
+     also the Apply-time screen, where there is no submission review to read, and a prop that is
+     simply empty there is one fewer branch than a nullable review would be. Empty on every live
+     response until volley #906 merges. */
+  confirmationRequiredQuestionIds?: readonly string[];
   onChange: (questions: ApplicationQuestion[]) => void;
   onBack: () => void;
   onSubmit: () => void;
@@ -7095,6 +7187,12 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, metad
   const optionalDecisionMissing = editableQuestions.some(optionalQuestionNeedsDecision);
   const focusQuestionId = focusQuestion?.id ?? null;
   const focusToken = focusQuestion?.token ?? 0;
+  /* Only the ones this screen is actually drawing a control for. A question the presentation layer
+     blocked (unreadable label, unread options) has no card to mark and no answer she could confirm,
+     so counting it in the line at the top would promise a marked card that is not below it. */
+  const confirmationRequiredIds = new Set(
+    editableQuestions.filter((question) => confirmationRequiredQuestionIds.includes(question.id)).map((question) => question.id),
+  );
   const actionableIds = new Set(actionableQuestionIds);
   if (focusQuestionId) actionableIds.add(focusQuestionId);
   const actionableQuestions = editableQuestions.filter((question) => actionableIds.has(question.id));
@@ -7175,6 +7273,17 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, metad
             screen that only counts what is still owed reads as a bill. */}
         {!reviewDiscovered && prescriptNote && (
           <p className="mt-1 text-sm leading-6 text-muted">{prescriptNote}</p>
+        )}
+        {/* WHY A FINISHED-LOOKING APPLICATION IS NOT GOING ANYWHERE, said once, at the top, so the
+            marked cards below have a reason before she reaches the first one. This is also where
+            the refused send lands: routeToSensitiveConfirmation brings her to this screen focused
+            on the named question, and a screen change with no statement on it is a screen that
+            looks like it lost her press. Not a role="alert": nothing happened, this is the state
+            the packet is in, and it says the same thing on every visit. */}
+        {confirmationRequiredIds.size > 0 && (
+          <p className="mt-3 rounded-inner border border-warn/20 bg-warn-soft px-4 py-3 text-sm leading-6 text-warn">
+            {sensitiveConfirmationScreenLine(confirmationRequiredIds.size)}
+          </p>
         )}
         {reviewDiscovered && actionableQuestions.length > 0 && actionableQuestions.length < editableQuestions.length && (
           <button
@@ -7301,6 +7410,19 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, metad
               run's attention reason cannot describe the same refusal in two different voices. */}
           {question.explanation && (
             <p className="mt-1 text-xs leading-5 text-muted">{question.explanation}</p>
+          )}
+          {/* THE MARK ON THE CARD, AND IT IS NOT A SECOND BADGE.
+              #526's rule is that the badge above is a claim about the control below it, and on the
+              packet this was measured on that claim is TRUE: she answered "Yes", the control holds
+              "Yes", ANSWERED is correct. Overwriting it with "Required" to get her attention would
+              make the badge lie about the control and tell her she failed to answer something she
+              answered. So the badge is left exactly as #526 shipped it and the outstanding fact
+              gets its own sentence, in the same warn box shape the re-opened-answer notice below
+              already uses on this card. */}
+          {confirmationRequiredIds.has(question.id) && (
+            <p className="mt-3 rounded-inner border border-warn/20 bg-warn-soft px-3 py-2 text-xs leading-5 text-warn">
+              {SENSITIVE_CONFIRMATION_CARD_NOTE}
+            </p>
           )}
           {question.answer_draft?.trim() && !question.answer.trim() && question.answer_state !== "skipped" && (
             <p className="mt-3 rounded-inner border border-warn/20 bg-warn-soft px-3 py-2 text-xs leading-5 text-warn">
@@ -7560,8 +7682,12 @@ function UnverifiedSubmissionCard({ attentionReason, submitting, error, onSubmit
   );
 }
 
-export function DirectApplicationQuestion({ task, position, total, saving, saved, focusToken, hasPrevious, hasNext, preservedDraft, externalFailure, onDraftChange, onClearDraft, onClearFailure, onPrevious, onNext, onReviewApplication, onSave, onSkip }: {
+export function DirectApplicationQuestion({ task, position, total, saving, saved, focusToken, hasPrevious, hasNext, preservedDraft, externalFailure, confirmationRequired = false, onDraftChange, onClearDraft, onClearFailure, onPrevious, onNext, onReviewApplication, onSave, onSkip }: {
   task: DirectQuestionTask;
+  /* The server says this exact question is waiting on her explicit confirmation. Defaulted false so
+     the Apply-time and test call sites keep working unchanged, and so an absent
+     sensitive_questions_requiring_confirmation is simply "no". */
+  confirmationRequired?: boolean;
   position: number;
   total: number;
   saving: boolean;
@@ -7751,6 +7877,19 @@ export function DirectApplicationQuestion({ task, position, total, saving, saved
               ? "Required. Litos saves this answer to this application before showing the next one."
               : "Optional. Answer it or skip it. Litos saves this answer to this application before showing the next one."}
         </p>
+        {confirmationRequired && (
+          /* THE SAME QUIET SURFACE AS THE DRAFTED-ANSWER NOTICE, AND NOT AMBER, which is a decision
+             this screen already made and tests: tests/dashboard-mobile-clarity.test.mjs forbids any
+             warn token inside this component, because a one-question screen that paints its own
+             explanation as an alarm reads as a failure on every question it explains. The reason
+             holds here too. Litos declining to make a legal declaration for her is the guardrail
+             working, not a fault, and the words carry the weight without the colour. It sits above
+             the control that resolves it, whose caption on this intent already reads "Confirm
+             answer", so the sentence and the button say one thing in one place. */
+          <p className="mt-3 rounded-inner border border-control-border bg-surface-alt px-3 py-2 text-small leading-6 text-muted">
+            {SENSITIVE_CONFIRMATION_QUESTION_NOTE}
+          </p>
+        )}
         {litosDrafted && (
           /* Deliberately the same quiet surface as the other two notices on this screen, and
              deliberately not a warning: a drafted answer is the product working, not a fault. */
@@ -8121,6 +8260,7 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
     company: packet.job_context.company,
     role: packet.job_context.role,
     documents: submission.documents,
+    sensitiveConfirmations: submission.sensitive_questions_requiring_confirmation,
   });
   const directProgressKey = directAnswerPassKey(review);
   const directProgress = directAnswerProgress?.key === directProgressKey
@@ -8165,6 +8305,7 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
       company: packet.job_context.company,
       role: packet.job_context.role,
       documents: submission.documents,
+      sensitiveConfirmations: submission.sensitive_questions_requiring_confirmation,
     })
     ? null
     : standingNonQuestionTask;
@@ -8229,6 +8370,20 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
      untouched, and a send refused on a screen that has not seen the form is the failure that costs
      a real application. */
   const unconfirmedDocuments = unconfirmedDocumentItems(review, { resume: resumeRecord });
+  /* The questions the server will not answer for her, as the SAME rows the Your turn panel builds.
+     Taken off `attentionReview` rather than `review` so this block and the one-question queue above
+     it are looking at one input; built by humanInputItems so they are looking at one builder.
+
+     THIS SCREEN IS THE WHOLE POINT. BlockerList renders only on needs_attention, and the packet
+     this was measured on (Hudson River Trading 4a79eec1) sat at ready_for_final_approval - which is
+     why every surface she could reach showed a finished application and only the 422 knew
+     otherwise. Empty on every live response until volley #906 merges. */
+  const sensitiveConfirmations = sensitiveConfirmationItems(attentionReview, {
+    company: packet.job_context.company,
+    role: packet.job_context.role,
+    documents: submission.documents,
+    sensitiveConfirmations: submission.sensitive_questions_requiring_confirmation,
+  });
   /* What this application already carries, as far as the snapshot on screen knows.
    *
    * ABSENT IS THE ORDINARY STATE OF THIS FIELD, which is the whole reason the gate below does not
@@ -8330,7 +8485,25 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
      they block on unrelated facts, neither implies the other, and a resolution that kept one end of
      this line and dropped the other would have re-opened a real employer send. That is what the
      whole-expression pin in tests/application-submission-gate.test.mjs is for. */
-  const finalApprovalBlocked = !packetEvidenceReviewed || educationProfilePending || Boolean(educationDriftWarning) || coverLetterPending || requiredAnswerMissing || sensitiveQuestionPresent || !previewReady || handoffExpired || approving || restarting || transcriptPending;
+  /* THE NINTH REASON, APPENDED AT THE TAIL for the same reason `transcriptPending` was: two suites
+     read the expression below as a literal, and appending is the one edit that cannot reorder a
+     pinned neighbour.
+
+     WHY IT BLOCKS RATHER THAN ONLY WARNS, deliberately, against the standing rule that refusing a
+     correct send is the expensive direction. It is not a rule this client invented: the SERVER
+     refuses exactly this list with 422 SENSITIVE_QUESTION_CONFIRMATION_REQUIRED, so a live button
+     here buys nothing but a spent press and a paragraph - which is precisely the failure that hid
+     this requirement for three sessions. The gate is also the narrower of the two: it reads the
+     ROWS, so it can only close while a Confirm control is on screen beside it, and it stands down
+     the moment her confirmation lands (see sensitiveConfirmationQuestions) whether or not the
+     server has refreshed its list. A requirement with no row and no control leaves the button LIVE
+     and lets the server answer, and routeToSensitiveConfirmation turns that answer into a route.
+
+     `sensitiveQuestionPresent` two terms to its left is NOT the same fact and neither implies the
+     other: that one is this file's own label heuristic over any sensitive question, this one is the
+     server naming the questions its own send gate is holding. */
+  const sensitiveConfirmationPending = sensitiveConfirmations.length > 0;
+  const finalApprovalBlocked = !packetEvidenceReviewed || educationProfilePending || Boolean(educationDriftWarning) || coverLetterPending || requiredAnswerMissing || sensitiveQuestionPresent || !previewReady || handoffExpired || approving || restarting || transcriptPending || sensitiveConfirmationPending;
   function approveVerifiedPreview() {
     if (finalApprovalBlocked) return;
     onApprove();
@@ -8436,6 +8609,7 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
             onReviewApplication={onQuestionsFinished}
             onSave={saveCurrentDirectQuestion}
             onSkip={skipCurrentDirectQuestion}
+            confirmationRequired={sensitiveConfirmationQuestionIds(review, submission.sensitive_questions_requiring_confirmation).includes(currentDirectQuestion.question.id)}
           />
         ) : (
           <>
@@ -8612,6 +8786,32 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
           <div role="alert" className="mt-4 rounded-inner bg-warn-soft px-4 py-3 text-sm leading-6 text-warn">
             <p>Review the exact resume beside the job description and its evidence colours before sending.</p>
             <Button onClick={onCheckResume} size="sm" className="mt-3">Check packet</Button>
+          </div>
+        )}
+        {/* THE ONE THING THIS SCREEN NEVER SAID, and the reason a 27-of-27, 46-fields-filled,
+            audit-passed packet could not be sent. Its own block with its own heading, above Not
+            confirmed and above Done, because it is the only outstanding work on this screen and
+            both of those headers describe states this is not.
+
+            SAME SHAPE AS THE BLOCK BELOW, deliberately: heading left, caption right, rows under it.
+            The one difference is that these rows KEEP their control - onOpenQuestion is passed, so
+            checklistRowControl draws the Confirm pill, and pressing it opens the answers screen
+            focused on that question with the confirm intent recorded, so her save carries
+            `confirmed: true`. That is the existing DV Trading CONFIRM loop, reused rather than
+            rebuilt. It deliberately does NOT confirm from this pill: a confirmation minted by a
+            press on a row that never showed her the answer is the laundering the backend's gate
+            exists to refuse. */}
+        {sensitiveConfirmations.length > 0 && (
+          <div className="mt-6">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs font-medium text-warn">{SENSITIVE_CONFIRMATION_BLOCK_HEADING}</p>
+              <p className="font-mono text-[11px] text-warn">{SENSITIVE_CONFIRMATION_BLOCK_CAPTION}</p>
+            </div>
+            <ul className="mt-2 grid gap-2 sm:grid-cols-2">
+              {sensitiveConfirmations.map((item) => (
+                <ChecklistRow key={item.id} item={item} checked={false} onOpenQuestion={onOpenQuestion} />
+              ))}
+            </ul>
           </div>
         )}
         {/* Its own block with its own heading, never folded into the list below: those rows are
@@ -8938,6 +9138,17 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
         {review.status === "ready_for_final_approval" && sensitiveQuestionPresent && (
           <p className="mt-3 text-xs leading-5 text-warn">
             A sensitive demographic, identity, or legal question is present. Leave it for the applicant before sending.
+          </p>
+        )}
+        {/* THE NINTH REASON, named the way the other eight are, and named BEFORE the press rather
+            than after it. This is the sentence whose absence cost three sessions: the server was
+            already refusing this send and the only place that fact existed was the 422 body. It
+            names the control that clears it and where that control is, because a blocker the
+            student cannot act on is a wall. The block it points at is above, on this same screen,
+            and it renders under exactly the same condition. */}
+        {review.status === "ready_for_final_approval" && sensitiveConfirmationPending && (
+          <p className="mt-3 text-xs leading-5 text-warn">
+            {sensitiveConfirmationSendGateLine(sensitiveConfirmations.length)}
           </p>
         )}
         {/* The eighth reason, named the way the other seven are. Says which document and where the
