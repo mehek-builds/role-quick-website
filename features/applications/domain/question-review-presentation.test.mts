@@ -116,6 +116,9 @@ test("an old unsupported blocker is suppressed only when the exact multi-value f
   assert.deepEqual(questionReviewPresentation([stored], [legacyBlocker]), {
     editableQuestions: [stored],
     metadataBlockers: [],
+    /* Nothing here is a follow-up to a condition Litos holds a no for, so nothing is left blank.
+       See questionsLeftBlankByKnownFalseCondition and tests/question-with-no-true-option.test.mjs. */
+    leftBlankQuestions: [],
   });
   assert.deepEqual(
     questionReviewPresentation([{ ...stored, options: null }], [legacyBlocker]).metadataBlockers,
