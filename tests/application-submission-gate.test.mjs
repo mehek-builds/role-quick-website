@@ -78,7 +78,7 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   assert.ok(verifiedPacketStart > 0 && verifiedPacketEnd > verifiedPacketStart);
   assert.ok(
     verifiedPacket.indexOf("routeMissingRequiredAnswers(questions)")
-      < verifiedPacket.indexOf("/packet-audit/acknowledge"),
+      < verifiedPacket.indexOf("acknowledgePacketAudit("),
     "newly discovered questions must open before the packet approval is spent",
   );
   assert.match(verifiedPacket, /!options\.allowServerAnswerRefresh && routeMissingRequiredAnswers\(questions\)/,
@@ -504,9 +504,10 @@ test("Home does not review a packet", async () => {
    against the screen that actually performs a submission, so the coverage moved rather than
    thinned. */
 test("the review screen gates and performs the submission", async () => {
-  const [review, evidenceSession] = await Promise.all([
+  const [review, evidenceSession, acknowledge] = await Promise.all([
     readFile(new URL("../app/dashboard/applications/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../features/applications/domain/packet-evidence-session.ts", import.meta.url), "utf8"),
+    readFile(new URL("../features/applications/infrastructure/packet-audit-acknowledge.ts", import.meta.url), "utf8"),
   ]);
 
   // A required question with no answer opens the screen that can collect it before any request.
@@ -575,11 +576,18 @@ test("the review screen gates and performs the submission", async () => {
   assert.match(evidenceSession, /packetAuditIdentityMatches\(current\.response\.packet_audit, polledAudit\)/);
   assert.match(review, /review\?\.status === "ready_for_final_approval"[\s\S]{0,120}moveToScreen\("portal"\)/);
   assert.match(review, /<ExactPacketPdf[\s\S]{0,500}onVerified=\{recordPacketPdfVerification\}/);
-  assert.match(review, /`\/applications\/\$\{applicationId\}\/packet-audit\/acknowledge`/);
-  assert.match(review, /audit_digest: audit\.audit_digest/);
-  assert.match(review, /packet_version: audit\.packet_version/);
-  assert.match(review, /pdf_sha256: pdf\.sha256/);
-  assert.match(review, /size_bytes: pdf\.size_bytes/);
+  /* THE ACKNOWLEDGEMENT BODY IS ASSERTED WHERE IT IS NOW BUILT. Both this screen and the onboarding
+     send (components/start/ReviewStep.tsx) posted their own copy of the four values the backend
+     CASes against, so a contract change had to be found twice. They now share one helper, and these
+     assertions follow it: the screen is pinned to calling it with the audit response that put the
+     PDF on screen, and the four fields are pinned in the helper, once, for both callers. */
+  assert.match(review, /await acknowledgePacketAudit\([\s\S]{0,120}activePacketEvidence\.response/);
+  assert.match(acknowledge, /`\/applications\/\$\{applicationId\}\/packet-audit\/acknowledge`/);
+  assert.match(acknowledge, /audit_digest: response\.packet_audit\.audit_digest/);
+  assert.match(acknowledge, /packet_version: response\.packet_audit\.packet_version/);
+  assert.match(acknowledge, /pdf_sha256: response\.pdf\.sha256/);
+  assert.match(acknowledge, /size_bytes: response\.pdf\.size_bytes/);
+  assert.match(acknowledge, /if \(!packetAuditAcknowledgementAccepted\(result\)\) throw new Error\(refusalMessage\)/);
   assert.match(review, /Review the exact resume beside the job description and its evidence colours before sending/);
   assert.match(review, /Check resume/);
   assert.match(review, />Resume<\/p>/);

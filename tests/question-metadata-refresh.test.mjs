@@ -32,7 +32,7 @@ test("stale employer metadata can start one fresh managed read with only saved a
 
 test("metadata recovery spends the exact packet acknowledgement before preparation", () => {
   const continuation = functionBody(PAGE, "async function continueFromVerifiedPacket(");
-  const acknowledgement = continuation.indexOf("/packet-audit/acknowledge");
+  const acknowledgement = continuation.indexOf("acknowledgePacketAudit(");
   const preparation = continuation.indexOf("prepareApplication(questions, options)");
 
   assert.match(continuation, /!options\.allowServerAnswerRefresh && routeMissingRequiredAnswers\(questions\)/);

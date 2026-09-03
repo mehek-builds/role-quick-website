@@ -77,7 +77,7 @@ import { applicationSelectionPath } from "./application-selection-url";
 import { applicationMatchesQuery, applicationNextActionRank, applicationWorkflowRevision } from "@/features/applications";
 import { ExactPacketPdf } from "@/components/app/ExactPacketPdf";
 import { AuditedJobDescription, manualHandoffMatchesPacket, manualTrialPacketEvidenceIsFresh, PacketAuditBreakdown, packetAuditDisplayIsExact, packetAuditResponseMatchesApplication } from "@/components/app/PacketAuditEvidence";
-import { acknowledgePacketEvidence, packetAuditAcknowledgementAccepted, packetQuestionsSnapshot, reconcilePacketPdfVerification, reconcileUnacknowledgedPacketPoll, revalidateAcknowledgedPacketEvidence, type PacketEvidenceSession, type PacketPdfEvidenceVerification } from "@/features/applications";
+import { acknowledgePacketAudit, acknowledgePacketEvidence, packetQuestionsSnapshot, reconcilePacketPdfVerification, reconcileUnacknowledgedPacketPoll, revalidateAcknowledgedPacketEvidence, type PacketEvidenceSession, type PacketPdfEvidenceVerification } from "@/features/applications";
 import { useBilling } from "@/components/billing/BillingProvider";
 import { isStructuredUpgradeDenial } from "@/features/billing";
 import { completeOperationId, operationIdFor } from "@/lib/operation-id";
@@ -4185,21 +4185,14 @@ function Applications() {
     const applicationId = activePacketEvidence.applicationId;
     if (packetAuditInFlight.current === applicationId) return;
     packetAuditInFlight.current = applicationId;
-    const audit = activePacketEvidence.response.packet_audit;
-    const pdf = activePacketEvidence.response.pdf;
     setPacketAuditBusy(true);
     setError(null);
     try {
-      const result = await api<unknown>(`/applications/${applicationId}/packet-audit/acknowledge`, {
-        method: "POST",
-        body: JSON.stringify({
-          audit_digest: audit.audit_digest,
-          packet_version: audit.packet_version,
-          pdf_sha256: pdf.sha256,
-          size_bytes: pdf.size_bytes,
-        }),
+      await acknowledgePacketAudit({
+        applicationId,
+        response: activePacketEvidence.response,
+        refusalMessage: "Litos did not confirm this exact packet review.",
       });
-      if (!packetAuditAcknowledgementAccepted(result)) throw new Error("Litos did not confirm this exact packet review.");
       if (selectedIdRef.current !== applicationId) return;
       const acknowledgedEvidence = acknowledgePacketEvidence(packetEvidenceRef.current, activePacketEvidence);
       if (!acknowledgedEvidence) throw new Error("The resume, audit, PDF, or answers changed while Litos recorded the review. Check the exact packet again.");

@@ -60,12 +60,12 @@ import { ErrorNote, PendingLabel } from "@/components/app/ui";
 import { Button } from "@/components/app/Button";
 import { ApiError, api, type MonitoredJob, type PacketAuditResponse, type ResumeSpec } from "@/lib/api";
 import {
+  acknowledgePacketAudit,
   acknowledgePacketEvidence,
   buildRequirementIndex,
   EMPTY_REQUIREMENT_INDEX,
   educationDrift,
   educationDriftMessage,
-  packetAuditAcknowledgementAccepted,
   packetAuditPassedCleanly,
   packetAuditRefusalIsRetryable,
   packetAuditResponseMatchesApplication,
@@ -345,24 +345,15 @@ export function ReviewStep({
     sendInFlight.current = true;
     setBusy(true);
     setError(null);
-    const audit = session.response.packet_audit;
-    const pdf = session.response.pdf;
     try {
       /* HER REVIEW, WRITTEN BY HER PRESS. Nothing above this line acknowledges anything, and
-         nothing below it re-derives what she approved: the four values are read off the audit whose
-         PDF is on screen and verified. */
-      const acknowledgement = await api<unknown>(`/applications/${applicationId}/packet-audit/acknowledge`, {
-        method: "POST",
-        body: JSON.stringify({
-          audit_digest: audit.audit_digest,
-          packet_version: audit.packet_version,
-          pdf_sha256: pdf.sha256,
-          size_bytes: pdf.size_bytes,
-        }),
+         nothing below it re-derives what she approved: the four values the helper posts are read off
+         the audit response whose PDF is on screen and verified. */
+      await acknowledgePacketAudit({
+        applicationId,
+        response: session.response,
+        refusalMessage: "Litos did not record your review of this exact packet.",
       });
-      if (!packetAuditAcknowledgementAccepted(acknowledgement)) {
-        throw new Error("Litos did not record your review of this exact packet.");
-      }
       /* THE LIVE EVIDENCE AGAINST THE ONE SHE PRESSED ON, which is the only pairing that catches
          anything. The first version passed the same snapshot twice, so every comparison inside -
          application, spec, questions, audit identity - compared a value to itself and the guard whose

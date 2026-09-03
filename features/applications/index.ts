@@ -55,6 +55,7 @@ export * from "./domain/application-packet-authority";
 export * from "./domain/board-submission-authority";
 export * from "./domain/submission-state";
 export * from "./infrastructure/applications-api";
+export * from "./infrastructure/packet-audit-acknowledge";
 export { PartialPayloadError } from "./infrastructure/response-shape";
 export {
   SCORE_BATCH,
