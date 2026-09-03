@@ -70,10 +70,12 @@ describe("evidenceImageUrl", () => {
 
   test("accepts our own backend under BOTH its production names", () => {
     /* Durable Rippling copies arrive as {API}/storage/logo/rippling/<tenant>/
-       <digest>.png, and the backend writes them as absolute api.trylitos.com
-       URLs while this app calls the same service by its Vercel name. Gating on
-       the configured host alone refused our own storage: measured locally on
-       2026-09-01, every Rippling source 404ed on exactly this. */
+       <digest>.png as absolute api.trylitos.com URLs, which is also the host
+       this app now calls. The Vercel name is kept as READ-ONLY LEGACY for rows
+       the backend persisted before the DNS cutover: this is a fetch allow-list
+       for already-stored URLs, so dropping it refuses our own storage and
+       returns a monogram silently. Measured locally on 2026-09-01, gating on
+       the configured host alone 404ed every Rippling source. */
     assert.ok(
       evidenceImageUrl(
         "https://api.trylitos.com/storage/logo/rippling/thrive-scholars-jobs/aa.png",

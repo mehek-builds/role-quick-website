@@ -401,7 +401,7 @@ function requestingPage(route) {
 
 /* THE BACKEND IS IDENTIFIED BY PATH, NOT BY ORIGIN, and that is deliberate.
  *
- * lib/config.ts reads NEXT_PUBLIC_API_URL and only falls back to the Vercel origin when it is
+ * lib/config.ts reads NEXT_PUBLIC_API_URL and only falls back to the default API origin when it is
  * unset, so the API origin baked into a build is whatever the machine's .env.local said at build
  * time. On this tree that is a localhost port. A spec that recognised the backend by matching
  * BACKEND_ORIGIN therefore aborted every API call, the page never received an onboarding state,

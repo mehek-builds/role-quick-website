@@ -126,13 +126,24 @@ function hostMatchesDomain(host: string, domain: string | null): boolean {
 
 /* Our own backend, where durable logo copies are served from /storage/logo/.
  *
- * BOTH production names are listed, not just the configured API_URL: the backend
- * writes durable-copy URLs as absolute api.trylitos.com addresses, while this
- * app is configured to call the same service as student-outreach-backend
- * .vercel.app until the DNS cutover completes (see CLAUDE.md). Live Rippling
- * rows carry the trylitos form today, so gating on the configured host alone
- * refused our own storage and turned every Rippling logo into a monogram, which
- * is exactly how it failed in local verification on 2026-09-01. */
+ * BOTH production names are listed, and the Vercel one is KEPT ON PURPOSE now
+ * that the DNS cutover is done and nothing calls that host any more.
+ *
+ * api.trylitos.com is the live name and the one the backend writes new durable
+ * copies as. student-outreach-backend.vercel.app is READ-ONLY LEGACY. This set
+ * is a fetch allow-list for URLs the backend ALREADY PERSISTED, some written
+ * before the cutover, and this repo cannot see which host was baked into a row
+ * stored months ago: that is a backend and database question, not a frontend
+ * one. Dropping the entry cannot break a call, because we no longer make one,
+ * but it can silently refuse a stored row and turn that employer's logo into a
+ * monogram with a 200 and no error anywhere. That is precisely how it failed in
+ * local verification on 2026-09-01, when the gate was keyed to the configured
+ * host alone and every Rippling source 404ed.
+ *
+ * So the entry stays until someone confirms no stored evidence row carries the
+ * host. Keeping it costs nothing worth trading: the gate is https-only, scoped
+ * to our own /storage/logo/ path, and both names resolved to the identical
+ * Railway service. */
 const BACKEND_EVIDENCE_HOSTS = new Set(["api.trylitos.com", "student-outreach-backend.vercel.app"]);
 try {
   BACKEND_EVIDENCE_HOSTS.add(new URL(API_URL).hostname);
