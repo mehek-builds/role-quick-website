@@ -656,6 +656,14 @@ const LEDGER = 'section[aria-labelledby="application-ledger-heading"]';
  * message. Both CI failures left nothing behind to say which it was, and that is why this note has
  * to speculate about the second one.
  *
+ * ONLY THIS SITE USES IT, and that is a stated gap rather than an oversight. Eleven sibling
+ * waitForURL calls below still carry the 10s budget and a bare timeout. They have never failed,
+ * because they run on the warmed server, but the CASES loop is first only because it is declared
+ * first: reorder the file, or select a later case with --test-name-pattern, and whichever runs
+ * first pays the same cold navigation with none of this. They are not drop-in conversions - most
+ * omit the pathname check this helper enforces - and widening a mitigation into eleven predicate
+ * rewrites is how a mitigation acquires its own bug. Convert them deliberately, or when one fails.
+ *
  * NOT REPRODUCED LOCALLY, and the attempts are recorded so the next person does not repeat them:
  * delaying the client chunks 3s and 12s, delaying every _rsc navigation 12s, and 20x CPU throttling
  * all left this file at 17/17. React replays a click captured during hydration, and openTracker
