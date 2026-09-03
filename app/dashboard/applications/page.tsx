@@ -64,7 +64,7 @@ import { applyBankVariant, type ApplyOutcome } from "@/features/applications";
 import { RequirementProvider, RequirementText, MatchLegend } from "@/components/app/RequirementText";
 import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX, exactPacketAuditClauses, exactPacketAuditRanges } from "@/features/applications";
 import { educationDrift, educationDriftMessage, type EducationProfile } from "@/features/applications";
-import { checklistRowControl, completedSubmissionGroups, directInputTaskPlan, directQuestionPromptFingerprint, directQuestionTaskFingerprint, displayQuestionLabel, documentAsksByKind, documentControls, documentStepsInPlan, humanInputItems, metadataRefreshOutranksStandingAttention, QUESTION_CHOICE_LIST_LIMIT, reviewedAnswersSaveLanding, type DirectQuestionTask, type DirectQuestionTaskIntent, type SubmissionChecklistAction, type SubmissionChecklistItem } from "@/features/applications";
+import { checklistRowControl, completedSubmissionGroups, directInputTaskPlan, directQuestionPromptFingerprint, directQuestionTaskFingerprint, displayQuestionLabel, documentAsksByKind, documentControls, documentStepsInPlan, humanInputItems, metadataRefreshOutranksStandingAttention, QUESTION_CHOICE_LIST_LIMIT, reviewedAnswersSaveLanding, unconfirmedDocumentItems, type DirectQuestionTask, type DirectQuestionTaskIntent, type SubmissionChecklistAction, type SubmissionChecklistItem } from "@/features/applications";
 import { prescriptBlocksProgress, prescriptEditableQuestions, prescriptMetadataBlockers, prescriptNeedsHer, prescriptSummary } from "@/features/applications";
 import { answerNamesNoOfferedOption, answerWithExactOptionToggled, exactQuestionOption, exactSelectedQuestionOptions, optionalQuestionNeedsDecision, questionAcceptsMultipleOptions, questionOptionsAreComplete, questionReviewPresentation, requiredQuestionReviewRoute } from "@/features/applications";
 import type { JdMatchResponse, JobMatch } from "@/features/applications";
@@ -8169,6 +8169,12 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
     return result;
   }
   const completedItems = completedSubmissionGroups(review);
+  /* The files the run claims it attached and nothing has confirmed on the employer's own form.
+     Rendered ABOVE Done, because it is the part of this list she has to check herself and the Done
+     block is twelve rows of things she does not. It blocks nothing: finalApprovalBlocked below is
+     untouched, and a send refused on a screen that has not seen the form is the failure that costs
+     a real application. */
+  const unconfirmedDocuments = unconfirmedDocumentItems(review);
   /* What this application already carries, as far as the snapshot on screen knows.
    *
    * ABSENT IS THE ORDINARY STATE OF THIS FIELD, which is the whole reason the gate below does not
@@ -8552,6 +8558,22 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
           <div role="alert" className="mt-4 rounded-inner bg-warn-soft px-4 py-3 text-sm leading-6 text-warn">
             <p>Review the exact resume beside the job description and its evidence colours before sending.</p>
             <Button onClick={onCheckResume} size="sm" className="mt-3">Check packet</Button>
+          </div>
+        )}
+        {/* Its own block with its own heading, never folded into the list below: those rows are
+            counted as "checks already complete" and printed under a header that says Complete, and
+            a row that is neither belongs to neither. Rendered with checked={false} so it draws the
+            status dot rather than the green tick, and it carries no actionKind, so checklistRowControl
+            returns nothing and there is no pill here to press. */}
+        {unconfirmedDocuments.length > 0 && (
+          <div className="mt-6">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs font-medium text-warn">Not confirmed</p>
+              <p className="font-mono text-[11px] text-warn">Check the filled form</p>
+            </div>
+            <ul className="mt-2 grid gap-2 sm:grid-cols-2">
+              {unconfirmedDocuments.map((item) => <ChecklistRow key={item.id} item={item} checked={false} />)}
+            </ul>
           </div>
         )}
         {completedItems.length > 0 && (

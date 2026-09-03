@@ -12,6 +12,7 @@ import {
   documentControls,
   humanInputItems,
   QUESTION_CHOICE_LIST_LIMIT,
+  unconfirmedDocumentItems,
 } from "./submission-checklist.ts";
 
 test("displayQuestionLabel restores sentence case and common application acronyms", () => {
@@ -309,11 +310,13 @@ test("completedSubmissionGroups hides provider handles and keeps the Done sectio
     questions: [{ id: "q-1", question: "How did you hear about us?", answer: "Company website", kind: "required", required: true }],
   });
 
+  /* No "Application files" line: this packet is not submitted, so the resume upload is a claim the
+     run made about its own work and nothing here has seen the employer's form. It is named by
+     unconfirmedDocumentItems instead, pinned in its own tests below. */
   assert.deepEqual(groups.map(({ label, detail }) => ({ label, detail })), [
     { label: "Contact details", detail: "6 items completed" },
     { label: "Education", detail: "5 items completed" },
     { label: "Professional links", detail: "1 item completed" },
-    { label: "Application files", detail: "1 item completed" },
     { label: "Employer questions", detail: "1 item completed" },
   ]);
   assert.equal(groups.some((group) => /\d{2,}|combo|control|field/i.test(group.label)), false);
@@ -1671,5 +1674,154 @@ test("the screen keeps the document step alive in the unverified-submission mode
     page,
     /\{needsAttention && !awaitingUnverifiedSubmission && <Button onClick=\{onRetry\}/,
     "Try again must stay suppressed while Litos does not know whether the first application landed",
+  );
+});
+
+/**
+ * DSI Innovations, Recruitee, packet a34e5ce2, measured live on 2026-09-03.
+ *
+ * The review screen printed "Application files, 2 items completed" with a green tick, DIRECTLY
+ * BESIDE its own evidence image, in which the required "CV or resume *" dropzone and the cover
+ * letter dropzone both still read "Upload a file or drag and drop here" with no filename anywhere.
+ * Send application was enabled. `filled_fields` is the runner's claim about its own work and nothing
+ * had cross-checked it against the employer's form.
+ */
+const dsi: Pick<ApplicationReview, "attention_reason" | "filled_fields" | "questions" | "receipt" | "skipped_reasons" | "status"> = {
+  status: "ready_for_final_approval",
+  attention_reason: "",
+  skipped_reasons: [],
+  questions: [],
+  filled_fields: ["name", "email", "phone", "resume", "cover_letter"],
+};
+
+test("a file the run only CLAIMS it attached is not Done", () => {
+  const groups = completedSubmissionGroups(dsi);
+  const items = completedSubmissionItems(dsi);
+
+  assert.equal(
+    groups.some((group) => group.label === "Application files"),
+    false,
+    'Done said "Application files, 2 items completed" beside a screenshot of two empty dropzones',
+  );
+  assert.equal(items.some((item) => item.label === "Resume"), false);
+  assert.equal(items.some((item) => item.label === "Cover letter"), false);
+
+  // Targeted, not a blanket deletion: everything the run typed INTO the form still counts.
+  assert.deepEqual(groups.map(({ label, detail }) => ({ label, detail })), [
+    { label: "Contact details", detail: "2 items completed" },
+    { label: "Other details", detail: "1 item completed" },
+  ]);
+});
+
+test("an unconfirmed file is named in its own state rather than dropped in silence", () => {
+  const unconfirmed = unconfirmedDocumentItems(dsi);
+
+  assert.deepEqual(unconfirmed.map((item) => item.label), ["Resume", "Cover letter"]);
+  assert.equal(
+    unconfirmed[0]?.detail,
+    "Litos says it attached this. Nothing has confirmed it on the company's form, so check the picture of the filled form for the file name.",
+  );
+  assert.equal(unconfirmed[0]?.badge, "Not confirmed");
+  // It states uncertainty and refuses nothing: no control, no tick, nothing the send gate reads.
+  assert.equal(unconfirmed[0]?.actionKind, undefined);
+  assert.equal(unconfirmed[0]?.acknowledgeable, undefined);
+  assert.equal(unconfirmed[0]?.settled, undefined);
+  assert.equal(checklistRowControl(unconfirmed[0]!, { portalUrl: "https://example.com" }), null);
+});
+
+test("the run's own report that a file is still missing sharpens the sentence", () => {
+  const unconfirmed = unconfirmedDocumentItems({
+    ...dsi,
+    attention_reason: '"CV or resume" is required and is still empty',
+  });
+
+  const resume = unconfirmed.find((item) => item.label === "Resume");
+  assert.equal(resume?.detail, "The run reports this file is still missing from the company's form.");
+  assert.equal(resume?.badge, "Missing");
+  // The cover letter has no such report, so it keeps the weaker, honest sentence rather than
+  // borrowing the resume's.
+  assert.equal(unconfirmed.find((item) => item.label === "Cover letter")?.badge, "Not confirmed");
+});
+
+test("a file the runner drops from filled_fields is still named from skipped_reasons", () => {
+  /* litos-stratus #152: a runner that cannot confirm an upload stops listing the label as filled
+     and names the reason instead. There is no claim left to demote, so nothing but this keeps the
+     file on screen. */
+  const after = unconfirmedDocumentItems({
+    ...dsi,
+    filled_fields: ["name", "email", "phone"],
+    skipped_reasons: ["resume: upload control never reported a file after the drop"],
+  });
+
+  assert.deepEqual(after.map(({ label, badge }) => ({ label, badge })), [{ label: "Resume", badge: "Missing" }]);
+
+  // And the same file reported in both places is still ONE row.
+  const both = unconfirmedDocumentItems({
+    ...dsi,
+    skipped_reasons: ["resume: upload control never reported a file after the drop"],
+  });
+  assert.deepEqual(both.map((item) => item.label), ["Resume", "Cover letter"]);
+  assert.equal(both.find((item) => item.label === "Resume")?.badge, "Missing");
+});
+
+test("a skipped reason that names no file does not invent a row", () => {
+  const unconfirmed = unconfirmedDocumentItems({
+    ...dsi,
+    filled_fields: ["name", "email"],
+    skipped_reasons: ["an upload control was left alone", "salary: left for the applicant"],
+  });
+  assert.deepEqual(unconfirmed, []);
+});
+
+test("the employer's own record is what makes a file Done", () => {
+  const filed: Pick<ApplicationReview, "attention_reason" | "filled_fields" | "questions" | "receipt" | "skipped_reasons" | "status"> = {
+    ...dsi,
+    status: "submitted",
+    receipt: {
+      confirmation_text: "Thanks for applying to DSI Innovations.",
+      final_url: "https://dsiinnovations.recruitee.com/o/intern/c/new",
+      captured_at: "2026-09-03T09:00:00.000Z",
+    },
+  };
+
+  assert.deepEqual(
+    completedSubmissionGroups(filed).find((group) => group.label === "Application files")?.detail,
+    "2 items completed",
+    "once the employer has answered, the claim is settled and Done is allowed to say so",
+  );
+  assert.deepEqual(unconfirmedDocumentItems(filed), []);
+  assert.equal(
+    unconfirmedDocumentItems({ ...filed, skipped_reasons: ["resume: upload control never reported a file"] }).length,
+    0,
+    "a receipt outranks a run's report about its own attempt",
+  );
+});
+
+test("the review screen renders the unconfirmed files outside the Done column", () => {
+  const page = readFileSync("app/dashboard/applications/page.tsx", "utf8");
+  assert.match(
+    page,
+    /const unconfirmedDocuments = unconfirmedDocumentItems\(review\);/,
+    "the review screen must read the unconfirmed files off the review it is showing",
+  );
+  assert.match(
+    page,
+    /\{unconfirmedDocuments\.length > 0 && \([\s\S]{0,400}?Not confirmed[\s\S]{0,400}?<ChecklistRow key=\{item\.id\} item=\{item\} checked=\{false\} \/>/,
+    "an unconfirmed file must render under its own heading with checked={false}, never as a green Done row",
+  );
+  assert.equal(
+    /completedItems\.slice\(0, 12\)[\s\S]{0,200}unconfirmedDocuments/.test(page),
+    false,
+    "it must never be folded into the list counted as checks already complete",
+  );
+});
+
+test("the packet record says the same thing the review screen does", () => {
+  const packet = readFileSync("components/app/ApplicationPacket.tsx", "utf8");
+  assert.match(packet, /const unconfirmedDocuments = unconfirmedDocumentItems\(safeContentReview\);/);
+  assert.match(
+    packet,
+    /\{unconfirmedDocuments\.length > 0 && \([\s\S]{0,400}?Not confirmed on their form[\s\S]{0,400}?<CheckRow key=\{item\.id\} item=\{item\} checked=\{false\} \/>/,
+    "the read-only record must not list under Done by Litos a file the review screen calls unconfirmed",
   );
 });

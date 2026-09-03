@@ -1314,6 +1314,10 @@ export function completedSubmissionItems(review: Pick<ApplicationReview, "attent
     const label = displayField(field);
     if (!label) continue;
     if (isHumanOnlyChecklistLabel(label)) continue;
+    // The run says it put a file on the form. Nothing here has seen the form, and Done is a claim
+    // about the employer's form. Routed through documentClaimState rather than tested inline so the
+    // one place that decides what a file claim is worth also decides what enters this column.
+    if (isDocumentField(field) && documentClaimState(field, review, emptySubjects) !== "verified") continue;
     addUnique(items, {
       id: `field-${keyFor(label)}`,
       label,
@@ -1369,9 +1373,118 @@ function providerFieldKey(value: string): string {
     .trim();
 }
 
+/**
+ * Every field name that names a FILE rather than a typed answer.
+ *
+ * ONE DEFINITION. The grouping row below routes on it and the claim gate under that reads it, and a
+ * second copy is a copy that stops agreeing: a term added to the grouping and not to the gate would
+ * put a file back in the Done column by the side door.
+ */
+const DOCUMENT_FIELD_PATTERN = /\b(?:resume|cv|cover letter|transcript|attachment|upload|doc(?:ument)?)\b/;
+
+/**
+ * The word that says WHICH file, for matching one report against another.
+ *
+ * Deliberately shorter than the pattern above. "upload", "attachment" and "document" group a field
+ * fine and identify nothing, so a skipped reason mentioning an upload is not evidence about the
+ * resume and must not be read as any.
+ */
+const DOCUMENT_KIND_PATTERN = /\b(?:resume|cv|cover letter|transcript)\b/g;
+
+/** The words Litos prints for a file it can name. Litos spells it resume, never with accents. */
+const DOCUMENT_KIND_LABELS: Record<string, string> = {
+  resume: "Resume",
+  "cover letter": "Cover letter",
+  transcript: "Transcript",
+};
+
+function isDocumentField(value: string): boolean {
+  return DOCUMENT_FIELD_PATTERN.test(providerFieldKey(value));
+}
+
+/**
+ * Which FILE a string is about, as one word, or null when it names no particular one. "CV" and
+ * "resume" are one file under two names on employers' forms.
+ */
+function namedDocumentKind(value: string): string | null {
+  const kinds = (providerFieldKey(value).match(DOCUMENT_KIND_PATTERN) ?? []).map((kind) => (kind === "cv" ? "resume" : kind));
+  return kinds[0] ?? null;
+}
+
+/**
+ * The key a list dedupes files on, so it carries one row per file rather than one per capture.
+ *
+ * Falls back to the normalized field name when nothing names a kind: an "attachment" control is
+ * still a file and still gets its own row, it just cannot be merged with anything.
+ */
+function documentFileSubject(field: string): string {
+  return namedDocumentKind(field) ?? providerFieldKey(field);
+}
+
+/**
+ * Whether the employer's own record has answered for this application yet.
+ *
+ * A receipt, or a submitted status. Both are the employer's side of the exchange rather than the
+ * run's report on its own work, and only that side can settle a claim about the employer's form.
+ * This is the same line the questions path stops second-guessing at, on purpose.
+ */
+function employerRecordConfirms(review: Pick<ApplicationReview, "receipt" | "status">): boolean {
+  return Boolean(review.receipt) || review.status === "submitted";
+}
+
+/**
+ * The fields a run says it did NOT put on the form, by normalized name.
+ *
+ * `skipped_reasons` is the run naming its own omissions, so every line here is already a report of
+ * something missing and there is no blocker shape to filter for, unlike attention_reason. Empty on
+ * most packets today and that is fine: absence here is silence, never evidence.
+ */
+function skippedFieldSubjects(reasons: readonly string[] | undefined): Set<string> {
+  return new Set((reasons ?? []).map(blockerSubject).filter(Boolean));
+}
+
+/**
+ * What a run's claim about a FILE is worth on a screen that has not seen the employer's form.
+ *
+ * "verified" only ever comes from the employer's own record. Everything before that is the runner
+ * describing its own attempt, and DSI Innovations is what that cost on 2026-09-03: `filled_fields`
+ * carried "resume" and "cover_letter", the Done column read "Application files, 2 items completed",
+ * and the evidence image printed directly beside it showed the required "CV or resume *" dropzone
+ * still saying "Upload a file or drag and drop here". Done is a claim about the employer's form, not
+ * about what this process attempted, which is the rule the questions path in this same file already
+ * states and the documents path did not follow.
+ *
+ * "reported_empty" is the run contradicting its own claim, in either of the two places it can say
+ * so: an attention_reason blocker, or a skipped reason once the runner starts dropping an unverified
+ * upload out of `filled_fields` and naming why (litos-stratus #152). NEITHER IS REQUIRED TO BE
+ * PRESENT, and neither promotes anything. They only sharpen the sentence from "nobody checked this"
+ * to "the run says it is not there", so this reads the same before and after that lands.
+ *
+ * There is deliberately no fourth state for "the run says it attached it". That WAS the defect.
+ *
+ * The subject match is made on the kind word rather than through `questionReportedEmpty`, which is
+ * the right test for a question and the wrong one for a file: it wants more than ten characters on
+ * one side before it will match a substring, and the labels a form puts on a dropzone are "resume",
+ * "cv", "cover letter". "CV or resume" and "resume" share exactly the part that is the same file.
+ */
+type DocumentClaimState = "verified" | "reported_empty" | "unverified";
+
+function documentClaimState(
+  field: string,
+  review: Pick<ApplicationReview, "receipt" | "status">,
+  reportedEmptySubjects: ReadonlySet<string>,
+): DocumentClaimState {
+  if (employerRecordConfirms(review)) return "verified";
+  const subject = documentFileSubject(field);
+  for (const reported of reportedEmptySubjects) {
+    if (reported.includes(subject)) return "reported_empty";
+  }
+  return "unverified";
+}
+
 function completedGroupForField(value: string): CompletedGroup {
   const field = providerFieldKey(value);
-  if (/\b(resume|cv|cover letter|transcript|attachment|upload|doc(?:ument)?)\b/.test(field)) return "documents";
+  if (DOCUMENT_FIELD_PATTERN.test(field)) return "documents";
   if (/\b(school|university|college|education|degree|discipline|major|graduation|graduate|gpa|coursework)\b/.test(field)) return "education";
   if (/\b(linkedin|github|portfolio|website|web site|url)\b/.test(field)) return "links";
   if (/\b(authorization|authorised|authorized|sponsorship|visa|relocation|availability|available|start date|work eligible)\b/.test(field)) return "eligibility";
@@ -1393,7 +1506,14 @@ export function completedSubmissionGroups(
   for (const field of review.filled_fields ?? []) {
     const key = providerFieldKey(field);
     if (!key || /^question(?: text)?\b/.test(key)) continue;
-    add(completedGroupForField(field), key);
+    const group = completedGroupForField(field);
+    /* The same rule the row list applies, in the shape this column happens to use: a file counts as
+       complete only once the employer's own record says so. An unverified file leaves this group at
+       zero and the group off the Done column entirely, which is the honest shape for a count headed
+       "Complete". unconfirmedDocumentItems is where the file is then named, so dropping it here
+       hides nothing. */
+    if (group === "documents" && documentClaimState(field, review, emptySubjects) !== "verified") continue;
+    add(group, key);
   }
   for (const question of review.questions ?? []) {
     if (!(question.answer ?? "").trim()) continue;
@@ -1413,4 +1533,70 @@ export function completedSubmissionGroups(
       detail: `${count} ${count === 1 ? "item" : "items"} completed`,
     }];
   });
+}
+
+/**
+ * The files this run says it attached that nothing has confirmed on the employer's own form.
+ *
+ * The other half of the documents gate above, and it is not optional. Dropping an unverified file
+ * out of Done is only half honest: the applicant is reading that list to decide whether to press
+ * Send, and a file that quietly stops being mentioned reads as a file this form never asked for. So
+ * it is named here instead, in the state it is actually in, beside the picture of the form it is a
+ * claim about, where she can settle it in one look.
+ *
+ * NOT a blocker, and deliberately not routed into humanInputItems or anywhere the send gate reads.
+ * Refusing a correct send is the failure that costs a real application, and nothing on this screen
+ * has measured enough to refuse one. These rows carry no action, no acknowledgement tick and no
+ * control: they carry a sentence, and they point at the evidence.
+ *
+ * `skipped_reasons` is read here and nowhere else in this file, and it is read TWICE, for the two
+ * different worlds this has to be right in. Today a runner that cannot confirm an upload still lists
+ * the label in `filled_fields`, so the first loop demotes the claim. Once litos-stratus #152 lands
+ * the runner DROPS the label and names the reason in `skipped` instead, so there is no claim left to
+ * demote and the first loop would say nothing at all about the file: the second loop is what keeps
+ * it named on exactly the runs that measured it best. Neither loop needs the other to have found
+ * anything.
+ *
+ * A file named in `attention_reason` and absent from `filled_fields` is deliberately NOT picked up
+ * here. humanInputItems already emits that one, with a control that opens the employer's page, and
+ * two rows for one file under two headings is the screen contradicting itself.
+ */
+export function unconfirmedDocumentItems(
+  review: Pick<ApplicationReview, "attention_reason" | "filled_fields" | "receipt" | "skipped_reasons" | "status">,
+): SubmissionChecklistItem[] {
+  const reportedEmptySubjects = emptyFieldSubjects(compactLines(review.attention_reason));
+  for (const subject of skippedFieldSubjects(review.skipped_reasons)) reportedEmptySubjects.add(subject);
+  const items: SubmissionChecklistItem[] = [];
+  const name = (source: string, state: DocumentClaimState) => {
+    const subject = documentFileSubject(source);
+    const label = DOCUMENT_KIND_LABELS[subject] ?? displayField(providerFieldKey(source));
+    if (!label) return;
+    addUnique(items, {
+      id: `unconfirmed-${keyFor(label)}`,
+      label,
+      detail: state === "reported_empty"
+        ? "The run reports this file is still missing from the company's form."
+        : "Litos says it attached this. Nothing has confirmed it on the company's form, so check the picture of the filled form for the file name.",
+      badge: state === "reported_empty" ? "Missing" : "Not confirmed",
+      /* One row per FILE, not per capture. A form that names the same dropzone "resume" on one run
+         and "Resume upload control_4" on the next is one file, and a file both loops below reach is
+         still one file. addUnique drops the second on this subject rather than saying the same
+         uncertain thing twice. */
+      subject,
+    });
+  };
+  for (const field of review.filled_fields ?? []) {
+    if (!isDocumentField(field)) continue;
+    const state = documentClaimState(field, review, reportedEmptySubjects);
+    if (state === "verified") continue;
+    name(field, state);
+  }
+  for (const reason of employerRecordConfirms(review) ? [] : review.skipped_reasons ?? []) {
+    /* A named kind, not merely a document-shaped sentence. "upload" and "attachment" are in the
+       grouping pattern and identify no file, and a skipped reason that cannot say WHICH file would
+       arrive here as a row labelled with its own sentence. */
+    if (!namedDocumentKind(reason)) continue;
+    name(reason, "reported_empty");
+  }
+  return items;
 }
