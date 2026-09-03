@@ -635,11 +635,18 @@ function FocusForm({
       </details>
 
       <div className="flex items-center gap-3">
-        {/* `!ready` is in here for a reason a browser found and no unit test would have.
-            Deselecting every field hides the title list but does NOT clear `selectedTitles`, so a
-            student who changed their mind about the field could press Continue and commit titles
-            the screen had stopped drawing. Continue never commits anything invisible: while the
-            offer is withheld, so is the button. */}
+        {/* PRESSABLE WHENEVER IT IS NOT MID-WRITE. The refusals live in save() via focusProblem,
+            never in this expression.
+            This comment used to open "`!ready` is in here", naming a term ce6ba78 removed on
+            purpose without deleting the sentence that described it. Read against the code it
+            asserts a guard that is not there, and it cost a session: the stale walk assertion that
+            #515 has since fixed was first diagnosed as a product regression on the strength of
+            this comment, because a disabled expression that disagrees with the sentence above it
+            reads as the bug rather than as the stale note.
+            The invariant it named is real and still kept, only kept elsewhere. Deselecting every
+            field hides the title list without clearing `selectedTitles`; focusProblem returns on
+            `fields.length === 0` before putTargeting, so nothing invisible is committed and the
+            student is told which answer is missing, which the dead button never did. */}
         <PrimaryButton onClick={() => void save()} disabled={busy}>
           {busy ? <PendingLabel onColor>Saving...</PendingLabel> : "Continue"}
         </PrimaryButton>
