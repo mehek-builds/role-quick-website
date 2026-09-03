@@ -25,7 +25,7 @@
 import { useEffect, useState } from "react";
 import { ThinkingOrb } from "thinking-orbs";
 import { ErrorNote } from "@/components/app/ui";
-import { api, ApiError, getJob, getPostingQuestions, isGuestSession, type MonitoredJob, type ResumeSpec } from "@/lib/api";
+import { api, ApiError, getJob, getOnboardingPacket, getPostingQuestions, isGuestSession, type MonitoredJob, type ResumeSpec } from "@/lib/api";
 import {
   fetchJdMatch,
   prescriptMetadataBlockers,
@@ -38,6 +38,7 @@ import { isStructuredUpgradeDenial } from "@/features/billing";
 import {
   BuildPreconditionError,
   buildActionLabel,
+  buildOrRejoin,
   initialStages,
   runOnboardingBuild,
   type BuildResult,
@@ -146,27 +147,48 @@ export function BuildStep({
           return { fullName: identity.full_name ?? null, resumeEmail: identity.resume_email ?? null };
         },
         generateResume: async (input) => {
-          const generated = await api<{ canonical_application_id?: string; application?: { id?: string; spec?: ResumeSpec } }>("/resume/generate", {
-          method: "POST",
-          body: JSON.stringify({
-            initiation: "explicit_click",
-            company: input.company,
-            role: input.role,
-            jd_text: input.jdText,
-            job_id: input.jobId,
-            contact: { full_name: input.fullName, email: input.resumeEmail },
-          }),
-          });
-          return {
-            /* THE LEGACY generated_resumes ID, NOT canonical_application_id, and getting this wrong
-               is a 404 on the send. POST /applications/:id/submit-request resolves its row through
-               ownedResume, which reads generated_resumes alone; the canonical application is a
-               parallel row that carries this one as legacy_generated_resume_id. Handing the
-               canonical id to the review screen made every onboarding send answer "Application not
-               found" (measured live, 2026-09-01). */
-            applicationId: generated.application?.id ?? null,
-            resumeSpec: generated.application?.spec ?? null,
-          };
+          /* THE REBUILD THAT USED TO COST A SECOND FREE BUILD, AND THEN THE ACCOUNT.
+           *
+           * This screen keeps its packet in memory for the sitting, so a reload landed the student
+           * back here and generated the SAME posting again, spending the second of two free
+           * onboarding builds. Two reloads bricked the account: it could then neither finish setup
+           * nor open the dashboard. The decision - read the packet already paid for, generate only
+           * when there is genuinely nothing to rejoin, and never fail the build over the read -
+           * lives in lib/onboarding-build.ts beside the rest of this sequence, and carries the
+           * measurement. It is there rather than here for the reason the whole orchestration is:
+           * generating costs money, so it has to be provable without spending one. */
+          const outcome = await buildOrRejoin({
+            readPacket: getOnboardingPacket,
+            generate: async () => {
+              const generated = await api<{ canonical_application_id?: string; application?: { id?: string; spec?: ResumeSpec } }>("/resume/generate", {
+                method: "POST",
+                body: JSON.stringify({
+                  initiation: "explicit_click",
+                  company: input.company,
+                  role: input.role,
+                  jd_text: input.jdText,
+                  job_id: input.jobId,
+                  contact: { full_name: input.fullName, email: input.resumeEmail },
+                }),
+              });
+              return {
+                /* THE LEGACY generated_resumes ID, NOT canonical_application_id, and getting this
+                   wrong is a 404 on the send. POST /applications/:id/submit-request resolves its
+                   row through ownedResume, which reads generated_resumes alone; the canonical
+                   application is a parallel row that carries this one as
+                   legacy_generated_resume_id. Handing the canonical id to the review screen made
+                   every onboarding send answer "Application not found" (measured live,
+                   2026-09-01). */
+                applicationId: generated.application?.id ?? null,
+                resumeSpec: generated.application?.spec ?? null,
+              };
+            },
+          }, input.jobId);
+          /* Reported by the decision rather than inferred from the result here, so the count
+             measures what actually happened: how often a student reloads mid-sequence, which is the
+             behaviour that used to exhaust the two free builds and brick the account. */
+          if (outcome.rejoined) track("onboarding_build_rejoined", { job_id: input.jobId });
+          return { applicationId: outcome.applicationId, resumeSpec: outcome.resumeSpec };
         },
         loadQuestions: async (jobId) => {
           /* THE PRE-SCAN IS A PREVIEW, NEVER A GATE (Mehek, 2026-09-01). Reading the employer's form

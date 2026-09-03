@@ -53,7 +53,41 @@ let submitRequests = 0;
 const savedAnswers = [];
 let checkoutRequests = 0;
 let generationCalls = 0;
+/* THE PACKET, ONCE BUILT, so the rejoin read can serve it back exactly as the backend does. Null
+   until a generation happens, which is the ordinary answer for an account on its first build. */
+let builtPacket = null;
 let releaseGeneration;
+
+/* THE ONE GENERATED SPEC, named once and served by BOTH the generation and the rejoin read. Two
+   copies would let them drift, and a rejoin that returned a different resume than the build did is
+   precisely the bug a reader of this spec would want it to catch. */
+const GENERATED_SPEC = {
+  /* THE CONTACT BLOCK THE ROUTE ACTUALLY RETURNS. The build screen draws the resume with the
+     shared ResumePaper, whose header is built from `_contact`; a stub without one produced a
+     headerless document and no way to see that the real thing has a header. */
+  _contact: {
+    full_name: "A Candidate",
+    email: "a@example.com",
+    location: "Los Angeles, CA",
+    linkedin_url: "linkedin.com/in/candidate",
+  },
+  school: "USC",
+  degree: "BS Computer Science",
+  grad_date: "May 2027",
+  coursework: "Distributed Systems, Databases",
+  experience: [
+    {
+      org: "Campus Lab",
+      title: "Software Engineering Intern",
+      date_range: "Jun 2026 - Aug 2026",
+      bullets: [
+        "Built a TypeScript and React dashboard used by 40 researchers.",
+        "Cut PostgreSQL query time 60% by adding covering indexes.",
+      ],
+    },
+  ],
+  skills: ["TypeScript", "React", "PostgreSQL", "Python"],
+};
 const generationHeld = new Promise((resolve) => { releaseGeneration = resolve; });
 
 /* Polls a condition only the STUB can see. Playwright's waits are all about the page, and the
@@ -328,39 +362,23 @@ before(async () => {
          this spec stayed green; in production the canonical id 404'd every onboarding send with
          "Application not found" (2026-09-01). The submit stub below answers app-1 only, so a
          client that regresses to canonical_application_id counts zero sends and fails test 06. */
+      builtPacket = { id: "app-1", spec: GENERATED_SPEC };
       return json({
         resume_id: "app-1",
         canonical_application_id: "canon-1",
-        application: {
-          id: "app-1",
-          spec: {
-            /* THE CONTACT BLOCK THE ROUTE ACTUALLY RETURNS. The build screen draws the resume with
-               the shared ResumePaper, whose header is built from `_contact`; a stub without one
-               produced a headerless document and no way to see that the real thing has a header. */
-            _contact: {
-              full_name: "A Candidate",
-              email: "a@example.com",
-              location: "Los Angeles, CA",
-              linkedin_url: "linkedin.com/in/candidate",
-            },
-            school: "USC",
-            degree: "BS Computer Science",
-            grad_date: "May 2027",
-            coursework: "Distributed Systems, Databases",
-            experience: [
-              {
-                org: "Campus Lab",
-                title: "Software Engineering Intern",
-                date_range: "Jun 2026 - Aug 2026",
-                bullets: [
-                  "Built a TypeScript and React dashboard used by 40 researchers.",
-                  "Cut PostgreSQL query time 60% by adding covering indexes.",
-                ],
-              },
-            ],
-            skills: ["TypeScript", "React", "PostgreSQL", "Python"],
-          },
-        },
+        application: { id: "app-1", spec: GENERATED_SPEC },
+      });
+    }
+    /* THE REJOIN READ, stubbed with the SAME packet the generation above returns, because that is
+       what the real route does: the packet is a row, and reading it back after a build is the whole
+       point of it. Answering `{ application: null }` here regardless would let a client that never
+       reads it stay green, which is the class of fiction the two-ids note above already names.
+       Before any build there is nothing to rejoin, which is the ordinary first-build answer. */
+    if (path === "/applications/onboarding-packet") {
+      return json({
+        application: builtPacket
+          ? { application_id: "canon-1", job_id: "job-1", packet: builtPacket }
+          : null,
       });
     }
     if (path === "/postings/job-1/questions") return json(PRESCRIPT);

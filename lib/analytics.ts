@@ -73,6 +73,11 @@ type OnboardingEvent =
      all, and `fixable` separates a one-line profile gap from a genuine build failure - two very
      different things to see rising in a funnel. */
   | "onboarding_build_completed"
+  /* A build that cost nothing because the account had already paid for this posting's packet and a
+     reload had only lost the reference to it. Worth its own event: it is the measure of how often
+     students reload mid-sequence, which is the behaviour that used to exhaust the two free builds
+     and brick the account (components/start/BuildStep.tsx carries the story). */
+  | "onboarding_build_rejoined"
   | "onboarding_build_failed"
   /* The questions screen. `asked` versus `already_answered` is the ratio that says whether the
      pre-script is doing its job: a screen that asks eight of seventeen is a profile gap, not a

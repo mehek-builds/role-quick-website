@@ -4,11 +4,13 @@ import {
   BUILD_STAGES,
   BuildPreconditionError,
   buildActionLabel,
+  buildOrRejoin,
   initialStages,
   runOnboardingBuild,
   stagesAt,
   type BuildDeps,
   type BuildStage,
+  type RejoinablePacket,
 } from "./onboarding-build.ts";
 import type { PostingPrescriptQuestion } from "./api.ts";
 
@@ -246,4 +248,97 @@ test("the button reports the real count, and zero skips the questions screen", (
   assert.equal(buildActionLabel({ outstandingQuestions: 1 }), "1 question needs you");
   // Nothing outstanding means screen 05 would be empty, so the button says what really happens.
   assert.equal(buildActionLabel({ outstandingQuestions: 0 }), "Review and send");
+});
+
+/* REJOINING A BUILD RATHER THAN PAYING FOR IT TWICE.
+ *
+ * A reload between the build screen and the send screen used to drop the in-memory packet, send the
+ * student back to the build step and spend a second of the account's TWO free onboarding builds on
+ * the SAME posting. Two reloads exhausted them and bricked the account: no way to finish setup (the
+ * build needs an entitlement it no longer had) and no way into the dashboard (the card gate holds it
+ * shut until setup completes). Measured on production 2026-09-03: onboarding_builds_used 2,
+ * onboarding_completed_at NULL.
+ *
+ * Every test below counts GENERATIONS, because the count is the bug. A test that only asserted the
+ * returned ids would pass against a version that returned the right packet and generated anyway.
+ */
+const JOB = "job-1";
+const SPEC = { school: "USC", degree: "BS CS", grad_date: "2027", coursework: "", experience: [], skills: [] } as never;
+
+function rejoinDeps(packet: RejoinablePacket | Error, generated = { applicationId: "generated-packet", resumeSpec: SPEC }) {
+  const calls = { read: 0, generate: 0 };
+  return {
+    calls,
+    deps: {
+      readPacket: async () => {
+        calls.read += 1;
+        if (packet instanceof Error) throw packet;
+        return packet;
+      },
+      generate: async () => {
+        calls.generate += 1;
+        return generated;
+      },
+    },
+  };
+}
+
+test("a posting this account already built is rejoined, and nothing is generated", async () => {
+  const { calls, deps } = rejoinDeps({ packet: { id: "existing-packet", spec: SPEC } });
+  const outcome = await buildOrRejoin(deps, JOB);
+  assert.equal(calls.generate, 0, "a reload must not pay for the same posting twice");
+  assert.equal(outcome.rejoined, true);
+  assert.equal(outcome.applicationId, "existing-packet");
+  assert.equal(outcome.resumeSpec, SPEC);
+});
+
+test("reloading ten times still generates nothing", async () => {
+  /* The allowance is two. The old flow spent one per reload, so the third arrival was a 402 with no
+     way forward; this is the property that has to hold for an unbounded number of reloads. */
+  const { calls, deps } = rejoinDeps({ packet: { id: "existing-packet", spec: SPEC } });
+  for (let reload = 0; reload < 10; reload++) await buildOrRejoin(deps, JOB);
+  assert.equal(calls.generate, 0);
+  assert.equal(calls.read, 10);
+});
+
+test("a posting with nothing built for it is generated, which is what a build is", async () => {
+  const { calls, deps } = rejoinDeps(null);
+  const outcome = await buildOrRejoin(deps, JOB);
+  assert.equal(calls.generate, 1, "a genuinely new posting is a new build and is meant to cost one");
+  assert.equal(outcome.rejoined, false);
+  assert.equal(outcome.applicationId, "generated-packet");
+});
+
+test("an application that exists with no packet is built, not rejoined into nothing", async () => {
+  /* The rejoin needs the spec and the packet id, not the application row. An application can exist
+     without a generated resume, and returning `rejoined` with a null id would hand the review
+     screen nothing to send. */
+  const { calls, deps } = rejoinDeps({ packet: null });
+  const outcome = await buildOrRejoin(deps, JOB);
+  assert.equal(calls.generate, 1);
+  assert.equal(outcome.rejoined, false);
+  assert.equal(outcome.applicationId, "generated-packet");
+});
+
+test("a failed read builds instead of failing, so the worst case is the old behaviour", async () => {
+  /* The direction to fail in. A backend without the route yet, or a network blip, must never turn a
+     build the student can still afford into a dead end - and it is what lets the two repos deploy
+     in either order. */
+  const { calls, deps } = rejoinDeps(new Error("404 Not Found"));
+  const outcome = await buildOrRejoin(deps, JOB);
+  assert.equal(calls.generate, 1);
+  assert.equal(outcome.rejoined, false);
+  assert.equal(outcome.applicationId, "generated-packet");
+});
+
+test("a generation failure is still surfaced, not swallowed by the rejoin path", async () => {
+  /* Only the READ is allowed to fail quietly. The generation's refusals (the entitlement denial,
+     the quality hold) carry structured bodies the failure screen routes on, and swallowing one
+     would put the student back on the loop the paywall branch exists to break. */
+  const { deps } = rejoinDeps(null);
+  const denial = new Error("This action is part of Litos+");
+  await assert.rejects(
+    () => buildOrRejoin({ ...deps, generate: async () => { throw denial; } }, JOB),
+    denial,
+  );
 });

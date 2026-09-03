@@ -76,6 +76,64 @@ export type BuildResult = {
   deferredFields: number;
 };
 
+/* BUILD IT, OR REJOIN THE ONE ALREADY PAID FOR.
+ *
+ * THE BUG THIS CLOSES. /start holds its built packet in memory for the sitting (app/start/page.tsx:
+ * "A reload mid-sequence therefore lands the student back on the step the LEDGER says they are on
+ * with nothing carried over"). So every reload between the build screen and the send screen dropped
+ * the packet, returned the student to the build step, and ran POST /resume/generate again for the
+ * SAME posting - claiming a second of the account's TWO free onboarding builds. Two reloads
+ * exhausted them and bricked the account outright: it could not finish setup (the build needs an
+ * entitlement it no longer had) and could not reach /dashboard (the card gate holds the dashboard
+ * shut until setup completes). Measured on production 2026-09-03 on a real account:
+ * onboarding_builds_used 2, onboarding_completed_at NULL.
+ *
+ * Raising the limit from one to two on 2026-09-01 was the same symptom answered with a bigger
+ * number. THE PACKET WAS NEVER LOST, ONLY THE REFERENCE TO IT, so the fix is to ask for it back.
+ *
+ * A DIFFERENT POSTING STILL COSTS A BUILD, and must: the read is keyed to the posting, so a student
+ * who genuinely picks another job generates for it. What is refused is paying twice for one job.
+ *
+ * A FAILED READ BUILDS, and that is the deliberate direction to fail in. A backend that does not
+ * serve the route yet, a network blip, a malformed answer - none of them may turn a build the
+ * student can still afford into a dead end. The worst case is exactly the behaviour that shipped
+ * before this existed, which is also what lets the two repos deploy in either order.
+ *
+ * A PACKETLESS APPLICATION BUILDS TOO. An application row can exist with no generated resume, and
+ * a rejoin needs the spec and the packet id, not the row. Nothing to rejoin means build.
+ *
+ * Injected, like every other dependency in this file, for the reason stated at the top of it:
+ * generating a tailored resume costs money, so the decision has to be provable without spending
+ * one. This one especially - its whole subject is not spending.
+ */
+export type RejoinablePacket = { packet: { id: string; spec: ResumeSpec } | null } | null;
+
+export type BuildOrRejoinDeps = {
+  /** The account's already-built packet for this posting, or null when there is none. */
+  readPacket: (jobId: string) => Promise<RejoinablePacket>;
+  /** The real generation. Called only when there is genuinely nothing to rejoin. */
+  generate: () => Promise<{ applicationId: string | null; resumeSpec: ResumeSpec | null }>;
+};
+
+export type BuildOrRejoinOutcome = {
+  applicationId: string | null;
+  resumeSpec: ResumeSpec | null;
+  /** True when this cost nothing because the packet already existed. Reported, not inferred. */
+  rejoined: boolean;
+};
+
+export async function buildOrRejoin(deps: BuildOrRejoinDeps, jobId: string): Promise<BuildOrRejoinOutcome> {
+  const existing = await deps.readPacket(jobId).catch(() => null);
+  if (existing?.packet) {
+    /* THE PACKET ID, NOT THE CANONICAL APPLICATION ID. The send resolves its row through
+       generated_resumes alone, so handing the canonical id onward answers "Application not found"
+       on every send - measured live 2026-09-01. The read route puts both on the wire under names
+       that say which is which; this takes the one the send can use. */
+    return { applicationId: existing.packet.id, resumeSpec: existing.packet.spec, rejoined: true };
+  }
+  return { ...(await deps.generate()), rejoined: false };
+}
+
 export type BuildDeps = {
   /** The FULL posting. The board row carries a 600-character preview, and tailoring against a
    *  truncated description would grade the student on the posting's intro paragraph, which is

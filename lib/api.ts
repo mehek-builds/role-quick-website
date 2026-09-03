@@ -1519,6 +1519,40 @@ export function getJob(jobId: string) {
   return api<{ job: MonitoredJob }>(`/jobs/${encodeURIComponent(jobId)}`).then((data) => data.job);
 }
 
+/** The application an onboarding student is in the middle of, and the packet a free build already
+ *  paid for.
+ *
+ *  WHAT IT IS FOR. /start holds its built packet in memory for the sitting (app/start/page.tsx),
+ *  so every reload between the build screen and the send screen dropped it, sent the student back
+ *  to the build step, and spent ANOTHER free onboarding build on the SAME posting. The allowance
+ *  is two, so two reloads exhausted it and the account was stuck: it could not finish setup (the
+ *  build needs an entitlement it no longer had) and could not reach the dashboard (the card gate
+ *  holds it shut until setup completes). Measured on production 2026-09-03.
+ *
+ *  The packet was never lost - only the reference to it was. This reads it back.
+ *
+ *  TWO QUESTIONS, ONE ROUTE. With a `jobId`, "is there already a packet for THIS posting", asked
+ *  by the build step before it spends. Without one, "which application is this account in the
+ *  middle of", asked on a reload to put the student back on the posting they were building.
+ *
+ *  `null` IS AN ORDINARY ANSWER, not a failure: an account on its first build has nothing yet,
+ *  which is exactly the case the caller then generates for.
+ *
+ *  `packet.id` IS THE generated_resumes ID AND IT IS NOT `application_id`. The send resolves its
+ *  row through generated_resumes alone, so handing the canonical id onward 404s every send - which
+ *  is what shipped on 2026-09-01. Both are here under names that say which is which. */
+export type OnboardingPacket = {
+  application_id: string;
+  job_id: string | null;
+  packet: { id: string; spec: ResumeSpec } | null;
+};
+
+export function getOnboardingPacket(jobId?: string): Promise<OnboardingPacket | null> {
+  const query = jobId ? `?job_id=${encodeURIComponent(jobId)}` : "";
+  return api<{ application: OnboardingPacket | null }>(`/applications/onboarding-packet${query}`)
+    .then((data) => data.application ?? null);
+}
+
 /**
  * What the student answered on the "what the job asks" screen, kept.
  *
