@@ -215,6 +215,17 @@ jobs:
       - name: Question blocker harness spec
         run: npm run test:question-blocker
 
+      # The send gate's exact PDF viewer, rendered rather than read. This viewer decides whether
+      # Litos may fill any employer form, and it once hung forever in production while its
+      # source-reading coverage stayed green: a regular expression can confirm that a render
+      # promise is awaited and can never confirm that it settles. The npm script has existed
+      # without a step here, so this spec has never run in CI once. It starts its own `next start`
+      # with a fabricated QA secret and serves a committed fixture, so it needs no secret and
+      # reaches no network. Above the deliberately-last partial-payload step, so its known-red
+      # case cannot skip this.
+      - name: Exact packet PDF spec
+        run: npm run test:exact-packet-pdf
+
       # LAST ON PURPOSE. These steps run sequentially, so whichever fails first skips every
       # step after it. This spec is currently red on one case whose payload the board's submission
       # authority gate now rejects before render, and while it sat above them it was silently
