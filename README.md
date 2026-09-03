@@ -8,9 +8,9 @@ tailors your resume, fills the application, and drafts the outreach.
 - **Stack:** Next.js 16 (App Router, Turbopack) + Tailwind v4 + GSAP
   ScrollTrigger + Lenis
 - **This repo is frontend only.** All data comes from the separately
-  deployed Litos backend (`student-outreach-backend.vercel.app`, its own
-  repo). Base URL lives in `lib/config.ts` (`NEXT_PUBLIC_API_URL`
-  override). Backend changes belong in that repo, never here.
+  deployed Litos backend (`api.trylitos.com`, repo `student-outreach-backend`).
+  Base URL lives in `lib/config.ts` (`NEXT_PUBLIC_API_URL` override).
+  Backend changes belong in that repo, never here.
 
 ## Read these before editing
 

@@ -14,7 +14,7 @@ import { createHash } from "node:crypto";
  */
 
 /** The default backend in lib/config.ts. Recognised by the spec's catch-all, never contacted. */
-export const BACKEND_ORIGIN = "https://student-outreach-backend.vercel.app";
+export const BACKEND_ORIGIN = "https://api.trylitos.com";
 
 /** Fabricated. Seeded into localStorage so the dashboard's auth guard lets the page render. */
 export const SESSION_TOKEN = "fixture-token-not-a-real-credential";

@@ -11,22 +11,31 @@ test("accepts only reusable HTTPS Lemon Squeezy checkout links", () => {
 });
 
 test("accepts first-party Litos Pay checkout intents from the configured backend only", () => {
-  const intent = "https://student-outreach-backend.vercel.app/billing/litos-pay/checkout/6d58c1f5-e885-41f7-a16a-dac37f98ab17?token=signed";
+  /* NEXT_PUBLIC_API_URL is unset here on purpose, so this case runs against the
+     DEFAULT origin in lib/billing.ts. That default is what production actually
+     uses, because the Dockerfile never forwards the variable into the build. */
+  const intent = "https://api.trylitos.com/billing/litos-pay/checkout/6d58c1f5-e885-41f7-a16a-dac37f98ab17?token=signed";
   assert.equal(isLitosPayCheckoutUrl(intent), true);
   assert.equal(isSafeCheckoutUrl(intent), true);
   assert.equal(isLitosPayCheckoutUrl(intent.replace("https://", "http://")), false);
-  assert.equal(isLitosPayCheckoutUrl(intent.replace("student-outreach-backend.vercel.app", "evil.example")), false);
-  assert.equal(isLitosPayCheckoutUrl("https://student-outreach-backend.vercel.app/billing/litos-pay/checkout/6d58c1f5-e885-41f7-a16a-dac37f98ab17"), false);
-  assert.equal(isLitosPayCheckoutUrl("https://student-outreach-backend.vercel.app/billing/litos-pay/checkout/not-a-uuid?token=signed"), false);
+  assert.equal(isLitosPayCheckoutUrl(intent.replace("api.trylitos.com", "evil.example")), false);
+  /* The retired Vercel name is no longer the configured origin, so an intent on
+     it is refused like any other foreign host. Nothing issues one: both names
+     fronted the same service, and the backend writes its own live name. */
+  assert.equal(isLitosPayCheckoutUrl(intent.replace("api.trylitos.com", "student-outreach-backend.vercel.app")), false);
+  assert.equal(isLitosPayCheckoutUrl("https://api.trylitos.com/billing/litos-pay/checkout/6d58c1f5-e885-41f7-a16a-dac37f98ab17"), false);
+  assert.equal(isLitosPayCheckoutUrl("https://api.trylitos.com/billing/litos-pay/checkout/not-a-uuid?token=signed"), false);
 });
 
 test("accepts Litos Pay intents from an explicitly configured backend origin", () => {
+  /* An explicit NEXT_PUBLIC_API_URL must beat the default in both directions,
+     which is what keeps a staging or preview backend usable. */
   const previous = process.env.NEXT_PUBLIC_API_URL;
-  process.env.NEXT_PUBLIC_API_URL = "https://api.trylitos.com";
+  process.env.NEXT_PUBLIC_API_URL = "https://staging-api.trylitos.com";
   try {
-    const intent = "https://api.trylitos.com/billing/litos-pay/checkout/6d58c1f5-e885-41f7-a16a-dac37f98ab17?token=signed";
+    const intent = "https://staging-api.trylitos.com/billing/litos-pay/checkout/6d58c1f5-e885-41f7-a16a-dac37f98ab17?token=signed";
     assert.equal(isLitosPayCheckoutUrl(intent), true);
-    assert.equal(isLitosPayCheckoutUrl(intent.replace("api.trylitos.com", "student-outreach-backend.vercel.app")), false);
+    assert.equal(isLitosPayCheckoutUrl(intent.replace("staging-api.trylitos.com", "api.trylitos.com")), false);
   } finally {
     if (previous === undefined) delete process.env.NEXT_PUBLIC_API_URL;
     else process.env.NEXT_PUBLIC_API_URL = previous;

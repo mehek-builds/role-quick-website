@@ -25,7 +25,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { chromium } from "playwright-core";
 import { isSanctionedThirdParty } from "./sanctioned-third-parties.mjs";
 
-const BACKEND = "https://student-outreach-backend.vercel.app";
+const BACKEND = "https://api.trylitos.com";
 const TOKEN = "captcha-consent-fixture-token";
 
 const CAPTCHA_LABEL = "Pick my application back up after I clear a check";

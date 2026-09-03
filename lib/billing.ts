@@ -12,7 +12,10 @@ export function isLemonSqueezyCheckoutUrl(value: string): boolean {
 export function isLitosPayCheckoutUrl(value: string): boolean {
   try {
     const url = new URL(value);
-    const api = new URL(process.env.NEXT_PUBLIC_API_URL ?? "https://student-outreach-backend.vercel.app");
+    /* Same default as lib/config.ts, and it has to stay the same: this compares a
+       checkout intent's origin against the API's, so a default that disagrees with
+       the one the dashboard actually calls silently refuses real checkout links. */
+    const api = new URL(process.env.NEXT_PUBLIC_API_URL ?? "https://api.trylitos.com");
     return url.protocol === "https:"
       && url.origin === api.origin
       && /^\/billing\/litos-pay\/checkout\/[0-9a-f-]{36}$/i.test(url.pathname)

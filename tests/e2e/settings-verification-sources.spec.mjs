@@ -14,7 +14,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { chromium } from "playwright-core";
 import { isSanctionedThirdParty } from "./sanctioned-third-parties.mjs";
 
-const BACKEND = "https://student-outreach-backend.vercel.app";
+const BACKEND = "https://api.trylitos.com";
 const TOKEN = "settings-verification-fixture-token";
 
 async function freePort() {

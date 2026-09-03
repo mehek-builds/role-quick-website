@@ -74,7 +74,7 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          NEXT_PUBLIC_API_URL: https://student-outreach-backend.vercel.app
+          NEXT_PUBLIC_API_URL: https://api.trylitos.com
 
   # SEPARATE JOB ON PURPOSE, and named for what it is.
   #
@@ -125,7 +125,7 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          NEXT_PUBLIC_API_URL: https://student-outreach-backend.vercel.app
+          NEXT_PUBLIC_API_URL: https://api.trylitos.com
 
       - name: Audited state contracts spec
         run: npm run test:audited-state-contracts
