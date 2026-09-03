@@ -41,27 +41,33 @@ ARG NEXT_PUBLIC_STATUS_PAGE_URL
 COPY --from=dependencies /app/node_modules ./node_modules
 COPY . .
 
-# AN EMPTY VARIABLE IS NOT AN ABSENT ONE, and conflating the two would have
-# turned this fix into a worse outage than the bug it repairs.
+# AN EMPTY VARIABLE IS NOT AN ABSENT ONE, and Next.js treats them completely
+# differently. `??` is nullish-only, so a variable set to "" is NOT replaced by
+# the default beside it: it wins. Measured on this commit, same command:
 #
-# The obvious spelling is `ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL`. A
-# declared ARG that nobody passed expands to the EMPTY STRING, not to nothing,
-# so that line sets the variable to "" on any build without that `--build-arg`:
-# a plain `docker build`, or the day someone blanks a field in the Railway UI.
-# `??` is nullish-only, so "" sails straight past the defaults that exist to
-# catch exactly this. Measured locally on 2026-09-04, same commit, same command:
-#
-#   NEXT_PUBLIC_API_URL unset -> API_URL "https://api.trylitos.com"   (default held)
-#   NEXT_PUBLIC_API_URL=""    -> API_URL ""                           (default bypassed)
+#   NEXT_PUBLIC_API_URL unset -> API_URL "https://api.trylitos.com"  (default held)
+#   NEXT_PUBLIC_API_URL=""    -> API_URL ""                          (default bypassed)
 #
 # The second build emitted `API_URL",0,""` and zero occurrences of
 # api.trylitos.com anywhere in .next/static: every API call in the dashboard
-# aimed at a relative path, and the build exited 0 while doing it.
+# aimed at a relative path, `npm test` stayed green, and the build exited 0.
 #
-# So empty values are dropped rather than exported, which makes an unpassed
-# build-arg behave exactly like the untouched variable it actually is and lets
-# the lib/config.ts defaults do the job they are there for. This repo has met
-# this trap once already, on BUILD_TIME; next.config.ts records that round.
+# Two ways an empty value gets in here, both measured against this Dockerfile
+# with docker 29.4.1 on 2026-09-04:
+#
+#   ARG + `--build-arg NAME=`      -> present, ""      <- a blanked Railway field
+#   ARG + ENV NAME=$NAME, no arg   -> present, ""      <- the tempting spelling
+#   ARG alone, no --build-arg      -> absent           <- what we want
+#
+# Railway passes EVERY service variable as a build arg, so a field someone
+# clears in the UI arrives as the first row, not as an absent variable. That is
+# why the names are stripped here rather than exported through ENV: it collapses
+# both "" cases onto the third row, which is the one where the lib/config.ts
+# defaults do the job they exist for. tests/next-public-build-args.test.mjs
+# refuses the ENV spelling outright so it cannot come back.
+#
+# This repo has met the same nullish-versus-empty trap once already, on
+# BUILD_TIME; next.config.ts records that round.
 RUN set -eu; \
     for name in \
       NEXT_PUBLIC_API_URL \
