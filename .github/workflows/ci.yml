@@ -277,11 +277,23 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: click-path-artifacts
+          # EVERY DIRECTORY A SPEC IN THIS JOB ACTUALLY WRITES, which four of them were missing.
+          # Each entry is one spec's ARTIFACT_DIR; grep `ARTIFACT_DIR =` under tests/e2e/ to check
+          # the list is still complete when a spec is added. `if-no-files-found: ignore` means a
+          # green run uploads nothing, so listing a directory costs nothing and omitting one costs
+          # the whole picture: approve, packet-flow-refusals, start-checklist and tracker-row all
+          # wrote a screenshot, the serialised DOM and a context file on failure that no run has
+          # ever uploaded. tracker-row is the one that has actually bitten - it is the known
+          # load-flake in this job, and its evidence was being discarded on every red run.
           path: |
+            test-results/approve/
             test-results/click-path/
             test-results/country-eligibility-flow/
             test-results/dashboard-visual-regressions/
             test-results/narrow-viewport/
+            test-results/packet-flow-refusals/
             test-results/question-blocker/
+            test-results/start-checklist/
+            test-results/tracker-row/
           if-no-files-found: ignore
           retention-days: 7
