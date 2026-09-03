@@ -168,6 +168,7 @@ export function ReviewStep({
   fieldsAnswered,
   onSent,
   onSaveForLater,
+  onStalePacket,
 }: {
   posting: MonitoredJob;
   /** The generated_resumes row POST /resume/generate created for this posting; the id space
@@ -188,6 +189,13 @@ export function ReviewStep({
   fieldsAnswered: number;
   onSent: (outcome: SubmitOutcome) => void;
   onSaveForLater: () => void;
+  /** THE SITTING NAMED A PACKET THAT IS NOT THIS ACCOUNT'S.
+   *
+   *  A 404 from the audit is not a refusal to retry against, it is the pointer being wrong: the row
+   *  belongs to another account, or no longer exists. Retrying re-asks a question that has one
+   *  permanent answer, which is the dead end this screen was rebuilt to remove, so the flow is told
+   *  to drop the pointer and start the application again instead. */
+  onStalePacket?: () => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -275,10 +283,16 @@ export function ReviewStep({
       })
       .catch((reason: unknown) => {
         if (!active) return;
+        /* A packet this account does not own cannot be audited by anyone, ever. Handing that back as
+           "check it again" is a control that cannot change its own answer. */
+        if (reason instanceof ApiError && reason.status === 404 && onStalePacket) {
+          onStalePacket();
+          return;
+        }
         setAuditBlock(auditBlockFor(reason));
       });
     return () => { active = false; };
-  }, [applicationId, auditAttempt, specJson, writeEvidence]);
+  }, [applicationId, auditAttempt, specJson, writeEvidence, onStalePacket]);
 
   /* Only a real verification result or a real revocation moves this. reconcilePacketPdfVerification
      drops the acknowledgement along with the proof when the bytes stop matching, so a packet that
