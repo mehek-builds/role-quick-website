@@ -385,13 +385,28 @@ function subjectTerms(prompt: string): Set<string> {
   return terms;
 }
 
+/**
+ * True when two term sets name at least one thing in common.
+ *
+ * An empty set shares with nothing, including another empty set. A prompt made entirely of form
+ * furniture ("If yes, please explain.") names no subject, so it identifies no parent and its caller
+ * asks the applicant instead of guessing one.
+ *
+ * Takes SETS rather than prompts because subjectResolvedParents compares every follow-up against
+ * every question above it: re-tokenising a prompt once per comparison made questionReviewPresentation,
+ * which several screens call on every render, five times slower on a 27-question form (68us to
+ * 347us measured). Each prompt is tokenised once now and the comparison is set membership.
+ */
+function termSetsShare(first: ReadonlySet<string>, second: ReadonlySet<string>): boolean {
+  if (first.size === 0 || second.size === 0) return false;
+  const [smaller, larger] = first.size <= second.size ? [first, second] : [second, first];
+  for (const term of smaller) if (larger.has(term)) return true;
+  return false;
+}
+
 /** True when two prompts name at least one thing in common that is not form furniture. */
 export function promptsShareASubject(one: string | undefined, other: string | undefined): boolean {
-  const first = subjectTerms(one ?? "");
-  if (first.size === 0) return false;
-  const second = subjectTerms(other ?? "");
-  for (const term of second) if (first.has(term)) return true;
-  return false;
+  return termSetsShare(subjectTerms(one ?? ""), subjectTerms(other ?? ""));
 }
 
 /**
@@ -430,20 +445,26 @@ export function promptsShareASubject(one: string | undefined, other: string | un
  */
 export function subjectResolvedParents(questions: readonly PromptShaped[]): Map<string, string> {
   const resolved = new Map<string, string>();
-  const candidates: { id: string; question: string }[] = [];
+  const candidates: { id: string; terms: ReadonlySet<string> }[] = [];
   for (const question of questions) {
     const id = question.id?.trim();
     if (!id) continue;
     if (questionDependsOnPrior(question.question)) {
-      const sharing = candidates.filter(
-        (candidate) => promptsShareASubject(question.question, candidate.question),
-      );
-      if (sharing.length === 1) resolved.set(id, sharing[0].id);
+      const terms = subjectTerms(question.question);
+      let only: string | null = null;
+      let sharing = 0;
+      for (const candidate of candidates) {
+        if (!termSetsShare(terms, candidate.terms)) continue;
+        sharing += 1;
+        if (sharing > 1) break;
+        only = candidate.id;
+      }
+      if (sharing === 1 && only !== null) resolved.set(id, only);
       continue;
     }
     /* Only a free-standing question can be a parent, which is the rule dependentQuestionParents
        already walks by. A chain of follow-ups therefore competes for nothing. */
-    candidates.push({ id, question: question.question });
+    candidates.push({ id, terms: subjectTerms(question.question) });
   }
   return resolved;
 }

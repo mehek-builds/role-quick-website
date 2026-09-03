@@ -296,12 +296,16 @@ export function questionsLeftBlankByKnownFalseCondition(
    */
   unreadableQuestionIds: ReadonlySet<string> = new Set(),
 ): Map<string, string> {
-  /* Resolved over the employer's WHOLE stored form, holes included, for the reason
-     `directInputTaskPlan` documents: "the nearest free-standing question above" computed over a
-     list with a metadata blocker missing from it silently names the wrong one. */
-  const provenConditions = questionsWithPolarFollowUps(questions);
   const knownFalseConditions = new Map<string, string>();
   const leftBlank = new Map<string, string>();
+  /* Resolved over the employer's WHOLE stored form, holes included, for the reason
+     `directInputTaskPlan` documents: "the nearest free-standing question above" computed over a
+     list with a metadata blocker missing from it silently names the wrong one.
+
+     Read lazily, and the reason is cost rather than tidiness. Several screens call
+     questionReviewPresentation on every render, and reading prompts is the expensive part of this
+     rule, so the scan below pays for it only on a form that actually reaches shape B. */
+  let provenConditions: ReadonlySet<string> | null = null;
 
   for (const question of questions) {
     const id = question.id?.trim();
@@ -333,6 +337,7 @@ export function questionsLeftBlankByKnownFalseCondition(
        so two independent signals have to agree before it counts: the form's own explicit follow-up
        ("If yes, what company...") and a polar opener in the prompt itself. Either one alone would
        reach questions it must not. */
+    provenConditions ??= questionsWithPolarFollowUps(questions);
     if (!provenConditions.has(id)) continue;
     if (!promptAsksAPolarQuestion(question.question)) continue;
     /* A REQUIRED ONE OF THESE SETTLES NOTHING, NOT EVEN FOR ITS FOLLOW-UPS. It must reach her, and
@@ -348,6 +353,11 @@ export function questionsLeftBlankByKnownFalseCondition(
     if (question.answer_state === "skipped" || question.answer_state === "unanswered") continue;
     leftBlank.set(id, question.question);
   }
+
+  /* NOTHING BELOW CAN FIRE WITHOUT A SETTLED CONDITION, and the two walks below are the whole cost
+     of this rule. Most employer forms carry no closed control answered with a negative at all, so
+     leaving here is the ordinary path rather than an optimisation for a rare one. */
+  if (knownFalseConditions.size === 0) return leftBlank;
 
   const parents = dependentQuestionParents(questions);
   const subjectParents = subjectResolvedParents(questions);
