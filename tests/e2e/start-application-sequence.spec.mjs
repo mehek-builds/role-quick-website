@@ -810,17 +810,28 @@ describe("the application sequence, end to end", () => {
       assert.equal(await boxes.nth(i).isChecked(), false, "a pre-ticked consent is not a consent");
     }
 
-    /* HYDRATION, WAITED FOR RATHER THAN ASSUMED. The switches read the account's saved preferences
-       on mount and setState from that read, so a tick that lands first is silently undone and the
-       save below never fires. The losing side of that race is a timeout with no explanation, which
-       is why this waits on the read itself rather than on a sleep. */
-    await waitFor(() => notificationReads > 0, "the switches never read the account's preferences");
+    /* AN ASSERTION, NOT A WAIT, and the distinction is worth being exact about because the first
+       draft of this line claimed to be a hydration race guard and could not have been one. The GET
+       fires when TrialStep mounts, and TrialStep's own title is the heading test 06 already waited
+       on, so by the time this runs the read landed a whole test ago. It could not synchronise
+       anything even if it needed to: the counter increments when the STUB serves the response,
+       which says nothing about React having applied the setState behind it.
+       Kept because it is worth asserting on its own. A switch that never reads shows a returning
+       student two empty boxes no matter what she already chose, and nothing else in this walk
+       would notice. */
+    assert.ok(notificationReads > 0, "the switches never read the account's preferences");
 
     await page.getByRole("checkbox", { name: "Tell me when a strong match opens" }).check();
 
     /* Saved on the tick. Waited for rather than read once, because the assertion is about a request
-       in flight and a bare read here is a snapshot that races it. */
-    await waitFor(() => notificationSaves.length === 1, "ticking a switch did not save it");
+       in flight and a bare read here is a snapshot that races it.
+       AT LEAST ONE, then the exact count separately. Polling for `=== 1` would be polling for a
+       value the counter passes THROUGH: a regression that issues two saves per tick could go 0 to 2
+       between two 50ms samples, and this would then spend its whole timeout and report "did not
+       save it" about a switch that saved twice. The two failures are opposites and must not wear
+       each other's message. */
+    await waitFor(() => notificationSaves.length >= 1, "ticking a switch did not save it");
+    assert.equal(notificationSaves.length, 1, "one tick must issue exactly one save");
     assert.equal(notificationSaves[0].strong_match, true);
     assert.equal(notificationSaves[0].employer_reply, false, "an unticked box is a decline, not an omission");
     assert.equal(notificationSaves[0].activity_digest, false, "the laptop summary was never granted");
