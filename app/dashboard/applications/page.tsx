@@ -66,7 +66,7 @@ import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX, exactPacketAuditClauses
 import { educationDrift, educationDriftMessage, type EducationProfile } from "@/features/applications";
 import { checklistRowControl, completedSubmissionGroups, directInputTaskPlan, directQuestionPromptFingerprint, directQuestionTaskFingerprint, displayQuestionLabel, documentAsksByKind, documentControls, documentStepsInPlan, humanInputItems, metadataRefreshOutranksStandingAttention, QUESTION_CHOICE_LIST_LIMIT, reviewedAnswersSaveLanding, type DirectQuestionTask, type DirectQuestionTaskIntent, type SubmissionChecklistAction, type SubmissionChecklistItem } from "@/features/applications";
 import { prescriptBlocksProgress, prescriptEditableQuestions, prescriptMetadataBlockers, prescriptNeedsHer, prescriptSummary } from "@/features/applications";
-import { answerNamesNoOfferedOption, answerWithExactOptionToggled, exactQuestionOption, exactSelectedQuestionOptions, optionalQuestionNeedsDecision, questionAcceptsMultipleOptions, questionOptionsAreComplete, questionReviewPresentation, requiredQuestionReviewRoute } from "@/features/applications";
+import { answerWithExactOptionToggled, exactQuestionOption, exactSelectedQuestionOptions, optionalQuestionNeedsDecision, questionAcceptsMultipleOptions, questionOptionsAreComplete, questionReadsAsAnswered, questionReviewPresentation, requiredQuestionReviewRoute } from "@/features/applications";
 import type { JdMatchResponse, JobMatch } from "@/features/applications";
 import { userFacingError } from "@/lib/user-facing-error";
 import { APPLICATION_DOCUMENT_ACCEPT_ATTRIBUTE, validateApplicationDocument } from "@/lib/document-size";
@@ -7057,7 +7057,11 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, metad
   const editableQuestions = presentation.editableQuestions;
   const effectiveMetadataBlockers = presentation.metadataBlockers;
   const metadataBlocked = effectiveMetadataBlockers.length > 0;
-  const missingQuestions = editableQuestions.filter((question) => question.required && !question.answer.trim());
+  /* THE SAME RULE THE BADGE PRINTS, because this count disables the button on that badge's own
+     screen. Left on emptiness alone it read the HRT gender question as answered while the badge
+     beside it read Required, so the screen said "one answer needs you" and offered an enabled
+     Save and continue in the same frame. */
+  const missingQuestions = editableQuestions.filter((question) => question.required && !questionReadsAsAnswered(question));
   const optionalDecisionMissing = editableQuestions.some(optionalQuestionNeedsDecision);
   const focusQuestionId = focusQuestion?.id ?? null;
   const focusToken = focusQuestion?.token ?? 0;
@@ -7224,13 +7228,32 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, metad
               weight, with the line height of body text. The full text always renders: what she is
               agreeing to is the one thing this screen must not truncate. */}
           <label htmlFor={`question-${question.id}`} className={`block text-sm text-ink ${question.question.trim().length > 140 ? "font-normal leading-6" : "font-medium"}`}>{displayQuestionLabel(question.question)}</label>
+          {/* THE BADGE IS A CLAIM ABOUT THE CONTROL BELOW IT, so it reads the answer the same way
+              that control does. Emptiness alone was the third place in this screen to test it,
+              after the waiting count and the continue route, and it was the one left saying
+              "Answered" over a closed question the card had painted blank: an off-list value is
+              not empty. MEASURED live on the Hudson River Trading Greenhouse packet (4a79eec1,
+              2026-09-03): a required "What is your gender?" offering Woman, Man, Non-binary and a
+              decline carried the profile spelling "Female", every radio rendered unchecked, and
+              the badge still read ANSWERED directly above a veteran question whose "No" WAS
+              painted. The two badges said the same word about two different states, so the one
+              question on that screen actually waiting for her looked done.
+
+              THE AGREEMENT IS NOT TOTAL, and the gap is worth naming rather than implying away.
+              The card paints a choice control whenever `options` is non-empty, while
+              `answerNamesNoOfferedOption` additionally requires `portal_input_type` to name a
+              closed control. `portal_input_type` is optional and is populated from whatever the
+              backend reports, so a required question carrying options under an absent or
+              unrecognised control type still reads as answered over a control painted blank. One
+              shared closed-choice predicate for the card and this badge is the fix, and it is not
+              this change. */}
           <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
-            <p className={`font-mono text-[11px] uppercase tracking-[0.08em] ${question.required && !question.answer.trim() ? "text-warn" : "text-muted"}`}>
+            <p className={`font-mono text-[11px] uppercase tracking-[0.08em] ${question.required && !questionReadsAsAnswered(question) ? "text-warn" : "text-muted"}`}>
               {question.required
-                ? question.answer.trim() ? "Answered" : "Required"
+                ? questionReadsAsAnswered(question) ? "Answered" : "Required"
                 : question.answer_state === "skipped"
                   ? "Skipped"
-                  : question.answer.trim() ? "Optional, answered" : "Optional, answer or skip"}
+                  : questionReadsAsAnswered(question) ? "Optional, answered" : "Optional, answer or skip"}
             </p>
             {!question.required && (
               question.answer_state === "skipped" ? (
@@ -8054,10 +8077,11 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
   ).editableQuestions.some(optionalQuestionNeedsDecision);
   /* THE LAST GATE BEFORE THE EMPLOYER, and emptiness alone was not enough of one. A required closed
      control carrying a value none of its options offer is not empty, so it read as answered and
-     Send rendered enabled over an application the portal cannot take. `answerNamesNoOfferedOption`
-     is the same membership the question card binds its controls with. */
+     Send rendered enabled over an application the portal cannot take. `questionReadsAsAnswered` is
+     the same membership the question card binds its controls with, and the same one its badge
+     prints, so this gate and that badge cannot disagree about a single question. */
   const requiredAnswerMissing = review.questions.some((question) => question.required
-    && (!(question.answer ?? "").trim() || answerNamesNoOfferedOption(question)))
+    && !questionReadsAsAnswered(question))
     || optionalAnswerDecisionMissing;
   const safeAttentionReason = review.attention_reason
     ? userFacingError(review.attention_reason, "Litos could not finish the company’s form. Try again in a minute.")

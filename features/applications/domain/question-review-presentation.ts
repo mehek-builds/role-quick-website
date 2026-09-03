@@ -169,6 +169,34 @@ export function answerNamesNoOfferedOption(
     : exactQuestionOption(question.answer, options) === null;
 }
 
+/**
+ * Whether a question reads to the applicant as already answered.
+ *
+ * ONE RULE FOR EVERY PLACE THAT SAYS "ANSWERED". `answerNamesNoOfferedOption` above taught the
+ * waiting count and the continue route that an off-list value is not an answer. The badge on the
+ * question card was the third such place and still tested emptiness alone, so it printed
+ * "Answered" over a closed control it had itself painted blank. This wraps the pair so the badge,
+ * the count and the last gate before the employer read one rule instead of three.
+ *
+ * IT DOES NOT MAKE THEM AGREE EVERYWHERE, and the remaining gap is upstream of this function: the
+ * question card paints a choice control on a non-empty `options` alone, while
+ * `answerNamesNoOfferedOption` also requires `portal_input_type` to name a closed control. That
+ * field is optional, so a question with options under an absent or unrecognised control type still
+ * reads as answered here while the card paints nothing. Closing that needs one shared closed-choice
+ * predicate for both, which is a separate change.
+ *
+ * The two conditions are exactly the ones the gate already composes at the send: a blank answer is
+ * not given, and a complete closed list that holds no reading of the stored answer is not given
+ * either. Everything else, including a free-text answer and a control whose options discovery
+ * could not finish reading, keeps reading as answered, because refusing a correct answer costs a
+ * real application and this predicate is not the place to invent doubt.
+ */
+export function questionReadsAsAnswered(
+  question: Pick<ApplicationQuestion, "answer" | "options" | "options_complete" | "optionsComplete" | "portal_input_type">,
+): boolean {
+  return Boolean(question.answer?.trim()) && !answerNamesNoOfferedOption(question);
+}
+
 export function answerWithExactOptionToggled(
   answer: string,
   options: readonly string[] | null | undefined,
