@@ -747,6 +747,26 @@ describe("the application sequence, end to end", () => {
   });
 
   test("07 the trial: the gift, counted after the build spent one generation", async () => {
+    /* WAITED FOR, NOT SNAPSHOTTED, and this line is the whole test.
+     *
+     * Every assertion below reads a value that arrives from getBillingState(), which TrialStep
+     * fires on mount and does not block its first paint on. Before it resolves the screen is
+     * honestly in its other state: `holdsTrial` is false, so the meters print what the seven days
+     * INCLUDE (5, 5, 5, 5), row 05 names the length instead of an end date, and the line reads
+     * "Nothing is charged for the first seven days." Reading innerText the instant test 06's
+     * heading appeared raced that fetch, and on a loaded CI runner the fetch lost: main went red on
+     * `/Tailored resumes\s*\n?\s*4/` against a receipt showing 5, which is not a wrong number but
+     * a number read too early.
+     *
+     * This was invisible for as long as it existed, because this spec sits below the onboarding
+     * checklist walk in the sequential browser job and that walk was red, so step 18 was SKIPPED
+     * rather than passing. The first CI run that reached it found this on the second attempt.
+     *
+     * The wait is on the loaded state's OWN sentence rather than on a timer: "Already on your
+     * account" is printed only when `holdsTrial` is true, which cannot be true until the snapshot
+     * is in hand. So it cannot pass early, and the assertions below read one settled screen. */
+    await page.getByText(/Already on your account/i).waitFor({ timeout: 20_000 });
+
     const body = await page.locator("main").innerText();
     assert.match(body, /A gift, on us/i);
     assert.match(body, /days of Litos\+/i);
@@ -873,6 +893,17 @@ describe("the application sequence, end to end", () => {
        So this pins what the screen must SAY -- when the charge lands, how to stop it -- and the
        absence of every exit, rather than any sentence the product no longer means. */
     await page.getByRole("heading", { name: /after the seven days/i }).waitFor({ timeout: 20_000 });
+    /* AND THEN FOR THE SHIMMER TO GO, because that heading does not mean what it looks like it
+       means. PlanStep renders the SAME title in both branches: while `settled` is false it draws
+       the title over a shimmer, deliberately, so that somebody who has just paid is never flashed a
+       sales pitch. So waiting on the heading is waiting for the loading screen, and every assertion
+       below would then be read off it.
+       Not observed in CI, unlike the same defect in 07 above, but reproduced here on purpose: with
+       the billing stub held 1500ms this case fails on "the paywall must state when the charge
+       lands" - the copy is absent because the plans have not arrived, not because the paywall
+       stopped saying it. Keyed on the loading indicator rather than on any of the copy asserted
+       below, so it cannot make those assertions vacuous. */
+    await page.waitForFunction(() => !document.querySelector("main .rq-shimmer"), null, { timeout: 20_000 });
 
     const body = await page.locator("main").innerText();
     assert.match(
