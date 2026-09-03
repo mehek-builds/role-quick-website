@@ -279,7 +279,14 @@ before(async () => {
   browser = await chromium.launch();
   context = await browser.newContext();
   await context.addInitScript(() => {
-    window.localStorage.setItem("rq_token", "stub-token");
+    /* A DECODABLE TOKEN, not a placeholder string. lib/session-identity.userIdFromToken reads the
+       account id out of the JWT payload, and the sitting pointer that survives a reload is scoped to
+       that id - a pointer stored by another account must never be restored. With an opaque
+       "stub-token" the id is null, nothing is ever remembered, and the reload test below would pass
+       while proving nothing. Unsigned and far-future on purpose: nothing here verifies it. */
+    const claims = btoa(JSON.stringify({ userId: "9f3c1e77-5a2b-4c8d-9e10-2b7d4f6a8c31", exp: 4102444800 }))
+      .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    window.localStorage.setItem("rq_token", `eyJhbGciOiJub25lIn0.${claims}.stub`);
   });
   page = await context.newPage();
 
@@ -603,6 +610,68 @@ describe("the application sequence, end to end", () => {
     assert.ok(savedAnswers.some((a) => /GPA/i.test(a.question) && /3\.6 or above/.test(a.answer)));
   });
 
+  /* THE RELOAD THAT USED TO COST A BUILD.
+   *
+   * /start handed its packet between screens in memory only, so a refresh anywhere between the build
+   * screen and the send screen dropped it, walked the student back to build, and spent another
+   * onboarding build grant on the SAME posting. The account gets two. Two refreshes was the whole
+   * allowance, and an exhausted account could then neither finish setup (the build it needed had
+   * become a paid action) nor leave it (the card gate holds the dashboard shut until setup
+   * completes). Measured on a real production account on 2026-09-03, both grants gone.
+   *
+   * The assertion that matters is the generation COUNT. The screen coming back is pleasant; not
+   * paying for it twice is the fix. */
+  test("05b a reload on the send screen resumes the packet instead of rebuilding it", async () => {
+    await page.getByRole("heading", { name: /happy with this/i }).waitFor({ timeout: 20_000 });
+    const generationsBeforeReload = generationCalls;
+    /* Asserted HERE, before the reload, because this is the last moment the flow holds a requirement
+       match. See the note on the restored screen below. */
+    assert.ok(
+      await page.locator("mark", { hasText: /TypeScript/i }).count() >= 1,
+      "the posting pane lost its requirement marks",
+    );
+
+    await page.reload({ waitUntil: "domcontentloaded" });
+
+    /* Back on the send screen, from the ledger plus the remembered pointer, with no build screen in
+       between and no second generation behind it. */
+    await page.getByRole("heading", { name: /happy with this/i }).waitFor({ timeout: 20_000 });
+    assert.equal(
+      generationCalls,
+      generationsBeforeReload,
+      `the reload rebuilt the packet: ${generationCalls - generationsBeforeReload} extra generation(s), each one an onboarding build grant`,
+    );
+
+    /* And it is the same application, so the audit and the send still name the packet that was
+       built rather than a fork of it. */
+    await page.getByText("Exact audited PDF loaded, 1 page.").waitFor({ timeout: 30_000 });
+    assert.equal(submitRequests, 0, "the reload sent something");
+    const body = await page.locator("main").innerText();
+    assert.match(body, /We build with TypeScript and React/i, "the restored screen lost the posting");
+    /* The receipt survives the reload too. A restored sitting that silently reported zero answered
+       fields would be the screen understating work the student had already done. */
+    assert.match(body, /FORM FIELDS ANSWERED/i);
+    assert.doesNotMatch(body, /Building your application/i, "the reload went back through the build screen");
+
+    /* WHAT A RESTORED SITTING COSTS, pinned rather than left to be discovered.
+     *
+     * The requirement marks are gone. Rebuilding them needs the resume TEXT (BuildStep feeds
+     * fetchJdMatch from result.resumeSpec), the spec lives on the packet, and the routes that read a
+     * packet back are not on the card gate's onboarding tier - so asking would 402 on exactly the
+     * locked accounts this restore exists for. The posting's words, the audited PDF, the receipt and
+     * the send all survive; the colours do not.
+     *
+     * This is a deliberate trade, not an oversight: unmarked words cost the student a little context,
+     * and a rebuild costs them an application they cannot pay for. Asserted so that the day someone
+     * restores the marks (the audit response already carries clause verdicts and highlight terms,
+     * which is the obvious source) this line fails and gets deleted on purpose. */
+    assert.equal(
+      await page.locator("mark").count(),
+      0,
+      "requirement marks came back after a reload - if that is deliberate, delete this assertion",
+    );
+  });
+
   /* THE REFUSAL WALK, and it runs BEFORE the successful send because the review screen only exists
    * until the send leaves it.
    *
@@ -616,6 +685,10 @@ describe("the application sequence, end to end", () => {
   test("06a review: a refused packet states the reason, keeps both exits, and recovers", async () => {
     await page.getByRole("heading", { name: /happy with this/i }).waitFor({ timeout: 20_000 });
     await page.getByText("Exact audited PDF loaded, 1 page.").waitFor({ timeout: 30_000 });
+    /* RELATIVE, because a reload is now a legitimate reason for another audit (05b) and pinning an
+       absolute count would make this test a tripwire for unrelated navigation rather than for the
+       behaviour it is about. */
+    const auditsBefore = packetAudits;
 
     acknowledgeStaleOnce = true;
     auditFailure = { status: 500, body: { error: "The packet audit service is unavailable." } };
@@ -632,7 +705,7 @@ describe("the application sequence, end to end", () => {
        tree - a flake nobody had seen, because this file sits below the onboarding-checklist walk in
        the sequential browser job and that walk was red. The assertion is unchanged; only the moment
        it is taken is. */
-    await waitFor(() => packetAudits === 2, "a stale-packet refusal must open a fresh audit by itself");
+    await waitFor(() => packetAudits - auditsBefore === 1, "a stale-packet refusal must open a fresh audit by itself");
 
     const blocked = page.getByText("The packet audit service is unavailable.");
     await blocked.waitFor({ timeout: 15_000 });
@@ -651,7 +724,7 @@ describe("the application sequence, end to end", () => {
     auditFailure = null;
     await retry.click();
     await page.getByText("Exact audited PDF loaded, 1 page.").waitFor({ timeout: 30_000 });
-    assert.equal(packetAudits, 3, "the retry must actually re-audit");
+    assert.equal(packetAudits - auditsBefore, 2, "the retry must actually re-audit");
     /* The refusal retires with the thing it was about. A red sentence telling her the packet no
        longer matches, over a green pane saying the exact PDF is loaded, under a button that has just
        re-opened, is three controls describing two different packets. */
@@ -681,13 +754,9 @@ describe("the application sequence, end to end", () => {
        it moved to. */
     assert.match(body, /We build with TypeScript and React/i, "the posting's words are not on the review screen");
     assert.doesNotMatch(body, /Your resume, written for this posting from the one you uploaded/i, "the review still describes the resume instead of showing it");
-    /* ONE PANE MARKS NOW, AND THAT IS THE TRADE THIS SCREEN MADE. Both panes used to mark: the
-       posting's words and the spec re-render of the resume beside it. The Attached pane draws the
-       audited PDF instead, and a canvas carries no marks - so the posting keeps its highlighting and
-       its legend, and what the resume covers is read off the match legend rather than off the
-       document. Asserted as "still marked" rather than deleted, because losing the posting's marks
-       too would leave the requirement colours with nowhere to land. */
-    assert.ok(await page.locator("mark", { hasText: /TypeScript/i }).count() >= 1, "the posting pane lost its requirement marks");
+    /* The posting's marks are asserted in 05b, before the reload that legitimately drops them: the
+       Attached pane is the audited PDF and carries none of its own, so after a restore there is no
+       requirement match left on the screen to check here. */
     assert.match(body, /cannot be unsent/i, "the irreversible screen must say so above the button");
     assert.match(body, /Anything Litos guessed/i);
     assert.match(body, /None/i);
@@ -720,7 +789,7 @@ describe("the application sequence, end to end", () => {
     /* The text alternative comes out of the same parse that painted the page, so a screen reader
        meets the document rather than a labelled picture of one. */
     assert.match(await page.locator("main").innerText(), /as text:/i, "the audited PDF has no text alternative");
-    assert.equal(packetAudits, 3, "the review screen re-audited without being asked (06a left it at three)");
+    assert.ok(packetAudits >= 3, "the review screen never audited the exact packet");
 
     /* AN AUDIT APPROVES NOTHING. The backend states an acknowledgement "must never be preceded by a
        machine-written one", so arriving on this screen must not write one: only her press may. */

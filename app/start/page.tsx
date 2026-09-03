@@ -34,6 +34,7 @@ import {
   createGuestSession,
   getApplicationProfile,
   getJob,
+  getPostingQuestions,
   getOnboardingState,
   getStoredEmail,
   getToken,
@@ -52,6 +53,8 @@ import { RevisitProvider, StartFlowProvider, StepRail } from "@/components/start
 import { RecentExperienceStep } from "@/components/start/RecentExperienceStep";
 import { deferOnboardingForSession } from "@/lib/onboarding-flow";
 import { isFinishedAccount, startArrival } from "@/lib/start-arrival";
+import { SESSION_TOKEN_KEY, userIdFromToken } from "@/lib/session-identity";
+import { forgetStartSitting, readStartSitting, rememberStartSitting } from "@/lib/start-sitting";
 import { saveOnboardingAnswers } from "@/lib/api";
 import { MatchStep } from "@/components/start/MatchStep";
 import { BuildStep } from "@/components/start/BuildStep";
@@ -90,6 +93,10 @@ export default function Start() {
      requirement match, the applicant's name), so the review screen can draw the same two marked
      panes without re-fetching any of it. */
   const [built, setBuilt] = useState<(BuildResult & Partial<BuildContext>) | null>(null);
+  /* Whether the restore below has already run for this mount. It is a ref rather than state because
+     it must not schedule a render, and because the effect that reads it must run at most once: the
+     restore issues a network read, and a second one would race the first. */
+  const sittingRestored = useRef(false);
   /* THE ANSWERS THEMSELVES, not just how many. Kept because a student can now come BACK to this
      screen, and a revisit that shows an empty form has lost their work: the built `ask` carries the
      employer's questions with no answers on them, so seeding from it alone blanks everything they
@@ -490,6 +497,85 @@ export default function Start() {
        starting could still queue a redundant call before the ref is set. */
   }, [pinnedJobStep, pinnedJobId, chosenMatch, pinnedJobDeclined, loadPinnedJob]);
 
+  /* THE POINTER THIS SITTING MUST NOT LOSE, written the moment the build produces one.
+     See lib/start-sitting.ts for why a forgotten id is a bill rather than an inconvenience. */
+  const rememberSitting = useCallback((sitting: {
+    jobId: string | null | undefined;
+    applicationId: string | null;
+    fieldsAnswered: number;
+    answersGiven: { question: string; answer: string }[];
+  }) => {
+    const ownerId = typeof window === "undefined"
+      ? null
+      : userIdFromToken(window.localStorage.getItem(SESSION_TOKEN_KEY));
+    if (!ownerId || !sitting.jobId || !sitting.applicationId) return;
+    rememberStartSitting({
+      ownerId,
+      jobId: sitting.jobId,
+      applicationId: sitting.applicationId,
+      fieldsAnswered: sitting.fieldsAnswered,
+      answersGiven: sitting.answersGiven,
+    });
+  }, []);
+
+  /* THE RESTORE, and the only thing it prevents is a REBUILD.
+   *
+   * It runs once, when the ledger says the student is on the send screen and this mount has nothing
+   * in hand - which is precisely the reload that used to walk them back through the build step and
+   * spend another onboarding grant on the packet they already had. Everything it needs beyond the
+   * stored pointer is a free read: GET /jobs/:id is on the card gate's onboarding tier, so a locked
+   * account can still see the posting it is about to apply to.
+   *
+   * WHAT IT DELIBERATELY DOES NOT RESTORE is the resume spec and the requirement match. The spec is
+   * only read here for the review screen's education-drift guard, and POST /submit-request runs that
+   * same comparison server-side (packetEducationDrift), so a restored sitting is checked by the
+   * enforcement point rather than by the convenience one. The match colours the posting's words and
+   * its route is not on the onboarding tier at all, so asking for it would 402 on exactly the
+   * accounts this restore exists for; ReviewStep already renders an unmarked posting for a null
+   * match. Neither is worth a rebuild, which is the whole point.
+   *
+   * A failed read leaves the flow exactly where it was: the ordinary build path, one grant, and the
+   * student none the wiser. */
+  useEffect(() => {
+    if (sittingRestored.current) return;
+    if (state?.step !== "review" || built || chosenMatch) return;
+    const ownerId = typeof window === "undefined"
+      ? null
+      : userIdFromToken(window.localStorage.getItem(SESSION_TOKEN_KEY));
+    const sitting = readStartSitting(ownerId);
+    if (!sitting) return;
+    sittingRestored.current = true;
+    /* BOTH READS ARE FREE ON THE ONBOARDING TIER. GET /jobs/:id and GET /postings/:jobId/questions
+       are on the card gate's own build allowlist, so a locked account can re-read the posting it is
+       applying to and the employer's questions without spending anything. The prescript is re-read
+       rather than stored because it is the honest source for the counts the receipt prints and for
+       the list a revisit to the questions screen needs; a stored copy would go stale the moment the
+       employer's form changed underneath it. */
+    Promise.all([getJob(sitting.jobId), getPostingQuestions(sitting.jobId).catch(() => null)])
+      .then(([job, prescript]) => {
+        setChosenMatch({ job, freshness: freshnessOf(job), hoursSinceSeen: hoursSinceSeen(job.first_seen_at), widened: false });
+        setBuilt({
+          applicationId: sitting.applicationId,
+          resumeSpec: null,
+          ask: prescript?.ask ?? [],
+          alreadyAnswered: prescript?.already_answered ?? 0,
+          outstandingQuestions: prescript?.ask?.length ?? 0,
+          /* The stored count is the fallback, not the answer: a prescript that reads nothing must not
+             blank a receipt that was true a moment ago. */
+          totalQuestions: prescript?.question_count ?? sitting.fieldsAnswered,
+          deferredFields: 0,
+          posting: job,
+          jdMatch: null,
+        });
+        setAnswersGiven(sitting.answersGiven);
+      })
+      .catch(() => {
+        /* The posting is gone, or the read failed. Forget the pointer rather than leaving one that
+           will fail the same way on every future mount, and let the ordinary flow take over. */
+        forgetStartSitting();
+      });
+  }, [state?.step, built, chosenMatch]);
+
   // One step_view per step, from the one place that knows every step. Deduped on the step itself
   // so a refresh() that returns the same step (the install poll fires one every few seconds)
   // doesn't inflate the denominator and make drop-off look better than it is.
@@ -557,8 +643,16 @@ export default function Start() {
    * mid-sequence: the alternative is carrying a packet the student cannot see and cannot check. */
   const resumeSequence = useCallback(() => {
     if (!chosenMatch) return <MatchStep onLater={later} onBuild={setChosenMatch} />;
-    return <BuildStep match={chosenMatch} onLater={later} onPickAnother={() => setChosenMatch(null)} onReviseResume={() => { track("onboarding_revisit_opened", { step: "resume" }); setRevisiting("resume"); }} onQuestions={(result, context) => setBuilt({ ...result, ...context })} />;
-  }, [chosenMatch, later]);
+    return <BuildStep match={chosenMatch} onLater={later} onPickAnother={() => setChosenMatch(null)} onReviseResume={() => { track("onboarding_revisit_opened", { step: "resume" }); setRevisiting("resume"); }} onQuestions={(result, context) => {
+      rememberSitting({
+        jobId: context.posting?.id ?? chosenMatch?.job.id,
+        applicationId: result.applicationId,
+        fieldsAnswered: result.totalQuestions,
+        answersGiven,
+      });
+      setBuilt({ ...result, ...context });
+    }} />;
+  }, [answersGiven, chosenMatch, later, rememberSitting]);
 
   /* An advance that did not land must not leave the sitting marked as having advanced.
    *
@@ -867,6 +961,12 @@ export default function Start() {
             }}
             onReviseResume={() => { track("onboarding_revisit_opened", { step: "resume" }); setRevisiting("resume"); }}
             onQuestions={(result, context) => {
+              rememberSitting({
+                jobId: context.posting?.id ?? chosenMatch.job.id,
+                applicationId: result.applicationId,
+                fieldsAnswered: result.totalQuestions,
+                answersGiven,
+              });
               setBuilt({ ...result, ...context });
               stepDone("match");
               /* A SCREEN WITH NOTHING TO ASK IS NOT A SCREEN, so it is acknowledged here rather
@@ -923,6 +1023,15 @@ export default function Start() {
                 answers,
               });
               setAnswersGiven(answers);
+              /* The only copy of these words outside this tab's memory. Without it a reload leaves
+                 the revisited questions screen blank and its save button disabled over work the
+                 student already did. */
+              rememberSitting({
+                jobId: built.posting?.id ?? chosenMatch.job.id,
+                applicationId: built.applicationId,
+                fieldsAnswered: built.totalQuestions,
+                answersGiven: answers,
+              });
               stepDone("questions");
               if (completedRevisit()) return;
               await ack("questions");
@@ -944,8 +1053,15 @@ export default function Start() {
             educationProfile={profile}
             answersSaved={answersGiven.length}
             fieldsAnswered={built?.totalQuestions ?? 0}
-            onSent={() => { setApplicationSent(true); stepDone("review"); void ack("review").then(refresh).catch(fail); }}
-            onSaveForLater={() => { setApplicationSent(false); stepDone("review"); void ack("review").then(refresh).catch(fail); }}
+            /* The pointer is spent either way: the packet has reached the employer, or it has been
+               handed to the tracker. Cleared AFTER the outcome is recorded, so the trial screen's
+               title still reads the student's own last action. */
+            onSent={() => { setApplicationSent(true); forgetStartSitting(); stepDone("review"); void ack("review").then(refresh).catch(fail); }}
+            onSaveForLater={() => { setApplicationSent(false); forgetStartSitting(); stepDone("review"); void ack("review").then(refresh).catch(fail); }}
+            /* The pointer named a packet this account cannot audit, so it is worth nothing. Drop it
+               and let the ordinary sequence rebuild, which is the one case where a rebuild is the
+               right answer rather than a bill. */
+            onStalePacket={() => { forgetStartSitting(); sittingRestored.current = false; setBuilt(null); setChosenMatch(null); }}
           />
         );
 
