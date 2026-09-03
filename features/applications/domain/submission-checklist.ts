@@ -844,26 +844,42 @@ function documentAskItems(
  *
  * The CONFIRM row below used to be decided by the label class alone, which cannot change: confirm,
  * save, "Saved.", and the same amber ask again, indefinitely - driven four full cycles on the DV
- * Trading packet on 2026-08-17. What a confirmation actually leaves behind is the backend's
- * applicant-claim (`answer_source: 'applicant_review'`, minted by the save when the request carries
- * her explicit `confirmed` flag), so that claim is what this reads.
+ * Trading packet on 2026-08-17. What a confirmation actually leaves behind is a field the server
+ * mints only from her explicit `confirmed` flag, so that field is what this reads.
  *
- * THE ROUND CHECK MATCHES THE SERVER'S OWN. A claim is only checkable beside the review round it
- * was minted against; the backend's refreshKnownQuestionAnswers discards a mismatched one, and a
- * looser client test would show "confirmed" for a claim every server reader is about to throw away.
- * A review that carries no round cannot have minted any claim, so a claim without a round to match
- * reads as unconfirmed rather than trusted.
+ * IT READS answer_confirmed_of, NOT THE APPLICANT-CLAIM, and the difference is a dead end.
+ *
+ * This used to test `answer_source: 'applicant_review'` beside a matching review round. That is a
+ * strictly LOOSER test than the one the send gate applies, and the gap is not theoretical: the
+ * backend's sensitive-question gate clears on `answer_confirmed_of === question`, which is minted
+ * ONLY by a per-question `confirmed: true`, while `applicant_review` is also minted by any bulk
+ * review save. So a packet could hold applicant_review on every answer, render every sensitive row
+ * as "Confirmed by you" in the Done column with no control asking for anything - and refuse to send,
+ * permanently, with the only account of why living in a 422 body the checklist never sees.
+ *
+ * Measured live on 2026-09-04, Exa "Software Engineer, Intern" packet 73768339 (ashby). Its visa
+ * question carried answer_source applicant_review with answer_reviewed_at equal to
+ * questions_reviewed_at, so this function returned true and the row settled into
+ * "Employer questions - 4 items completed". Pressing Send returned
+ * FINAL_APPROVAL_VERIFICATION_FAILED, "Sensitive question requires your attention: do you require
+ * visa sponsorship...". There was no Confirm control anywhere on the screen, because this function
+ * had already declared the thing confirmed. The client said done, the server said not done, and
+ * nothing in between could be pressed.
+ *
+ * The round check is gone with the claim it guarded. answer_confirmed_of is an ANSWER-claim on the
+ * server (see ANSWER_CLAIM_FIELDS): it is falsified by the answer changing, deliberately NOT by the
+ * round moving, because a confirmation that expired whenever the round advanced for an unrelated
+ * reason would put the gate straight back into the dead end the field exists to open. Matching the
+ * value against the question's own text is what proves the confirmation belongs to THIS question and
+ * did not survive a rename underneath it - the same check the server's own reader makes.
  */
 function applicantConfirmedAnswer(
-  question: Pick<ApplicationQuestion, "answer" | "answer_source" | "answer_reviewed_at">,
-  questionsReviewedAt: string | undefined,
+  question: Pick<ApplicationQuestion, "answer" | "question" | "answer_confirmed_of">,
 ): boolean {
   return Boolean(
     (question.answer ?? "").trim()
-    && question.answer_source === "applicant_review"
-    && typeof question.answer_reviewed_at === "string"
-    && questionsReviewedAt
-    && question.answer_reviewed_at === questionsReviewedAt,
+    && typeof question.answer_confirmed_of === "string"
+    && question.answer_confirmed_of === question.question,
   );
 }
 
@@ -991,7 +1007,7 @@ export function humanInputItems(
       /* Confirmed once is confirmed, and the row has to say so or the ask never ends. The settled
          shape keeps the control - she can still change the answer - while taking the row out of the
          amber panel and out of the "N to check" count. See applicantConfirmedAnswer. */
-      const confirmed = applicantConfirmedAnswer(question, review.questions_reviewed_at);
+      const confirmed = applicantConfirmedAnswer(question);
       addUnique(items, confirmed
         ? {
           id: `confirm-${question.id}`,

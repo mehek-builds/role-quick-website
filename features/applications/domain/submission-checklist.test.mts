@@ -890,6 +890,9 @@ test("a human-only answer she confirmed renders settled, not as an outstanding C
         required: true,
         answer_source: "applicant_review",
         answer_reviewed_at: round,
+        /* The confirmation itself. answer_source rides along because a confirming save mints both,
+           but it is THIS field that settles the row, and the test below proves it. */
+        answer_confirmed_of: "Are you legally authorized to work for any employer in this country?",
       },
       {
         id: "sponsorship",
@@ -911,6 +914,73 @@ test("a human-only answer she confirmed renders settled, not as an outstanding C
   assert.equal(outstanding?.settled, undefined, "the one she has not confirmed still asks");
   assert.equal(outstanding?.detail, "Needs your confirmation");
   assert.equal(outstanding?.action, "Confirm");
+});
+
+/* THE APPLICANT-CLAIM IS NOT A CONFIRMATION, and reading it as one is a dead end with no control in
+ * it.
+ *
+ * Measured live 2026-09-04 on Exa "Software Engineer, Intern", packet 73768339 (ashby). Its visa
+ * question carried answer_source 'applicant_review' with answer_reviewed_at equal to
+ * questions_reviewed_at and NO answer_confirmed_of. This function read that as confirmed, so the row
+ * rendered settled inside "Employer questions - 4 items completed" and the screen offered nothing to
+ * press. The backend's sensitive gate reads answer_confirmed_of, found none, and refused the send
+ * with FINAL_APPROVAL_VERIFICATION_FAILED: "Sensitive question requires your attention: do you
+ * require visa sponsorship...". Client said done, server said not done, and the packet could not
+ * move in either direction.
+ *
+ * The two claims are minted by different acts on purpose: any bulk review save mints
+ * applicant_review, while answer_confirmed_of is minted only by a per-question `confirmed: true`.
+ * Testing the looser one here is what put a settled row in front of a refusal. */
+test("an applicant-claim without a confirmation still asks, so the send gate has a control", () => {
+  const round = "2026-09-02T12:23:29.281Z";
+  const exa: Pick<ApplicationReview, "attention_reason" | "questions" | "questions_reviewed_at" | "status"> = {
+    status: "needs_attention",
+    attention_reason: "",
+    questions_reviewed_at: round,
+    questions: [
+      {
+        id: "visa",
+        question: "Do you require visa sponsorship to work in your selected location? If so, which one? And when does your visa expire?",
+        answer: "I am authorized to work in the US on F-1 status (CPT/OPT), so I do not require sponsorship for an internship.",
+        kind: "required",
+        required: true,
+        answer_source: "applicant_review",
+        answer_reviewed_at: round,
+      },
+    ],
+  };
+
+  const asking = humanInputItems(exa).find((item) => item.questionId === "visa");
+  assert.ok(asking, "the question the server is refusing on must have a row");
+  assert.equal(asking.settled, undefined, "it is NOT settled: nothing has confirmed it");
+  assert.equal(asking.detail, "Needs your confirmation");
+  assert.equal(asking.action, "Confirm");
+  assert.equal(asking.actionKind, "confirm", "and the control posts the confirmed flag the gate wants");
+});
+
+/* A confirmation that names a DIFFERENT question does not settle this one - the field carries the
+ * question's own text precisely so a rename cannot inherit it, and the server's reader compares it
+ * the same way. */
+test("a confirmation naming another question does not settle this one", () => {
+  const renamed: Pick<ApplicationReview, "attention_reason" | "questions" | "questions_reviewed_at" | "status"> = {
+    status: "needs_attention",
+    attention_reason: "",
+    questions_reviewed_at: "2026-09-02T12:23:29.281Z",
+    questions: [
+      {
+        id: "visa",
+        question: "Do you require visa sponsorship, and when does your visa expire?",
+        answer: "No sponsorship needed for an internship.",
+        kind: "required",
+        required: true,
+        answer_confirmed_of: "Do you require visa sponsorship?",
+      },
+    ],
+  };
+
+  const asking = humanInputItems(renamed).find((item) => item.questionId === "visa");
+  assert.equal(asking?.settled, undefined, "a stale confirmation must not survive the rename");
+  assert.equal(asking?.action, "Confirm");
 });
 
 /* THE ROUND CHECK IS THE SERVER'S OWN. A claim keyed to a review round the row no longer carries is
@@ -1367,6 +1437,9 @@ test("settled confirmations and ambiguous question identities never enter the di
         required: true,
         answer_source: "applicant_review",
         answer_reviewed_at: round,
+        // Settled by the confirmation, not by the applicant-claim beside it. See
+        // "an applicant-claim without a confirmation still asks".
+        answer_confirmed_of: "Are you legally authorized to work in Canada?",
       },
       { id: "duplicate", question: "First duplicate prompt", answer: "", kind: "required", required: true },
       { id: "duplicate", question: "Second duplicate prompt", answer: "", kind: "required", required: true },

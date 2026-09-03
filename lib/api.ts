@@ -873,6 +873,20 @@ export type ApplicationQuestion = {
   answer_source?: "applicant_review" | "consent_permission" | "litos_draft";
   /** When she reviewed it. Only checkable beside the review's own questions_reviewed_at. */
   answer_reviewed_at?: string;
+  /* THE QUESTION SHE PRESSED CONFIRM ON, carrying its own label as the proof.
+   *
+   * Minted by the backend from a per-question `confirmed: true` and from nothing else - a bulk
+   * review save mints answer_source but never this - which is exactly why the sensitive-question
+   * send gate reads this field and not that one. The client must read the same field or it will
+   * render a settled row for a packet the server is about to refuse; see applicantConfirmedAnswer
+   * in submission-checklist.ts for the dead end that caused.
+   *
+   * It holds the question TEXT rather than a boolean so a rename cannot inherit the confirmation:
+   * the reader compares it against the question's current label. Unlike answer_source it survives a
+   * review round advancing, because it is an answer-claim on the server - falsified by the answer
+   * changing, not by the round moving. Never sent back up, for the same reason the two fields above
+   * are not. */
+  answer_confirmed_of?: string;
 };
 
 /** Exact employer-question metadata Litos could not prove during the latest complete form read. */
