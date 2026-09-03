@@ -14,11 +14,19 @@ import { describe, test } from "node:test";
  * synced the two: a captcha-blocked managed row had no way to reach that button.
  *
  * THE FIX offers it here too, gated narrowly on `challenge_on_screen` (not on needs_attention in
- * general - an ordinary timeout or provider error still offers only Try again, because there is no
- * synced-fill packet to fall back to and no evidence retrying is futile the way a rendered CAPTCHA
- * is). It sits ALONSIDE Try again, not replacing it: hCaptcha and friends are not always
- * deterministic, so a retry can still succeed, and the extension path is the guaranteed alternative
- * rather than the only one. */
+ * general - an ordinary timeout or provider error is left to the audited re-fill and packet review,
+ * because there is no synced-fill packet to fall back to and no evidence re-running is futile the
+ * way a rendered CAPTCHA is). It sits ALONSIDE them, not replacing them: hCaptcha and friends are
+ * not always deterministic, so a re-run can still succeed, and the extension path is the guaranteed
+ * alternative rather than the only one.
+ *
+ * UPDATED with the row it sits in. The neighbour named above was "Try again", a bare
+ * submit-request that could not clear currentAcknowledgedPacketAudit once the packet had moved. It
+ * is now "Review and fill again" on refreshEmployerQuestionMetadata, which acknowledges the exact
+ * packet before posting the same request. This recovery is deliberately NOT given that control's
+ * gates: it reaches the employer's own page through the extension rather than through the audited
+ * send, so on a captcha-blocked row with no current acknowledged packet it is the control here that
+ * survives, which is exactly what it was built for. */
 describe("a managed run stopped by a rendered CAPTCHA can be finished through the synced extension fill", () => {
   const applications = readFileSync(
     new URL("../app/dashboard/applications/page.tsx", import.meta.url),
@@ -40,16 +48,17 @@ describe("a managed run stopped by a rendered CAPTCHA can be finished through th
       applications,
       /const captchaBlockedLastAttempt = needsAttention && !awaitingUnverifiedSubmission\s*\n\s*&& review\.unverified_submission\?\.challenge_on_screen === true;/,
       "captchaBlockedLastAttempt must require needsAttention, must wait for the yes/no card to " +
-      "resolve (the same gate Try again, Open packet review, and the handoff controls already use), " +
-      "and must check challenge_on_screen specifically, not needs_attention alone",
+      "resolve (the same gate Open packet review and the handoff controls use, and the first two " +
+      "terms of refillOfferedHere), and must check challenge_on_screen specifically, not " +
+      "needs_attention alone",
     );
   });
 
-  test("the extension-recovery button renders next to Try again, not instead of it, and only when captchaBlockedLastAttempt", () => {
+  test("the extension-recovery button renders next to the audited re-fill, not instead of it, and only when captchaBlockedLastAttempt", () => {
     const buttons = applications.match(
-      /\{needsAttention && !awaitingUnverifiedSubmission && <Button onClick=\{onRetry\}[\s\S]{0,60}Try again<\/Button>\}\s*\n[\s\S]{0,900}?\{captchaBlockedLastAttempt && \(\s*\n\s*<Button onClick=\{onOpenWithExtension\} variant="secondary" disabled=\{extensionFillBusy\}>\s*\n\s*\{extensionFillBusy \? "Checking extension\.\.\." : "Open and fill with extension"\}\s*\n\s*<\/Button>\s*\n\s*\)\}/,
+      /\{refillOfferedHere && \(\s*\n\s*<Button\s*\n\s*onClick=\{onRefreshQuestionMetadata\}[\s\S]{0,400}?"Review and fill again"\}\s*\n\s*<\/Button>\s*\n\s*\)\}\s*\n[\s\S]{0,900}?\{captchaBlockedLastAttempt && \(\s*\n\s*<Button onClick=\{onOpenWithExtension\} variant="secondary" disabled=\{extensionFillBusy\}>\s*\n\s*\{extensionFillBusy \? "Checking extension\.\.\." : "Open and fill with extension"\}\s*\n\s*<\/Button>\s*\n\s*\)\}/,
     );
-    assert.ok(buttons, "Open and fill with extension must render immediately after Try again, gated on captchaBlockedLastAttempt");
+    assert.ok(buttons, "Open and fill with extension must render immediately after Review and fill again, gated on captchaBlockedLastAttempt");
   });
 
   test("onOpenWithExtension calls fillApplication with this packet's own job details, on the submission errorSurface so failures render on THIS screen", () => {

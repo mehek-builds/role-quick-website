@@ -52,6 +52,7 @@ export * from "./domain/submission-checklist";
 export * from "./domain/submission-authority-envelope";
 export * from "./domain/submission-projection";
 export * from "./domain/application-packet-authority";
+export * from "./domain/attention-refill-offer";
 export * from "./domain/board-submission-authority";
 export * from "./domain/submission-state";
 export * from "./infrastructure/applications-api";

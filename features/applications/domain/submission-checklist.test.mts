@@ -1667,9 +1667,14 @@ test("the screen keeps the document step alive in the unverified-submission mode
     /\{awaitingUnverifiedSubmission && unverifiedDocumentSteps\.length > 0 && \(\s*<BlockerList\s+items=\{unverifiedDocumentSteps\}\s+onAddDocument=\{onAddDocument\}/,
     "the unverified-submission mode must still draw the document steps, with the control that resolves them",
   );
+  /* The re-run control on this row was "Try again" on onRetry, a bare submit-request. It is now the
+     audited re-fill on refreshEmployerQuestionMetadata, gated by refillOfferedHere. What is pinned
+     is unchanged and is the whole point: whatever that control is, it must carry
+     !awaitingUnverifiedSubmission, so it cannot start a second employer run while Litos does not
+     know whether the first application landed. */
   assert.match(
     page,
-    /\{needsAttention && !awaitingUnverifiedSubmission && <Button onClick=\{onRetry\}/,
-    "Try again must stay suppressed while Litos does not know whether the first application landed",
+    /const refillOfferedHere = attentionRefillOffered\(\{\s*\n\s*needsAttention,\s*\n\s*awaitingUnverifiedSubmission,/,
+    "the re-fill must stay suppressed while Litos does not know whether the first application landed",
   );
 });

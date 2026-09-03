@@ -740,6 +740,10 @@ test("a direct answer owns the screen and invalidates an older poll snapshot", (
   assert.match(save, /if \(!result\.saved\)[\s\S]*?const refusalStillOwnsApplication[\s\S]*?if \(result\.review && refusalStillOwnsApplication\) \{[\s\S]*?submissionMutationGenerationRef\.current \+= 1;[\s\S]*?publishSubmissionEnvelope\(submissionRef, reconciled, "direct"\)/);
   assert.match(save, /submissionMutationGenerationRef\.current \+= 1;[\s\S]*?const acceptedCandidate: SubmissionResponse/);
   assert.match(screen, /const directAnswerActive = needsAttention && !awaitingUnverifiedSubmission && currentDirectQuestion !== null/);
-  assert.match(screen, /\{!directAnswerActive && <>[\s\S]*?<Button onClick=\{onReviewPacket\}[^>]*>Open packet review<\/Button>[\s\S]*?<Button onClick=\{onRetry\} variant="secondary">Try again<\/Button>/);
+  /* The second control here was "Try again" on onRetry until it was re-pointed at the audited
+     re-fill. What this line is pinning is unchanged: both recovery controls live INSIDE the
+     `!directAnswerActive` fragment, so an open direct-answer question owns the screen instead of
+     competing with a control that starts a fresh employer run underneath it. */
+  assert.match(screen, /\{!directAnswerActive && <>[\s\S]*?<Button onClick=\{onReviewPacket\}[^>]*>Open packet review<\/Button>[\s\S]*?\{refillOfferedHere && \(\s*\n\s*<Button\s*\n\s*onClick=\{onRefreshQuestionMetadata\}/);
   assert.match(screen, /!awaitingUnverifiedSubmission && !directAnswerActive && filledFormEvidence/);
 });
