@@ -98,8 +98,17 @@ test("Applications asks one trusted employer question at a time with explicit sa
   assert.match(prompt, /<option value="" disabled>Choose an answer<\/option>/);
   assert.match(prompt, /<textarea\s+value=\{answer\}\s+readOnly=\{busy\}\s+aria-disabled=\{busy\}/);
   assert.match(prompt, /<Button type="submit" block className="sm:w-auto" disabled=\{busy \|\| answerBlocked\}>/);
+  /* SCOPED TO THE ANSWER ROW, which is the only thing this count was ever about: while she is
+     answering, Previous, Next and the optional Skip are the whole non-submit control set, and a
+     fourth press appearing beside Save is how an answer flow grows an exit nobody designed. The
+     "Fill again" escape added for the frozen-question-inventory defect sits ABOVE the row, in its
+     own bordered block, and is asserted on its own in tests/question-fill-again.test.mjs. */
+  const answerRow = prompt.slice(
+    requiredIndex(prompt, "<TerminalActionBar", "the direct answer action row"),
+    requiredIndex(prompt, "</TerminalActionBar>", "the end of the direct answer action row"),
+  );
   assert.equal(
-    [...prompt.matchAll(/type="button"/g)].length,
+    [...answerRow.matchAll(/type="button"/g)].length,
     3,
     "Previous, Next, and optional Skip must be non-submit controls",
   );

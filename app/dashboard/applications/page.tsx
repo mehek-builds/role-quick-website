@@ -64,7 +64,7 @@ import { applyBankVariant, type ApplyOutcome } from "@/features/applications";
 import { RequirementProvider, RequirementText, MatchLegend } from "@/components/app/RequirementText";
 import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX, exactPacketAuditClauses, exactPacketAuditRanges } from "@/features/applications";
 import { educationDrift, educationDriftMessage, type EducationProfile } from "@/features/applications";
-import { checklistRowControl, completedSubmissionGroups, directInputTaskPlan, directQuestionPromptFingerprint, directQuestionTaskFingerprint, displayQuestionLabel, documentAsksByKind, documentControls, humanInputItems, metadataRefreshOutranksStandingAttention, QUESTION_CHOICE_LIST_LIMIT, reviewedAnswersSaveLanding, type DirectQuestionTask, type DirectQuestionTaskIntent, type SubmissionChecklistAction, type SubmissionChecklistItem } from "@/features/applications";
+import { checklistRowControl, completedSubmissionGroups, directInputTaskPlan, directQuestionPromptFingerprint, directQuestionTaskFingerprint, displayQuestionLabel, documentAsksByKind, documentControls, fillAgainControlState, humanInputItems, metadataRefreshOutranksStandingAttention, QUESTION_CHOICE_LIST_LIMIT, reviewedAnswersSaveLanding, type DirectQuestionTask, type DirectQuestionTaskIntent, type SubmissionChecklistAction, type SubmissionChecklistItem } from "@/features/applications";
 import { prescriptBlocksProgress, prescriptEditableQuestions, prescriptMetadataBlockers, prescriptNeedsHer, prescriptSummary } from "@/features/applications";
 import { answerNamesNoOfferedOption, answerWithExactOptionToggled, exactQuestionOption, exactSelectedQuestionOptions, optionalQuestionNeedsDecision, questionAcceptsMultipleOptions, questionOptionsAreComplete, questionReviewPresentation, requiredQuestionReviewRoute } from "@/features/applications";
 import type { JdMatchResponse, JobMatch } from "@/features/applications";
@@ -4312,7 +4312,12 @@ function Applications() {
       /* A restart is pressed FROM the portal screen and is about the packet on it, so its refusal
          goes back there and lands beside the control, not on the review screen behind a banner. */
       moveToScreen(options.failureScreen ?? (options.restart ? "portal" : "review"));
-      const message = reason instanceof Error ? reason.message : "We could not open the company's application page.";
+      /* THROUGH THE FILTER, NOT STRAIGHT OFF THE WIRE. This message is the only thing the applicant
+         is told when a run refuses, and it now lands beside a control on the question screen as well
+         as on the portal screen. userFacingError is the same filter every other refusal on this page
+         goes through: a stack frame, a chromium path or a 5xx becomes the sentence below instead of
+         being shown as though Litos meant to say it. */
+      const message = userFacingError(reason, "We could not open the company's application page.");
       const issues = reason instanceof ApiError ? reason.issues : [];
       if (options.restart) refuseSend(applicationId, message, issues);
       else if (options.failureScreen === "questions") {
@@ -7507,7 +7512,26 @@ function UnverifiedSubmissionCard({ attentionReason, submitting, error, onSubmit
   );
 }
 
-export function DirectApplicationQuestion({ task, position, total, saving, saved, focusToken, hasPrevious, hasNext, preservedDraft, externalFailure, onDraftChange, onClearDraft, onClearFailure, onPrevious, onNext, onReviewApplication, onSave, onSkip }: {
+/* EVERY INPUT THE "Fill again" CONTROL NEEDS, in one prop rather than eight.
+   The decision itself is fillAgainControlState in features/applications/domain, so the rule that
+   says when the employer's form may be read again is unit-testable without a browser. `onFillAgain`
+   is refreshEmployerQuestionMetadata - the SAME managed prepare the packet review's "Review and
+   fill" spends - not a second caller of submit-request. */
+type DirectQuestionFillAgain = {
+  /** `review.status`, verbatim. */
+  status: string;
+  /** `Boolean(review.submission_claimed_at)`. */
+  claimed: boolean;
+  unverifiedResolution?: "sent" | "not_sent";
+  running: boolean;
+  /** Unsaved edits in the questions editor. The screen adds its own dirty answer to this. */
+  editsUnsaved: boolean;
+  needsPacketReview: boolean;
+  error: string | null;
+  onFillAgain: () => void;
+};
+
+export function DirectApplicationQuestion({ task, position, total, saving, saved, focusToken, hasPrevious, hasNext, preservedDraft, externalFailure, fillAgain, onDraftChange, onClearDraft, onClearFailure, onPrevious, onNext, onReviewApplication, onSave, onSkip }: {
   task: DirectQuestionTask;
   position: number;
   total: number;
@@ -7518,6 +7542,7 @@ export function DirectApplicationQuestion({ task, position, total, saving, saved
   hasNext: boolean;
   preservedDraft: DirectAnswerDraft | null;
   externalFailure: DirectAnswerFailure | null;
+  fillAgain: DirectQuestionFillAgain;
   onDraftChange: (questionId: string, promptFingerprint: string, taskFingerprint: string, answer: string) => void;
   onClearDraft: (promptFingerprint: string) => void;
   onClearFailure: (promptFingerprint: string) => void;
@@ -7591,6 +7616,18 @@ export function DirectApplicationQuestion({ task, position, total, saving, saved
         : "Choose one of the employer's current options before saving."
       : null);
   const answerDescribedBy = `${progressId} ${helperId}${visibleError ? ` ${errorId}` : ""}`;
+  const fillAgainHelpId = `${headingId}-fill-again-help`;
+  /* HER OWN UNSAVED ANSWER COUNTS AS AN UNSAVED EDIT. The run carries only the answers the server
+     already holds, so a paragraph she has typed here and not saved would be dropped by a read
+     started underneath it. Disabling is the honest answer: Save and next is right there. */
+  const fillAgainState = fillAgainControlState({
+    status: fillAgain.status,
+    submissionClaimed: fillAgain.claimed,
+    unverifiedResolution: fillAgain.unverifiedResolution,
+    running: fillAgain.running,
+    unsavedAnswer: fillAgain.editsUnsaved || answerDirty,
+    needsPacketReview: fillAgain.needsPacketReview,
+  });
 
   useEffect(() => {
     if (focusToken <= 0) return;
@@ -7839,6 +7876,44 @@ export function DirectApplicationQuestion({ task, position, total, saving, saved
             <p id={errorId} role="alert" className="mt-3 text-small leading-6 text-danger">
               {visibleError}
             </p>
+          )}
+          {/* THE WAY BACK TO A RUN, from the one screen that had none.
+              Skip, Save and next, All applications and Switch applications were the whole control
+              set here, and none of them re-reads the employer's form. So a packet whose questions
+              were discovered before a resolver fix shipped stayed frozen against the build that
+              discovered them, and a required essay Litos now drafts at prepare time never got its
+              draft: both are things a fill run produces, and this screen could not start one.
+
+              A SECONDARY control, deliberately. Answering the question in front of her is still the
+              work; this is the escape when the question should not have been asked. It reuses
+              refreshEmployerQuestionMetadata, which spends the exact-packet acknowledgement and then
+              the ONE guarded preparation path, so there is no second route to the employer here. */}
+          {/* The block's bottom margin is scroll room, not spacing. Below lg the action bar below is
+              `!fixed` and floats over whatever is last in the flow, so without it this block ends
+              underneath the bar and the button can never be reached on a phone. */}
+          {fillAgainState.available && (
+            <div className="mt-6 mb-[calc(var(--dashboard-bottom-bar)+5rem)] border-t border-border pt-5 lg:mb-0">
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={fillAgainState.disabled}
+                aria-busy={fillAgainState.busy}
+                aria-describedby={fillAgainHelpId}
+                onClick={fillAgain.onFillAgain}
+              >
+                {fillAgainState.busy ? <PendingLabel>{fillAgainState.label}</PendingLabel> : fillAgainState.label}
+              </Button>
+              <p id={fillAgainHelpId} className="mt-3 text-label leading-5 text-muted">
+                {fillAgainState.reason === "unsaved_answer"
+                  ? "Save this answer first. Litos fills the form again from your saved answers only."
+                  : fillAgainState.reason === "packet_review_first"
+                    ? "Litos needs your exact packet review before it can fill the employer form again."
+                    : "Litos opens the company form again with your saved resume and the answers already on file. Nothing you have saved is discarded, and nothing goes to the employer."}
+              </p>
+              {fillAgain.error && (
+                <p role="alert" className="mt-3 text-small leading-6 text-danger">{fillAgain.error}</p>
+              )}
+            </div>
           )}
           <TerminalActionBar className="!fixed inset-x-4 !bottom-[calc(var(--dashboard-bottom-bar)+0.75rem)] !z-40 mt-6 justify-end sm:inset-x-6 lg:!static lg:!inset-auto lg:!bottom-auto lg:!z-20 lg:shadow-none">
             <div className={`grid w-full gap-2 ${hasPrevious ? "grid-cols-[auto_minmax(0,1fr)]" : "grid-cols-1"} sm:flex sm:items-center sm:w-auto`}>
@@ -8358,6 +8433,20 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
             hasNext={currentDirectQuestionIndex >= 0 && currentDirectQuestionIndex < directQuestionTasks.length - 1}
             preservedDraft={currentDirectAnswerDraft}
             externalFailure={directAnswerFailure?.promptFingerprint === currentDirectPromptFingerprint ? directAnswerFailure : null}
+            fillAgain={{
+              status: review.status,
+              /* The claim, read off the review the same way submitRequestDisposition reads it on the
+                 server. A claimed row may already be with the employer, so it gets no control here at
+                 all - only her own "I looked and it is not there" reopens it, and that answer is
+                 given on the card above, not on this screen. */
+              claimed: Boolean(review.submission_claimed_at),
+              unverifiedResolution: review.unverified_submission?.resolution,
+              running: questionMetadataRefreshing,
+              editsUnsaved: questionMetadataRefreshDisabled,
+              needsPacketReview: questionMetadataNeedsPacketReview,
+              error: questionMetadataRefreshError,
+              onFillAgain: onRefreshQuestionMetadata,
+            }}
             onDraftChange={onDirectAnswerDraftChange}
             onClearDraft={onClearDirectAnswerDraft}
             onClearFailure={onClearDirectAnswerFailure}

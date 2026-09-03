@@ -59,8 +59,14 @@ describe("the drafted answer arrives in the ordinary answer box, labelled", () =
   });
 
   test("Previous, Next and Skip are still the only non-submit controls", () => {
+    /* Counted across the ANSWER ROW, not the whole screen. Approving a draft must not add a press
+       beside Save - that is what this guards, and it still does. The "Fill again" escape lives
+       above the row in its own block and starts a run rather than touching this answer. */
+    const rowStart = prompt.indexOf("<TerminalActionBar");
+    const rowEnd = prompt.indexOf("</TerminalActionBar>", rowStart);
+    assert.ok(rowStart >= 0 && rowEnd > rowStart, "the direct answer action row must still be findable");
     assert.equal(
-      [...prompt.matchAll(/type="button"/g)].length,
+      [...prompt.slice(rowStart, rowEnd).matchAll(/type="button"/g)].length,
       3,
       "approving a draft must not add a control; it is the save press",
     );
