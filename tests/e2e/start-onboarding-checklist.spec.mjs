@@ -361,6 +361,44 @@ const unstubbedBackendPaths = new Set();
 /** Set when the flow's terminal POST lands, which is the only proof the walk finished. */
 let completePosts = 0;
 
+/* THE BACKEND'S ORIGIN, LEARNED RATHER THAN DECLARED, and used only to tell the backend apart from
+ * a third party - never to decide what to stub. Stubbing stays keyed to the path, for the reason
+ * set out under BACKEND_PATHS below: lib/config.ts bakes NEXT_PUBLIC_API_URL into the build, so the
+ * origin is whatever the building machine's .env.local said and a spec that hardcoded one aborted
+ * every API call. Reading it off the first recognised backend request is the same fact without the
+ * dependency.
+ *
+ * WHY IT IS NEEDED AT ALL. The flow's last screen hands the student to /dashboard - that handoff is
+ * the second half of criterion 6 and the case above clicks it deliberately - and the dashboard then
+ * boots itself: /dashboard/bootstrap, /applications, /billing/state, /billing/plans,
+ * /metrics/funnel. Those are the product's OWN backend on the origin already identified above, not
+ * a third party, and calling them one would be a false statement in the failure message.
+ *
+ * They were invisible until now only because the walk never got that far: it died on the first
+ * screen, so `blockedExternal` was empty for want of a dashboard rather than for want of a leak. */
+let backendOrigin = null;
+/* Backend requests made BY THE DASHBOARD, aborted like everything else - nothing leaves this
+   machine - but not asserted, because the dashboard is a different surface with its own fixture and
+   its own spec (tests/e2e/dashboard-click-path.spec.mjs). Reported in the failure message below, so
+   a surprise here is visible rather than swallowed. */
+const afterHandoff = [];
+
+/** Which page a request came from, or "" when Playwright cannot attribute it to a frame.
+ *
+ * THE GATE HAS TO BE THIS AND NOT "the flow has finished". The first version excused any backend
+ * path once `completePosts > 0`, which is a latch: it is set by the walk and never clears, so every
+ * later case excused /start's OWN unrecognised backend calls too. Three cases below navigate back
+ * to /start after that point, and a new endpoint added to DoneStep would have been swallowed there
+ * with the guard still green - the exact fixture hole `blockedExternal` exists to catch. Asking
+ * which page asked is the fact actually wanted, and it cannot latch. */
+function requestingPage(route) {
+  try {
+    return route.request().frame().url();
+  } catch {
+    return "";
+  }
+}
+
 /* THE BACKEND IS IDENTIFIED BY PATH, NOT BY ORIGIN, and that is deliberate.
  *
  * lib/config.ts reads NEXT_PUBLIC_API_URL and only falls back to the Vercel origin when it is
@@ -402,16 +440,24 @@ await context.route("**/*", async (route) => {
     return;
   }
 
-  const { pathname, hostname } = new URL(url);
+  const { pathname, hostname, origin } = new URL(url);
   const method = route.request().method();
 
   if (!BACKEND_PATHS.has(pathname)) {
     if (ANALYTICS_HOSTS.some((pattern) => pattern.test(hostname))) blockedAnalytics.push(url);
     else if (isSanctionedThirdParty(url)) { /* see ./sanctioned-third-parties.mjs */ }
+    /* The product's own backend, asked for BY THE DASHBOARD. Scoped to the asking page rather than
+       to "the flow has finished": /start's own unrecognised backend calls must keep failing below,
+       on every case, including the ones that run after the walk has completed. */
+    else if (origin === backendOrigin && requestingPage(route).startsWith(`${ORIGIN}/dashboard`)) afterHandoff.push(url);
     else blockedExternal.push(url);
     await route.abort();
     return;
   }
+
+  /* Learned from a request the path set already vouched for, so it cannot be taught a third party's
+     origin by a third party. */
+  backendOrigin ??= origin;
 
   if (pathname === "/v1/meta") {
     await jsonRoute(route, {
@@ -785,6 +831,13 @@ test("the walk: every step in order, each one advancing the rail by one", async 
     /* NOT pushed: the criteria test above already recorded this screen as `first`, and the rail
        arithmetic at the end counts each screen once. Roles is the first screen now, so it is that
        test's reading rather than this walk's. */
+    /* Set rather than inherited, for the same reason finishedAccount() exists: the refusal check
+       below reads `savedTargeting.locations` and `progress.focus` as evidence that a blocked press
+       wrote NOTHING, and evidence read off whatever the previous case left behind is not evidence.
+       The page is already standing on this screen and both values are already empty on a full run,
+       so this changes nothing there and makes the case honest when it is run alone. */
+    savedTargeting = { ...EMPTY_TARGETING };
+    progress.focus = false;
     await screen("Your roles");
     const softwareEngineer = page.getByRole("button", { name: "Software Engineer", exact: true });
     assert.equal(
@@ -800,12 +853,36 @@ test("the walk: every step in order, each one advancing the rail by one", async 
 
     const rolesContinue = page.locator("button", { hasText: "Continue" });
 
-    /* WHERE IS A REQUIRED ANSWER NOW, and this proves the gate rather than the label. Location is
-       a hard filter on the board, so a blank one is not a neutral default - it is a student who
-       asked for the whole world by accident. Continue stays disabled until they answer, and the
-       screen says which answer is missing. */
+    /* WHERE IS A REQUIRED ANSWER, and this proves the gate rather than the label. Location is a
+       hard filter on the board, so a blank one is not a neutral default - it is a student who
+       asked for the whole world by accident.
+
+       THE GATE MOVED, AND THIS CASE MOVED WITH IT. It used to read `isDisabled() === true`: the
+       screen withheld Continue until every answer was in. That was changed deliberately, and for a
+       reason this walk should be holding rather than fighting - a dead button refuses without
+       saying why, and a new student arriving on step 1 met exactly that silence. Continue is now
+       always pressable and the refusal is a SENTENCE in reply to pressing it, with the write
+       itself gated inside save() (`focusProblem` -> setError -> return, before putTargeting).
+
+       So the guarantee is asserted where it now lives: press Continue with no place answered, and
+       nothing is written and the screen names what is missing. That is strictly stronger than the
+       old line, which could be satisfied by a button that was merely disabled while the underlying
+       save happily wrote a world-wide targeting row. */
     await assert.doesNotReject(rolesContinue.waitFor({ timeout: 5000 }));
-    assert.equal(await rolesContinue.isDisabled(), true, "Continue is offered before the location question is answered");
+    assert.equal(
+      await rolesContinue.isDisabled(),
+      false,
+      "Continue is dead rather than answering, so a blocked student is given no reason",
+    );
+    await rolesContinue.click();
+    await page.getByText('Add at least one place', { exact: false }).waitFor({ timeout: 10_000 });
+    assert.equal(
+      savedTargeting.locations,
+      null,
+      "pressing Continue with no place saved a targeting row that filters nothing",
+    );
+    assert.equal(progress.focus, false, "the refused save still advanced the flow off the roles screen");
+
     assert.match(
       await page.locator("main").innerText(),
       /where do you want to work/i,
@@ -942,6 +1019,25 @@ test("criteria 5-6: the last screen confirms setup is over, then names the first
   } catch (reason) {
     await captureFailure("last-screen");
     throw reason;
+  } finally {
+    /* PARKED SOMEWHERE THE FIXTURE ACTUALLY SERVES, once the handoff has been asserted.
+     *
+     * This case is the only one that leaves /start, and where it leaves it FOR is a surface this
+     * file stubs nothing for: the dashboard boots itself against five backend paths that are not in
+     * BACKEND_PATHS, so every one of them is aborted and the page sits there retrying. Left parked
+     * on it, the next case's `page.goto` inherits that - measured on this tree as a 30-second
+     * navigation timeout in the consent case, and then "interrupted by another navigation" in the
+     * three after it, all four of them cases about /start that had nothing to do with a dashboard.
+     *
+     * It was invisible until the walk started passing, because a walk that died on the first screen
+     * never pressed the button that goes there.
+     *
+     * BACK TO /start, NOT to about:blank. about:blank is the obvious park and the wrong one: it has
+     * an opaque origin, so the first thing the page's own script does there is read localStorage and
+     * take a SecurityError, which the runner catches as an uncaught page exception and fails the
+     * FILE with all thirteen cases green. Somewhere same-origin and stubbed is the quiet option.
+     * The next case navigates here itself, so this costs one load and changes nothing it asserts. */
+    await page.goto(`${ORIGIN}/start`, { waitUntil: "domcontentloaded" }).catch(() => {});
   }
 });
 
@@ -1078,7 +1174,14 @@ test("the walk never left the fixture", () => {
      a regression was injected upstream. `completePosts` is the one counter that can only be 1 if
      the flow actually finished. */
   assert.equal(completePosts, 1, "the walk never completed, so the assertions below prove nothing");
-  assert.deepEqual(blockedExternal, [], "the page reached for a third-party origin");
+  /* `afterHandoff` is named in the message rather than asserted: those calls are the dashboard's
+     own and this file stubs none of them, but a leak and a dashboard boot are told apart by ORIGIN,
+     so printing what was excused is what stops the excuse being invisible. */
+  assert.deepEqual(
+    blockedExternal,
+    [],
+    `the page reached for a third-party origin (excused as the dashboard's own: ${JSON.stringify(afterHandoff)})`,
+  );
   assert.deepEqual([...unstubbedBackendPaths], [], "the flow called backend paths this fixture does not answer");
 });
 
