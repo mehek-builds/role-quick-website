@@ -762,10 +762,15 @@ describe("the application sequence, end to end", () => {
      * checklist walk in the sequential browser job and that walk was red, so step 18 was SKIPPED
      * rather than passing. The first CI run that reached it found this on the second attempt.
      *
-     * The wait is on the loaded state's OWN sentence rather than on a timer: "Already on your
-     * account" is printed only when `holdsTrial` is true, which cannot be true until the snapshot
-     * is in hand. So it cannot pass early, and the assertions below read one settled screen. */
-    await page.getByText(/Already on your account/i).waitFor({ timeout: 20_000 });
+     * WAITED ON A SIGNAL THIS TEST DOES NOT ASSERT, which took two tries to get right. The first
+     * version waited on "Already on your account" - one of the strings asserted below - and that
+     * made the assertion on it unfalsifiable: the wait guaranteed the very thing the assert was
+     * written to catch, so a regression to the wrong branch would have surfaced as a bare 20-second
+     * locator timeout instead of as "the trial line is wrong".
+     * Row 05's key is the honest signal. It reads "Ends" only when `holdsTrial` is true and
+     * "Length" until then, and nothing below reads it, so it says the snapshot has landed without
+     * standing in for any assertion. Anchored, so it cannot match a longer word ending in it. */
+    await page.getByText(/^Ends$/i).waitFor({ timeout: 20_000 });
 
     const body = await page.locator("main").innerText();
     assert.match(body, /A gift, on us/i);
@@ -901,9 +906,15 @@ describe("the application sequence, end to end", () => {
        Not observed in CI, unlike the same defect in 07 above, but reproduced here on purpose: with
        the billing stub held 1500ms this case fails on "the paywall must state when the charge
        lands" - the copy is absent because the plans have not arrived, not because the paywall
-       stopped saying it. Keyed on the loading indicator rather than on any of the copy asserted
-       below, so it cannot make those assertions vacuous. */
-    await page.waitForFunction(() => !document.querySelector("main .rq-shimmer"), null, { timeout: 20_000 });
+       stopped saying it.
+       WAITED ON WHAT IS THERE, NOT ON WHAT IS GONE. The first version waited for `.rq-shimmer` to
+       disappear, which is a wait that cannot fail: rename that class, restyle the loading state, or
+       swap the shimmer for a spinner, and querySelector returns null on the first poll, the wait
+       passes instantly, and this case is silently reading the loading screen again with nothing
+       red to say so. The plan options carry `aria-pressed` and exist only in the settled branch, so
+       waiting for one to appear says the same thing and fails loudly when its hook moves. It is not
+       among the things asserted below, which read button text. */
+    await page.locator("main button[aria-pressed]").first().waitFor({ timeout: 20_000 });
 
     const body = await page.locator("main").innerText();
     assert.match(
