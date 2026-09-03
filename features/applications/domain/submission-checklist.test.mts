@@ -1797,12 +1797,93 @@ test("the employer's own record is what makes a file Done", () => {
   );
 });
 
+/**
+ * GET /applications carries resume_attached, resume_source and resume_attached_at on every canonical
+ * row, and until now nothing in the dashboard read any of them. On DSI Innovations the same database
+ * held resume_attached false and resume_source "none" WHILE submission_state was
+ * ready_for_final_approval and this screen printed "Application files, 2 items completed".
+ */
+test("the application record outranks the run about the run's own resume", () => {
+  const unconfirmed = unconfirmedDocumentItems(dsi, {
+    resume: { resume_attached: false, resume_source: "none", resume_attached_at: null },
+  });
+
+  const resume = unconfirmed.find((item) => item.label === "Resume");
+  assert.equal(resume?.detail, "Litos's own record of this application has no resume attached to it. Check the picture of the filled form.");
+  assert.equal(resume?.badge, "Missing");
+  /* One row of the ledger, one file. The record says nothing about the cover letter, so the cover
+     letter keeps the sentence the run earned it. */
+  assert.equal(unconfirmed.find((item) => item.label === "Cover letter")?.badge, "Not confirmed");
+});
+
+test("an attached resume on the record still does not make a Done line", () => {
+  /* Hudson River Trading and EQL Tech both read resume_attached true with submission_state
+     not_started on 2026-09-03, so this field says a resume artifact is linked to the RECORD, not
+     that an employer's form received one. Promoting it would be the original defect with a new
+     source. */
+  const attached = { resume: { resume_attached: true, resume_source: "artifact", resume_attached_at: "2026-09-01T21:27:37.000Z" } };
+
+  assert.equal(
+    completedSubmissionGroups(dsi).some((group) => group.label === "Application files"),
+    false,
+    "a resume linked to the application record is not the employer's form having received it",
+  );
+  const unconfirmed = unconfirmedDocumentItems(dsi, attached);
+  assert.deepEqual(unconfirmed.map(({ label, badge }) => ({ label, badge })), [
+    { label: "Resume", badge: "Not confirmed" },
+    { label: "Cover letter", badge: "Not confirmed" },
+  ]);
+});
+
+test("a record this ledger never loaded is silence, not a verdict", () => {
+  /* resume_attached is optional on the wire and absent on any backend that predates it, and the row
+     is only present when this page's ledger loaded it. Absent must read exactly like today. */
+  assert.deepEqual(unconfirmedDocumentItems(dsi, {}), unconfirmedDocumentItems(dsi));
+  assert.deepEqual(unconfirmedDocumentItems(dsi, { resume: {} }), unconfirmedDocumentItems(dsi));
+  assert.deepEqual(
+    unconfirmedDocumentItems(dsi, { resume: { resume_source: "none" } }),
+    unconfirmedDocumentItems(dsi),
+    "resume_source is typed as an open set and must not be branched on",
+  );
+});
+
+test("the record never creates a row on its own, and never outranks a receipt", () => {
+  const noResume = { resume: { resume_attached: false, resume_source: "none", resume_attached_at: null } };
+
+  assert.deepEqual(
+    unconfirmedDocumentItems({ ...dsi, filled_fields: ["name", "email"] }, noResume),
+    [],
+    "nothing here claimed a resume, so this list has nothing to correct",
+  );
+  assert.deepEqual(
+    unconfirmedDocumentItems({
+      ...dsi,
+      status: "submitted",
+      receipt: { confirmation_text: "Received.", final_url: "https://example.com/done", captured_at: "2026-09-03T09:00:00.000Z" },
+    }, noResume),
+    [],
+    "the employer's own record outranks Litos's record about Litos",
+  );
+});
+
+test("a question about a file is not a file", () => {
+  /* `question:cover letter` is a text area the run typed into. completedSubmissionGroups already
+     skips every question-prefixed key, and a list of unconfirmed FILES that included it would be a
+     fresh false statement in the column built to stop making them. */
+  const unconfirmed = unconfirmedDocumentItems({
+    ...dsi,
+    filled_fields: ["name", "question:cover letter"],
+    skipped_reasons: ["question: cover letter left for the applicant"],
+  });
+  assert.deepEqual(unconfirmed, []);
+});
+
 test("the review screen renders the unconfirmed files outside the Done column", () => {
   const page = readFileSync("app/dashboard/applications/page.tsx", "utf8");
   assert.match(
     page,
-    /const unconfirmedDocuments = unconfirmedDocumentItems\(review\);/,
-    "the review screen must read the unconfirmed files off the review it is showing",
+    /const unconfirmedDocuments = unconfirmedDocumentItems\(review, \{ resume: resumeRecord \}\);/,
+    "the review screen must read the unconfirmed files off the review AND the canonical row's resume record",
   );
   assert.match(
     page,
@@ -1816,9 +1897,25 @@ test("the review screen renders the unconfirmed files outside the Done column", 
   );
 });
 
+test("the canonical row's resume record reaches both screens by either of its two ids", () => {
+  /* The review flow hands SubmissionScreen the RESTORED legacy packet, so canonicalApplicationFromPacket
+     answers null on exactly the screen with the Send button and the legacy id is the only handle
+     left. A map keyed only by the canonical id would be silently empty there, which reads identical
+     to a backend that never served the field. */
+  const page = readFileSync("app/dashboard/applications/page.tsx", "utf8");
+  assert.match(
+    page,
+    /const canonicalApplicationsByAnyId = useMemo\(\(\) => \{[\s\S]{0,600}?canonicalApplicationFromPacket\(packet\)[\s\S]{0,300}?rows\[application\.id\] = application;[\s\S]{0,200}?rows\[application\.legacy_generated_resume_id\] = application;/,
+    "the record must be reachable by the canonical id AND by the legacy packet id",
+  );
+  assert.match(page, /\[packets\]\);/, "it is derived off the ledger on screen, never a second copy that can drift");
+  assert.match(page, /resumeRecord=\{canonicalApplicationsByAnyId\[selected\.id\]\}/);
+  assert.match(page, /resumeRecord=\{canonicalApplicationsByAnyId\[revisitingPacket\.id\]\}/);
+});
+
 test("the packet record says the same thing the review screen does", () => {
   const packet = readFileSync("components/app/ApplicationPacket.tsx", "utf8");
-  assert.match(packet, /const unconfirmedDocuments = unconfirmedDocumentItems\(safeContentReview\);/);
+  assert.match(packet, /const unconfirmedDocuments = unconfirmedDocumentItems\(safeContentReview, \{ resume: resumeRecord \}\);/);
   assert.match(
     packet,
     /\{unconfirmedDocuments\.length > 0 && \([\s\S]{0,400}?Not confirmed on their form[\s\S]{0,400}?<CheckRow key=\{item\.id\} item=\{item\} checked=\{false\} \/>/,

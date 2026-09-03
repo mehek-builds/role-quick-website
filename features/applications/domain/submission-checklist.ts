@@ -1398,8 +1398,18 @@ const DOCUMENT_KIND_LABELS: Record<string, string> = {
   transcript: "Transcript",
 };
 
+/**
+ * A field that names a FILE, and not a QUESTION about one.
+ *
+ * `question:cover letter` is a text area the run typed into, and completedSubmissionGroups already
+ * skips every question-prefixed key before it groups anything, for exactly this reason. A list of
+ * unconfirmed FILES that included it would be flagging a typed answer as an upload that never
+ * landed, which is a fresh false statement in the column built to stop making them.
+ */
 function isDocumentField(value: string): boolean {
-  return DOCUMENT_FIELD_PATTERN.test(providerFieldKey(value));
+  const field = providerFieldKey(value);
+  if (/^question(?: text)?\b/.test(field)) return false;
+  return DOCUMENT_FIELD_PATTERN.test(field);
 }
 
 /**
@@ -1441,6 +1451,53 @@ function employerRecordConfirms(review: Pick<ApplicationReview, "receipt" | "sta
  */
 function skippedFieldSubjects(reasons: readonly string[] | undefined): Set<string> {
   return new Set((reasons ?? []).map(blockerSubject).filter(Boolean));
+}
+
+/**
+ * What the canonical application row says about the resume attached to THIS application.
+ *
+ * Structural rather than `CanonicalApplication`, for the same reason `ChecklistDocumentMarks` above
+ * is structural: these three fields are all this decision reads, and binding the checklist to the
+ * whole tracker row would make every future field on it an input to a list about files.
+ */
+export type ChecklistResumeRecord = Readonly<{
+  resume_attached?: boolean;
+  resume_source?: string;
+  resume_attached_at?: string | null;
+}>;
+
+/**
+ * The application RECORD's own answer about the resume, when it has one.
+ *
+ * `GET /applications` has been serving `resume_attached`, `resume_source` and `resume_attached_at`
+ * on every canonical row all along, and lib/api.ts has typed all three all along, and the dashboard
+ * read none of them. Another measurement on the wire and read nowhere, like `transcript_supported`
+ * before it. On the DSI Innovations packet the SAME database held `resume_attached: false`,
+ * `resume_source: "none"` and `submission_state: ready_for_final_approval` while this screen printed
+ * "Application files, 2 items completed" over an enabled Send button.
+ *
+ * ONLY THE NEGATIVE IS READ, and that is the whole of the discipline here.
+ *
+ * `false` sits UPSTREAM of the employer's form: a resume that is not attached to the application
+ * cannot have reached anybody's dropzone, so it sharpens a sentence this list was already going to
+ * print. `true` says a resume artifact is linked to the RECORD, which is a different claim from the
+ * employer's form having received it: Hudson River Trading and EQL Tech both read
+ * `resume_attached: true` with `submission_state: not_started` on 2026-09-03. Promoting that to Done
+ * would be this same defect wearing a new source. `undefined` is an older backend, or a row this
+ * screen never loaded, and it says nothing at all.
+ *
+ * The sentence is attributed to the RECORD and never to the employer's form, because this row can
+ * lag: canonical-tracker.ts carries a dated live measurement of the same row reading
+ * `submission_state: not_started` while its packet was already filled and holding a preview
+ * screenshot (The Maven Group, 2026-09-02). A lagging `false` printed as a fact about the employer
+ * would be a fresh lie in the opposite direction, and attribution is what makes it true either way.
+ *
+ * `resume_source` is deliberately not switched on. lib/api.ts types it
+ * `"artifact" | "base_resume" | "none" | string`, and that trailing `string` is its author saying the
+ * value set is open. A branch on "none" would be a closed reading of an explicitly open field.
+ */
+function recordHasNoResume(record: ChecklistResumeRecord | undefined): boolean {
+  return record?.resume_attached === false;
 }
 
 /**
@@ -1560,24 +1617,38 @@ export function completedSubmissionGroups(
  * A file named in `attention_reason` and absent from `filled_fields` is deliberately NOT picked up
  * here. humanInputItems already emits that one, with a control that opens the employer's page, and
  * two rows for one file under two headings is the screen contradicting itself.
+ *
+ * `context.resume` is the canonical row's own record of the resume, and it SHARPENS rows rather than
+ * creating them. A record saying no resume is attached, on an application whose run never claimed
+ * one either, is not news about this send: nothing here said it had a resume, `required_documents`
+ * and humanInputItems own the employer still asking for one, and a Resume row on every application
+ * that has not been prepared yet is noise where this list needs to be read.
  */
 export function unconfirmedDocumentItems(
   review: Pick<ApplicationReview, "attention_reason" | "filled_fields" | "receipt" | "skipped_reasons" | "status">,
+  context: { resume?: ChecklistResumeRecord } = {},
 ): SubmissionChecklistItem[] {
   const reportedEmptySubjects = emptyFieldSubjects(compactLines(review.attention_reason));
   for (const subject of skippedFieldSubjects(review.skipped_reasons)) reportedEmptySubjects.add(subject);
+  const noResumeOnRecord = recordHasNoResume(context.resume);
   const items: SubmissionChecklistItem[] = [];
   const name = (source: string, state: DocumentClaimState) => {
     const subject = documentFileSubject(source);
     const label = DOCUMENT_KIND_LABELS[subject] ?? displayField(providerFieldKey(source));
     if (!label) return;
+    /* The record outranks the run about the run, and only about the resume, which is the only file
+       this row of the ledger describes. It never promotes: a row that got here is already not
+       verified, and this only decides which true sentence it prints. */
+    const fromRecord = noResumeOnRecord && subject === "resume";
     addUnique(items, {
       id: `unconfirmed-${keyFor(label)}`,
       label,
-      detail: state === "reported_empty"
-        ? "The run reports this file is still missing from the company's form."
-        : "Litos says it attached this. Nothing has confirmed it on the company's form, so check the picture of the filled form for the file name.",
-      badge: state === "reported_empty" ? "Missing" : "Not confirmed",
+      detail: fromRecord
+        ? "Litos's own record of this application has no resume attached to it. Check the picture of the filled form."
+        : state === "reported_empty"
+          ? "The run reports this file is still missing from the company's form."
+          : "Litos says it attached this. Nothing has confirmed it on the company's form, so check the picture of the filled form for the file name.",
+      badge: fromRecord || state === "reported_empty" ? "Missing" : "Not confirmed",
       /* One row per FILE, not per capture. A form that names the same dropzone "resume" on one run
          and "Resume upload control_4" on the next is one file, and a file both loops below reach is
          still one file. addUnique drops the second on this subject rather than saying the same
@@ -1594,8 +1665,9 @@ export function unconfirmedDocumentItems(
   for (const reason of employerRecordConfirms(review) ? [] : review.skipped_reasons ?? []) {
     /* A named kind, not merely a document-shaped sentence. "upload" and "attachment" are in the
        grouping pattern and identify no file, and a skipped reason that cannot say WHICH file would
-       arrive here as a row labelled with its own sentence. */
-    if (!namedDocumentKind(reason)) continue;
+       arrive here as a row labelled with its own sentence. isDocumentField carries the other half,
+       so a reason about a question ABOUT a file is not read as a reason about the file. */
+    if (!isDocumentField(reason) || !namedDocumentKind(reason)) continue;
     name(reason, "reported_empty");
   }
   return items;

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, type ApplicationReview, type GeneratedResume, type ResumeSpec } from "@/lib/api";
 import { canonicalApplicationFromPacket, isStubPacketSpec, sectionHeading, startsNewSection, statusLabel, stripMetadata, withoutHistoricalPacketAuditStaleAttention } from "@/features/applications";
-import { cleanJdCapture, cleanScrapedLabel, cleanScrapedPrompt, completedSubmissionGroups, displayQuestionLabel, humanInputItems, unconfirmedDocumentItems, type SubmissionChecklistItem } from "@/features/applications";
+import { cleanJdCapture, cleanScrapedLabel, cleanScrapedPrompt, completedSubmissionGroups, displayQuestionLabel, humanInputItems, unconfirmedDocumentItems, type ChecklistResumeRecord, type SubmissionChecklistItem } from "@/features/applications";
 import { resumeContactLine } from "@/lib/resumeContact";
 import { userFacingError } from "@/lib/user-facing-error";
 import { useDashboardOverlayExit } from "@/components/app/useDashboardOverlayExit";
@@ -277,10 +277,14 @@ function formatMoment(value: string | null | undefined): string {
 
 export function ApplicationPacket({
   packet,
+  resumeRecord,
   review,
   onClose,
 }: {
   packet: GeneratedResume;
+  /** The canonical row's record of the resume, when this ledger loaded the row. See
+   *  unconfirmedDocumentItems: undefined is silence, never an answer. */
+  resumeRecord?: ChecklistResumeRecord;
   review: ApplicationReview;
   onClose: () => void;
 }) {
@@ -423,7 +427,7 @@ export function ApplicationPacket({
   /* The same honesty the review screen applies, in the record of the same application. A packet
      viewer that listed a file under "Done by Litos" while the review screen said it was unconfirmed
      would be the two halves of the product disagreeing about what the employer received. */
-  const unconfirmedDocuments = unconfirmedDocumentItems(safeContentReview);
+  const unconfirmedDocuments = unconfirmedDocumentItems(safeContentReview, { resume: resumeRecord });
   const receipt = safeContentReview.receipt;
   const sentAt = formatMoment(review.submitted_at ?? review.updated_at);
   const builtAt = formatMoment(contentPacket.created_at);
