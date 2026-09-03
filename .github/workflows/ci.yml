@@ -215,6 +215,49 @@ jobs:
       - name: Question blocker harness spec
         run: npm run test:question-blocker
 
+      # The send gate's exact PDF viewer, rendered rather than read. This viewer decides whether
+      # Litos may fill any employer form, and it once hung forever in production while its
+      # source-reading coverage stayed green: a regular expression can confirm that a render
+      # promise is awaited and can never confirm that it settles. The npm script has existed
+      # without a step here, so this spec has never run in CI once. It starts its own `next start`
+      # with a fabricated QA secret and serves a committed fixture, so it needs no secret and
+      # reaches no network. Above the deliberately-last partial-payload step, so its known-red
+      # case cannot skip this.
+      - name: Exact packet PDF spec
+        run: npm run test:exact-packet-pdf
+
+      # The two verification routes on Settings, asserted as the screen and the request body rather
+      # than as source. Reuses the production build above.
+      - name: Settings verification sources spec
+        run: npm run test:settings-verification-sources
+
+      # The human-check permission on both surfaces that grant it. The case worth having in CI is
+      # the STALE GRANT: accounts holding a consent the backend constant has since superseded must
+      # read unticked with no date, and ticking must write a fresh grant. Before this shipped,
+      # nothing on any surface wrote automatic_captcha_enabled at all.
+      - name: Captcha consent toggle spec
+        run: npm run test:captcha-consent
+
+      # THE TWO BELOW RUN `next dev`, not the production build every step above uses, so they are
+      # grouped and kept last. Measured on 2026-09-03: `next dev` writes its own .next/dev subtree
+      # and leaves BUILD_ID and the production manifests intact, so it does not clobber the build
+      # the earlier steps depend on. That is a property of the current Next version rather than a
+      # promise, and ordering them last means a future version that does clobber breaks nothing
+      # after them. Both still sit above the deliberately-last partial-payload step.
+
+      # Guest mode entry through 127.0.0.1. The failure this catches is deceptive and invisible to
+      # a source assertion: when the dev origin is not permitted, sign-in controls render but React
+      # never hydrates, so visible buttons silently do nothing.
+      - name: QA guest entry spec
+        run: npm run test:qa-guest-entry
+
+      # The HTTPS tunnel hostname the managed runner reaches the controlled portal through. If the
+      # exact host is not allowed, the form renders but the effect publishing data-litos-qa-ready
+      # never runs and the backend fails closed before fill. Needs openssl, which the runner has,
+      # for a throwaway one-day certificate; nothing leaves the machine.
+      - name: QA tunnel hydration spec
+        run: npm run test:qa-tunnel-hydration
+
       # LAST ON PURPOSE. These steps run sequentially, so whichever fails first skips every
       # step after it. This spec is currently red on one case whose payload the board's submission
       # authority gate now rejects before render, and while it sat above them it was silently
@@ -234,11 +277,23 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: click-path-artifacts
+          # EVERY DIRECTORY A SPEC IN THIS JOB ACTUALLY WRITES, which four of them were missing.
+          # Each entry is one spec's ARTIFACT_DIR; grep `ARTIFACT_DIR =` under tests/e2e/ to check
+          # the list is still complete when a spec is added. `if-no-files-found: ignore` means a
+          # green run uploads nothing, so listing a directory costs nothing and omitting one costs
+          # the whole picture: approve, packet-flow-refusals, start-checklist and tracker-row all
+          # wrote a screenshot, the serialised DOM and a context file on failure that no run has
+          # ever uploaded. tracker-row is the one that has actually bitten - it is the known
+          # load-flake in this job, and its evidence was being discarded on every red run.
           path: |
+            test-results/approve/
             test-results/click-path/
             test-results/country-eligibility-flow/
             test-results/dashboard-visual-regressions/
             test-results/narrow-viewport/
+            test-results/packet-flow-refusals/
             test-results/question-blocker/
+            test-results/start-checklist/
+            test-results/tracker-row/
           if-no-files-found: ignore
           retention-days: 7
