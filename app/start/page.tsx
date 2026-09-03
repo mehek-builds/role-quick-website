@@ -23,6 +23,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ApplicationProfile,
+  MonitoredJob,
   OnboardingState,
   OnboardingStep,
   ParsedProfile,
@@ -34,6 +35,7 @@ import {
   createGuestSession,
   getApplicationProfile,
   getJob,
+  getOnboardingPacket,
   getOnboardingState,
   getStoredEmail,
   getToken,
@@ -63,6 +65,23 @@ import { PlanStep } from "@/components/start/PlanStep";
 import { freshnessOf, hoursSinceSeen, type OnboardingMatch } from "@/lib/onboarding-match";
 import type { BuildResult } from "@/lib/onboarding-build";
 import type { BuildContext } from "@/components/start/BuildStep";
+
+/* THE BLANK MOMENT WHILE THE REJOIN DECIDES whether there is a posting to return to.
+ *
+ * MatchStep must not render here: a screen that appears and is replaced a moment later is not a
+ * lower-friction version of not showing it, which is the same rule the job-first pin follows (and
+ * the reason it skips MatchStep outright rather than auto-advancing through it). The same shape the
+ * pinned load shows while it waits, because it is the same wait.
+ */
+function RejoinShimmer() {
+  return (
+    <div className="mx-auto max-w-2xl px-6 py-16">
+      <StepRail current="match" />
+      <div className="rq-shimmer mt-10 h-9 w-2/3 rounded-full" />
+      <div className="rq-shimmer mt-6 h-32 rounded-inner" />
+    </div>
+  );
+}
 
 /* Whether this account's flow is one the acknowledgement ledger exists for.
  *
@@ -452,24 +471,28 @@ export default function Start() {
    * A stable callback rather than inline effect logic, so the retry button below can call it
    * directly - the same "call the loader again" idiom loadProfile already uses elsewhere in this
    * file, rather than a second, novel retry mechanism living only here. */
+  /* One posting, handed to BuildStep the way MatchStep's own "yes, build this" would. Shared by
+     the two paths that arrive at a build with a job id already in hand - the job-first pin below
+     and the reload rejoin further down - so the two cannot drift into constructing the match
+     differently. `widened` is false for both: neither came off the ranked board's widening. */
+  const matchFromJob = useCallback((job: MonitoredJob): OnboardingMatch => ({
+    job,
+    freshness: freshnessOf(job),
+    hoursSinceSeen: hoursSinceSeen(job.first_seen_at),
+    widened: false,
+  }), []);
   const loadPinnedJob = useCallback(async (jobId: string) => {
     if (pinnedJobFetchInFlight.current) return;
     pinnedJobFetchInFlight.current = true;
     setPinnedJobError(null);
     try {
-      const job = await getJob(jobId);
-      setChosenMatch({
-        job,
-        freshness: freshnessOf(job),
-        hoursSinceSeen: hoursSinceSeen(job.first_seen_at),
-        widened: false,
-      });
+      setChosenMatch(matchFromJob(await getJob(jobId)));
     } catch (reason) {
       setPinnedJobError(reason instanceof Error ? reason.message : "Could not load that job.");
     } finally {
       pinnedJobFetchInFlight.current = false;
     }
-  }, []);
+  }, [matchFromJob]);
   const pinnedJobStep = state?.step;
   const pinnedJobId = state?.pinned_target_job_id;
   useEffect(() => {
@@ -489,6 +512,70 @@ export default function Start() {
        deps, a poll landing in the gap between this effect scheduling and the fetch actually
        starting could still queue a redundant call before the ref is set. */
   }, [pinnedJobStep, pinnedJobId, chosenMatch, pinnedJobDeclined, loadPinnedJob]);
+
+  /* REJOINING THE APPLICATION AFTER A RELOAD, INSTEAD OF PAYING TO BUILD IT AGAIN.
+   *
+   * THE BUG. `chosenMatch` and `built` are per-sitting state (see their declarations above), so a
+   * reload between the build screen and the send screen dropped both and the flow restarted at the
+   * match list with no memory of the posting it had just built. Picking again ran a fresh
+   * POST /resume/generate, which claims one of the account's TWO free onboarding builds. Two
+   * reloads exhausted them and bricked the account outright: it could not finish setup (the build
+   * needs an entitlement it no longer had) and could not reach /dashboard (the card gate holds the
+   * dashboard shut until setup completes). Measured on production 2026-09-03 on a real account:
+   * onboarding_builds_used 2, onboarding_completed_at NULL. Raising the limit from one to two on
+   * 2026-09-01 moved the ceiling and left this cause alone; this is the cause.
+   *
+   * THE PACKET WAS NEVER LOST, ONLY THE REFERENCE TO IT. The application and its tailored resume
+   * are rows the first build already paid for, so the reload has something to carry on with: this
+   * asks the server which application the account is in the middle of and puts the student back on
+   * that posting. BuildStep then reads the packet rather than generating (see its generateResume),
+   * so the whole trip spends nothing.
+   *
+   * IT RESTORES THE POSTING, NOT THE SCREEN. The student lands on the build screen for the job they
+   * were on, with "Show me a different one" still there - a reload must not take away a choice they
+   * had before it. Declining is recorded so this does not immediately pull the same posting back,
+   * exactly as pinnedJobDeclined does for the job-first pin.
+   *
+   * ONLY WHERE A MATCH IS WHAT IS MISSING. The profile-derived steps ahead of the sequence have
+   * their own screens and their own state, and the steps after `review` no longer need a match.
+   *
+   * FAILURE IS THE OLD BEHAVIOUR, NOT A DEAD END. Any error - an older backend without the route
+   * included - leaves chosenMatch null and falls through to MatchStep, which is exactly what
+   * happens today. `checked` is set either way so this is asked once per sitting rather than on
+   * every poll tick.
+   */
+  const [rejoinChecked, setRejoinChecked] = useState(false);
+  const [rejoinDeclined, setRejoinDeclined] = useState(false);
+  const rejoinFetchInFlight = useRef(false);
+  const rejoinStep = state?.step;
+  /* The job-first pin owns the restore when it applies, and it names a posting the student chose
+     over one they merely built. Deferring to it keeps exactly one loader in flight.
+     Scoped to the match step because the pinned effect above is: a pin the backend failed to clear
+     would otherwise hold this off at 'questions' and 'review', where nothing would ever resolve it
+     and the shimmer below would have no end. */
+  const pinnedRestoreActive = Boolean(pinnedJobId) && !pinnedJobDeclined && rejoinStep === "match";
+  useEffect(() => {
+    if (rejoinChecked || rejoinDeclined || chosenMatch || pinnedRestoreActive) return;
+    if (rejoinStep !== "match" && rejoinStep !== "questions" && rejoinStep !== "review") return;
+    if (rejoinFetchInFlight.current) return;
+    rejoinFetchInFlight.current = true;
+    // Same nested-async idiom the pinned-job effect above uses, for the same lint reason.
+    void (async () => {
+      try {
+        const inProgress = await getOnboardingPacket();
+        if (inProgress?.job_id) setChosenMatch(matchFromJob(await getJob(inProgress.job_id)));
+      } catch {
+        /* Swallowed on purpose. There is nothing to tell the student: the match screen below is a
+           complete, working way forward, and an error banner over it would describe a recovery
+           that already happened. */
+      } finally {
+        rejoinFetchInFlight.current = false;
+        setRejoinChecked(true);
+      }
+    })();
+    /* Primitive deps for the same reason the pinned effect documents: refresh() replaces `state`
+       wholesale every poll tick, and depending on the object would re-ask on each one. */
+  }, [rejoinChecked, rejoinDeclined, chosenMatch, pinnedRestoreActive, rejoinStep, matchFromJob]);
 
   // One step_view per step, from the one place that knows every step. Deduped on the step itself
   // so a refresh() that returns the same step (the install poll fires one every few seconds)
@@ -555,10 +642,16 @@ export default function Start() {
    *
    * Rebuilding does spend another tailored generation, and that is the honest cost of a reload
    * mid-sequence: the alternative is carrying a packet the student cannot see and cannot check. */
+  /* THE BLANK MOMENT WHILE THE REJOIN DECIDES. MatchStep must not render here: a screen that
+     appears and is replaced a moment later is not a lower-friction version of not showing it (the
+     same rule the job-first pin follows above, and the reason it skips MatchStep outright). Both
+     call sites have already established a null chosenMatch and a sequence step, which is the rest
+     of the effect's own guard. */
+  const rejoinPending = !rejoinChecked && !rejoinDeclined && !pinnedRestoreActive;
   const resumeSequence = useCallback(() => {
-    if (!chosenMatch) return <MatchStep onLater={later} onBuild={setChosenMatch} />;
-    return <BuildStep match={chosenMatch} onLater={later} onPickAnother={() => setChosenMatch(null)} onReviseResume={() => { track("onboarding_revisit_opened", { step: "resume" }); setRevisiting("resume"); }} onQuestions={(result, context) => setBuilt({ ...result, ...context })} />;
-  }, [chosenMatch, later]);
+    if (!chosenMatch) return rejoinPending ? <RejoinShimmer /> : <MatchStep onLater={later} onBuild={setChosenMatch} />;
+    return <BuildStep match={chosenMatch} onLater={later} onPickAnother={() => { setRejoinDeclined(true); setChosenMatch(null); }} onReviseResume={() => { track("onboarding_revisit_opened", { step: "resume" }); setRevisiting("resume"); }} onQuestions={(result, context) => setBuilt({ ...result, ...context })} />;
+  }, [chosenMatch, later, rejoinPending]);
 
   /* An advance that did not land must not leave the sitting marked as having advanced.
    *
@@ -850,6 +943,7 @@ export default function Start() {
               </div>
             );
           }
+          if (rejoinPending) return <RejoinShimmer />;
           return <MatchStep onLater={later} onBuild={setChosenMatch} />;
         }
         return (
@@ -863,6 +957,9 @@ export default function Start() {
                what routes the fallthrough above to the ordinary MatchStep instead. */
             onPickAnother={() => {
               if (state.pinned_target_job_id) setPinnedJobDeclined(true);
+              /* Same reason, for the reload rejoin: clearing the match alone would satisfy its
+                 effect guard again and hand back the very posting they just asked to leave. */
+              setRejoinDeclined(true);
               setChosenMatch(null);
             }}
             onReviseResume={() => { track("onboarding_revisit_opened", { step: "resume" }); setRevisiting("resume"); }}
