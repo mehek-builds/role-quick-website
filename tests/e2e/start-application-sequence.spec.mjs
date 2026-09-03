@@ -7,13 +7,15 @@
  * only honest way to test an irreversible action.
  *
  * What this proves:
- *   - all six screens render and advance in order, driven by the acknowledgement ledger;
+ *   - every screen renders and advances in order, driven by the acknowledgement ledger, which by
+ *     itself is six entries answered across five screens: the trial screen answers two of them;
  *   - the build screen's stages are driven by real calls, and the resume stage does not resolve
  *     until generation does;
  *   - the questions screen shows the EMPLOYER'S options and refuses to auto-advance a declaration;
  *   - the review screen audits the exact packet, shows the real PDF, records the applicant's
  *     acknowledgement of it and only then issues exactly one submit-request;
- *   - the trial screen counts what is LEFT after the build spent one generation;
+ *   - the trial screen counts what is LEFT after the build spent one generation, and carries the
+ *     staying-in-touch ask that used to be a screen of its own;
  *   - the plan screen's Continue hands off to Stripe with the onboarding return route.
  */
 
@@ -39,16 +41,33 @@ let page;
 /* Everything the flow reads, in one place, so a change to the contract fails here loudly rather
    than being absorbed by six separate hand-written mocks. */
 const acknowledged = [];
-/* Every body the notifications screen PUT. Kept rather than counted, because the thing worth
+/* Every body the staying-in-touch switches PUT. Kept rather than counted, because the thing worth
    asserting is not that it saved but WHAT it saved: an unticked box has to arrive as an explicit
    false, or the server reads it as "not mentioned" and leaves a stale grant on. */
 const notificationSaves = [];
+/* And every READ, which the walk needs for a reason the saves do not: the switches hydrate from
+   this GET and setState from it, so a tick landing before it resolves would be silently undone.
+   Counted rather than kept, because the only question asked of it is whether it has happened. */
+let notificationReads = 0;
 let submitRequests = 0;
 const savedAnswers = [];
 let checkoutRequests = 0;
 let generationCalls = 0;
 let releaseGeneration;
 const generationHeld = new Promise((resolve) => { releaseGeneration = resolve; });
+
+/* Polls a condition only the STUB can see. Playwright's waits are all about the page, and the
+   assertions below are about requests the app did or did not make; a bare read of a counter is a
+   snapshot that races the fetch it is asking about. Failing loudly on timeout rather than
+   returning false keeps a missing request from reading as a passed assertion. */
+async function waitFor(condition, message, timeout = 10_000) {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    if (condition()) return;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  assert.fail(message);
+}
 
 /* THE SEND GATE, STUBBED AS THE BACKEND ACTUALLY ENFORCES IT.
  *
@@ -373,6 +392,7 @@ before(async () => {
           unsubscribe_configured: true,
         });
       }
+      notificationReads += 1;
       return json({
         /* All off, which is what a fresh account holds: nothing is pre-ticked, so the walk below
            has to actually click a box for anything to be granted. */
@@ -734,11 +754,38 @@ describe("the application sequence, end to end", () => {
     // The title follows what the student actually did, and this walk sent.
     assert.match(body, /Sent\. And here's something from us\./i);
 
-    await page.getByRole("button", { name: "Start using it" }).click();
+    /* NO PRESS HERE. "Start using it" leaves this screen AND answers the staying-in-touch ask
+       folded into it, so pressing it in this test would walk past the consent assertions in 08
+       before they could be made. The press belongs to the screen's last property, not its first. */
   });
 
-  test("08 notifications: two asks, nothing pre-ticked, and only what was ticked is granted", async () => {
-    await page.getByRole("heading", { name: /when the next one opens/i }).waitFor({ timeout: 20_000 });
+  /* 08 THE STAYING-IN-TOUCH ASK, ON THE SCREEN THAT NOW CARRIES IT.
+   *
+   * This was written against a notifications screen of its own and waited on that screen's
+   * heading, which stopped rendering when the two folded together: `case "trial"` acknowledges
+   * BOTH `trial` and `notifications` in one motion, so the server serves `plan` next and the
+   * standalone screen is now reached only by an account that acked `trial` before the fold
+   * shipped. The wait timed out and main went red.
+   *
+   * THE SCREEN MOVED; THE PROPERTIES DID NOT, so they moved with it rather than being deleted.
+   * Every one of them is still pinned below, now against the trial screen's switches:
+   *   - both asks are present, and they are the two the backend actually enforces;
+   *   - the two promises it keeps are said on the screen that asks;
+   *   - NOTHING is pre-ticked, because a pre-ticked consent is not a consent;
+   *   - the PUT carries EVERY key, so an untouched box arrives as an explicit `false` rather than
+   *     as an omission the server reads as "not mentioned" and leaves a stale grant on;
+   *   - the wall of standing permissions is still not here.
+   *
+   * One property is new and belongs to the fold itself: the switches save AS THEY ARE TICKED
+   * rather than on Continue, because as a section of the trial screen save-on-continue would
+   * couple "Start using it" to a second write that can fail after both acks have landed. So the
+   * save is asserted BEFORE the button is pressed, and the button is asserted to add nothing.
+   */
+  test("08 staying in touch: two asks on the trial screen, nothing pre-ticked, and only what was ticked is granted", async () => {
+    /* Text, not a heading. This is a section of the trial screen now, under that screen's own
+       title; asking for a heading here is what the old assertion did and it is exactly the thing
+       that no longer exists. */
+    await page.getByText(/Want to know when the next one opens\?/i).waitFor({ timeout: 20_000 });
 
     const body = await page.locator("main").innerText();
     assert.match(body, /Tell me when a strong match opens/i);
@@ -746,9 +793,10 @@ describe("the application sequence, end to end", () => {
     /* The two promises the backend actually enforces, said on the screen that asks. */
     assert.match(body, /at most once a day/i);
     assert.match(body, /unsubscribe link that works without signing in/i);
-    /* Screen 08 is notifications ONLY. Auto-apply and the rest are asked at the moment their
-       feature is first used, and a wall of checkboxes immediately before the price is both worse
-       consent hygiene and a worse rung. */
+    /* Auto-apply, send-without-asking and the rest are asked at the moment their feature is first
+       used. Folding this ask into the trial screen did not make that screen the place to put them:
+       a wall of checkboxes immediately before the price is still both worse consent hygiene and a
+       worse rung. */
     assert.doesNotMatch(body, /apply automatically|send without asking|auto-submit/i);
 
     /* Chromium in this harness supports the Push API, so the laptop-summary control renders and
@@ -762,14 +810,39 @@ describe("the application sequence, end to end", () => {
       assert.equal(await boxes.nth(i).isChecked(), false, "a pre-ticked consent is not a consent");
     }
 
-    await page.getByRole("checkbox", { name: "Tell me when a strong match opens" }).check();
-    await page.getByRole("button", { name: "Continue" }).click();
+    /* AN ASSERTION, NOT A WAIT, and the distinction is worth being exact about because the first
+       draft of this line claimed to be a hydration race guard and could not have been one. The GET
+       fires when TrialStep mounts, and TrialStep's own title is the heading test 06 already waited
+       on, so by the time this runs the read landed a whole test ago. It could not synchronise
+       anything even if it needed to: the counter increments when the STUB serves the response,
+       which says nothing about React having applied the setState behind it.
+       Kept because it is worth asserting on its own. A switch that never reads shows a returning
+       student two empty boxes no matter what she already chose, and nothing else in this walk
+       would notice. */
+    assert.ok(notificationReads > 0, "the switches never read the account's preferences");
 
-    await page.getByRole("heading", { name: /after the seven days/i }).waitFor({ timeout: 20_000 });
-    assert.equal(notificationSaves.length, 1);
+    await page.getByRole("checkbox", { name: "Tell me when a strong match opens" }).check();
+
+    /* Saved on the tick. Waited for rather than read once, because the assertion is about a request
+       in flight and a bare read here is a snapshot that races it.
+       AT LEAST ONE, then the exact count separately. Polling for `=== 1` would be polling for a
+       value the counter passes THROUGH: a regression that issues two saves per tick could go 0 to 2
+       between two 50ms samples, and this would then spend its whole timeout and report "did not
+       save it" about a switch that saved twice. The two failures are opposites and must not wear
+       each other's message. */
+    await waitFor(() => notificationSaves.length >= 1, "ticking a switch did not save it");
+    assert.equal(notificationSaves.length, 1, "one tick must issue exactly one save");
     assert.equal(notificationSaves[0].strong_match, true);
     assert.equal(notificationSaves[0].employer_reply, false, "an unticked box is a decline, not an omission");
     assert.equal(notificationSaves[0].activity_digest, false, "the laptop summary was never granted");
+
+    /* AND THE FOLD'S OWN CONTRACT: one press, both ledger entries, the price screen next. Reaching
+       `after the seven days` is the proof the server was told about `notifications` too -- had only
+       `trial` been acked, the server would derive the standalone notifications screen and this wait
+       would be the one that timed out. */
+    await page.getByRole("button", { name: "Start using it" }).click();
+    await page.getByRole("heading", { name: /after the seven days/i }).waitFor({ timeout: 20_000 });
+    assert.equal(notificationSaves.length, 1, "Continue wrote again; the switches had already saved");
   });
 
   test("09 the plan: pre-selected, one control, and no way past it without a card", async () => {
