@@ -64,7 +64,7 @@ import { applyBankVariant, type ApplyOutcome } from "@/features/applications";
 import { RequirementProvider, RequirementText, MatchLegend } from "@/components/app/RequirementText";
 import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX, exactPacketAuditClauses, exactPacketAuditRanges } from "@/features/applications";
 import { educationDrift, educationDriftMessage, type EducationProfile } from "@/features/applications";
-import { checklistRowControl, completedSubmissionGroups, directInputTaskPlan, directQuestionPromptFingerprint, directQuestionTaskFingerprint, displayQuestionLabel, documentAsksByKind, documentControls, documentStepsInPlan, humanInputItems, metadataRefreshOutranksStandingAttention, QUESTION_CHOICE_LIST_LIMIT, reviewedAnswersSaveLanding, type DirectQuestionTask, type DirectQuestionTaskIntent, type SubmissionChecklistAction, type SubmissionChecklistItem } from "@/features/applications";
+import { checklistRowControl, completedSubmissionGroups, directInputTaskPlan, directQuestionPromptFingerprint, directQuestionTaskFingerprint, displayQuestionLabel, documentAsksByKind, documentControls, documentStepsInPlan, humanInputItems, metadataRefreshOutranksStandingAttention, QUESTION_CHOICE_LIST_LIMIT, reviewedAnswersSaveLanding, unconfirmedDocumentItems, type ChecklistResumeRecord, type DirectQuestionTask, type DirectQuestionTaskIntent, type SubmissionChecklistAction, type SubmissionChecklistItem } from "@/features/applications";
 import { prescriptBlocksProgress, prescriptEditableQuestions, prescriptMetadataBlockers, prescriptNeedsHer, prescriptSummary } from "@/features/applications";
 import { answerWithExactOptionToggled, exactQuestionOption, exactSelectedQuestionOptions, optionalQuestionNeedsDecision, questionAcceptsMultipleOptions, questionOptionsAreComplete, questionReadsAsAnswered, questionReviewPresentation, requiredQuestionReviewRoute } from "@/features/applications";
 import type { JdMatchResponse, JobMatch } from "@/features/applications";
@@ -836,6 +836,31 @@ function Applications() {
   const [revisitingId, setRevisitingId] = useState<string | null>(null);
   const locallyRevisitingIdRef = useRef<string | null>(null);
   const revisitingPacket = revisitingId ? (packets ?? []).find((item) => item.id === revisitingId) ?? null : null;
+  /**
+   * Every canonical row the ledger on screen is carrying, reachable by EITHER of its two ids.
+   *
+   * Derived off `packets` rather than held as its own state, and that is the point of doing it this
+   * way: mergeCanonicalApplicationHistory already folded the canonical rows into the packets this
+   * page renders, so a map built from them cannot drift out of step with what is on screen the way a
+   * second copy filled in by two separate loaders would.
+   *
+   * Keyed by the canonical id AND by legacy_generated_resume_id because the review flow deliberately
+   * hands SubmissionScreen the RESTORED legacy packet: selectPacket refuses to send a canonical
+   * envelope to the legacy endpoints, and linkedLegacyPacketFromCanonicalTrackerPacket puts the
+   * legacy id back and deletes `canonical_application` on the way through. So on exactly the screen
+   * with the Send button, canonicalApplicationFromPacket answers null, and the legacy id is the only
+   * handle left. This is the same lookup canonicalIdByPacketId already does for the row id.
+   */
+  const canonicalApplicationsByAnyId = useMemo(() => {
+    const rows: Record<string, CanonicalApplication> = {};
+    for (const packet of packets ?? []) {
+      const application = canonicalApplicationFromPacket(packet);
+      if (!application) continue;
+      rows[application.id] = application;
+      if (application.legacy_generated_resume_id) rows[application.legacy_generated_resume_id] = application;
+    }
+    return rows;
+  }, [packets]);
   /* Stable identity. The viewer's focus-trap effect keys on its onClose, and an inline arrow here
      gave it a new one on every render of this page: each parent commit tore the effect down and
      rebuilt it, which ran the cleanup's `previous?.focus?.()` and threw focus out of an open
@@ -5895,6 +5920,10 @@ function Applications() {
         <SubmissionScreen
           key={selectedSubmission.application_id}
           packet={selected}
+          /* The canonical row's own record of the resume, for the one list that reads it. Undefined
+             whenever this ledger never loaded the row, which the checklist treats as silence rather
+             than as an answer. */
+          resumeRecord={canonicalApplicationsByAnyId[selected.id]}
           submission={selectedSubmission}
           packetEvidenceReviewed={packetEvidenceReviewed}
           manualTrialPacket={manualTrialEvidence?.response ?? null}
@@ -6282,6 +6311,7 @@ function Applications() {
       {revisitingPacket?.spec._review && (
         <ApplicationPacket
           packet={revisitingPacket}
+          resumeRecord={canonicalApplicationsByAnyId[revisitingPacket.id]}
           review={revisitingPacket.spec._review}
           onClose={closeRevisit}
         />
@@ -7908,7 +7938,7 @@ export function DirectApplicationQuestion({ task, position, total, saving, saved
   );
 }
 
-function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTrialPacket, approving, securityCodeSubmitting, securityCodeError, onSubmitSecurityCode, unverifiedSubmissionSubmitting, unverifiedSubmissionError, onSubmitUnverifiedOutcome, educationProfile, educationProfileStatus, onCheckResume, onReloadCoverLetter, onWriteCoverLetter, coverLetterReloading, onHandoffComplete, onApprove, sendRefusal, onRestart, restarting, onRetry, onReviewPacket, onReviewQuestions, onOpenQuestion, onChooseOption, onSaveQuestion, onSkipQuestion, savingAnswer, answeredQuestionFingerprints, directAnswerProgress, directAnswerDrafts, directAnswerFailure, onDirectAnswerDraftChange, onClearDirectAnswerDraft, onNavigateDirectQuestion, onClearDirectAnswerFailure, onRefreshQuestionMetadata, questionMetadataRefreshing, questionMetadataRefreshDisabled, questionMetadataNeedsPacketReview, questionMetadataRefreshError, onQuestionsFinished, onAddDocument, onToggleAcknowledged, attentionTicking, onSelfSubmitted, onPacketAuditRefusal, onOpenWithExtension, extensionFillBusy, extensionFillError }: { packet: GeneratedResume; submission: SubmissionResponse; packetEvidenceReviewed: boolean; manualTrialPacket: PacketAuditResponse | null; approving: boolean; securityCodeSubmitting: boolean; securityCodeError: string | null; onSubmitSecurityCode: (code: string) => void; unverifiedSubmissionSubmitting: boolean; unverifiedSubmissionError: string | null; onSubmitUnverifiedOutcome: (found: boolean) => void; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onReloadCoverLetter: () => void; onWriteCoverLetter: () => void; coverLetterReloading: boolean; onHandoffComplete: (outcome?: "cleared" | "submitted") => void; onApprove: () => void; sendRefusal: { message: string; issues: string[] } | null; onRestart: () => void; restarting: boolean; onRetry: () => void; onReviewPacket: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string, intent?: SubmissionChecklistAction) => void; onChooseOption: (questionId: string, option: string) => void; onSaveQuestion: (questionId: string, answer: string, intent: DirectQuestionTaskIntent, promptFingerprint: string, taskFingerprint: string, task: DirectQuestionTask) => Promise<DirectAnswerSaveResult>; onSkipQuestion: (questionId: string, intent: DirectQuestionTaskIntent, promptFingerprint: string, taskFingerprint: string, task: DirectQuestionTask) => Promise<DirectAnswerSaveResult>; savingAnswer: boolean; answeredQuestionFingerprints: ReadonlySet<string>; directAnswerProgress: DirectAnswerProgress | null; directAnswerDrafts: ReadonlyMap<string, DirectAnswerDraft>; directAnswerFailure: DirectAnswerFailure | null; onDirectAnswerDraftChange: (questionId: string, promptFingerprint: string, taskFingerprint: string, answer: string) => void; onClearDirectAnswerDraft: (promptFingerprint: string) => void; onNavigateDirectQuestion: (promptFingerprint: string) => void; onClearDirectAnswerFailure: (promptFingerprint: string) => void; onRefreshQuestionMetadata: () => void; questionMetadataRefreshing: boolean; questionMetadataRefreshDisabled: boolean; questionMetadataNeedsPacketReview: boolean; questionMetadataRefreshError: string | null; onQuestionsFinished: () => void; onAddDocument: (kind: string) => void; onToggleAcknowledged: (item: SubmissionChecklistItem, acknowledged: boolean) => void; attentionTicking: ReadonlySet<string>; onSelfSubmitted: () => void; onPacketAuditRefusal: (reason: unknown) => Promise<boolean>; onOpenWithExtension: () => void; extensionFillBusy: boolean; extensionFillError: string | null }) {
+function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceReviewed, manualTrialPacket, approving, securityCodeSubmitting, securityCodeError, onSubmitSecurityCode, unverifiedSubmissionSubmitting, unverifiedSubmissionError, onSubmitUnverifiedOutcome, educationProfile, educationProfileStatus, onCheckResume, onReloadCoverLetter, onWriteCoverLetter, coverLetterReloading, onHandoffComplete, onApprove, sendRefusal, onRestart, restarting, onRetry, onReviewPacket, onReviewQuestions, onOpenQuestion, onChooseOption, onSaveQuestion, onSkipQuestion, savingAnswer, answeredQuestionFingerprints, directAnswerProgress, directAnswerDrafts, directAnswerFailure, onDirectAnswerDraftChange, onClearDirectAnswerDraft, onNavigateDirectQuestion, onClearDirectAnswerFailure, onRefreshQuestionMetadata, questionMetadataRefreshing, questionMetadataRefreshDisabled, questionMetadataNeedsPacketReview, questionMetadataRefreshError, onQuestionsFinished, onAddDocument, onToggleAcknowledged, attentionTicking, onSelfSubmitted, onPacketAuditRefusal, onOpenWithExtension, extensionFillBusy, extensionFillError }: { packet: GeneratedResume; resumeRecord?: ChecklistResumeRecord; submission: SubmissionResponse; packetEvidenceReviewed: boolean; manualTrialPacket: PacketAuditResponse | null; approving: boolean; securityCodeSubmitting: boolean; securityCodeError: string | null; onSubmitSecurityCode: (code: string) => void; unverifiedSubmissionSubmitting: boolean; unverifiedSubmissionError: string | null; onSubmitUnverifiedOutcome: (found: boolean) => void; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onReloadCoverLetter: () => void; onWriteCoverLetter: () => void; coverLetterReloading: boolean; onHandoffComplete: (outcome?: "cleared" | "submitted") => void; onApprove: () => void; sendRefusal: { message: string; issues: string[] } | null; onRestart: () => void; restarting: boolean; onRetry: () => void; onReviewPacket: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string, intent?: SubmissionChecklistAction) => void; onChooseOption: (questionId: string, option: string) => void; onSaveQuestion: (questionId: string, answer: string, intent: DirectQuestionTaskIntent, promptFingerprint: string, taskFingerprint: string, task: DirectQuestionTask) => Promise<DirectAnswerSaveResult>; onSkipQuestion: (questionId: string, intent: DirectQuestionTaskIntent, promptFingerprint: string, taskFingerprint: string, task: DirectQuestionTask) => Promise<DirectAnswerSaveResult>; savingAnswer: boolean; answeredQuestionFingerprints: ReadonlySet<string>; directAnswerProgress: DirectAnswerProgress | null; directAnswerDrafts: ReadonlyMap<string, DirectAnswerDraft>; directAnswerFailure: DirectAnswerFailure | null; onDirectAnswerDraftChange: (questionId: string, promptFingerprint: string, taskFingerprint: string, answer: string) => void; onClearDirectAnswerDraft: (promptFingerprint: string) => void; onNavigateDirectQuestion: (promptFingerprint: string) => void; onClearDirectAnswerFailure: (promptFingerprint: string) => void; onRefreshQuestionMetadata: () => void; questionMetadataRefreshing: boolean; questionMetadataRefreshDisabled: boolean; questionMetadataNeedsPacketReview: boolean; questionMetadataRefreshError: string | null; onQuestionsFinished: () => void; onAddDocument: (kind: string) => void; onToggleAcknowledged: (item: SubmissionChecklistItem, acknowledged: boolean) => void; attentionTicking: ReadonlySet<string>; onSelfSubmitted: () => void; onPacketAuditRefusal: (reason: unknown) => Promise<boolean>; onOpenWithExtension: () => void; extensionFillBusy: boolean; extensionFillError: string | null }) {
   const { review } = submission;
   const awaitingSecurityCode = review.status === "awaiting_security_code";
   const needsAttention = review.status === "needs_attention";
@@ -8193,6 +8223,12 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
     return result;
   }
   const completedItems = completedSubmissionGroups(review);
+  /* The files the run claims it attached and nothing has confirmed on the employer's own form.
+     Rendered ABOVE Done, because it is the part of this list she has to check herself and the Done
+     block is twelve rows of things she does not. It blocks nothing: finalApprovalBlocked below is
+     untouched, and a send refused on a screen that has not seen the form is the failure that costs
+     a real application. */
+  const unconfirmedDocuments = unconfirmedDocumentItems(review, { resume: resumeRecord });
   /* What this application already carries, as far as the snapshot on screen knows.
    *
    * ABSENT IS THE ORDINARY STATE OF THIS FIELD, which is the whole reason the gate below does not
@@ -8576,6 +8612,22 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
           <div role="alert" className="mt-4 rounded-inner bg-warn-soft px-4 py-3 text-sm leading-6 text-warn">
             <p>Review the exact resume beside the job description and its evidence colours before sending.</p>
             <Button onClick={onCheckResume} size="sm" className="mt-3">Check packet</Button>
+          </div>
+        )}
+        {/* Its own block with its own heading, never folded into the list below: those rows are
+            counted as "checks already complete" and printed under a header that says Complete, and
+            a row that is neither belongs to neither. Rendered with checked={false} so it draws the
+            status dot rather than the green tick, and it carries no actionKind, so checklistRowControl
+            returns nothing and there is no pill here to press. */}
+        {unconfirmedDocuments.length > 0 && (
+          <div className="mt-6">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs font-medium text-warn">Not confirmed</p>
+              <p className="font-mono text-[11px] text-warn">Check the filled form</p>
+            </div>
+            <ul className="mt-2 grid gap-2 sm:grid-cols-2">
+              {unconfirmedDocuments.map((item) => <ChecklistRow key={item.id} item={item} checked={false} />)}
+            </ul>
           </div>
         )}
         {completedItems.length > 0 && (

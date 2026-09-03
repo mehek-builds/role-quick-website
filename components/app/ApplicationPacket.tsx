@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, type ApplicationReview, type GeneratedResume, type ResumeSpec } from "@/lib/api";
 import { canonicalApplicationFromPacket, isStubPacketSpec, sectionHeading, startsNewSection, statusLabel, stripMetadata, withoutHistoricalPacketAuditStaleAttention } from "@/features/applications";
-import { cleanJdCapture, cleanScrapedLabel, cleanScrapedPrompt, completedSubmissionGroups, displayQuestionLabel, humanInputItems, type SubmissionChecklistItem } from "@/features/applications";
+import { cleanJdCapture, cleanScrapedLabel, cleanScrapedPrompt, completedSubmissionGroups, displayQuestionLabel, humanInputItems, unconfirmedDocumentItems, type ChecklistResumeRecord, type SubmissionChecklistItem } from "@/features/applications";
 import { resumeContactLine } from "@/lib/resumeContact";
 import { userFacingError } from "@/lib/user-facing-error";
 import { useDashboardOverlayExit } from "@/components/app/useDashboardOverlayExit";
@@ -277,10 +277,14 @@ function formatMoment(value: string | null | undefined): string {
 
 export function ApplicationPacket({
   packet,
+  resumeRecord,
   review,
   onClose,
 }: {
   packet: GeneratedResume;
+  /** The canonical row's record of the resume, when this ledger loaded the row. See
+   *  unconfirmedDocumentItems: undefined is silence, never an answer. */
+  resumeRecord?: ChecklistResumeRecord;
   review: ApplicationReview;
   onClose: () => void;
 }) {
@@ -420,6 +424,10 @@ export function ApplicationPacket({
   const needsInput = inputItems.filter((item) => !item.settled);
   const acknowledgedItems = inputItems.filter((item) => item.acknowledged === true);
   const completedItems = completedSubmissionGroups(safeContentReview);
+  /* The same honesty the review screen applies, in the record of the same application. A packet
+     viewer that listed a file under "Done by Litos" while the review screen said it was unconfirmed
+     would be the two halves of the product disagreeing about what the employer received. */
+  const unconfirmedDocuments = unconfirmedDocumentItems(safeContentReview, { resume: resumeRecord });
   const receipt = safeContentReview.receipt;
   const sentAt = formatMoment(review.submitted_at ?? review.updated_at);
   const builtAt = formatMoment(contentPacket.created_at);
@@ -752,7 +760,7 @@ export function ApplicationPacket({
                   }
                 />
 
-                {(needsInput.length > 0 || acknowledgedItems.length > 0 || completedItems.length > 0) && (
+                {(needsInput.length > 0 || acknowledgedItems.length > 0 || unconfirmedDocuments.length > 0 || completedItems.length > 0) && (
                   <div className="mt-3 overflow-hidden rounded-inner border border-border bg-surface">
                     {needsInput.length > 0 && (
                       <div className="border-b border-border bg-warn-soft/40 px-4 py-3">
@@ -777,6 +785,23 @@ export function ApplicationPacket({
                         <ul className="mt-2 space-y-2">
                           {acknowledgedItems.map((item) => (
                             <CheckRow key={item.id} item={item} checked />
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {/* Above "Done by Litos" and outside it, because it is the opposite claim: the
+                        run said it attached these and no record here says the employer got them.
+                        checked={false} draws the amber marker CheckRow already has for work that is
+                        not settled, and these rows carry no action word, which this read-only viewer
+                        does not print anyway. */}
+                    {unconfirmedDocuments.length > 0 && (
+                      <div className="border-b border-border px-4 py-3">
+                        <p className="font-mono text-[9px] font-medium uppercase tracking-[0.08em] text-warn">
+                          Not confirmed on their form
+                        </p>
+                        <ul className="mt-2 space-y-2">
+                          {unconfirmedDocuments.map((item) => (
+                            <CheckRow key={item.id} item={item} checked={false} />
                           ))}
                         </ul>
                       </div>
