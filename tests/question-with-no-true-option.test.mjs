@@ -496,6 +496,152 @@ describe("a follow-up the condition does NOT take with it", () => {
     assert.equal(questionsLeftBlankByKnownFalseCondition(questions).has("ident"), false);
   });
 
+  test("a same-theme neighbour cannot take a follow-up down with it", () => {
+    /* PR #530 second review, all five executed and all five silently blanked against the wrong
+       question on the revision that had only the shared-word test. Questions sit next to each other
+       on a real form BECAUSE they are about the same thing, so the shared word is present in
+       exactly the case it was supposed to filter. Each follow-up here shares its bridging word with
+       BOTH questions above it, which is the form saying it cannot be read, not saying which. */
+    const mispairs = [
+      ["Do you have experience with Python?", "Do you have experience with Rust?",
+        "If yes, how many years of Python experience do you have?"],
+      ["Do you have a salary figure in mind?", "Is your salary history published anywhere?",
+        "If yes, what is your salary expectation?"],
+      ["Are you under a contract with a notice period?", "Has your notice been waived by your employer?",
+        "If yes, how long is your notice period?"],
+      ["Will you require sponsorship now or in the future?", "Has a sponsorship petition ever been denied for you?",
+        "If yes, please describe the sponsorship you will require."],
+      ["Do you have a completed university degree?", "Is your degree currently in progress?",
+        "If yes, which degree did you complete?"],
+    ];
+    for (const [realParent, nearerThief, followUp] of mispairs) {
+      const questions = [
+        closed("real", realParent, "Yes", ["Yes", "No"]),
+        closed("thief", nearerThief, "No", ["Yes", "No"]),
+        text("follow", followUp, ""),
+      ];
+      const blanks = questionsLeftBlankByKnownFalseCondition(questions);
+      assert.equal(
+        blanks.has("follow"),
+        false,
+        `blanked against ${JSON.stringify(blanks.get("follow"))}: ${followUp}`,
+      );
+    }
+  });
+
+  test("a parent answer the employer's list does not hold settles nothing", () => {
+    /* NEGATIVE_ANSWER accepts "N/A" and "Not applicable", and volley writes 'N/A' into some
+       controls. Without the membership test the condition could be settled by a value this same
+       file reports as UNANSWERED in the same breath: questionReadsAsAnswered false,
+       answerNamesNoOfferedOption true, the control painted blank. A follow-up must never be hidden
+       on the strength of an answer nothing on screen shows. */
+    for (const answer of ["N/A", "None", "Not applicable", "No offers"]) {
+      const questions = [
+        closed("sponsor", "Do you require visa sponsorship?", answer, ["Yes", "No"]),
+        text("detail", "If yes, what type of visa do you hold?", ""),
+      ];
+      assert.equal(
+        questionsLeftBlankByKnownFalseCondition(questions).has("detail"),
+        false,
+        `an off-list negative settled the condition: ${answer}`,
+      );
+    }
+    /* The one that IS on the employer's list still settles it, so this is a membership test and not
+       a blanket refusal of every negative. */
+    const onTheList = [
+      closed("sponsor", "Do you require visa sponsorship?", "No", ["Yes", "No"]),
+      text("detail", "If yes, what type of visa do you hold?", ""),
+    ];
+    assert.equal(questionsLeftBlankByKnownFalseCondition(onTheList).has("detail"), true);
+  });
+
+  test("a parent whose own control could not be read settles nothing", () => {
+    /* Reachable by composition: another change can hold the parent back as "Exact choices not
+       read" while this rule still cites it as the reason its follow-up is blank. Both questions
+       would then leave the screen, one into a blocker card with no answer and the other into a
+       blank justified by an answer the same screen calls unreadable. An unreadable control settles
+       nothing and is owed nothing. */
+    const questions = [
+      { ...closed("sponsor", "Do you require visa sponsorship?", "No", ["Yes", "No"]), options: [] },
+      text("detail", "If yes, what type of visa do you hold?", ""),
+    ];
+    const presentation = questionReviewPresentation(questions);
+    assert.deepEqual(presentation.leftBlankQuestions, []);
+    assert.ok(
+      presentation.metadataBlockers.length > 0,
+      "the unreadable parent is still reported rather than silently lost",
+    );
+    assert.equal(
+      presentation.editableQuestions.find((question) => question.id === "detail")?.answer_state,
+      undefined,
+      "and the follow-up is still hers to answer or skip",
+    );
+  });
+
+  test("a list with no yes on it is not a yes/no question, even when its no is picked", () => {
+    /* "None" among a list of countries is not the same speech act as answering no to a polar
+       question, and the follow-up's "if yes" refers to a yes this control never offered. The cost
+       is real and is the direction this module errs in: a form that writes its condition this way
+       gets one extra question rather than a silent blank. It also keeps a decline option from being
+       read as a no, which is what "I don't wish to answer" would otherwise become on an EEO list. */
+    const questions = [
+      closed("sanctions", "Which sanctioned countries have you worked in?", "None", ["None", "Cuba", "Iran", "Syria"]),
+      text("detail", "If yes, describe the sanctioned work you performed.", ""),
+    ];
+    assert.equal(questionsLeftBlankByKnownFalseCondition(questions).has("detail"), false);
+  });
+
+  test("a parent whose answer was re-opened into the draft settles nothing", () => {
+    /* conditionAnswerIsKnownNegative reads answer_draft so the rule survives the backend blanking a
+       closed answer that fits no option. For a shape A parent that same blanking means there is no
+       standing answer on the control at all, and a follow-up must not be hidden behind an answer
+       the applicant cannot see. Evidence enough to decline to ask a question is not evidence enough
+       to call a condition settled. */
+    const questions = [
+      { ...closed("sponsor", "Do you require visa sponsorship?", "", ["Yes", "No"]), answer_draft: "No" },
+      text("detail", "If yes, what type of visa do you hold?", ""),
+    ];
+    assert.equal(questionsLeftBlankByKnownFalseCondition(questions).has("detail"), false);
+  });
+
+  test("a parent the presentation holds back as unreadable settles nothing", () => {
+    /* Reachable by composition, and it gets likelier as the metadata rules tighten: another change
+       holds the parent back as "Exact choices not read" while this rule still cites it as the
+       reason its follow-up is blank. Both questions would leave the screen, one into a blocker card
+       with no answer, the other into a blank justified by an answer the same screen calls
+       unreadable. The parent here has a complete, readable option list and is held back only by the
+       server blocker, so nothing but the unreadable set can refuse it. */
+    const parent = {
+      ...closed("sponsor", "Do you require visa sponsorship?", "No", ["Yes", "No"]),
+      portal_selector: "#sponsor",
+    };
+    const blocker = {
+      kind: "missing_exact_options",
+      required: false,
+      portal_input_type: "combobox",
+      portal_selector: "#sponsor",
+    };
+    const questions = [parent, text("detail", "If yes, what type of visa do you hold?", "")];
+    const presentation = questionReviewPresentation(questions, [blocker]);
+    assert.equal(
+      presentation.editableQuestions.some((question) => question.id === "sponsor"),
+      false,
+      "the parent really is held back, so this test is exercising the guard and not the option check",
+    );
+    assert.deepEqual(presentation.leftBlankQuestions, []);
+    assert.equal(
+      presentation.editableQuestions.find((question) => question.id === "detail")?.answer_state,
+      undefined,
+      "and the follow-up is still hers to answer or skip",
+    );
+    /* Without the guard the same packet loses both: the parent to a blocker card and the follow-up
+       to a blank, with nothing in any queue and no answer on either. */
+    assert.equal(
+      questionsLeftBlankByKnownFalseCondition(questions, new Set(["sponsor"])).size,
+      0,
+    );
+  });
+
   test("shape B needs a follow-up that states a polarity, not merely one that points up", () => {
     /* A backward reference with no polarity proves a question sits above it and nothing about that
        question's shape, so it is not evidence that the question above is answerable yes or no. */

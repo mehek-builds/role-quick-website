@@ -1,12 +1,13 @@
 import type { ApplicationQuestion, ApplicationQuestionMetadataBlocker } from "../../../lib/api.ts";
 import {
   conditionAnswerIsKnownNegative,
-  dependentGoesWithAFalseCondition,
+  dependentConditionPolarity,
   dependentQuestionParents,
   optionsOfferANegative,
   optionsOfferAnAffirmative,
   promptAsksAPolarQuestion,
   questionsWithPolarFollowUps,
+  subjectResolvedParents,
 } from "./dependent-questions.ts";
 
 const CLOSED_QUESTION_CONTROL = /^(?:select(?:-one|-multiple)?|radio|checkbox|combobox|listbox)$/i;
@@ -284,6 +285,16 @@ function closedSingleChoiceOptions(
  */
 export function questionsLeftBlankByKnownFalseCondition(
   questions: readonly ApplicationQuestion[],
+  /**
+   * Ids this presentation is holding back because their label, control or options could not be
+   * read. AN UNREADABLE CONTROL SETTLES NOTHING AND IS OWED NOTHING. Without this, a parent that
+   * renders as "Exact choices not read" could still be cited as the reason its follow-up was left
+   * blank, so both questions would leave the screen: the parent into a blocker card with no answer,
+   * the follow-up into a blank justified by an answer the same screen has just called unreadable.
+   * That composition is reachable today and gets likelier as the metadata rules tighten, so this
+   * closes it here rather than relying on any other change to not create it.
+   */
+  unreadableQuestionIds: ReadonlySet<string> = new Set(),
 ): Map<string, string> {
   /* Resolved over the employer's WHOLE stored form, holes included, for the reason
      `directInputTaskPlan` documents: "the nearest free-standing question above" computed over a
@@ -295,6 +306,7 @@ export function questionsLeftBlankByKnownFalseCondition(
   for (const question of questions) {
     const id = question.id?.trim();
     if (!id || knownFalseConditions.has(id)) continue;
+    if (unreadableQuestionIds.has(id)) continue;
     if (!conditionAnswerIsKnownNegative(question)) continue;
     const options = closedSingleChoiceOptions(question);
     if (!options) continue;
@@ -304,6 +316,15 @@ export function questionsLeftBlankByKnownFalseCondition(
          is involved at all. She is on the no, the condition is established, and only its follow-ups
          are affected: the parent itself is answered and is left exactly as it stands. */
       if (!optionsOfferAnAffirmative(options)) continue;
+      /* AND THE NO HAS TO BE ONE THE EMPLOYER OFFERED. NEGATIVE_ANSWER accepts "N/A" and "Not
+         applicable", and volley writes 'N/A' into some controls, so without this the condition
+         could be settled by a value this same file simultaneously reports as unanswered:
+         questionReadsAsAnswered is false for it, answerNamesNoOfferedOption is true, and the card
+         paints the control blank. A follow-up must never be hidden on the strength of an answer
+         nothing on screen shows. This is the fill path's own equivalence, trim plus case fold, the
+         one the rest of this file already uses. Shape B is different by construction: its list
+         holds no negative at all, so no negative answer can ever be on it. */
+      if (exactQuestionOption(question.answer, options) === null) continue;
       knownFalseConditions.set(id, question.question);
       continue;
     }
@@ -329,20 +350,23 @@ export function questionsLeftBlankByKnownFalseCondition(
   }
 
   const parents = dependentQuestionParents(questions);
+  const subjectParents = subjectResolvedParents(questions);
   for (const question of questions) {
     const id = question.id?.trim();
-    if (!id || leftBlank.has(id)) continue;
+    if (!id || leftBlank.has(id) || unreadableQuestionIds.has(id)) continue;
     const parentId = parents.get(id);
     const conditionQuestion = parentId ? knownFalseConditions.get(parentId) : undefined;
     if (!conditionQuestion) continue;
     if (question.required) continue;
-    /* THE TWO THINGS PROXIMITY AND A BACKWARD REFERENCE DO NOT PROVE, both required, both measured
-       on the merged tree before this line existed: that this follow-up applies on a YES rather than
-       on the very no that settled the condition ("If no, will you now or in the future require
-       sponsorship..." under an authorization question answered No), and that the question proximity
-       named is the one it is actually about ("If yes, what level of clearance do you hold?" matched
-       to "Are you willing to relocate?" because that sat closer). See dependent-questions.ts. */
-    if (!dependentGoesWithAFalseCondition(question.question, conditionQuestion)) continue;
+    /* WHICH ANSWER MAKES IT APPLY. A backward reference points up; it does not say the follow-up
+       applies on a YES. "If no, will you now or in the future require sponsorship" applies BECAUSE
+       the condition is false, and was blanked by it before this line existed. */
+    if (dependentConditionPolarity(question.question) !== "affirmative") continue;
+    /* WHICH QUESTION IT MEANS. Proximity and the follow-up's own subject have to name the SAME
+       question, independently. Proximity alone put "If yes, how many years of Python experience do
+       you have?" under a Rust question, and one shared word alone could not separate them because
+       both questions were about experience. See subjectResolvedParents for the measurements. */
+    if (subjectParents.get(id) !== parentId) continue;
     if (question.answer_state === "skipped" || question.answer_state === "unanswered") continue;
     /* An answer she can see standing in the control is hers to keep, whoever put it there. Only a
        follow-up with nothing usable in it is left blank, so this never discards a value. */
@@ -514,7 +538,10 @@ export function questionReviewPresentation(
      then agrees without a fifth rule being invented for them. The stored answer is untouched: only
      this presentation copy carries the blank, and `leftBlankQuestions` below tells the screen it
      was Litos and not her. */
-  const leftBlank = questionsLeftBlankByKnownFalseCondition(questions);
+  const leftBlank = questionsLeftBlankByKnownFalseCondition(
+    questions,
+    new Set([...blockedQuestionIds].map((questionId) => questionId.trim())),
+  );
 
   const editableQuestions = questions.flatMap((question) => {
     if (blockedQuestionIds.has(question.id)) return [];

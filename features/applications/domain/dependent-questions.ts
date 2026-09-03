@@ -395,16 +395,55 @@ export function promptsShareASubject(one: string | undefined, other: string | un
 }
 
 /**
- * Whether this follow-up is one its condition takes with it when the condition is false.
+ * For each follow-up, the ONE question above it that its own words identify, or nothing.
  *
- * Both gaps closed at once, and BOTH are required. Polarity says the follow-up applies on a yes;
- * the shared subject says the question it applies to is the one proximity named. Either alone lets
- * a real question off the screen, which the two measurements at the top of this section are.
+ * ONE SHARED WORD SAYS "RELATED". IT DOES NOT SAY "THIS ONE", and the difference is the whole of
+ * this function. Questions sit next to each other on a real form BECAUSE they are about the same
+ * thing, so a same-theme neighbour is the most likely thief of parenthood, not the least. Measured
+ * on the revision that had only the shared-word test, every one of these was blanked against the
+ * question underlined below rather than the one above it:
+ *
+ *   "Do you have experience with Python?"  Yes
+ *   "Do you have experience with Rust?"    No     <- nearest, so it was named
+ *   "If yes, how many years of Python experience do you have?"
+ *
+ *   "Are you under a contract with a notice period?"   Yes
+ *   "Has your notice been waived by your employer?"    No     <- nearest, so it was named
+ *   "If yes, how long is your notice period?"
+ *
+ * and the same shape on salary, sponsorship and degree. In each the follow-up shares its bridging
+ * word with BOTH questions, which is exactly why the shared-word test could not tell them apart.
+ *
+ * THE AMBIGUITY IS VISIBLE IN THE DATA, so it is measured rather than guessed at. A follow-up
+ * resolves only when exactly ONE question above it is about the same thing. Two candidates is the
+ * form telling us it cannot be read, and the caller then asks the applicant. Zero is no evidence at
+ * all, and is equally unresolved.
+ *
+ * This is deliberately not "the nearest question sharing the word": that rule names the Rust
+ * question, the waiver question and the petition question, which is the defect it would be trying
+ * to fix.
+ *
+ * ONE RESIDUAL, AND IT IS NOT CLOSABLE FROM A FLAT LIST OF PROMPTS. If the real parent shares no
+ * word with its follow-up and a nearer question does, that nearer question is the only candidate
+ * and is resolved to. It is also the reading a person gets from the same flat list, since nothing
+ * in the stored form says otherwise.
  */
-export function dependentGoesWithAFalseCondition(
-  dependentPrompt: string | undefined,
-  conditionPrompt: string | undefined,
-): boolean {
-  return dependentConditionPolarity(dependentPrompt) === "affirmative"
-    && promptsShareASubject(dependentPrompt, conditionPrompt);
+export function subjectResolvedParents(questions: readonly PromptShaped[]): Map<string, string> {
+  const resolved = new Map<string, string>();
+  const candidates: { id: string; question: string }[] = [];
+  for (const question of questions) {
+    const id = question.id?.trim();
+    if (!id) continue;
+    if (questionDependsOnPrior(question.question)) {
+      const sharing = candidates.filter(
+        (candidate) => promptsShareASubject(question.question, candidate.question),
+      );
+      if (sharing.length === 1) resolved.set(id, sharing[0].id);
+      continue;
+    }
+    /* Only a free-standing question can be a parent, which is the rule dependentQuestionParents
+       already walks by. A chain of follow-ups therefore competes for nothing. */
+    candidates.push({ id, question: question.question });
+  }
+  return resolved;
 }
