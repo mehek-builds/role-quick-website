@@ -48,6 +48,19 @@ export function QuestionBlockerHarness({ tasks }: { tasks: DirectQuestionTask[] 
         hasNext={index < tasks.length - 1}
         preservedDraft={null}
         externalFailure={null}
+        /* No packet, no submission and no server behind this harness, so "Fill again" has nothing to
+           start. `status` hides it: this fixture is about how a question renders and is answered, and
+           a control that cannot run would be a painted button, which is the exact defect the real
+           screen's Button usage exists to prevent. */
+        fillAgain={{
+          status: "questions_ready",
+          claimed: false,
+          running: false,
+          editsUnsaved: false,
+          needsPacketReview: false,
+          error: null,
+          onFillAgain: noop,
+        }}
         onDraftChange={noop}
         onClearDraft={noop}
         onClearFailure={noop}
