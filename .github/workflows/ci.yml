@@ -71,10 +71,68 @@ jobs:
       - name: Lint
         run: npm run lint -- --max-warnings 25
 
-      - name: Build
+      # BUILT WITH NO NEXT_PUBLIC_* SET, WHICH IS THE POINT, and is the reverse
+      # of what this step used to do.
+      #
+      # It used to pass NEXT_PUBLIC_API_URL explicitly, so CI only ever compiled
+      # the branch where the variable is present. The branch where it is absent
+      # is the one that rotted: the Dockerfile forwarded nothing into the build
+      # for months, every visitor got the lib/config.ts default, and no build
+      # here had ever compiled that path. The Dockerfile now forwards the
+      # variables, so this job deliberately keeps building without them and
+      # covers the defence-in-depth defaults instead.
+      #
+      # The `click-path` job below still builds WITH the variable set, so
+      # between the two jobs CI compiles both branches rather than trading one
+      # blind spot for the other.
+      - name: Build (no NEXT_PUBLIC_* set, so the code defaults are what ship)
         run: npm run build
-        env:
-          NEXT_PUBLIC_API_URL: https://api.trylitos.com
+
+      # ASSERTS ON THE EMITTED ARTIFACT, not on the source text, and the
+      # difference is measured rather than assumed.
+      #
+      # tests/api-origin-default.test.mjs greps lib/config.ts and lib/billing.ts.
+      # It reads source, so it cannot see build-time configuration at all, and
+      # build-time configuration is the entire class of defect this step exists
+      # for. Measured on 2026-09-04, building this commit with
+      # NEXT_PUBLIC_API_URL="" (exactly what a declared-but-unpassed Docker ARG
+      # expands to):
+      #
+      #   npm run build                      -> exit 0
+      #   tests/api-origin-default.test.mjs  -> 2 pass, 0 fail
+      #   .next/static                       -> API_URL "", and ZERO occurrences
+      #                                         of api.trylitos.com anywhere
+      #
+      # A green suite, a green build, and a dashboard pointing every API call at
+      # a relative path. Reading what was actually emitted is the only check in
+      # this repo that catches it.
+      #
+      # SCOPED TO .next/static, THE CLIENT BUNDLE, ON PURPOSE. The retired host
+      # is still a deliberate entry in BACKEND_EVIDENCE_HOSTS in
+      # lib/company-logo-evidence.ts, a read-only fetch allow-list for rows the
+      # backend persisted before the DNS cutover. That module is imported only by
+      # app/api/company-logo/route.ts, so it compiles into .next/server, where it
+      # belongs and where this scan does not look. On this commit that is 23
+      # server files carrying the name and 0 client files. Widening the scan to
+      # .next would fail every run on an entry that is correct.
+      - name: The built bundle carries the live API origin
+        run: |
+          set -euo pipefail
+
+          if ! grep -rq "api\.trylitos\.com" .next/static; then
+            echo "FAIL: no build output references api.trylitos.com."
+            echo "With NEXT_PUBLIC_API_URL unset the lib/config.ts default is what compiles in."
+            echo "An empty string counts as set and defeats the ?? default, so check for that first."
+            exit 1
+          fi
+
+          if grep -rq "student-outreach-backend\.vercel\.app" .next/static; then
+            echo "FAIL: the retired Vercel host is compiled into the bundle:"
+            grep -rl "student-outreach-backend\.vercel\.app" .next/static
+            exit 1
+          fi
+
+          echo "ok: api.trylitos.com present in $(grep -rl "api\.trylitos\.com" .next/static | wc -l | tr -d ' ') build artefact(s), retired host absent"
 
   # SEPARATE JOB ON PURPOSE, and named for what it is.
   #

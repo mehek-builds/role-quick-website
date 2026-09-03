@@ -12,8 +12,11 @@ test("accepts only reusable HTTPS Lemon Squeezy checkout links", () => {
 
 test("accepts first-party Litos Pay checkout intents from the configured backend only", () => {
   /* NEXT_PUBLIC_API_URL is unset here on purpose, so this case runs against the
-     DEFAULT origin in lib/billing.ts. That default is what production actually
-     uses, because the Dockerfile never forwards the variable into the build. */
+     DEFAULT origin in lib/billing.ts. That default was what production actually
+     used while the Dockerfile forwarded nothing into the build; since 2026-09-04
+     it forwards the variable, and the default is the fallback a build with
+     nothing set compiles in. Either way it is a real shipped value, not a
+     local-dev convenience, which is why it is exercised here. */
   const intent = "https://api.trylitos.com/billing/litos-pay/checkout/6d58c1f5-e885-41f7-a16a-dac37f98ab17?token=signed";
   assert.equal(isLitosPayCheckoutUrl(intent), true);
   assert.equal(isSafeCheckoutUrl(intent), true);
