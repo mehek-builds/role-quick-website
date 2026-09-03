@@ -513,7 +513,13 @@ function isHumanOnlyChecklistLabel(label: string): boolean {
   if (/privacy|privacy policy|privacy notice|candidate-privacy|consent|recording|brighthire/.test(normalized)) return true;
   if (/salary|compensation|pay expectation|expected pay|annualized total compensation/.test(normalized)) return true;
   if (/(immigration support|legally authorized|work authorization|authorized to work|require sponsorship|visa sponsorship)/.test(normalized)) {
-    return !/(u\.s\.|us\b|united states|usa\b)/.test(normalized);
+    /* \bus\b, not us\b. Without the leading boundary this matched inside "status", so the standard
+       Greenhouse phrasing - "will you now or in the future require sponsorship for employment visa
+       status?" - was read as a US-scoped question and dropped out of the human-only class, which is
+       the class that grows a Confirm row. The server refuses that label either way, so the row was
+       the only thing missing. Measured: the exclusion hit at index 74, inside "status".
+       Non-US labels mentioning a "status" were caught by the same accident. */
+    return !/(u\.s\.|\bus\b|united states|\busa\b)/.test(normalized);
   }
   return false;
 }
@@ -890,7 +896,12 @@ export function humanInputItems(
      so the caller supplies them. Optional, and every default is the honest one: with no company the
      sentence still names an employer as its subject, and with no document marks nothing is claimed
      to be attached. */
-  context: { company?: string; role?: string; documents?: ChecklistDocumentMarks } = {},
+  /* `sensitiveConfirmations` is THE SERVER'S OWN LIST of the questions it will refuse to send
+     without a confirmation, straight off GET /applications/:id/submission. It is the authority and
+     the label classes below are only a fallback, because the server decides with the resolver, the
+     applicant profile, the JD and the posting country - none of which exist here. Omitting it
+     leaves the previous label-only behaviour exactly as it was. */
+  context: { company?: string; role?: string; documents?: ChecklistDocumentMarks; sensitiveConfirmations?: readonly string[] } = {},
 ): SubmissionChecklistItem[] {
   const items: SubmissionChecklistItem[] = [];
   for (const item of documentAskItems(review.required_documents ?? [], context, review)) addUnique(items, item);
@@ -1003,7 +1014,12 @@ export function humanInputItems(
       });
       continue;
     }
-    if (review.status !== "submitted" && answer && isHumanOnlyChecklistLabel(question.question)) {
+    /* Case- and space-insensitive, because the two sides carry the same label through different
+       transports and only the TEXT is its identity. */
+    const serverAsksToConfirm = (context.sensitiveConfirmations ?? []).some(
+      (label) => label.trim().toLowerCase() === question.question.trim().toLowerCase(),
+    );
+    if (review.status !== "submitted" && answer && (serverAsksToConfirm || isHumanOnlyChecklistLabel(question.question))) {
       /* Confirmed once is confirmed, and the row has to say so or the ask never ends. The settled
          shape keeps the control - she can still change the answer - while taking the row out of the
          amber panel and out of the "N to check" count. See applicantConfirmedAnswer. */

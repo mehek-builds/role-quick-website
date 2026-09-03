@@ -973,6 +973,12 @@ test("a confirmation naming another question does not settle this one", () => {
         answer: "No sponsorship needed for an internship.",
         kind: "required",
         required: true,
+        /* The applicant-claim is present and current ON PURPOSE. Without it this test passed on the
+           old predicate too - for the wrong reason, since that predicate returned false on the
+           missing answer_source and never reached the rename at all. Carrying the claim makes the
+           rename the ONLY thing that can decide the row. */
+        answer_source: "applicant_review",
+        answer_reviewed_at: "2026-09-02T12:23:29.281Z",
         answer_confirmed_of: "Do you require visa sponsorship?",
       },
     ],
@@ -981,6 +987,69 @@ test("a confirmation naming another question does not settle this one", () => {
   const asking = humanInputItems(renamed).find((item) => item.questionId === "visa");
   assert.equal(asking?.settled, undefined, "a stale confirmation must not survive the rename");
   assert.equal(asking?.action, "Confirm");
+});
+
+/* THE SERVER NAMES THE ROWS, because only the server can.
+ *
+ * Its verdict is computed against the resolver, the applicant profile, the JD and the posting
+ * country, none of which exist on this client, so any label regex here is a guess at it. Two
+ * families were measured missing from the local classes: EEO self-identification, and US-scoped
+ * work authorization (excluded outright by isHumanOnlyChecklistLabel). For those the send gate
+ * refused and this screen built no row at all - the same dead end, one question family over.
+ *
+ * The list ships on GET /applications/:id/submission as
+ * sensitive_questions_requiring_confirmation. Measured live 2026-09-04 on Exa packet 73768339, it
+ * held exactly the visa label. */
+test("a question the server names for confirmation gets a row the local classes would never build", () => {
+  const EEO = "What is your gender?";
+  const review: Pick<ApplicationReview, "attention_reason" | "questions" | "questions_reviewed_at" | "status"> = {
+    status: "needs_attention",
+    attention_reason: "",
+    questions_reviewed_at: "2026-09-04T00:00:00.000Z",
+    questions: [
+      { id: "gender", question: EEO, answer: "Woman", kind: "required", required: true },
+    ],
+  };
+
+  // Without the server's list the local classes build nothing for this label - the measured gap.
+  assert.equal(humanInputItems(review).find((item) => item.questionId === "gender"), undefined);
+
+  const asking = humanInputItems(review, { sensitiveConfirmations: [EEO] })
+    .find((item) => item.questionId === "gender");
+  assert.ok(asking, "the server named it, so it must be on screen");
+  assert.equal(asking.action, "Confirm");
+  assert.equal(asking.actionKind, "confirm");
+  assert.equal(asking.settled, undefined);
+});
+
+test("the server's list matches a label regardless of case and surrounding space", () => {
+  const review: Pick<ApplicationReview, "attention_reason" | "questions" | "questions_reviewed_at" | "status"> = {
+    status: "needs_attention",
+    attention_reason: "",
+    questions_reviewed_at: "2026-09-04T00:00:00.000Z",
+    questions: [
+      { id: "visa", question: "Do You Require Visa Sponsorship?", answer: "No", kind: "required", required: true },
+    ],
+  };
+  const asking = humanInputItems(review, { sensitiveConfirmations: ["  do you require visa sponsorship?  "] })
+    .find((item) => item.questionId === "visa");
+  assert.equal(asking?.action, "Confirm", "the two sides carry the same label through different transports");
+});
+
+test("a question the server has stopped naming settles once it is confirmed", () => {
+  const LABEL = "What is your gender?";
+  const review: Pick<ApplicationReview, "attention_reason" | "questions" | "questions_reviewed_at" | "status"> = {
+    status: "needs_attention",
+    attention_reason: "",
+    questions_reviewed_at: "2026-09-04T00:00:00.000Z",
+    questions: [
+      { id: "gender", question: LABEL, answer: "Woman", kind: "required", required: true, answer_confirmed_of: LABEL },
+    ],
+  };
+  const settled = humanInputItems(review, { sensitiveConfirmations: [LABEL] })
+    .find((item) => item.questionId === "gender");
+  assert.equal(settled?.settled, true, "confirmed is confirmed, or the ask never ends");
+  assert.equal(settled?.action, "Change");
 });
 
 /* THE ROUND CHECK IS THE SERVER'S OWN. A claim keyed to a review round the row no longer carries is

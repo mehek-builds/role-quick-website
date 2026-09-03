@@ -245,6 +245,19 @@ export type SubmissionResponse = {
   documents?: Record<string, AttachedDocument>;
   handoff_url?: string;
   configured?: boolean;
+  /* THE LABELS THE SERVER WILL REFUSE TO SEND WITHOUT A CONFIRMATION, in its own words.
+   *
+   * The backend computes this from the resolver, the applicant profile, the JD and the posting
+   * country - none of which exist on this client - and its own doc says it ships "so the dashboard
+   * can mark the exact rows that need a confirmation, instead of the applicant discovering them one
+   * 422 at a time". This repo did not read it, and re-derived the verdict from label regexes
+   * instead, which cannot ever agree: the regexes here covered neither the EEO family nor US-scoped
+   * work authorization, so the send gate refused questions this screen never surfaced.
+   *
+   * Reading the server's own list is what makes the two sides structurally incapable of diverging.
+   * Optional because an older payload may not carry it; absent means "fall back to the label
+   * classes", which is exactly the previous behaviour. */
+  sensitive_questions_requiring_confirmation?: string[];
   partial?: boolean;
 };
 
@@ -8296,7 +8309,20 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
   const transcriptPending = outstandingDocumentAsks.length > 0 || documentsLitosCannotDeliver;
   const educationDriftWarning = educationDriftMessage(educationDrift(packet.spec, educationProfile));
   const educationProfilePending = educationProfileStatus !== "ready";
-  const sensitiveQuestionPresent = review.questions.some((question) => requiresSensitiveQuestionReview(question.question, question.answer));
+  /* THE SERVER'S OWN LIST FIRST, this screen's label classes only as a fallback.
+     The backend names the exact questions it will refuse to send without a confirmation, computed
+     against the resolver and profile that do not exist here. Rows are built for those labels
+     whether or not the local classes recognise them, which is what closes the EEO and US
+     work-authorization families the regexes here never matched. */
+  const serverSensitiveLabels = submission.sensitive_questions_requiring_confirmation;
+  const unconfirmedSensitiveRows = humanInputItems(review, { sensitiveConfirmations: serverSensitiveLabels })
+    .filter((item) => item.actionKind === "confirm" && !item.settled);
+  const sensitiveQuestionPresent = review.questions.some((question) => requiresSensitiveQuestionReview(question.question, question.answer))
+    /* A question the SERVER says needs confirming blocks the send here too, so the button stops
+       offering a press the server has already decided to refuse. Measured live on Exa packet
+       73768339: this list held the visa question, Send rendered enabled anyway, and pressing it
+       returned 422 FINAL_APPROVAL_VERIFICATION_FAILED naming that same question. */
+    || unconfirmedSensitiveRows.length > 0;
   const [previewState, setPreviewState] = useState<{ url: string; loaded: boolean; failed: boolean } | null>(null);
   /* Bumps the screenshot URL past the browser's cached failure, so Try loading it again is a real
      retry rather than an instant replay of the same error. */
@@ -8937,8 +8963,31 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
         )}
         {review.status === "ready_for_final_approval" && sensitiveQuestionPresent && (
           <p className="mt-3 text-xs leading-5 text-warn">
-            A sensitive demographic, identity, or legal question is present. Leave it for the applicant before sending.
+            {unconfirmedSensitiveRows.length > 0
+              ? "Litos will not answer these for you. Read each one and press Confirm, then Send application."
+              : "A sensitive demographic, identity, or legal question is present. Leave it for the applicant before sending."}
           </p>
+        )}
+        {/* THE CONTROL THAT SATISFIES THE REASON ABOVE, on the screen that states it.
+            BlockerList renders only on needs_attention, so before this the ready_for_final_approval
+            branch could name a sensitive question and offer nothing to press. Measured live on Exa
+            packet 73768339: Send returned 422 FINAL_APPROVAL_VERIFICATION_FAILED naming the visa
+            question, and every control on the screen - Check resume, Start it again, I submitted it
+            myself, Send application - left that question exactly as it was. The row was being built
+            correctly by humanInputItems the whole time; nothing drew it here.
+            Same component and same handler as the needs_attention path, so a press mints the
+            per-question confirmation through the one writer that exists. */}
+        {review.status === "ready_for_final_approval" && unconfirmedSensitiveRows.length > 0 && (
+          <div className="mt-3">
+            <BlockerList
+              items={unconfirmedSensitiveRows}
+              onOpenQuestion={onOpenQuestion}
+              onChooseOption={onChooseOption}
+              onAddDocument={onAddDocument}
+              onToggleAcknowledged={onToggleAcknowledged}
+              tickingIds={attentionTicking}
+            />
+          </div>
         )}
         {/* The eighth reason, named the way the other seven are. Says which document and where the
             control is, because a blocker the student cannot act on is a wall.
