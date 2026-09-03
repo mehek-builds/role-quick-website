@@ -26,14 +26,22 @@ test("the dashboard and first-party billing guard share the live API fallback", 
  * first test stays green.
  *
  * It is worth a test rather than a comment because the default is not a
- * local-dev convenience here. The Dockerfile declares no build ARG for
- * NEXT_PUBLIC_API_URL, so Railway's service variable never reaches
- * `npm run build` and the literal in lib/config.ts is the API origin shipped to
- * every visitor. Confirmed on the live bundle on 2026-09-03, which still carried
- * the `?? "<default>"` expression rather than an inlined literal: that is what
- * an undefined build-time variable compiles to. A default aimed at a platform
- * being retired is therefore a dead product on the day that project is deleted,
- * not a fallback that merely looks untidy. */
+ * local-dev convenience. Until 2026-09-04 the Dockerfile declared no build ARG
+ * for NEXT_PUBLIC_API_URL, so Railway's service variable never reached
+ * `npm run build` and this literal was the API origin shipped to every visitor:
+ * confirmed on the live bundle on 2026-09-03, which carried the `?? "<default>"`
+ * expression rather than an inlined literal, which is what an undefined
+ * build-time variable compiles to. The Dockerfile now forwards the variable, so
+ * the default is a fallback again rather than the live configuration.
+ *
+ * THE ASSERTIONS BELOW STAY, and so does the default they pin, because a
+ * fallback is exactly what a build with no variable set compiles in. What this
+ * file CANNOT see is build-time configuration: it reads source. Measured on
+ * 2026-09-04, building this commit with NEXT_PUBLIC_API_URL="" left both tests
+ * here green while .next/static carried `API_URL",0,""` and no occurrence of
+ * api.trylitos.com at all. That gap is covered separately, at artifact level,
+ * by the "built bundle carries the live API origin" step in .github/workflows/
+ * ci.yml, and the build-arg wiring itself by tests/next-public-build-args.test.mjs. */
 test("no default sends production at the retired Vercel host", () => {
   for (const [name, source] of [
     ["lib/config.ts", configSource],
