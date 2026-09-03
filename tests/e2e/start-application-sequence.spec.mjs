@@ -625,7 +625,14 @@ describe("the application sequence, end to end", () => {
     await page.getByText(/no longer matches the saved application/i).waitFor({ timeout: 15_000 });
     assert.equal(submitRequests, 0, "a refused acknowledgement must never reach submit-request");
     assert.equal(acknowledgements.length, 0, "a refused acknowledgement is not a recorded review");
-    assert.equal(packetAudits, 2, "a stale-packet refusal must open a fresh audit by itself");
+    /* WAITED FOR, NOT READ, for the reason the waitFor helper above already gives. The refusal
+       sentence and the fresh audit are two different effects of the same rejection and nothing
+       sequences them: the screen can paint the server's reason before the request it triggers has
+       reached this stub. Read bare, this line failed roughly one run in three - measured on this
+       tree - a flake nobody had seen, because this file sits below the onboarding-checklist walk in
+       the sequential browser job and that walk was red. The assertion is unchanged; only the moment
+       it is taken is. */
+    await waitFor(() => packetAudits === 2, "a stale-packet refusal must open a fresh audit by itself");
 
     const blocked = page.getByText("The packet audit service is unavailable.");
     await blocked.waitFor({ timeout: 15_000 });
