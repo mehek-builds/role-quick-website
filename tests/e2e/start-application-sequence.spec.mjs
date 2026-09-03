@@ -747,6 +747,31 @@ describe("the application sequence, end to end", () => {
   });
 
   test("07 the trial: the gift, counted after the build spent one generation", async () => {
+    /* WAITED FOR, NOT SNAPSHOTTED, and this line is the whole test.
+     *
+     * Every assertion below reads a value that arrives from getBillingState(), which TrialStep
+     * fires on mount and does not block its first paint on. Before it resolves the screen is
+     * honestly in its other state: `holdsTrial` is false, so the meters print what the seven days
+     * INCLUDE (5, 5, 5, 5), row 05 names the length instead of an end date, and the line reads
+     * "Nothing is charged for the first seven days." Reading innerText the instant test 06's
+     * heading appeared raced that fetch, and on a loaded CI runner the fetch lost: main went red on
+     * `/Tailored resumes\s*\n?\s*4/` against a receipt showing 5, which is not a wrong number but
+     * a number read too early.
+     *
+     * This was invisible for as long as it existed, because this spec sits below the onboarding
+     * checklist walk in the sequential browser job and that walk was red, so step 18 was SKIPPED
+     * rather than passing. The first CI run that reached it found this on the second attempt.
+     *
+     * WAITED ON A SIGNAL THIS TEST DOES NOT ASSERT, which took two tries to get right. The first
+     * version waited on "Already on your account" - one of the strings asserted below - and that
+     * made the assertion on it unfalsifiable: the wait guaranteed the very thing the assert was
+     * written to catch, so a regression to the wrong branch would have surfaced as a bare 20-second
+     * locator timeout instead of as "the trial line is wrong".
+     * Row 05's key is the honest signal. It reads "Ends" only when `holdsTrial` is true and
+     * "Length" until then, and nothing below reads it, so it says the snapshot has landed without
+     * standing in for any assertion. Anchored, so it cannot match a longer word ending in it. */
+    await page.getByText(/^Ends$/i).waitFor({ timeout: 20_000 });
+
     const body = await page.locator("main").innerText();
     assert.match(body, /A gift, on us/i);
     assert.match(body, /days of Litos\+/i);
@@ -873,6 +898,23 @@ describe("the application sequence, end to end", () => {
        So this pins what the screen must SAY -- when the charge lands, how to stop it -- and the
        absence of every exit, rather than any sentence the product no longer means. */
     await page.getByRole("heading", { name: /after the seven days/i }).waitFor({ timeout: 20_000 });
+    /* AND THEN FOR THE SHIMMER TO GO, because that heading does not mean what it looks like it
+       means. PlanStep renders the SAME title in both branches: while `settled` is false it draws
+       the title over a shimmer, deliberately, so that somebody who has just paid is never flashed a
+       sales pitch. So waiting on the heading is waiting for the loading screen, and every assertion
+       below would then be read off it.
+       Not observed in CI, unlike the same defect in 07 above, but reproduced here on purpose: with
+       the billing stub held 1500ms this case fails on "the paywall must state when the charge
+       lands" - the copy is absent because the plans have not arrived, not because the paywall
+       stopped saying it.
+       WAITED ON WHAT IS THERE, NOT ON WHAT IS GONE. The first version waited for `.rq-shimmer` to
+       disappear, which is a wait that cannot fail: rename that class, restyle the loading state, or
+       swap the shimmer for a spinner, and querySelector returns null on the first poll, the wait
+       passes instantly, and this case is silently reading the loading screen again with nothing
+       red to say so. The plan options carry `aria-pressed` and exist only in the settled branch, so
+       waiting for one to appear says the same thing and fails loudly when its hook moves. It is not
+       among the things asserted below, which read button text. */
+    await page.locator("main button[aria-pressed]").first().waitFor({ timeout: 20_000 });
 
     const body = await page.locator("main").innerText();
     assert.match(
