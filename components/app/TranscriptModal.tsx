@@ -6,10 +6,13 @@ import { Chip } from "@/components/app/ui";
 import { useDashboardOverlayExit } from "@/components/app/useDashboardOverlayExit";
 import {
   attachApplicationDocument,
+  attachStoredApplicationDocument,
   deleteUserDocument,
   detachApplicationDocument,
+  listUserDocuments,
   recordOrderedApplicationDocument,
   type AttachedDocument,
+  type DocumentSummary,
   type RequiredDocumentAsk,
 } from "@/lib/api";
 import {
@@ -26,6 +29,12 @@ import {
   DOCUMENT_REMOVAL_KICKER,
   documentRemovalTitle,
 } from "@/lib/document-removal";
+import {
+  DOCUMENT_REUSE_ACTION_LABEL,
+  DOCUMENT_REUSE_BUSY_LABEL,
+  DOCUMENT_REUSE_DESCRIPTION,
+  reusableDocumentsForAsk,
+} from "@/lib/document-reuse";
 
 /* THE ONE PLACE A STUDENT HANDS LITOS A FILE OF HER OWN.
  *
@@ -110,7 +119,26 @@ export function TranscriptModal({
      if I press this", and the weaker of the two was the one sitting beside a green Send button. */
   const [confirmingRemoval, setConfirmingRemoval] = useState(false);
   const [busy, setBusy] = useState<"attaching" | "ordering" | "detaching" | "removing" | null>(null);
+  /* Which library row is in flight, so the press she made wears the busy word and the others stay
+     readable. `busy` alone cannot say it: every row would report itself as attaching. */
+  const [reusingDocumentId, setReusingDocumentId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /* Files she has already given Litos, for the picker above the drop zone.
+   *
+   * `null` IS "NOT LOADED", NOT "NONE", and the two must not render the same. A failed or pending
+   * load draws no picker at all rather than an empty one, because an empty picker is a claim about
+   * her library - "you have nothing stored" - that a request which never answered has not earned.
+   * The same discipline DocumentsCard holds for the same reason: this frontend deploys separately
+   * from the API, so GET /documents may simply not be there yet, and a screen that reports that as
+   * an empty library would send her to re-export a file she already gave us. */
+  const [library, setLibrary] = useState<DocumentSummary[] | null>(null);
+  /* Whether this modal OPENED on a file that was already attached, captured once from the first
+     render's props and never recomputed. That is the "Manage file" press from a settled checklist
+     row, and it has no picker to draw and no use for the list, so it does not spend the request.
+     Read off the initial props rather than off `stage`, which the 2.5s poll rewrites: a live
+     reading would start a request the moment a poll happened to land between a detach and a
+     re-render, which is the one moment this modal is already busy. */
+  const [openedAttached] = useState(() => Boolean(attachment?.attached_at));
   /* What this modal has DONE, which is not the same as what the page last heard from the server.
      The parent is told immediately, but the poll can still land with a pre-upload envelope in the
      same second, and without a local record the screen would flip from "Transcript attached" back to
@@ -120,6 +148,33 @@ export function TranscriptModal({
   /* Only the upload response carries a byte count. On a reopen there is a filename and no size, and
      a size invented from nothing is worse than a chip without one. */
   const [localSize, setLocalSize] = useState<number | null>(null);
+
+  /* Read the library ONCE, on open, and never again.
+   *
+   * Skipped entirely when the modal opened onto an attached file, and keyed on THAT rather than on
+   * the stage even though the stage is what decides whether a picker is drawn. The stage is derived
+   * from props the 2.5s submission poll rewrites on every tick, so an effect depending on it would
+   * fire again on a tick that changed nothing, and a request in flight while she is choosing is a
+   * list that can reorder under her cursor. `openedAttached` is a first-render capture and never
+   * changes, so this runs at most once per open.
+   *
+   * The list is a snapshot on purpose. It goes stale the moment she uploads from another tab, and
+   * that is survivable: the attach endpoint is the authority and answers a stale row with a 404 she
+   * is told to reload on. Refreshing it live would buy a row she did not ask for, at the cost of a
+   * poll the modal does not otherwise need.
+   *
+   * A FAILURE IS SWALLOWED, deliberately and only here. Nothing about this request is load-bearing:
+   * every path this modal already had still works without it, and the upload she came for is
+   * untouched. Surfacing "Litos could not list your files" over a drop zone that works would be an
+   * error message about a control she cannot see. */
+  useEffect(() => {
+    if (openedAttached) return;
+    let live = true;
+    listUserDocuments()
+      .then((result) => { if (live) setLibrary(result.documents ?? []); })
+      .catch(() => { /* left as null, which draws no picker. See the state's comment. */ });
+    return () => { live = false; };
+  }, [openedAttached]);
 
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
@@ -215,6 +270,10 @@ export function TranscriptModal({
   const shownSize = localSize ?? (stage === "attached" ? null : chosen?.size ?? null);
   /** True only when this modal performed the upload, so the reuse choice on screen is this file's. */
   const reuseKnown = localAttachment !== undefined && localAttachment !== null;
+  /* The stored files this ask may be answered with. Empty until the load lands, and empty forever if
+     it failed, so the picker below simply is not drawn - see the `library` state for why that is the
+     honest reading of a request that never answered. */
+  const reusable = reusableDocumentsForAsk(library, kind);
 
   function choose(file: File | null | undefined) {
     if (!file) return;
@@ -256,6 +315,52 @@ export function TranscriptModal({
       setError(reason instanceof Error ? reason.message : "Litos could not attach that file. Try it again.");
     } finally {
       setBusy(null);
+    }
+  }
+
+  /* USE A FILE SHE HAS ALREADY GIVEN LITOS, on this application, on one press.
+   *
+   * The half of the ask this modal could not answer. The server reuses a stored file for a measured
+   * ask on its own, but only while a prepare run is happening, so an application prepared before the
+   * file existed goes on demanding it and no control anywhere could attach it: three packets on one
+   * account asked for the same transcript on 2026-09-03 and each wanted its own upload of the same
+   * PDF. lib/document-reuse.ts holds the measurement and the rule for which rows may be offered.
+   *
+   * SHAPED LIKE attach() ON PURPOSE, down to the focus move. Both commits land on the same state
+   * change - the stage becomes "attached" and the control that was pressed stops existing - so both
+   * have to move focus onto the one control every stage keeps before React removes the initiator, or
+   * Chromium is left with an aria-modal dialog open and focus on document.body.
+   *
+   * NO byte_size, which is the one thing this path cannot report. The upload response carries the
+   * count and this one does not, so `localSize` stays null and the attached state renders the file
+   * name without a size chip, exactly as it does on a reopen. An invented size would be a number
+   * about her file that nothing measured.
+   */
+  /* `stored`, never `document`: this component reads the global `document` for the focus trap and
+     the scroll lock, and a parameter of that name shadows it inside the one function that is about
+     to move focus. */
+  async function reuseStored(stored: DocumentSummary) {
+    if (busy) return;
+    setBusy("attaching");
+    setReusingDocumentId(stored.id);
+    setError(null);
+    try {
+      const result = await attachStoredApplicationDocument(applicationId, {
+        documentId: stored.id,
+        kind,
+      });
+      closeButton.current?.focus();
+      setLocalAttachment(result.attachment);
+      onAttachmentChange(kind, result.attachment);
+    } catch (reason) {
+      /* The endpoint answers wrong-user, wrong-kind, single-use and removed with one 404 and does not
+         say which, so this says the only thing true of all four rather than guessing at one of them.
+         Reloading is the action, because every one of the four means this list no longer matches
+         what the server holds. */
+      setError(reason instanceof Error ? reason.message : "Litos could not attach that file. Reload the page and try again.");
+    } finally {
+      setBusy(null);
+      setReusingDocumentId(null);
     }
   }
 
@@ -428,8 +533,53 @@ export function TranscriptModal({
 
           {stage === "ask" && (
             <>
+              {/* THE FILES SHE HAS ALREADY GIVEN LITOS, FIRST, because one press beats an export.
+                  Above the upload path and not folded into it: this is a different answer to the
+                  ask, not a shortcut through the drop zone, and the reuse checkbox below belongs to
+                  the upload alone. When nothing qualifies - which is every account with an empty
+                  library, and every account whose GET /documents did not answer - this whole block
+                  is absent and the stage is exactly what it was before.
+
+                  ON THE ask STAGE ONLY. The official stage is a different question (Litos cannot
+                  make a registrar send a sealed copy, and must not imply a stored PDF settles that),
+                  and it already carries its own door into this one: "Attach an unofficial copy
+                  anyway" switches the stage here, picker included. */}
+              {reusable.length > 0 && (
+                <div className="mt-4 rounded-inner border border-border bg-surface-alt px-4 py-4">
+                  <p className="text-sm font-medium text-ink">Use a file you already gave Litos</p>
+                  <p className="mt-1 text-xs leading-5 text-muted">{DOCUMENT_REUSE_DESCRIPTION}</p>
+                  <ul className="mt-3 space-y-2">
+                    {reusable.map((file) => (
+                      <li
+                        key={file.id}
+                        className="flex flex-wrap items-center justify-between gap-3 rounded-inner border border-border bg-surface px-4 py-3"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-ink">{file.file_name}</p>
+                          <p className="mt-0.5 text-xs leading-5 text-muted">{formatDocumentBytes(file.byte_size)}</p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          disabled={busy !== null}
+                          onClick={() => reuseStored(file)}
+                          /* Named for the file, the same rule the account page's Remove control
+                             keeps: down a column of identical labels the bare words tell a screen
+                             reader user nothing about which file this one attaches. */
+                          aria-label={`Use ${file.file_name} for this application`}
+                        >
+                          {reusingDocumentId === file.id ? DOCUMENT_REUSE_BUSY_LABEL : DOCUMENT_REUSE_ACTION_LABEL}
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               <p className="mt-4 text-sm leading-6 text-ink">
-                An unofficial copy is fine. The PDF you download from your student portal works.
+                {reusable.length > 0
+                  ? "Or add a new one. An unofficial copy is fine, and the PDF you download from your student portal works."
+                  : "An unofficial copy is fine. The PDF you download from your student portal works."}
               </p>
               {/* A label wrapping a visually hidden input, so the whole dashed area is the control
                   for a mouse and the input is still the thing a keyboard and a screen reader reach.

@@ -1892,6 +1892,36 @@ export function attachApplicationDocument(
   );
 }
 
+/**
+ * Attach a file the student has ALREADY given Litos to one more application.
+ *
+ * THE ENDPOINT THAT SHIPPED WITHOUT A CALLER. POST /applications/:id/documents/attach has existed
+ * since the document store did, described there as "what auto-reuse in review will call", and until
+ * this function nothing in this repo called it: the only way to satisfy an ask was a fresh upload.
+ * The server does reuse a stored file on its own, but only at prepare time (backend
+ * reuseStoredDocuments), so an application prepared before the file existed keeps asking and no
+ * control could ever answer it. See lib/document-reuse.ts for the measurement.
+ *
+ * NO `reuse` FLAG AND NO FILE. The stored row already carries the answer she gave the checkbox when
+ * she uploaded it, and the endpoint refuses any row that is not `reusable = true`, so this cannot be
+ * the request that changes her mind about a file. reusableDocumentsForAsk holds the same rule at the
+ * row, so a file she marked single-use is never offered here in the first place.
+ *
+ * A 404 is the endpoint's ONE answer to four different refusals - wrong user, wrong kind, single-use,
+ * or removed - and it deliberately does not say which. The caller must not guess: the honest reading
+ * is that this file is not attachable any more, which on this surface means the library is stale and
+ * a reload will show it.
+ */
+export function attachStoredApplicationDocument(
+  applicationId: string,
+  input: { documentId: string; kind: string },
+): Promise<{ attachment: AttachedDocument }> {
+  return api<{ attachment: AttachedDocument }>(`/applications/${applicationId}/documents/attach`, {
+    method: "POST",
+    body: JSON.stringify({ document_id: input.documentId, kind: input.kind }),
+  });
+}
+
 /** Record that the student has ordered an official copy. This does NOT unblock the send. */
 export function recordOrderedApplicationDocument(
   applicationId: string,

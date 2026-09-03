@@ -126,6 +126,71 @@ export type DirectNonQuestionTask = {
 
 export type DirectInputTask = DirectQuestionTask | DirectNonQuestionTask;
 
+/**
+ * Whether a row is about a FILE rather than about the employer's form.
+ *
+ * ONE DEFINITION, because there were two and they were about to disagree. This predicate was written
+ * inline inside metadataRefreshOutranksStandingAttention as a pair of terms, and the screen needs the
+ * same question answered in a second place now (see documentStepsInPlan), so the third copy is the
+ * one that gets a term wrong. Both halves are kept: `documentKind` is what a row carries so a control
+ * knows which key to write, and `actionKind === "attach"` is what makes it draw the control at all.
+ * Every row documentAskItems emits has both, and requiring either rather than both means a row that
+ * loses one of them is still recognised as a document row instead of quietly becoming a blocker.
+ *
+ * WHAT THIS IS FOR, and it is not cosmetic grouping. A document row is the only outstanding row on
+ * this screen whose control WRITES NOTHING TOWARD AN EMPLOYER: attaching a file writes
+ * `spec._documents` and sends nothing. Every other control in the amber panel either re-runs the
+ * fill, opens the employer's page, or saves an answer that the next run will type into their form.
+ * That difference is why a mode which must suppress the sending controls does not have to suppress
+ * this one.
+ */
+export function isDocumentChecklistItem(item: SubmissionChecklistItem): boolean {
+  return item.documentKind !== undefined || item.actionKind === "attach";
+}
+
+/**
+ * The document steps standing on this application, out of a plan that may be showing none of them.
+ *
+ * THE DEFECT THIS EXISTS FOR, measured 2026-09-03 on two packets of one account. The dashboard's
+ * unverified-submission mode - status needs_attention with an `unverified_submission` that has no
+ * resolution - replaces the entire amber panel with the raw `attention_reason` and two buttons
+ * ("I found it there" / "It is not there"). On the Databricks packet, which was not in that mode,
+ * the same review rendered "Databricks needs your transcript" with a REQUIRED badge and a working
+ * Add transcript control. On the Verkada packet, which was, the only thing on screen was
+ *
+ *   "Undergraduate Transcript" is required and is still empty
+ *   1 required field has no question you can answer in Litos: "Undergraduate Transcript"
+ *
+ * with no control anywhere. Same measurement, same required_documents, same transcript_supported,
+ * two completely different screens, and the one that stated the requirement was the one that could
+ * not act on it.
+ *
+ * SUPPRESSING THE SENDING CONTROLS IS RIGHT AND IS NOT WHAT THIS CHANGES. While Litos may already
+ * have reached the employer, Try again and Review and fill could send a second application, so they
+ * correctly wait for her yes/no. A document row cannot: see isDocumentChecklistItem. It is also work
+ * she owes on BOTH answers - "not there" means the next run needs the file, and "found it there"
+ * ends the application and takes the row away with it - so hiding it buys nothing and costs her the
+ * only surface that could tell her the file was wanted.
+ *
+ * Reads the PLAN rather than re-deriving from the review, so a row that reaches this list is one the
+ * ordinary panel would have drawn too: the same builder, the same dedupe, the same order. A second
+ * derivation is how one surface starts asking for a document the other has already settled.
+ *
+ * SETTLED ROWS COME TOO, and leaving them out was the first version of this. The plan keeps them in
+ * `settled` rather than in `nonQuestionTasks`, so a list built from the outstanding half alone
+ * vanishes the instant she attaches the file - and the confirmation row is the only thing on this
+ * screen carrying a control back to the modal, where "Remove this file" lives, while /privacy
+ * publishes "we encrypt it and keep it until you remove it or delete your account". BlockerList
+ * already draws the two halves differently, so handing it both is what it is built for: the
+ * outstanding row asks, the settled row confirms and keeps the way back.
+ */
+export function documentStepsInPlan(plan: Pick<DirectInputTaskPlan, "nonQuestionTasks" | "settled">): SubmissionChecklistItem[] {
+  return [
+    ...plan.nonQuestionTasks.map((task) => task.item),
+    ...plan.settled,
+  ].filter(isDocumentChecklistItem);
+}
+
 export type DirectInputTaskPlan = {
   /** Safe employer questions that still need the applicant, in the employer's stored order. */
   questionTasks: DirectQuestionTask[];
@@ -1170,8 +1235,11 @@ export function metadataRefreshOutranksStandingAttention(
   return plan.nonQuestionTasks.every((task) => (
     task.id.startsWith("blocker-")
     && task.id !== "blocker-captcha-requires-your-attention"
-    && task.item.documentKind === undefined
-    && task.item.actionKind !== "attach"
+    /* Was two inline terms here, and is now the shared predicate: this decision and
+       documentStepsInPlan have to mean the same thing by "a document row", and they were one
+       edit away from not. Nothing about the fail-closed rule changes - a document row still
+       stops the metadata-refresh panel from leading. */
+    && !isDocumentChecklistItem(task.item)
   ));
 }
 
