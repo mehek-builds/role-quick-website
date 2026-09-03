@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { exactPacketAuditRanges, manualHandoffMatchesPacket, manualTrialPacketEvidenceIsFresh, packetAuditIdentityMatches, packetAuditResponseMatchesApplication } from "./packet-audit-display.ts";
+import { exactPacketAuditRanges, manualHandoffMatchesPacket, manualTrialPacketEvidenceIsFresh, packetAuditIdentityMatches, packetAuditPassedCleanly, packetAuditResponseMatchesApplication } from "./packet-audit-display.ts";
 import { PACKET_AUDIT_VERSION } from "../../../lib/packet-audit-version.ts";
 
 const jdText = "Build reliable APIs. Improve deployment safety.";
@@ -201,4 +201,28 @@ test("opens only the action-time server URL for the exact displayed packet", () 
     assert.equal(manualHandoffMatchesPacket(changed, url, packet), false);
   }
   assert.equal(manualHandoffMatchesPacket({ manual_handoff: null }, url, packet), false);
+});
+
+/* THE AUDIT'S VERDICT ON ITSELF, asserted as behaviour rather than as a regex over its own source.
+ *
+ * `status: "passed"` is a compile-time claim in lib/api.ts and nothing on the wire enforces it, so
+ * both surfaces that put an audit in front of an applicant ask this at runtime: the dashboard before
+ * it paints a clause, the /start review screen before it stores an audit she is about to acknowledge.
+ */
+test("only a complete, undegraded, unrejected pass counts as clean", () => {
+  const clean = {
+    version: PACKET_AUDIT_VERSION,
+    status: "passed",
+    complete: true,
+    degraded: false,
+    rejectedCount: 0,
+  };
+  assert.equal(packetAuditPassedCleanly(clean), true);
+  assert.equal(packetAuditPassedCleanly({ ...clean, status: "failed" }), false);
+  assert.equal(packetAuditPassedCleanly({ ...clean, complete: false }), false);
+  assert.equal(packetAuditPassedCleanly({ ...clean, degraded: true }), false);
+  assert.equal(packetAuditPassedCleanly({ ...clean, rejectedCount: 1 }), false);
+  assert.equal(packetAuditPassedCleanly({ ...clean, version: "packet_audit_v1" }), false);
+  assert.equal(packetAuditPassedCleanly(null), false);
+  assert.equal(packetAuditPassedCleanly("passed"), false);
 });

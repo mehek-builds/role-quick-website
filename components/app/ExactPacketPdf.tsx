@@ -149,18 +149,34 @@ function downloadFailure(code: string): PdfFailure {
   return { message: "Litos could not load the exact PDF.", recoverable: true };
 }
 
+/* The pages container's own box, and the reason it is a prop rather than a constant.
+ *
+ * `min-h-[620px]` was authored for the dashboard's wide single-column drawer, where it is right.
+ * Dropped unchanged into a half-width grid column it stops being a floor and becomes a distortion:
+ * beside a pane sized `aspect-[612/792]` the two end 1.75x apart at the sm breakpoint, and because
+ * `min-height` beats `max-height` in CSS the `70vh` cap is dead on any viewport under ~886px, so on
+ * a 1366x768 laptop the sheet alone is taller than the usable viewport and the document and the
+ * irreversible Send button below it cannot be on screen at once.
+ *
+ * So the box is the CALLER's to state, and the default is exactly what the dashboard already had. */
+const DEFAULT_PAGES_CLASS = "max-h-[70vh] min-h-[620px] space-y-4 overflow-y-auto rounded-inner border border-border bg-panel-soft p-3";
+
 export function ExactPacketPdf({
   auditDigest,
   binding,
   downloadUrl,
   onVerified,
   timeoutMs = DEFAULT_TIMEOUT_MS,
+  pagesClassName = DEFAULT_PAGES_CLASS,
 }: {
   auditDigest: string;
   binding: PacketPdfBinding;
   downloadUrl: string;
   onVerified: (verified: PacketPdfEvidenceVerification | null) => void;
   timeoutMs?: number;
+  /** The pages container's box. Defaults to the dashboard's drawer sizing; /start passes its own so
+   *  the sheet matches the posting pane beside it. */
+  pagesClassName?: string;
 }) {
   const onVerifiedRef = useRef(onVerified);
   useEffect(() => {
@@ -316,6 +332,36 @@ export function ExactPacketPdf({
         await withDeadline(renderTask.promise, timeoutMs, abandon);
         renderTask = null;
         paintedPixels += paintedPixelsOn(canvas);
+        /* THE TEXT ALTERNATIVE, TAKEN FROM THESE BYTES AND NOT FROM ANYWHERE ELSE.
+         *
+         * A canvas is a picture, so without this the one document an applicant is asked to send
+         * irreversibly under her own name is unreadable to a screen reader, unselectable, and
+         * unfindable - on a repo whose ACCESSIBILITY.md targets WCAG 2.2 AA and names both surfaces
+         * that mount this component. The obvious shortcut is to render the resume spec beside the
+         * canvas instead, and it is wrong for the same reason this component exists: the spec is a
+         * faithful re-render, not the file, and an alternative that can disagree with the picture is
+         * an alternative to a different document. pdf.js already holds the page, so the words come
+         * out of the same parse that just painted it.
+         *
+         * BEST EFFORT, DELIBERATELY. The picture is the gate. A text layer that fails to extract is
+         * a worse screen for some readers; a text layer that can SHUT THE GATE is a screen nobody
+         * can send from, so this cannot throw into the render's own failure path. */
+        try {
+          const content = await withDeadline(page.getTextContent(), timeoutMs, abandon);
+          const words = content.items
+            .map((item) => (typeof (item as { str?: unknown }).str === "string" ? (item as { str: string }).str : ""))
+            .join(" ")
+            .replace(/\s+/gu, " ")
+            .trim();
+          if (words) {
+            const transcript = document.createElement("div");
+            transcript.className = "sr-only";
+            transcript.textContent = `Page ${pageNumber} of ${document_.numPages}, as text: ${words}`;
+            pages.append(transcript);
+          }
+        } catch {
+          // No transcript for this page. The rendered page still stands and the gate is unaffected.
+        }
       }
       if (!active || settled) return;
       /* A settled promise is not a drawn page. Reaching here with a blank canvas means the gate
@@ -377,7 +423,9 @@ export function ExactPacketPdf({
 
   return (
     <div className="space-y-3">
-      <div ref={pagesRef} aria-label="Exact audited resume PDF" className="max-h-[70vh] min-h-[620px] space-y-4 overflow-y-auto rounded-inner border border-border bg-panel-soft p-3" />
+      {/* role="group", because ARIA forbids naming a generic element: without a role that accepts a
+          name most assistive technology drops this label and the container announces as nothing. */}
+      <div ref={pagesRef} role="group" aria-label="Exact audited resume PDF" className={pagesClassName} />
       <p role="status" className={`text-xs ${currentView.rendered ? "text-positive" : "text-muted"}`}>
         {currentView.rendered
           ? `Exact audited PDF loaded, ${currentView.pageCount} ${currentView.pageCount === 1 ? "page" : "pages"}.`
