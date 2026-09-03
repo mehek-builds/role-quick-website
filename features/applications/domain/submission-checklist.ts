@@ -525,6 +525,15 @@ function isHumanOnlyChecklistLabel(label: string): boolean {
   return false;
 }
 
+/* addUnique's narrower sibling: identity only, no label or subject collapsing. See the confirmation
+   branch in humanInputItems for why one of its rows may share a label with another and must still
+   be drawn. Nothing else may use this: for every other row class, two rows about one field is the
+   duplicate-blocker defect addUnique exists to prevent. */
+function addUniqueById(items: SubmissionChecklistItem[], item: SubmissionChecklistItem) {
+  if (items.some((existing) => existing.id === item.id)) return;
+  items.push(item);
+}
+
 function addUnique(items: SubmissionChecklistItem[], item: SubmissionChecklistItem) {
   if (items.some((existing) => existing.id === item.id || existing.label === item.label)) return;
   if (item.subject && items.some((existing) => existing.subject === item.subject)) return;
@@ -965,7 +974,19 @@ export function humanInputItems(
        would come back on the next round - the DV Trading loop, re-entered through the blank door. */
     if (review.status !== "submitted" && sensitiveConfirmationIds.has(question.id)) {
       const answerStands = questionReadsAsAnswered(question);
-      addUnique(items, {
+      /* ONE ROW PER QUESTION, NOT PER LABEL, which is the one place this file deliberately does not
+         use addUnique. That helper drops a second row sharing a label, and it is right to for a
+         blocker: the runner emits several sentences about one field. It is wrong here. Two stored
+         questions can carry the same label and different ids - a race/ethnicity question asked in
+         two sections of one form is the ordinary case - and each is a separate box the employer
+         will read, so each needs its own confirmation and its own control.
+         Deduped by label, the three statements about one packet stopped agreeing: the send gate
+         counted rows and said "One answer is a declaration", the answers screen counted questions
+         and said "2 answers below are declarations", and the second question had no row to press.
+         "Two screens cannot describe one requirement differently" is the property this branch
+         exists to hold, so the row set is keyed on the id the answers screen is keyed on. The id
+         guard stays, because a row is still emitted once. */
+      addUniqueById(items, {
         id: `confirm-${question.id}`,
         label: displayQuestionLabel(question.question),
         detail: answerStands ? SENSITIVE_CONFIRMATION_ANSWERED_DETAIL : SENSITIVE_CONFIRMATION_UNANSWERED_DETAIL,

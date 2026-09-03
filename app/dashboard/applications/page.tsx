@@ -4557,7 +4557,7 @@ function Applications() {
     if (!selected || !submission) return false;
     if (selectedIdRef.current !== applicationId) return false;
     if (submission.application_id !== applicationId) return false;
-    const questionId = sensitiveConfirmationSendRouteQuestionId(reason, submission.review.questions);
+    const questionId = sensitiveConfirmationSendRouteQuestionId(reason, submission.review);
     if (!questionId) return false;
     setError(null);
     setPollError(null);

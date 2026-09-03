@@ -240,14 +240,14 @@ test("a label naming no stored question blocks nothing and invents no row", () =
    authored prose. A route that read only the typed code would not fire on the measured press. */
 
 test("the typed refusal names the question it is about", () => {
-  const questions = hrt().questions;
+  const review = hrt();
   const refusal = { status: 422, data: { code: "SENSITIVE_QUESTION_CONFIRMATION_REQUIRED", questions: [SPONSORSHIP] } };
   assert.deepEqual(sensitiveConfirmationRefusalLabels(refusal), [SPONSORSHIP]);
-  assert.equal(sensitiveConfirmationSendRouteQuestionId(refusal, questions), "q-sponsorship");
+  assert.equal(sensitiveConfirmationSendRouteQuestionId(refusal, review), "q-sponsorship");
 });
 
 test("the approve route's issue list routes too, and only its sensitive line", () => {
-  const questions = hrt().questions;
+  const review = hrt();
   const refusal = {
     status: 422,
     data: {
@@ -259,7 +259,7 @@ test("the approve route's issue list routes too, and only its sensitive line", (
     },
   };
   assert.deepEqual(sensitiveConfirmationRefusalLabels(refusal), [SPONSORSHIP]);
-  assert.equal(sensitiveConfirmationSendRouteQuestionId(refusal, questions), "q-sponsorship");
+  assert.equal(sensitiveConfirmationSendRouteQuestionId(refusal, review), "q-sponsorship");
 });
 
 /* THE APPROVE ROUTE TRUNCATES AT 120 CHARACTERS, so the sentence arrives carrying a cut-off prompt.
@@ -269,26 +269,26 @@ test("a truncated label still resolves, but never to a guess between two questio
   const long = "Please confirm whether you now hold, or will at any point in the future require, an employer-sponsored visa or work permit in any of the listed offices";
   const cut = `Sensitive question requires your attention: ${long.slice(0, 120)}`;
   const one = [{ id: "q-long", question: long, answer: "Yes", kind: "required" as const, required: true }];
-  assert.equal(sensitiveConfirmationSendRouteQuestionId({ data: { code: "FINAL_APPROVAL_VERIFICATION_FAILED", issues: [cut] } }, one), "q-long");
+  assert.equal(sensitiveConfirmationSendRouteQuestionId({ data: { code: "FINAL_APPROVAL_VERIFICATION_FAILED", issues: [cut] } }, { questions: one }), "q-long");
 
   /* Two prompts sharing the truncated prefix: the cut removed the thing that told them apart, and
      routing to a guess about a legal declaration is worse than routing nowhere. */
   const ambiguous = [...one, { id: "q-long-2", question: `${long} in the next 12 months`, answer: "", kind: "required" as const, required: true }];
-  assert.equal(sensitiveConfirmationSendRouteQuestionId({ data: { code: "FINAL_APPROVAL_VERIFICATION_FAILED", issues: [cut] } }, ambiguous), null);
+  assert.equal(sensitiveConfirmationSendRouteQuestionId({ data: { code: "FINAL_APPROVAL_VERIFICATION_FAILED", issues: [cut] } }, { questions: ambiguous }), null);
 });
 
 test("the route is keyed on the code, never on the sentence alone", () => {
-  const questions = hrt().questions;
+  const review = hrt();
   const sentence = `Sensitive question requires your attention: ${SPONSORSHIP}`;
   /* The exact sentence that was on screen for three sessions, carried with no code at all. It must
      route nowhere: the prose arm is bounded to a body that has already identified itself. */
-  assert.equal(sensitiveConfirmationSendRouteQuestionId({ status: 422, message: sentence, data: { error: sentence } }, questions), null);
-  assert.equal(sensitiveConfirmationSendRouteQuestionId({ status: 422, data: { issues: [sentence] } }, questions), null);
-  assert.equal(sensitiveConfirmationSendRouteQuestionId({ status: 409, data: { code: "PACKET_AUDIT_STALE" } }, questions), null);
+  assert.equal(sensitiveConfirmationSendRouteQuestionId({ status: 422, message: sentence, data: { error: sentence } }, review), null);
+  assert.equal(sensitiveConfirmationSendRouteQuestionId({ status: 422, data: { issues: [sentence] } }, review), null);
+  assert.equal(sensitiveConfirmationSendRouteQuestionId({ status: 409, data: { code: "PACKET_AUDIT_STALE" } }, review), null);
 });
 
 test("a refusal with nothing to route to falls back rather than guessing", () => {
-  const questions = hrt().questions;
+  const review = hrt();
   for (const data of [
     { code: "SENSITIVE_QUESTION_CONFIRMATION_REQUIRED" },
     { code: "SENSITIVE_QUESTION_CONFIRMATION_REQUIRED", questions: [] },
@@ -298,17 +298,17 @@ test("a refusal with nothing to route to falls back rather than guessing", () =>
     { code: "FINAL_APPROVAL_VERIFICATION_FAILED", issues: [] },
     { code: "FINAL_APPROVAL_VERIFICATION_FAILED" },
   ]) {
-    assert.equal(sensitiveConfirmationSendRouteQuestionId({ status: 422, data }, questions), null, JSON.stringify(data));
+    assert.equal(sensitiveConfirmationSendRouteQuestionId({ status: 422, data }, review), null, JSON.stringify(data));
   }
-  assert.equal(sensitiveConfirmationSendRouteQuestionId(null, questions), null);
-  assert.equal(sensitiveConfirmationSendRouteQuestionId(new Error(SPONSORSHIP), questions), null);
+  assert.equal(sensitiveConfirmationSendRouteQuestionId(null, review), null);
+  assert.equal(sensitiveConfirmationSendRouteQuestionId(new Error(SPONSORSHIP), review), null);
 });
 
 test("the route reads the same list the checklist does, so the screen it lands on has the row", () => {
   const review = hrt();
   const routed = sensitiveConfirmationSendRouteQuestionId(
     { status: 422, data: { code: "SENSITIVE_QUESTION_CONFIRMATION_REQUIRED", questions: [SPONSORSHIP] } },
-    review.questions,
+    review,
   );
   assert.equal(routed, sensitiveConfirmationItems(review, { sensitiveConfirmations: [SPONSORSHIP] })[0]?.questionId);
 });
@@ -335,4 +335,99 @@ test("the server's naming outranks the label heuristic and the required-blank ro
   assert.equal(rows[0].actionKind, "confirm");
   assert.equal(rows[0].detail, SENSITIVE_CONFIRMATION_UNANSWERED_DETAIL);
   assert.notEqual(rows[0].detail, "Required answer missing");
+});
+
+/* ---- THE GATE MAY ONLY CLOSE OVER WORK THE CONFIRM LOOP CAN FINISH ----
+ *
+ * The dead end this branch shipped in its first version, and the exact failure mode the whole
+ * change exists to prevent: a greyed Send with no press that clears it. `humanInputItems` walks
+ * every stored question and falls back to the stored record when `questionReviewPresentation` has
+ * BLOCKED one, so a blocked question produced a row with a live Confirm pill; the answers screen
+ * renders only `editableQuestions`, so the press landed on a screen with no card for it and a Save
+ * disabled by `continuationBlocked`, and Send stayed grey for good.
+ *
+ * All three unreadable shapes below were measured producing that wall before the fix. */
+test("a named question the answers screen cannot draw closes no gate and draws no row", () => {
+  const shapes: Array<[string, Partial<ApplicationReview>]> = [
+    ["a server metadata blocker", {
+      questions: [{ id: "q-auth", question: SPONSORSHIP, answer: "Yes", kind: "required", required: true }],
+      question_metadata_blockers: [{ kind: "missing_exact_options", required: true, portal_input_type: "select-one", question: SPONSORSHIP }],
+    }],
+    ["a closed control whose options were never read", {
+      questions: [{ id: "q-auth", question: SPONSORSHIP, answer: "Yes", kind: "required", required: true, portal_input_type: "select-one", options: [] }],
+    }],
+    ["a multi-value control whose options were never read", {
+      questions: [{ id: "q-auth", question: SPONSORSHIP, answer: "Yes", kind: "required", required: true, portal_input_type: "select-multiple", options: [] }],
+    }],
+  ];
+  for (const [name, overrides] of shapes) {
+    const review = hrt(overrides);
+    assert.deepEqual(sensitiveConfirmationQuestionIds(review, [SPONSORSHIP]), [], name);
+    assert.equal(sensitiveConfirmationPending(review, [SPONSORSHIP]), false, name);
+    assert.deepEqual(sensitiveConfirmationItems(review, { sensitiveConfirmations: [SPONSORSHIP] }), [], name);
+    /* And the refusal routes nowhere rather than to a card that is not there. Routing would also
+       record a confirm intent against a question she was never shown, which survives a metadata
+       refresh and would later ride out on a bulk save as her own claim. */
+    assert.equal(
+      sensitiveConfirmationSendRouteQuestionId({ data: { code: "SENSITIVE_QUESTION_CONFIRMATION_REQUIRED", questions: [SPONSORSHIP] } }, review),
+      null,
+      name,
+    );
+  }
+});
+
+test("the healthy shape beside those three still asks, so the guard is not just off", () => {
+  const review = hrt({
+    questions: [{ id: "q-auth", question: SPONSORSHIP, answer: "Yes", kind: "required", required: true, portal_input_type: "select-one", options: ["Yes", "No"] }],
+  });
+  assert.equal(sensitiveConfirmationPending(review, [SPONSORSHIP]), true);
+  assert.equal(sensitiveConfirmationItems(review, { sensitiveConfirmations: [SPONSORSHIP] }).length, 1);
+});
+
+/* AN OPTIONAL QUESTION WITH NO ANSWER IS AN OFFER, NOT A BLOCKER, and the rule is the backend's
+   own (#906's sensitiveQuestionsFor filters on `required || answer.trim()` before naming a label).
+   A loop rather than a wall, and optional EEO self-identifications are #906's own target class:
+   she confirms a named optional question, presses Skip, and saves. The save correctly carries no
+   `confirmed` flag - the backend ignores a confirmation of a blank too - so no claim was minted and
+   the ask returned on every pass. Reading the server's rule is the fix. */
+test("a named optional question she skipped stops asking instead of looping", () => {
+  const review = hrt({
+    questions: [{ id: "q-eeo", question: SPONSORSHIP, answer: "", kind: "required", required: false, answer_state: "skipped" }],
+  });
+  assert.equal(sensitiveConfirmationPending(review, [SPONSORSHIP]), false);
+  assert.deepEqual(sensitiveConfirmationItems(review, { sensitiveConfirmations: [SPONSORSHIP] }), []);
+});
+
+test("a named optional question that still carries an answer is still hers to confirm", () => {
+  const review = hrt({
+    questions: [{ id: "q-eeo", question: SPONSORSHIP, answer: "Prefer not to say", kind: "required", required: false }],
+  });
+  assert.equal(sensitiveConfirmationPending(review, [SPONSORSHIP]), true);
+});
+
+test("a named required question with no answer is still hers, blank or not", () => {
+  const review = hrt({
+    questions: [{ id: "q-auth", question: SPONSORSHIP, answer: "", kind: "required", required: true }],
+  });
+  assert.equal(sensitiveConfirmationPending(review, [SPONSORSHIP]), true);
+});
+
+/* TWO BOXES ASKING THE SAME THING ARE TWO CONFIRMATIONS. addUnique drops a second row sharing a
+   label, which is right for a blocker and wrong here: race/ethnicity asked in two sections of one
+   form is the ordinary case, and each box is one the employer will read. Deduped, the gate counted
+   rows and said "One answer is a declaration" while the answers screen counted questions and said
+   "2 answers below are declarations", and the second had no row to press. */
+test("two questions sharing a label produce two rows, so the counts on both screens agree", () => {
+  const label = "What is your race/ethnicity?";
+  const review = hrt({
+    questions: [
+      { id: "q-eeo-1", question: label, answer: "Asian", kind: "required", required: true },
+      { id: "q-eeo-2", question: label, answer: "Asian", kind: "required", required: true },
+    ],
+  });
+  const ids = sensitiveConfirmationQuestionIds(review, [label]);
+  const rows = sensitiveConfirmationItems(review, { sensitiveConfirmations: [label] });
+  assert.deepEqual(ids, ["q-eeo-1", "q-eeo-2"]);
+  assert.equal(rows.length, ids.length, "the gate's count and the answers screen's count must be the same number");
+  assert.deepEqual(rows.map((row) => row.questionId), ids);
 });

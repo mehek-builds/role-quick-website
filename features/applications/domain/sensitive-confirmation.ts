@@ -1,4 +1,5 @@
 import type { ApplicationQuestion, ApplicationReview } from "../../../lib/api.ts";
+import { questionReviewPresentation } from "./question-review-presentation.ts";
 
 /**
  * THE QUESTIONS THE SERVER WILL NOT LET LITOS ANSWER FOR HER, AND THE SCREEN NEVER SAID SO.
@@ -92,7 +93,7 @@ export function applicantConfirmedAnswer(
   );
 }
 
-type ConfirmationReview = Pick<ApplicationReview, "questions" | "questions_reviewed_at">;
+type ConfirmationReview = Pick<ApplicationReview, "questions" | "question_metadata_blockers" | "questions_reviewed_at">;
 
 /**
  * The stored questions the envelope names AND she has not confirmed in this review round.
@@ -118,8 +119,44 @@ export function sensitiveConfirmationQuestions(
 ): ApplicationQuestion[] {
   const wanted = new Set(sensitiveConfirmationLabels(labels).map(matchKey));
   if (wanted.size === 0) return [];
+  /* IT MUST BE A QUESTION THE ANSWERS SCREEN CAN ACTUALLY DRAW, and this line is the repair for the
+   * dead end the first version of this shipped.
+   *
+   * MEASURED on this branch before the fix, with "Are you legally authorized to work in the country
+   * of employment?" answered "Yes" and named by the server:
+   *
+   *   server blocker missing_exact_options       gate greys: yes   card on the answers screen: no
+   *   missing_exact_options, select-one, no opts gate greys: yes   card on the answers screen: no
+   *   unsupported_multi_value, no opts           gate greys: yes   card on the answers screen: no
+   *   healthy select-one with complete options   gate greys: yes   card on the answers screen: yes
+   *
+   * The first three are a wall. `humanInputItems` walks every stored question and falls back to the
+   * stored record when the presentation layer has BLOCKED one, so a row appeared with a live
+   * Confirm pill; the answers screen renders only `editableQuestions`, so the press landed on a
+   * screen with no card, no confirmation note, a disabled Save (`continuationBlocked` holds on
+   * `metadataBlocked`), and Send grey for good.
+   *
+   * A blocked question is not owed a confirmation. It is owed a fresh form read: Litos has not
+   * proved the employer's wording or choices, so there is nothing yet for her to declare. The
+   * metadata-refresh panel already owns that ask and says so in its own words. Dropping it here
+   * leaves the button LIVE and lets the server refuse, which is exactly the fallback the
+   * unresolvable-label case already takes.
+   *
+   * AN OPTIONAL QUESTION WITH NO ANSWER IS AN OFFER, NOT A BLOCKER, and that rule is the backend's
+   * own: #906's sensitiveQuestionsFor filters on `question.required || question.answer.trim()`
+   * before it ever names a label. Mirroring it closes a loop rather than a wall - she confirms a
+   * named optional question, presses Skip, saves, and the save correctly carries no `confirmed`
+   * flag (the backend ignores a confirmation of a blank too, so sending one would change nothing),
+   * so the server minted no claim and the ask returned on every pass. Reading the server's rule is
+   * the fix; flagging a blank would only have been the client lying more confidently. */
+  const editable = new Set(
+    questionReviewPresentation(review.questions ?? [], review.question_metadata_blockers ?? [])
+      .editableQuestions.map((question) => question.id),
+  );
   return (review.questions ?? []).filter((question) => (
     wanted.has(matchKey(question.question))
+    && editable.has(question.id)
+    && (question.required || (question.answer ?? "").trim().length > 0)
     && !applicantConfirmedAnswer(question, review.questions_reviewed_at)
   ));
 }
@@ -213,8 +250,21 @@ export function sensitiveConfirmationRefusalLabels(reason: unknown): string[] {
  */
 export function sensitiveConfirmationSendRouteQuestionId(
   reason: unknown,
-  questions: readonly ApplicationQuestion[],
+  review: Pick<ApplicationReview, "questions" | "question_metadata_blockers">,
 ): string | null {
+  /* RESOLVED AGAINST THE QUESTIONS THE ANSWERS SCREEN CAN DRAW, not against every stored record,
+   * and that is not only tidiness. Routing to a BLOCKED question lands her on a screen with no card
+   * for it while `reviewPortalQuestions` has already recorded a confirm intent against its id. That
+   * intent outlives the visit: Save is disabled there, but "Review and fill again" unblocks the
+   * question, and a later bulk save would then carry `confirmed: true` for an answer she was never
+   * shown. That is the laundering the backend's gate exists to refuse, opened by the client.
+   *
+   * With nothing editable to route to, this returns null and the caller keeps the server's own
+   * sentence beside the button, which is what it does today. */
+  const questions = questionReviewPresentation(
+    review.questions ?? [],
+    review.question_metadata_blockers ?? [],
+  ).editableQuestions;
   for (const label of sensitiveConfirmationRefusalLabels(reason)) {
     const key = matchKey(label);
     const exact = questions.filter((question) => matchKey(question.question) === key);

@@ -78,11 +78,20 @@ test("the block on the packet screen keeps its control, so the row is not a wall
     /\{sensitiveConfirmations\.map\(\(item\) => \(\s*<ChecklistRow key=\{item\.id\} item=\{item\} checked=\{false\} onOpenQuestion=\{onOpenQuestion\} \/>/,
   );
   /* Its own heading, above the two blocks below it, because "Not confirmed" and "Done" both
-     describe states this is not. */
-  assert.ok(
-    dashboard.indexOf("SENSITIVE_CONFIRMATION_BLOCK_HEADING") < dashboard.indexOf("Not confirmed"),
-    "the outstanding block must render above the two settled ones",
-  );
+     describe states this is not.
+
+     ANCHORED ON THE THREE RENDER EXPRESSIONS, not on the heading constant. The first version of
+     this compared indexOf("SENSITIVE_CONFIRMATION_BLOCK_HEADING") against indexOf("Not confirmed"),
+     and the first hit of that constant is its own IMPORT at the top of the file, so the assertion
+     passed wherever the block actually rendered. It was scenery. These three anchors each occur
+     once and each is the guard of the block it names, so the order they assert is the order the
+     three blocks paint in. */
+  const outstandingAt = dashboard.indexOf("{sensitiveConfirmations.length > 0 && (");
+  const notConfirmedAt = dashboard.indexOf("{unconfirmedDocuments.length > 0 && (");
+  const doneAt = dashboard.indexOf("{completedItems.length > 0 && (");
+  assert.ok(outstandingAt > 0 && notConfirmedAt > 0 && doneAt > 0, "one of the three block guards moved or was renamed");
+  assert.ok(outstandingAt < notConfirmedAt, "the outstanding block must render above Not confirmed");
+  assert.ok(notConfirmedAt < doneAt, "Not confirmed must still render above Done");
 });
 
 test("a refused send is a route to the question, not a paragraph under the button", async () => {
@@ -99,7 +108,11 @@ test("a refused send is a route to the question, not a paragraph under the butto
      confirm press, and without it her save on the screen this opens posts the same bytes with no
      claim attached and the send is refused again. */
   assert.match(dashboard, /reviewPortalQuestions\(questionId, "confirm"\);/);
-  assert.match(dashboard, /const questionId = sensitiveConfirmationSendRouteQuestionId\(reason, submission\.review\.questions\);/);
+  /* The whole review, not its bare questions array: the route resolves only against questions the
+     answers screen can draw, so it needs the metadata blockers to know which those are. Routing to
+     a BLOCKED question records a confirm intent against a card she never sees, and that intent
+     outlives the visit. */
+  assert.match(dashboard, /const questionId = sensitiveConfirmationSendRouteQuestionId\(reason, submission\.review\);/);
   assert.match(dashboard, /if \(!questionId\) return false;/, "an unresolvable label must fall back to the server's own sentence");
 
   /* Every guard the approve handler applies to its success path, applied before any write, because
