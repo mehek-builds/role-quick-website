@@ -1,11 +1,12 @@
 import type { ApplicationQuestion, ApplicationQuestionMetadataBlocker } from "../../../lib/api.ts";
 import {
   conditionAnswerIsKnownNegative,
+  dependentGoesWithAFalseCondition,
   dependentQuestionParents,
   optionsOfferANegative,
   optionsOfferAnAffirmative,
   promptAsksAPolarQuestion,
-  questionsWithExplicitDependents,
+  questionsWithPolarFollowUps,
 } from "./dependent-questions.ts";
 
 const CLOSED_QUESTION_CONTROL = /^(?:select(?:-one|-multiple)?|radio|checkbox|combobox|listbox)$/i;
@@ -287,7 +288,7 @@ export function questionsLeftBlankByKnownFalseCondition(
   /* Resolved over the employer's WHOLE stored form, holes included, for the reason
      `directInputTaskPlan` documents: "the nearest free-standing question above" computed over a
      list with a metadata blocker missing from it silently names the wrong one. */
-  const provenConditions = questionsWithExplicitDependents(questions);
+  const provenConditions = questionsWithPolarFollowUps(questions);
   const knownFalseConditions = new Map<string, string>();
   const leftBlank = new Map<string, string>();
 
@@ -335,6 +336,13 @@ export function questionsLeftBlankByKnownFalseCondition(
     const conditionQuestion = parentId ? knownFalseConditions.get(parentId) : undefined;
     if (!conditionQuestion) continue;
     if (question.required) continue;
+    /* THE TWO THINGS PROXIMITY AND A BACKWARD REFERENCE DO NOT PROVE, both required, both measured
+       on the merged tree before this line existed: that this follow-up applies on a YES rather than
+       on the very no that settled the condition ("If no, will you now or in the future require
+       sponsorship..." under an authorization question answered No), and that the question proximity
+       named is the one it is actually about ("If yes, what level of clearance do you hold?" matched
+       to "Are you willing to relocate?" because that sat closer). See dependent-questions.ts. */
+    if (!dependentGoesWithAFalseCondition(question.question, conditionQuestion)) continue;
     if (question.answer_state === "skipped" || question.answer_state === "unanswered") continue;
     /* An answer she can see standing in the control is hers to keep, whoever put it there. Only a
        follow-up with nothing usable in it is left blank, so this never discards a value. */

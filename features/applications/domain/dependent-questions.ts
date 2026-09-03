@@ -213,9 +213,27 @@ export function promptAsksAPolarQuestion(prompt: string | undefined): boolean {
   return Boolean(normalized) && POLAR_QUESTION_OPENER.test(normalized);
 }
 
-/** True when some question in this form explicitly refers back to the question with this id. */
-export function questionsWithExplicitDependents(questions: readonly PromptShaped[]): Set<string> {
-  return new Set(dependentQuestionParents(questions).values());
+/**
+ * The ids of questions the form's own words prove are answerable yes or no.
+ *
+ * A follow-up counts only when it STATES which way it points ("if yes", "if no", "if you answered
+ * yes"). A backward reference that states no polarity ("If you selected a response to the prior
+ * question") proves that a question sits above it and nothing at all about that question's shape,
+ * so it is not evidence that the question above is polar. See dependentConditionPolarity below,
+ * which is declared after this and is why this reads it lazily rather than at module scope.
+ */
+export function questionsWithPolarFollowUps(questions: readonly PromptShaped[]): Set<string> {
+  const parents = dependentQuestionParents(questions);
+  const proven = new Set<string>();
+  for (const question of questions) {
+    const id = question.id?.trim();
+    if (!id) continue;
+    const parentId = parents.get(id);
+    if (!parentId) continue;
+    if (dependentConditionPolarity(question.question) === "unstated") continue;
+    proven.add(parentId);
+  }
+  return proven;
 }
 
 /** True when at least one offered option lets her say no. */
@@ -247,4 +265,146 @@ export function conditionAnswerIsKnownNegative(
   if (answer) return NEGATIVE_ANSWER.test(answer);
   const draft = question.answer_draft?.trim() ?? "";
   return Boolean(draft) && NEGATIVE_ANSWER.test(draft);
+}
+
+/* ================================================================================================
+ * WHICH FOLLOW-UPS A KNOWN-FALSE CONDITION ACTUALLY TAKES WITH IT
+ * ================================================================================================
+ *
+ * TWO THINGS ARE TRUE OF A FOLLOW-UP AND ONLY ONE OF THEM IS PROVED BY `questionDependsOnPrior`.
+ * That predicate proves a follow-up refers BACKWARD. It proves nothing about WHICH answer above
+ * makes the follow-up apply, and nothing about WHICH question above it means. Both gaps are
+ * harmless where this module started, because `withRequiredParentQuestionIds` only ever ADDS a
+ * question to the queue and a spurious addition costs one extra screen. Leaving an optional
+ * question blank SUBTRACTS one. Under subtraction each gap is a way to take a question off the
+ * screen that the applicant was owed, so each needs its own evidence.
+ *
+ * GAP ONE: POLARITY. `BACKWARD_REFERENCE_PATTERNS` deliberately matches "if no" and "if not"
+ * alongside "if yes", and this module's own test asserts that it does. A follow-up opening "if no"
+ * APPLIES EXACTLY WHEN THE CONDITION IS FALSE. Measured on the merged tree before this was added:
+ *
+ *   "Are you legally authorized to work in the United States?"  = No
+ *   "If no, will you now or in the future require sponsorship for an employment visa?"
+ *       -> left blank, badged "Left blank by Litos"
+ *
+ * That is the most consequential question on a US application form, hidden by the very answer that
+ * makes it apply, and only `required` stood between it and the employer. So a follow-up is taken
+ * with its condition only when its own opener is AFFIRMATIVE. "If no", "If not" and "If you
+ * answered no" are never taken. Neither is an opener that states no polarity at all ("If you
+ * selected a response to the prior question"): unstated is not affirmative, and guessing which way
+ * it points is the whole error being fixed here.
+ *
+ * GAP TWO: WHICH PARENT. `dependentQuestionParents` resolves to the NEAREST free-standing question
+ * above, which is the best available reading and is still only proximity. A closer question can
+ * steal parenthood from the real one:
+ *
+ *   "Do you hold an active security clearance?"      = Yes
+ *   "Are you willing to relocate?"                   = No     <- nearest above, so it is named
+ *   "If yes, what level of clearance do you hold?"           -> left blank against relocation
+ *
+ * Proximity cannot tell those apart, so subtraction additionally requires the follow-up to be about
+ * the same thing as the parent it was matched to: one content word in common, after generic form
+ * vocabulary is removed. "clearance"/"level" against "willing"/"relocate" share nothing and the
+ * pair is refused; "visa" against "visa sponsorship", and "offer" against "offer deadlines", both
+ * hold. A follow-up with no content of its own ("If yes, please explain.") shares nothing with
+ * anything and is simply asked, which costs one screen and cannot hide a question.
+ */
+
+/** Whether a follow-up applies when the question above it was answered yes, no, or unknowably. */
+export type DependentConditionPolarity = "affirmative" | "negative" | "unstated";
+
+/* Checked before the affirmative list, so a prompt that names both ("if no, unlike if yes...")
+   resolves to the reading that keeps the question on screen. */
+const NEGATIVE_CONDITION_OPENERS: readonly RegExp[] = [
+  /^\s*if\s+(?:no|not)\b/i,
+  /^\s*if\s+(?:you|the\s+applicant)\s+(?:answered|said|selected|responded|indicated|checked|chose|choose|reply|replied)\s*["'“‘]?\s*(?:with\s+)?["'“‘]?\s*no\b/i,
+  /^\s*if\s+(?:the\s+)?answer\s+(?:to\s+[^,.?]{0,80}\s+)?(?:is|was|above\s+is)\s*["'“‘]?\s*no\b/i,
+];
+
+const AFFIRMATIVE_CONDITION_OPENERS: readonly RegExp[] = [
+  /^\s*if\s+(?:yes|so)\b/i,
+  /^\s*if\s+(?:you|the\s+applicant)\s+(?:answered|said|selected|responded|indicated|checked|chose|choose|reply|replied)\s*["'“‘]?\s*(?:with\s+)?["'“‘]?\s*yes\b/i,
+  /^\s*if\s+(?:the\s+)?answer\s+(?:to\s+[^,.?]{0,80}\s+)?(?:is|was|above\s+is)\s*["'“‘]?\s*yes\b/i,
+];
+
+/**
+ * Which answer above makes this follow-up apply.
+ *
+ * Only the opener is read. A "yes" appearing later in a long prompt is part of what the follow-up
+ * ASKS, not the condition under which it is asked, and reading it as the condition is how "if no,
+ * will you require sponsorship" would be classified affirmative on the strength of its own answer
+ * options.
+ */
+export function dependentConditionPolarity(prompt: string | undefined): DependentConditionPolarity {
+  const normalized = prompt?.replace(/\s+/g, " ").trim() ?? "";
+  if (!normalized) return "unstated";
+  if (NEGATIVE_CONDITION_OPENERS.some((pattern) => pattern.test(normalized))) return "negative";
+  if (AFFIRMATIVE_CONDITION_OPENERS.some((pattern) => pattern.test(normalized))) return "affirmative";
+  return "unstated";
+}
+
+/* GENERIC APPLICATION-FORM VOCABULARY, which is most of what two unrelated prompts have in common.
+   Erring long is the safe direction: every word added here makes some pair share nothing, and a
+   pair that shares nothing is asked rather than hidden. */
+const SUBJECT_STOPWORDS: ReadonlySet<string> = new Set([
+  "able", "about", "above", "additional", "after", "again", "against", "also", "answer", "answered",
+  "answers", "applicable", "applicant", "application", "applications", "apply", "applying", "asked",
+  "aware", "back", "been", "before", "being", "below", "best", "both", "brief", "briefly", "candidate",
+  "candidates", "cannot", "check", "checked", "choose", "chose", "chosen", "company", "companies",
+  "complete", "confirm", "consider", "could", "current", "currently", "date", "dates", "describe",
+  "description", "detail", "details", "does", "done", "during", "each", "else", "email", "employer",
+  "employers", "employment", "explain", "field", "fields", "first", "following", "form", "from",
+  "further", "give", "have", "held", "here", "hold", "holds", "indicate", "indicated", "information",
+  "interested", "into", "itself", "know", "last", "least", "less", "like", "list", "listed", "made",
+  "make", "many", "message", "month", "months", "more", "most", "much", "must", "name", "names",
+  "need", "needs", "number", "numbers", "only", "option", "options", "other", "others", "over",
+  "part", "phone", "please", "position", "positions", "previous", "prior", "provide", "provided",
+  "question", "questions", "rate", "reply", "respond", "response", "responses", "role", "roles",
+  "said", "same", "select", "selected", "share", "short", "should", "since", "some", "specify",
+  "such", "tell", "than", "that", "their", "them", "then", "there", "these", "they", "this", "those",
+  "through", "time", "times", "type", "types", "under", "until", "upon", "used", "using", "very",
+  "want", "well", "were", "what", "when", "where", "whether", "which", "while", "will", "with",
+  "within", "without", "would", "year", "years", "your", "yours", "yourself",
+]);
+
+/**
+ * The content words a prompt is about, with generic form vocabulary and short words removed.
+ *
+ * A crude plural fold is enough and a real stemmer would be worse than useless here: this set is
+ * only ever intersected with another one, so an over-eager stem creates a false match, which is the
+ * expensive direction.
+ */
+function subjectTerms(prompt: string): Set<string> {
+  const terms = new Set<string>();
+  for (const raw of prompt.toLowerCase().replace(/[^a-z]+/g, " ").split(" ")) {
+    if (raw.length < 4 || SUBJECT_STOPWORDS.has(raw)) continue;
+    const stem = raw.length > 4 && raw.endsWith("s") && !raw.endsWith("ss") ? raw.slice(0, -1) : raw;
+    if (stem.length < 4 || SUBJECT_STOPWORDS.has(stem)) continue;
+    terms.add(stem);
+  }
+  return terms;
+}
+
+/** True when two prompts name at least one thing in common that is not form furniture. */
+export function promptsShareASubject(one: string | undefined, other: string | undefined): boolean {
+  const first = subjectTerms(one ?? "");
+  if (first.size === 0) return false;
+  const second = subjectTerms(other ?? "");
+  for (const term of second) if (first.has(term)) return true;
+  return false;
+}
+
+/**
+ * Whether this follow-up is one its condition takes with it when the condition is false.
+ *
+ * Both gaps closed at once, and BOTH are required. Polarity says the follow-up applies on a yes;
+ * the shared subject says the question it applies to is the one proximity named. Either alone lets
+ * a real question off the screen, which the two measurements at the top of this section are.
+ */
+export function dependentGoesWithAFalseCondition(
+  dependentPrompt: string | undefined,
+  conditionPrompt: string | undefined,
+): boolean {
+  return dependentConditionPolarity(dependentPrompt) === "affirmative"
+    && promptsShareASubject(dependentPrompt, conditionPrompt);
 }

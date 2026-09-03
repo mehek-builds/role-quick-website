@@ -266,7 +266,9 @@ describe("what the parent link refuses to pair", () => {
         false,
         { portal_input_type: "radio" },
       ),
-      text("sanctions_detail", "If you selected a response to the prior question, please provide additional detail.", ""),
+      /* Affirmative and polarity-stating on purpose. An unstated follow-up would stand shape B down
+         one guard earlier, and this test would then pass without the polar reading being run. */
+      text("sanctions_detail", "If yes, please provide additional detail about that work.", ""),
     ];
     assert.equal(questionsLeftBlankByKnownFalseCondition(questions).size, 0);
   });
@@ -278,7 +280,9 @@ describe("what the parent link refuses to pair", () => {
        and take the question below it off the screen with it. */
     const questions = [
       closed("gender", "What is your gender?", "No", ["Woman", "Man", "Non-binary", "I don't wish to answer"]),
-      text("gender_detail", "If you selected another option above, please specify.", ""),
+      /* Affirmative, and it names the same subject, so ONLY the missing yes on that list keeps this
+         pair apart. Both other guards are satisfied here by construction. */
+      text("gender_detail", "If yes, how would you like your gender recorded?", ""),
     ];
     assert.equal(questionsLeftBlankByKnownFalseCondition(questions).size, 0);
   });
@@ -346,14 +350,14 @@ describe("what the parent link refuses to pair", () => {
 
   test("a chain of follow-ups resolves to the condition at its head, not to the middle of itself", () => {
     const questions = [
-      closed("offers", "Do you have any current offers?", "No", ["Yes", "No"]),
-      text("which", "If yes, which companies?", ""),
-      text("when", "If yes to the above, what are the deadlines?", ""),
+      closed("offers", "Do you have any outstanding offers?", "No", ["Yes", "No"]),
+      text("which", "If yes, which firms have made you an offer?", ""),
+      text("when", "If yes to the above, when does each offer expire?", ""),
       text("start", "If hired, when could you start?", ""),
     ];
     const blanks = questionsLeftBlankByKnownFalseCondition(questions);
-    assert.equal(blanks.get("which"), "Do you have any current offers?");
-    assert.equal(blanks.get("when"), "Do you have any current offers?");
+    assert.equal(blanks.get("which"), "Do you have any outstanding offers?");
+    assert.equal(blanks.get("when"), "Do you have any outstanding offers?");
     assert.equal(
       blanks.has("start"),
       false,
@@ -369,6 +373,137 @@ describe("what the parent link refuses to pair", () => {
     const presentation = questionReviewPresentation(questions);
     assert.deepEqual(presentation.leftBlankQuestions, []);
     assert.ok(presentation.metadataBlockers.length > 0, "it is still reported, not silently lost");
+  });
+});
+
+describe("a follow-up the condition does NOT take with it", () => {
+  /* PR #530 review, both reproduced on the merged tree before the guards below existed. A
+     backward reference proves a follow-up points UP. It proves neither which answer makes the
+     follow-up apply nor which question above it means, and under subtraction each gap takes a
+     question off the screen that the applicant was owed. */
+
+  test("a follow-up conditioned on the NO is asked exactly when the answer is no", () => {
+    /* THE WORST CASE THE REVIEW FOUND, and BACKWARD_REFERENCE_PATTERNS matches "if no" on purpose:
+       dependent-questions.test.mts asserts questionDependsOnPrior("If no, why not?") is true. So
+       this follow-up was a dependent of a known-false condition, and the condition being false is
+       precisely why it applies. Sponsorship is the most consequential question on a US form, and
+       only `required` stood between it and a silent blank. */
+    const questions = [
+      closed("auth", "Are you legally authorized to work in the United States?", "No", ["Yes", "No"]),
+      text("sponsor", "If no, will you now or in the future require sponsorship for an employment visa?", ""),
+    ];
+    const blanks = questionsLeftBlankByKnownFalseCondition(questions);
+    assert.equal(blanks.has("sponsor"), false);
+    assert.equal(
+      questionReviewPresentation(questions).editableQuestions.some(optionalQuestionNeedsDecision),
+      true,
+      "it is still hers to answer or skip",
+    );
+  });
+
+  test("the other spellings of a negative condition are asked too", () => {
+    for (const prompt of [
+      "If not, please explain your work authorization status.",
+      "If you answered no to the question above, tell us what you will need.",
+      "If you selected \u201cNo\u201d above, describe your situation.",
+      "If the answer above is no, when will that change?",
+    ]) {
+      const questions = [
+        closed("auth", "Are you legally authorized to work in the United States?", "No", ["Yes", "No"]),
+        text("child", prompt, ""),
+      ];
+      assert.equal(
+        questionsLeftBlankByKnownFalseCondition(questions).has("child"),
+        false,
+        `a negative-conditioned follow-up was hidden: ${prompt}`,
+      );
+    }
+  });
+
+  test("a follow-up that states no polarity at all is asked", () => {
+    /* The measured Lever prompt this module was originally written for. It refers backward and says
+       nothing about which way it points, and unstated is not affirmative. */
+    const questions = [
+      closed("sanctions", "Are you subject to any sanctions restrictions?", "No", ["Yes", "No"]),
+      text("detail", "If you selected a response to the prior question, please provide additional detail.", ""),
+    ];
+    assert.equal(questionsLeftBlankByKnownFalseCondition(questions).has("detail"), false);
+  });
+
+  test("a nearer question cannot steal parenthood and take a follow-up down with it", () => {
+    /* PROXIMITY PROVES THAT A PARENT EXISTS, NEVER WHICH. dependentQuestionParents resolves to the
+       nearest free-standing question above, so the relocation question is named here and the
+       clearance follow-up was blanked against it. In #526's use a mispair only ADDED a question to
+       the queue, which is safe; this use SUBTRACTS one, so the pair has to be about the same thing
+       before it counts. */
+    const questions = [
+      closed("clearance", "Do you hold an active security clearance?", "Yes", ["Yes", "No"]),
+      closed("relocate", "Are you willing to relocate?", "No", ["Yes", "No"]),
+      text("level", "If yes, what level of clearance do you hold?", ""),
+    ];
+    const blanks = questionsLeftBlankByKnownFalseCondition(questions);
+    assert.equal(blanks.has("level"), false);
+  });
+
+  test("a follow-up with no subject of its own is asked, which is the price of that guard", () => {
+    /* "If yes, please explain." shares nothing with anything, so proximity is the only evidence
+       available for it and proximity can be stolen. She is asked. That costs one screen and cannot
+       hide a question, which is the direction this whole module errs in. */
+    const questions = [
+      closed("sponsor", "Do you require visa sponsorship?", "No", ["Yes", "No"]),
+      text("explain", "If yes, please explain.", ""),
+    ];
+    assert.equal(questionsLeftBlankByKnownFalseCondition(questions).has("explain"), false);
+  });
+
+  test("an \"if no\" follow-up still proves the question above it is answerable yes or no", () => {
+    /* The negative openers are not merely a refusal list. A follow-up opening "if no" is the form
+       stating that the question above has a no arm, which is exactly the evidence shape B needs,
+       even though that follow-up is never taken along itself. Read as unstated instead, HRT's own
+       question would go back to being asked. */
+    const questions = [
+      closed("q_15", OFFER_DEADLINES, "No", OFFER_DEADLINE_OPTIONS),
+      text("why", "If no, why not?", ""),
+    ];
+    const blanks = questionsLeftBlankByKnownFalseCondition(questions);
+    assert.equal(blanks.get("q_15"), OFFER_DEADLINES, "the condition is still proved polar");
+    assert.equal(blanks.has("why"), false, "and the follow-up that applies on the no is still asked");
+  });
+
+  test("two prompts sharing only form furniture do not count as being about the same thing", () => {
+    /* The subject test is only as good as what it throws away. Here the sponsorship question is the
+       real parent, the willingness question sits closer and takes parenthood, and the follow-up
+       shares "your", "employer", "provide" and "details" with the thief: generic application-form
+       vocabulary, present on half the questions of any form, and not evidence of anything. */
+    const questions = [
+      closed("sponsor", "Do you require visa sponsorship?", "Yes", ["Yes", "No"]),
+      closed("contact", "Are you willing to provide your current employer's contact details?", "No", ["Yes", "No"]),
+      text("who", "If yes, please list the employer that sponsors your visa.", ""),
+    ];
+    assert.equal(questionsLeftBlankByKnownFalseCondition(questions).has("who"), false);
+  });
+
+  test("a plural of form furniture is furniture too, not a shared subject", () => {
+    /* The stopword list enumerates singulars it cannot enumerate every inflection of, so the fold
+       to a stem is checked against it a SECOND time. Without that second check "forms" survives as
+       "form" and bridges two prompts using the word in unrelated senses, which is a mispair built
+       out of nothing but a plural. */
+    const questions = [
+      closed("offers", "Do you have any outstanding offers?", "Yes", ["Yes", "No"]),
+      closed("consent", "Are you willing to sign our standard consent forms?", "No", ["Yes", "No"]),
+      text("ident", "If yes, which forms of identification can you provide?", ""),
+    ];
+    assert.equal(questionsLeftBlankByKnownFalseCondition(questions).has("ident"), false);
+  });
+
+  test("shape B needs a follow-up that states a polarity, not merely one that points up", () => {
+    /* A backward reference with no polarity proves a question sits above it and nothing about that
+       question's shape, so it is not evidence that the question above is answerable yes or no. */
+    const questions = [
+      closed("q_15", OFFER_DEADLINES, "No", OFFER_DEADLINE_OPTIONS),
+      text("detail", "If you selected a response to the prior question, please provide additional detail.", ""),
+    ];
+    assert.equal(questionsLeftBlankByKnownFalseCondition(questions).has("q_15"), false);
   });
 });
 
@@ -418,6 +553,13 @@ describe("the question screen", () => {
 
   test("names the condition rather than describing the blank as her choice", () => {
     assert.match(page, /leftBlankConditions\.get\(question\.id\) === question\.question/);
-    assert.match(page, /Litos left this blank: it follows up on/);
+    /* The sentence claims only what the rule now proves: this follow-up says it applies on a yes,
+       and the answer to the question it names is no. It used to claim the parent itself was "not
+       true for you", which was false for an "if no" follow-up and false again whenever proximity
+       had named the wrong parent. */
+    assert.match(page, /it applies only if the answer to/);
+    /* Anchored on the rendered template literal, not the phrase: the comment above it in page.tsx
+       quotes the old sentence to explain why it went. */
+    assert.doesNotMatch(page, /`Litos left this blank: it follows up on/);
   });
 });

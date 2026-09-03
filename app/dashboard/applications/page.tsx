@@ -7303,7 +7303,13 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, metad
                 ? "This optional question will be left blank. Choose Answer instead if you want to include a response."
                 : leftBlankConditions.get(question.id) === question.question
                   ? "None of the employer's choices is true for you, and Litos does not pick one that is not. This is left blank. Choose Answer instead if you want to answer it anyway."
-                  : `Litos left this blank: it follows up on "${displayQuestionLabel(leftBlankConditions.get(question.id) ?? "")}", which is not true for you. Choose Answer instead if you want to answer it anyway.`}
+                  /* This used to make a claim about the PARENT'S TRUTH, and that claim was false
+                     in both directions the PR #530 review found: a follow-up opening "if no"
+                     applies BECAUSE the parent is false, and a follow-up matched by proximity alone
+                     may not be about that parent at all. The rule now only reaches a follow-up that
+                     says it applies on a yes and names the same subject, so the sentence states
+                     exactly that and nothing wider. */
+                  : `Litos left this blank: it applies only if the answer to "${displayQuestionLabel(leftBlankConditions.get(question.id) ?? "")}" is yes, and yours is no. Choose Answer instead if you want to answer it anyway.`}
             </p>
           ) : question.options && question.options.length > 0 ? (
             /* The employer's own list, so a fixed choice is a choice rather than a box she has to
