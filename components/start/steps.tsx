@@ -635,11 +635,15 @@ function FocusForm({
       </details>
 
       <div className="flex items-center gap-3">
-        {/* `!ready` is in here for a reason a browser found and no unit test would have.
-            Deselecting every field hides the title list but does NOT clear `selectedTitles`, so a
-            student who changed their mind about the field could press Continue and commit titles
-            the screen had stopped drawing. Continue never commits anything invisible: while the
-            offer is withheld, so is the button. */}
+        {/* ONLY `busy`. Every data-completeness term that used to live in this expression is now a
+            sentence from focusProblem() at the top of save(), because a dead button on arrival was
+            the state of every new account: locations are the one answer on this screen nothing can
+            seed, so step 1 of 10 opened with an unpressable Continue and a red accusation.
+
+            The invariant `!ready` protected is still held, just not here. Deselecting every field
+            hides the title list without clearing `selectedTitles`, so Continue must never commit
+            titles the screen has stopped drawing - and it cannot, because save() returns on the
+            field problem before it writes. Pressable is not the same as permissive. */}
         <PrimaryButton onClick={() => void save()} disabled={busy}>
           {busy ? <PendingLabel onColor>Saving...</PendingLabel> : "Continue"}
         </PrimaryButton>

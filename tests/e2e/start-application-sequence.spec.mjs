@@ -734,12 +734,35 @@ describe("the application sequence, end to end", () => {
     // The title follows what the student actually did, and this walk sent.
     assert.match(body, /Sent\. And here's something from us\./i);
 
-    await page.getByRole("button", { name: "Start using it" }).click();
+    /* THE PRESS BELONGS TO 08 NOW, because the screen it leaves does. The staying-in-touch ask was
+       folded into this screen (10 -> 9), so "Start using it" is the control that finishes BOTH the
+       gift and the notification choices - see the next test, which makes those choices before
+       pressing it. Pressing here would walk past the ask this sequence still has to cover. */
   });
 
   test("08 notifications: two asks, nothing pre-ticked, and only what was ticked is granted", async () => {
-    await page.getByRole("heading", { name: /when the next one opens/i }).waitFor({ timeout: 20_000 });
+    /* A SECTION OF THE TRIAL SCREEN, NOT A SCREEN. This test waited for a standalone notifications
+       screen after "Start using it" and timed out on every run from the fold until 2026-09-03,
+       which is what kept Application sequence walk red - and, because Click path (browser) skips
+       every later step after a failure, kept three more specs from running at all.
 
+       Nothing broke. NotificationsStep's switches moved into TrialStep and app/start/page.tsx now
+       acknowledges `trial` and `notifications` in one motion "so the server never has a window in
+       which it would derive the folded screen". NotificationsStep itself survives only for accounts
+       that acked `trial` before the fold shipped; its own header says new accounts never reach it.
+       The text this test asserts all lives in NotificationChoices, which is the same component in
+       both places, so the fold cost this walk no coverage - only the wait was wrong.
+
+       So the ask is read on the screen 07 just checked, and this test now owns the press that
+       leaves it. */
+    await page.getByRole("heading", { name: /here's something from us/i }).waitFor({ timeout: 20_000 });
+
+    /* NOT asserted by counting headings. A `count(/when the next one opens/i) === 0` check reads
+       like it pins the fold, but the ask's label is a <p> only incidentally: promoting it to a
+       real heading is an accessibility improvement someone may well make, and that would fail this
+       test with a sentence claiming the screen came back when it had not. It also catches nothing
+       the body assertions below miss - un-folding takes NotificationChoices off this screen, so
+       the two ask labels stop being here at all, which is the honest signal. */
     const body = await page.locator("main").innerText();
     assert.match(body, /Tell me when a strong match opens/i);
     assert.match(body, /Tell me when an employer replies/i);
@@ -762,11 +785,24 @@ describe("the application sequence, end to end", () => {
       assert.equal(await boxes.nth(i).isChecked(), false, "a pre-ticked consent is not a consent");
     }
 
+    /* SAVED BY THE TICK, not by the button: NotificationChoices persists every key on every change,
+       which is what lets the trial screen's one control stay about one thing. Waiting on the PUT
+       rather than pressing straight after the tick is what keeps this from racing the request it
+       is about to assert on. */
+    const saved = page.waitForResponse(
+      (response) => new URL(response.url()).pathname.endsWith("/notifications/preferences")
+        && response.request().method() === "PUT",
+      { timeout: 20_000 },
+    );
     await page.getByRole("checkbox", { name: "Tell me when a strong match opens" }).check();
-    await page.getByRole("button", { name: "Continue" }).click();
+    await saved;
+
+    /* "Start using it", not "Continue": the fold left one button on this screen and it carries both
+       acknowledgements. The order test below is what pins that it writes trial then notifications. */
+    await page.getByRole("button", { name: "Start using it" }).click();
 
     await page.getByRole("heading", { name: /after the seven days/i }).waitFor({ timeout: 20_000 });
-    assert.equal(notificationSaves.length, 1);
+    assert.equal(notificationSaves.length, 1, "the tick saved more than once, or not at all");
     assert.equal(notificationSaves[0].strong_match, true);
     assert.equal(notificationSaves[0].employer_reply, false, "an unticked box is a decline, not an omission");
     assert.equal(notificationSaves[0].activity_digest, false, "the laptop summary was never granted");

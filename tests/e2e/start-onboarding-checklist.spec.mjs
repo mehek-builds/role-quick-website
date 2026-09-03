@@ -802,14 +802,42 @@ test("the walk: every step in order, each one advancing the rail by one", async 
 
     /* WHERE IS A REQUIRED ANSWER NOW, and this proves the gate rather than the label. Location is
        a hard filter on the board, so a blank one is not a neutral default - it is a student who
-       asked for the whole world by accident. Continue stays disabled until they answer, and the
-       screen says which answer is missing. */
+       asked for the whole world by accident.
+
+       THE GATE IS THE REFUSAL, NOT A DEAD BUTTON, and asserting the button's `disabled` attribute
+       is what made this walk red on main from 2026-09-02 (ce6ba78) to 2026-09-03. Continue used to
+       carry the four data-completeness terms in its `disabled` expression, so the very first frame
+       of step 1 of 10 handed every new account an unpressable button and a red sentence about a
+       field nothing can seed - no resume guess produces a place. 1949a6d and ce6ba78 moved all of
+       it into focusProblem(), consulted at the top of save(): the button is live, and pressing it
+       answers with the one missing thing instead of accusing the student on arrival.
+
+       So the invariant to hold this walk to is that a blank location cannot ADVANCE, which is
+       stronger than the old check and is what the student actually experiences. Asserted in three
+       parts: the button is offered, the press does not leave the screen, and the sentence names
+       the missing answer and the chip that satisfies it. */
     await assert.doesNotReject(rolesContinue.waitFor({ timeout: 5000 }));
-    assert.equal(await rolesContinue.isDisabled(), true, "Continue is offered before the location question is answered");
+    assert.equal(await rolesContinue.isDisabled(), false, "step 1 greeted the student with a dead Continue");
     assert.match(
       await page.locator("main").innerText(),
       /where do you want to work/i,
       "the roles screen never asks where",
+    );
+
+    /* Read BEFORE the press, not compared to EMPTY_TARGETING: this subtest inherits whatever the
+       ones above it left in the fixture, so pinning the constant would be asserting their state as
+       much as this press's. What matters here is only that the refused press changed nothing. */
+    const targetingBeforeRefusal = JSON.stringify(savedTargeting);
+    await rolesContinue.click();
+    /* WAITED FOR, not read on the next tick. The refusal is a React render, so reading innerText
+       straight after the click races it and would fail intermittently rather than honestly. */
+    const refusal = page.getByText(/Add at least one place\. Pick "Remote" if you want to work from anywhere\./);
+    await refusal.waitFor({ timeout: 10_000 });
+    await screen("Your roles");
+    assert.equal(
+      JSON.stringify(savedTargeting),
+      targetingBeforeRefusal,
+      "the refused press still wrote to the account",
     );
 
     /* By the VISIBLE label. The field is named by its own <label htmlFor>, so the string a student
@@ -1252,8 +1280,11 @@ test("an account that stored remote_only gets the Remote chip and the column cle
     "a stored remote_only did not become a visible Remote chip",
   );
 
+  /* PRESSED AND ADVANCED, not read off `disabled`. Continue no longer carries the location terms
+     (see the walk above), so an `isDisabled() === false` here would pass on a screen that had
+     seeded nothing at all. Leaving the screen is the only thing that still proves the stored
+     preference satisfied the gate. */
   const rolesContinue = page.locator("button", { hasText: "Continue" });
-  assert.equal(await rolesContinue.isDisabled(), false, "the seeded place did not satisfy the location gate");
   await rolesContinue.click();
   await screen("Your resume");
 
