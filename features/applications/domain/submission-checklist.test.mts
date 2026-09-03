@@ -1803,18 +1803,41 @@ test("the employer's own record is what makes a file Done", () => {
  * held resume_attached false and resume_source "none" WHILE submission_state was
  * ready_for_final_approval and this screen printed "Application files, 2 items completed".
  */
-test("the application record outranks the run about the run's own resume", () => {
+test("the application record adds its own sentence about the resume", () => {
   const unconfirmed = unconfirmedDocumentItems(dsi, {
     resume: { resume_attached: false, resume_source: "none", resume_attached_at: null },
   });
 
   const resume = unconfirmed.find((item) => item.label === "Resume");
-  assert.equal(resume?.detail, "Litos's own record of this application has no resume attached to it. Check the picture of the filled form.");
-  assert.equal(resume?.badge, "Missing");
+  assert.equal(
+    resume?.detail,
+    "Litos says it attached this, and Litos's own application record has no resume linked to it either. Nothing here can confirm the company got one, so check the picture of the filled form.",
+  );
+  /* NOT raised to Missing. The column is `not null default false` and only a managed prepare or a
+     post-receipt artifact sync ever writes it true, so false on a legacy-flow packet is the ordinary
+     state of a healthy application, not a measurement that anything is gone. Calling it Missing
+     would send her to re-upload a resume that was fine. */
+  assert.equal(resume?.badge, "Not confirmed");
   /* One row of the ledger, one file. The record says nothing about the cover letter, so the cover
      letter keeps the sentence the run earned it. */
-  assert.equal(unconfirmed.find((item) => item.label === "Cover letter")?.badge, "Not confirmed");
+  const cover = unconfirmed.find((item) => item.label === "Cover letter");
+  assert.equal(cover?.badge, "Not confirmed");
+  assert.equal(cover?.detail, "Litos says it attached this. Nothing has confirmed it on the company's form, so check the picture of the filled form for the file name.");
 });
+
+test("a run that reports the resume empty outranks the record's weaker sentence", () => {
+  /* Both are true, and the run measured the employer's own form while the record only knows what
+     Litos linked. The stronger, more specific report is the one worth printing. */
+  const unconfirmed = unconfirmedDocumentItems(
+    { ...dsi, attention_reason: '"CV or resume" is required and is still empty' },
+    { resume: { resume_attached: false, resume_source: "none", resume_attached_at: null } },
+  );
+  const resume = unconfirmed.find((item) => item.label === "Resume");
+  assert.equal(resume?.detail, "The run reports this file is still missing from the company's form.");
+  assert.equal(resume?.badge, "Missing");
+});
+
+const PLAIN_UNVERIFIED_DETAIL = "Litos says it attached this. Nothing has confirmed it on the company's form, so check the picture of the filled form for the file name.";
 
 test("an attached resume on the record still does not make a Done line", () => {
   /* Hudson River Trading and EQL Tech both read resume_attached true with submission_state
@@ -1829,10 +1852,10 @@ test("an attached resume on the record still does not make a Done line", () => {
     "a resume linked to the application record is not the employer's form having received it",
   );
   const unconfirmed = unconfirmedDocumentItems(dsi, attached);
-  assert.deepEqual(unconfirmed.map(({ label, badge }) => ({ label, badge })), [
-    { label: "Resume", badge: "Not confirmed" },
-    { label: "Cover letter", badge: "Not confirmed" },
-  ]);
+  assert.deepEqual(unconfirmed.map(({ label, badge, detail }) => ({ label, badge, detail })), [
+    { label: "Resume", badge: "Not confirmed", detail: PLAIN_UNVERIFIED_DETAIL },
+    { label: "Cover letter", badge: "Not confirmed", detail: PLAIN_UNVERIFIED_DETAIL },
+  ], "an attached record must read exactly like no record at all, in the words as well as the badge");
 });
 
 test("a record this ledger never loaded is silence, not a verdict", () => {

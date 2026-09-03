@@ -1476,25 +1476,35 @@ export type ChecklistResumeRecord = Readonly<{
  * `resume_source: "none"` and `submission_state: ready_for_final_approval` while this screen printed
  * "Application files, 2 items completed" over an enabled Send button.
  *
- * ONLY THE NEGATIVE IS READ, and that is the whole of the discipline here.
+ * ONLY THE NEGATIVE IS READ, IT NEVER PROMOTES, AND IT IS NOT AN ACCUSATION. All three of those are
+ * load-bearing, and the third one is where the first draft of this was wrong.
  *
- * `false` sits UPSTREAM of the employer's form: a resume that is not attached to the application
- * cannot have reached anybody's dropzone, so it sharpens a sentence this list was already going to
- * print. `true` says a resume artifact is linked to the RECORD, which is a different claim from the
- * employer's form having received it: Hudson River Trading and EQL Tech both read
- * `resume_attached: true` with `submission_state: not_started` on 2026-09-03. Promoting that to Done
- * would be this same defect wearing a new source. `undefined` is an older backend, or a row this
- * screen never loaded, and it says nothing at all.
+ * WHAT THE FIELD ACTUALLY MEANS, read off the backend rather than guessed from the name. The column
+ * is `boolean not null default false` with a CHECK constraint tying it to `resume_source`
+ * (`false`/'none', or `true`/'artifact' with a selected artifact id, or `true`/'base_resume'), and
+ * exactly two things write it: `linkExactPacket` in managedPrepare.ts, at PREPARE time on the
+ * managed path, and canonicalApplicationSync.ts, off the application_artifacts links. So `true`
+ * means an artifact row is linked. `false` means no such row is linked YET, which on a packet that
+ * never went through a managed prepare is the ORDINARY state of a perfectly healthy application, not
+ * a measurement that anything is missing. It is the schema default.
  *
- * The sentence is attributed to the RECORD and never to the employer's form, because this row can
- * lag: canonical-tracker.ts carries a dated live measurement of the same row reading
- * `submission_state: not_started` while its packet was already filled and holding a preview
- * screenshot (The Maven Group, 2026-09-02). A lagging `false` printed as a fact about the employer
- * would be a fresh lie in the opposite direction, and attribution is what makes it true either way.
+ * Which is why this only ever sharpens a row that is ALREADY not verified, and why it does not raise
+ * the badge. A row that got here is a file nothing has confirmed; the record having nothing either
+ * is a true and useful second sentence about that same uncertainty, and it is NOT proof the employer
+ * got no resume. Calling it Missing would be a fresh false statement in the column built to stop
+ * making them, and the applicant would go re-upload a resume that was fine.
  *
- * `resume_source` is deliberately not switched on. lib/api.ts types it
- * `"artifact" | "base_resume" | "none" | string`, and that trailing `string` is its author saying the
- * value set is open. A branch on "none" would be a closed reading of an explicitly open field.
+ * `true` is not evidence in the other direction either. It says a resume artifact is linked to the
+ * RECORD, which is a different claim from the employer's form having received one: Hudson River
+ * Trading and EQL Tech both read `resume_attached: true` with `submission_state: not_started` on
+ * 2026-09-03. Promoting that to Done would be this same defect wearing a new source.
+ *
+ * `undefined` is an older backend, or a row this ledger never loaded. Silence, never a verdict.
+ *
+ * `resume_source` is deliberately not switched on. The CHECK constraint means it carries nothing
+ * `resume_attached` does not already carry, and lib/api.ts types it
+ * `"artifact" | "base_resume" | "none" | string` so a client branch on "none" would be a closed
+ * reading of a field the client was told to treat as open.
  */
 function recordHasNoResume(record: ChecklistResumeRecord | undefined): boolean {
   return record?.resume_attached === false;
@@ -1636,19 +1646,19 @@ export function unconfirmedDocumentItems(
     const subject = documentFileSubject(source);
     const label = DOCUMENT_KIND_LABELS[subject] ?? displayField(providerFieldKey(source));
     if (!label) return;
-    /* The record outranks the run about the run, and only about the resume, which is the only file
-       this row of the ledger describes. It never promotes: a row that got here is already not
-       verified, and this only decides which true sentence it prints. */
-    const fromRecord = noResumeOnRecord && subject === "resume";
+    /* The record speaks about the RESUME and about nothing else, because the resume is the only file
+       that row of the ledger describes. It never promotes, and it never raises the badge: it adds a
+       second true sentence about an uncertainty this row already had. See recordHasNoResume. */
+    const fromRecord = noResumeOnRecord && subject === "resume" && state !== "reported_empty";
     addUnique(items, {
       id: `unconfirmed-${keyFor(label)}`,
       label,
       detail: fromRecord
-        ? "Litos's own record of this application has no resume attached to it. Check the picture of the filled form."
+        ? "Litos says it attached this, and Litos's own application record has no resume linked to it either. Nothing here can confirm the company got one, so check the picture of the filled form."
         : state === "reported_empty"
           ? "The run reports this file is still missing from the company's form."
           : "Litos says it attached this. Nothing has confirmed it on the company's form, so check the picture of the filled form for the file name.",
-      badge: fromRecord || state === "reported_empty" ? "Missing" : "Not confirmed",
+      badge: state === "reported_empty" ? "Missing" : "Not confirmed",
       /* One row per FILE, not per capture. A form that names the same dropzone "resume" on one run
          and "Resume upload control_4" on the next is one file, and a file both loops below reach is
          still one file. addUnique drops the second on this subject rather than saying the same
