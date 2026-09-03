@@ -193,7 +193,16 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   assert.match(dashboard, /Litos will never pretend to be you/);
   assert.match(dashboard, /will not get past the puzzle that checks you are human, a code on your phone, a login/);
   assert.match(dashboard, /submission\.cover_letter && review\.cover_letter_supported !== false/);
-  assert.match(dashboard, /Check the filled-form proof shown in this dashboard/);
+  /* The unverified card's fallback sentence MOVED, and where it moved to is the point. It used to
+     be a literal in this file asserting "Litos pressed Send and could not confirm what came back",
+     which was a claim about a press the client had no evidence for: it fires only when the server
+     sent no sentence at all. It now comes from unverifiedCardFallbackCopy, which reads the ledger
+     fold the dashboard already receives and refuses to assert a press the ledger does not record.
+     Asserted here as the CALL, and covered for content by
+     features/applications/domain/unverified-send-evidence.test.mts. */
+  assert.match(dashboard, /\{attentionReason \?\? unverifiedCardFallbackCopy\(retrySafety\)\}/);
+  assert.match(dashboard, /retrySafety=\{submission\.retry_safety\}/);
+  assert.doesNotMatch(dashboard, /Litos pressed Send and could not confirm what came back/);
   assert.doesNotMatch(dashboard, /Review the answers that need your voice/);
   assert.doesNotMatch(dashboard, /Continue to \$\{questions\.length\} question/);
 });

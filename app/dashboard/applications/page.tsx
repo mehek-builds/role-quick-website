@@ -40,7 +40,7 @@ import { duplicateBadge, duplicatePostingMarks, duplicatePostingNote } from "@/f
 import { isHttpsJobUrl, missingApplicationFields, type ApplicationDraftField } from "@/features/applications";
 import { COVER_LETTER_WAIT_MS, HANDOFF_CLOCK_TICK_MS, coverLetterBlocks, coverLetterGate, documentsFromSpecMarks, handoffWindowExpired, nextCoverLetterValue, nextSubmissionState, publishSubmissionEnvelope, reconcilePacketEvidenceWithSubmission, submissionAfterPacketAudit, submissionCoverLetterField, submissionReviewPacketIdentity, submissionSnapshotIsOlder } from "@/features/applications";
 import { MatchScore, MatchGaps } from "@/components/app/MatchScore";
-import { auditRefusalCode, historicalPacketAuditStaleMessage, nextMatchScoreRequest, packetAuditReviewRecoveryCode } from "@/features/applications";
+import { auditRefusalCode, historicalPacketAuditStaleMessage, nextMatchScoreRequest, packetAuditReviewRecoveryCode, unverifiedCardFallbackCopy } from "@/features/applications";
 import { getBaseResume } from "@/lib/base-resume";
 import { RequirementBreakdown } from "@/components/app/RequirementBreakdown";
 import { ResumeHealth } from "@/components/app/ResumeHealth";
@@ -1776,6 +1776,15 @@ function Applications() {
          pin that sentence over whatever she is looking at now. */
       if (reason instanceof ApiError && reason.status === 409 && selectedIdRef.current === requestedId) {
         packetRevalidationRefusal.current = { applicationId: requestedId, message: reason.message };
+        /* THE RED AND THE GREEN CANNOT BOTH BE TRUE, and they were rendered one above the other.
+           recoverPacketAuditReview's catch leaves "This application is paused for a fresh
+           exact-packet review." standing, and a later refusal pins the server's "This application
+           can no longer be audited before submission" directly above it. Measured 2026-09-02: the
+           screen told the applicant a fresh review was underway and, one line up, that no review
+           was possible. This file already names the pairing as wrong where a SUCCESSFUL audit
+           retires the refusal; the same retirement has to run in the other direction, because a
+           refusal is proof the notice's promise is not being kept. */
+        setNotice(null);
       }
       return { kind: "refused" as const };
     }
@@ -7534,8 +7543,11 @@ function SecurityCodeCard({ review, submitting, error, onSubmitCode }: {
  * exception message could land in this field. Taking the sanitized string as the prop, instead of
  * the whole review, makes reading the unsanitized field a type error rather than a habit to remember.
  */
-function UnverifiedSubmissionCard({ attentionReason, submitting, error, onSubmitOutcome }: {
+function UnverifiedSubmissionCard({ attentionReason, retrySafety, submitting, error, onSubmitOutcome }: {
   attentionReason: string | undefined;
+  /* The ledger's own fold, already on the wire. Read ONLY for the fallback below: the server's
+     sentence still wins whenever there is one. See unverified-send-evidence.ts. */
+  retrySafety: SubmissionRetrySafety | null | undefined;
   submitting: boolean;
   error: string | null;
   onSubmitOutcome: (found: boolean) => void;
@@ -7544,8 +7556,7 @@ function UnverifiedSubmissionCard({ attentionReason, submitting, error, onSubmit
     <div className="mt-4 rounded-inner border border-border bg-surface-alt p-4">
       <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Waiting on you to look</p>
       <p className="mt-2 whitespace-pre-line text-sm leading-6 text-ink">
-        {attentionReason
-          ?? "Litos pressed Send and could not confirm what came back. Check the filled-form proof shown in this dashboard, then choose what it shows."}
+        {attentionReason ?? unverifiedCardFallbackCopy(retrySafety)}
       </p>
       <div className="mt-4 flex flex-wrap gap-2">
         <Button onClick={() => onSubmitOutcome(true)} disabled={submitting} variant="secondary">
@@ -8555,6 +8566,7 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
         {awaitingUnverifiedSubmission && (
           <UnverifiedSubmissionCard
             attentionReason={safeAttentionReason}
+            retrySafety={submission.retry_safety}
             submitting={unverifiedSubmissionSubmitting}
             error={unverifiedSubmissionError}
             onSubmitOutcome={onSubmitUnverifiedOutcome}
