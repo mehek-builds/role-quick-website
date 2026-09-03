@@ -1569,3 +1569,107 @@ test("the answers screen's save routes through the landing with the reconciled a
     "the direct flow keeps its own status routing",
   );
 });
+
+import { documentStepsInPlan, isDocumentChecklistItem } from "./submission-checklist.ts";
+
+/* TWO PACKETS, ONE ACCOUNT, ONE MEASUREMENT, TWO DIFFERENT SCREENS - 2026-09-03.
+ *
+ * Both greenhouse, both needs_attention, both carrying the same measured ask and the same
+ * `transcript_supported: true`. The Databricks packet drew the step with a working Add transcript
+ * control. The Verkada packet carried an unresolved `unverified_submission` as well, and the
+ * dashboard's mode for that replaced the whole amber panel with the raw attention prose and a
+ * yes/no, so the requirement was stated by a screen that could not act on it.
+ *
+ * The review below is Verkada's, verbatim in the fields that decide any of this. */
+function transcriptAskReview() {
+  return {
+    status: "needs_attention" as const,
+    attention_reason: '"Undergraduate Transcript" is required and is still empty\n'
+      + '1 required field has no question you can answer in Litos: "Undergraduate Transcript"',
+    attention_categories: ["required_document" as const],
+    questions: [],
+    filled_fields: [],
+    required_documents: [{ kind: "transcript", label: "Undergraduate Transcript", official_requested: false }],
+    transcript_supported: true,
+  };
+}
+
+const VERKADA = { company: "Verkada", role: "Embedded Software Engineering Intern 2027" };
+
+test("the employer's two attention sentences collapse into one row that carries a control", () => {
+  /* Both lines name the same field, so the document row's subject collides with the first and
+     addUnique drops it. The row that survives is the one with somewhere to press, which is the whole
+     reason documentAskItems is emitted before the blocker loop. */
+  const items = humanInputItems(transcriptAskReview(), VERKADA);
+  assert.deepEqual(items.map((item) => item.id), ["document-transcript"]);
+  assert.equal(items[0].label, "Verkada needs your transcript");
+  assert.equal(items[0].actionKind, "attach");
+  assert.equal(items[0].documentKind, "transcript");
+});
+
+test("a document row is recognised by either half of what makes it one", () => {
+  /* Both halves are kept because a row losing one of them must still read as a document row rather
+     than quietly becoming a blocker with no control. */
+  assert.equal(isDocumentChecklistItem({ id: "a", label: "a", documentKind: "transcript" }), true);
+  assert.equal(isDocumentChecklistItem({ id: "b", label: "b", actionKind: "attach" }), true);
+  assert.equal(isDocumentChecklistItem({ id: "c", label: "c", actionKind: "open-page" }), false);
+  assert.equal(isDocumentChecklistItem({ id: "d", label: "d" }), false);
+});
+
+test("the document step survives a plan whose other rows the unverified mode must suppress", () => {
+  /* The plan is the same one the ordinary panel reads. What the screen does with it differs by mode;
+     what counts as a document row must not. */
+  const plan = directInputTaskPlan(transcriptAskReview(), VERKADA);
+  assert.deepEqual(
+    documentStepsInPlan(plan).map((item) => item.id),
+    ["document-transcript"],
+    "the one row that can resolve the employer's requirement was not offered to the suppressed mode",
+  );
+});
+
+test("only document rows survive: an ordinary blocker is not smuggled through with them", () => {
+  /* The point of the carve-out is that attaching a file sends nothing. A row that opens the
+     employer's page or re-runs the fill could send a second application while Litos still does not
+     know whether the first one landed, so it stays suppressed. */
+  const plan = directInputTaskPlan({ ...transcriptAskReview(), required_documents: [] }, VERKADA);
+  assert.ok(plan.nonQuestionTasks.length > 0, "the fixture must still produce blocker rows to be a real negative");
+  assert.deepEqual(documentStepsInPlan(plan), []);
+});
+
+test("the attached confirmation stays in the list, because it is the only way back to Remove", () => {
+  /* Settled rows live in `plan.settled`, not in `nonQuestionTasks`. A list built from the outstanding
+     half alone would vanish the instant she attached the file, taking with it the control that opens
+     the modal where "Remove this file" lives, while /privacy publishes "we keep it until you remove
+     it". */
+  const plan = directInputTaskPlan(transcriptAskReview(), {
+    ...VERKADA,
+    documents: { transcript: { file_name: "USC Transcript.pdf", attached_at: "2026-09-03T12:00:00.000Z" } },
+  });
+  const steps = documentStepsInPlan(plan);
+  assert.deepEqual(steps.map((item) => item.id), ["document-attached-transcript"]);
+  assert.equal(steps[0].settled, true);
+  assert.equal(steps[0].actionKind, "attach", "the confirmation lost the control that reopens the modal");
+});
+
+test("the screen keeps the document step alive in the unverified-submission mode", () => {
+  /* A source pin, because this is a render branch and the defect it repairs was invisible in every
+     domain test: the plan was correct all along and the screen threw it away. The mode still
+     suppresses the sending controls, so the pin is on the document list existing beside the card,
+     not on the card going away. */
+  const page = readFileSync("app/dashboard/applications/page.tsx", "utf8");
+  assert.match(
+    page,
+    /const unverifiedDocumentSteps = documentStepsInPlan\(directTaskPlan\);/,
+    "the document steps must be read off the same plan every other row on this screen uses",
+  );
+  assert.match(
+    page,
+    /\{awaitingUnverifiedSubmission && unverifiedDocumentSteps\.length > 0 && \(\s*<BlockerList\s+items=\{unverifiedDocumentSteps\}\s+onAddDocument=\{onAddDocument\}/,
+    "the unverified-submission mode must still draw the document steps, with the control that resolves them",
+  );
+  assert.match(
+    page,
+    /\{needsAttention && !awaitingUnverifiedSubmission && <Button onClick=\{onRetry\}/,
+    "Try again must stay suppressed while Litos does not know whether the first application landed",
+  );
+});

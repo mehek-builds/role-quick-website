@@ -64,7 +64,7 @@ import { applyBankVariant, type ApplyOutcome } from "@/features/applications";
 import { RequirementProvider, RequirementText, MatchLegend } from "@/components/app/RequirementText";
 import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX, exactPacketAuditClauses, exactPacketAuditRanges } from "@/features/applications";
 import { educationDrift, educationDriftMessage, type EducationProfile } from "@/features/applications";
-import { checklistRowControl, completedSubmissionGroups, directInputTaskPlan, directQuestionPromptFingerprint, directQuestionTaskFingerprint, displayQuestionLabel, documentAsksByKind, documentControls, humanInputItems, metadataRefreshOutranksStandingAttention, QUESTION_CHOICE_LIST_LIMIT, reviewedAnswersSaveLanding, type DirectQuestionTask, type DirectQuestionTaskIntent, type SubmissionChecklistAction, type SubmissionChecklistItem } from "@/features/applications";
+import { checklistRowControl, completedSubmissionGroups, directInputTaskPlan, directQuestionPromptFingerprint, directQuestionTaskFingerprint, displayQuestionLabel, documentAsksByKind, documentControls, documentStepsInPlan, humanInputItems, metadataRefreshOutranksStandingAttention, QUESTION_CHOICE_LIST_LIMIT, reviewedAnswersSaveLanding, type DirectQuestionTask, type DirectQuestionTaskIntent, type SubmissionChecklistAction, type SubmissionChecklistItem } from "@/features/applications";
 import { prescriptBlocksProgress, prescriptEditableQuestions, prescriptMetadataBlockers, prescriptNeedsHer, prescriptSummary } from "@/features/applications";
 import { answerNamesNoOfferedOption, answerWithExactOptionToggled, exactQuestionOption, exactSelectedQuestionOptions, optionalQuestionNeedsDecision, questionAcceptsMultipleOptions, questionOptionsAreComplete, questionReviewPresentation, requiredQuestionReviewRoute } from "@/features/applications";
 import type { JdMatchResponse, JobMatch } from "@/features/applications";
@@ -8091,6 +8091,10 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
     directQuestionTasks.map((task) => directQuestionPromptFingerprint(task)),
   );
   const standingNonQuestionTask = directTaskPlan.nonQuestionTasks[0]?.item ?? null;
+  /* The document steps this screen must keep even when the unverified-submission mode has taken
+     everything else away. Computed here beside the plan, not inside the branch, so it reads off the
+     same plan every other row on this screen does. See documentStepsInPlan for the measurement. */
+  const unverifiedDocumentSteps = documentStepsInPlan(directTaskPlan);
   /* THE OCCLUSION THIS SCREEN SHIPPED WITH: the branch below leads with the first standing
      non-question attention task, and the metadata-refresh panel, the ONLY control on this screen
      that starts the managed re-read, renders only when no such task stands. Measured live on the
@@ -8494,6 +8498,41 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
             submitting={unverifiedSubmissionSubmitting}
             error={unverifiedSubmissionError}
             onSubmitOutcome={onSubmitUnverifiedOutcome}
+          />
+        )}
+        {/* THE ONE STEP THAT SURVIVES THE UNVERIFIED-SUBMISSION MODE.
+         *
+         * Measured on 2026-09-03 across two packets of one account, both needs_attention, both
+         * carrying the same measured `required_documents: [transcript]` and `transcript_supported`.
+         * The Databricks packet drew "Databricks needs your transcript" with a REQUIRED badge and a
+         * working Add transcript control. The Verkada packet was in this mode, and every branch
+         * above keyed on `!awaitingUnverifiedSubmission` - the panel at the top of this card, the
+         * completed-checks list, Open packet review, Try again, the handoff controls, and the Add
+         * pills beside Send - so the whole screen collapsed to the two raw attention sentences and
+         * a yes/no. The screen stated a requirement and offered nothing that could meet it.
+         *
+         * SUPPRESSING THE REST IS STILL RIGHT. Litos may already have reached this employer, so
+         * Try again and Review and fill wait for her answer rather than risk a second application.
+         * A document row is the one outstanding row whose control sends nothing at all: it writes
+         * `spec._documents` and the file goes nowhere until a send she presses. See
+         * isDocumentChecklistItem for the distinction, held in one place so this list and the
+         * metadata-refresh decision cannot drift apart.
+         *
+         * It is also work she owes WHICHEVER WAY SHE ANSWERS. "It is not there" releases the claim
+         * and the next run needs the file; "I found it there" ends the application and takes the row
+         * with it. So there is no answer that makes this step go away unasked, and no reading of the
+         * two buttons that resolves it.
+         *
+         * Rendered through the SAME BlockerList the ordinary panel uses, off the same plan, so this
+         * is one more caller of the step mechanism rather than a second surface with its own copy.
+         * `portalUrl` is deliberately omitted: an open-page link belongs to the suppressed controls,
+         * and a document row does not use one. */}
+        {awaitingUnverifiedSubmission && unverifiedDocumentSteps.length > 0 && (
+          <BlockerList
+            items={unverifiedDocumentSteps}
+            onAddDocument={onAddDocument}
+            onToggleAcknowledged={onToggleAcknowledged}
+            tickingIds={attentionTicking}
           />
         )}
         {review.status === "ready_for_final_approval" && educationDriftWarning && (

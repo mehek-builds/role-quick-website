@@ -239,6 +239,42 @@ const TRANSCRIPT_PACKET = {
   },
 };
 
+/* THE VERKADA SHAPE, 2026-09-03: the same measured transcript ask, on a run that also left an
+ * unverified submission open. That second fact puts the screen into a mode which suppressed every
+ * other control it has, so the only thing rendered was the raw attention prose and a yes/no, and the
+ * required document was stated by a surface that could not act on it. Everything below the two
+ * unverified keys is TRANSCRIPT_PACKET's, unchanged, which is the point: one measurement, two
+ * screens. */
+const UNVERIFIED_TRANSCRIPT_PACKET = {
+  ...TRANSCRIPT_PACKET,
+  id: "fixture-packet-unverified-transcript",
+  job_context: {
+    ...TRANSCRIPT_PACKET.job_context,
+    company: "Fixture Sensors",
+    role: "Embedded Software Engineering Intern",
+  },
+  spec: {
+    ...TRANSCRIPT_PACKET.spec,
+    _review: {
+      ...TRANSCRIPT_PACKET.spec._review,
+      attention_reason: '"Undergraduate Transcript" is required and is still empty\n'
+        + '1 required field has no question you can answer in Litos: "Undergraduate Transcript"',
+      attention_categories: ["required_document", "unverified_submission"],
+      required_documents: [{
+        kind: "transcript",
+        label: "Undergraduate Transcript",
+        official_requested: false,
+      }],
+      preview_screenshot_url: "/qa/portal-preview.svg",
+      unverified_submission: {
+        at: "2026-09-03T12:00:00.000Z",
+        cause: "no_confirmation_state",
+        portal_url: "https://jobs.example.invalid/sensors",
+      },
+    },
+  },
+};
+
 const OFFICIAL_TRANSCRIPT_PACKET = {
   ...TRANSCRIPT_PACKET,
   id: "fixture-packet-official-transcript",
@@ -594,6 +630,9 @@ async function dashboardContext({
     maxConcurrentProfileUploads: 0,
     historyReads: 0,
     reviewAnswerWrites: [],
+    /* Bodies posted to POST /applications/:id/documents/attach, so a test can prove the picker sent
+       the document the row named rather than merely that the modal changed stage. */
+    storedDocumentAttachWrites: [],
     applicationMutationRequests: [],
     networkStatusReads: 0,
     networkCommitWrites: 0,
@@ -845,6 +884,16 @@ async function dashboardContext({
           ...(status === 202 ? { saved: false } : {}),
         }, status);
         gate?.markSettled();
+        return;
+      }
+      /* Matched BEFORE the upload route below, because that one anchors on `/documents$` and this
+         path is one segment longer: an attach reaching it would fall through to the unstubbed
+         handler and 500. Answers with the same attachment body the upload does, minus the
+         `document` half, which is exactly what the real route returns: it attaches a row that
+         already exists and has nothing new to report about the file. */
+      if (method === "POST" && /^\/applications\/[^/]+\/documents\/attach$/.test(pathname)) {
+        state.storedDocumentAttachWrites.push(route.request().postDataJSON());
+        await fulfillJson(route, { attachment: TRANSCRIPT_ATTACH_RESPONSE.attachment });
         return;
       }
       if (method === "POST" && /^\/applications\/[^/]+\/documents$/.test(pathname)) {
@@ -1917,6 +1966,167 @@ test("hand-built application overlays retain an inert exit and restore their exa
     await officialDialog.waitFor({ state: "detached" });
     await page.waitForFunction(() => document.activeElement?.getAttribute("data-focus-probe") === "official-transcript-trigger");
     assertNoPageErrors(state, "Application overlays");
+  } finally {
+    await context.close();
+  }
+});
+
+/* THE ASK IS ANSWERABLE WITH A FILE SHE HAS ALREADY GIVEN LITOS.
+ *
+ * The server reuses a stored file for a measured ask by itself, but only while a prepare run is
+ * happening: reuseStoredDocuments has exactly two callers and both are prepare paths. So an
+ * application prepared BEFORE the file existed keeps asking forever, and until this control there
+ * was nothing anywhere that could attach it. Measured on 2026-09-03 across three packets on one
+ * account that each asked for the same transcript.
+ *
+ * Held here rather than in a unit test because the decision is only half the fix: the row must draw
+ * a control, the control must post the document the row names, and the modal must land on the
+ * attached state, which is what clears the send gate. The rule about WHICH files may be offered is
+ * unit-tested in lib/document-reuse.test.mts; this walks the press.
+ *
+ * NO capturePass, deliberately. Every existing transcript capture runs on the default empty-library
+ * fixture and therefore draws no picker, so nothing this test does can move a stored baseline.
+ */
+test("an ask can be answered with a file already in the library, and a single-use file is never offered", async () => {
+  const { context, page, state } = await newDashboardPage({
+    viewport: { width: 1280, height: 900 },
+    boardFixture: APPLICATION_PACKET_BOARD_FIXTURE,
+    resumeHistoryFixture: [APPLICATION_PACKET, TRANSCRIPT_PACKET],
+    submissionFixtures: {
+      [TRANSCRIPT_PACKET.id]: {
+        application_id: TRANSCRIPT_PACKET.id,
+        review: TRANSCRIPT_PACKET.spec._review,
+        cover_letter: null,
+        documents: {},
+      },
+    },
+    documentsFixture: {
+      documents: [
+        STORED_DOCUMENT_FIXTURE,
+        /* Unticking "Reuse this for future applications that ask" is told back to her as "Attached
+           to this application only. Litos will ask again the next time an employer wants one." The
+           attach endpoint refuses these with the same 404 it gives a file that belongs to somebody
+           else, so a row for one would be a control that dies on press AND a promise broken. */
+        { ...STORED_DOCUMENT_FIXTURE, id: "fixture-document-single-use", file_name: "One Off.pdf", reusable: false },
+      ],
+    },
+  });
+  try {
+    await page.goto(`${ORIGIN}/dashboard/applications?application=${TRANSCRIPT_PACKET.id}&intent=apply`, {
+      waitUntil: "domcontentloaded",
+    });
+    const transcriptTrigger = page.getByRole("button", {
+      name: /Add the file this employer asks for: .*needs your transcript/i,
+    });
+    await transcriptTrigger.waitFor({ state: "visible" });
+    await transcriptTrigger.click();
+    const transcriptDialog = page.getByRole("dialog", {
+      name: "transcript for Software Engineer Intern at Fixture Robotics",
+    });
+    await transcriptDialog.waitFor({ state: "visible" });
+
+    /* Named for the file, because down a column of "Use this one" the bare words tell a screen
+       reader user nothing about which file a press attaches. */
+    const reuseAction = transcriptDialog.getByRole("button", {
+      name: `Use ${STORED_DOCUMENT_FIXTURE.file_name} for this application`,
+    });
+    await reuseAction.waitFor({ state: "visible" });
+    assert.equal(
+      await transcriptDialog.getByRole("button", { name: "Use One Off.pdf for this application" }).count(),
+      0,
+      "a single-use file was offered on a surface whose own copy promises it will not be reused",
+    );
+
+    await reuseAction.click();
+    await transcriptDialog.getByRole("heading", { name: "Transcript attached" }).waitFor({ state: "visible" });
+    assert.deepEqual(
+      state.storedDocumentAttachWrites,
+      [{ document_id: STORED_DOCUMENT_FIXTURE.id, kind: "transcript" }],
+      "the picker did not post the document the pressed row names",
+    );
+    /* No file part anywhere in this walk. The whole point is that she is not asked to produce the
+       PDF a second time, so an upload here would be the defect wearing the fix's clothes. */
+    assert.equal(
+      await transcriptDialog.locator('[data-transcript-action="attach"]').count(),
+      0,
+      "the attached state still offers the upload action",
+    );
+    assertNoPageErrors(state, "Stored document reuse");
+  } finally {
+    await context.close();
+  }
+});
+
+/* THE REQUIRED DOCUMENT SURVIVES THE UNVERIFIED-SUBMISSION MODE.
+ *
+ * Measured on 2026-09-03 across two packets of one account, both needs_attention, both carrying the
+ * same measured transcript ask. The one that was not in this mode drew the step with a working Add
+ * transcript control. The one that was drew the two attention sentences and nothing else, because
+ * every other branch on the screen keys on `!awaitingUnverifiedSubmission`.
+ *
+ * The suppression is right for the rest and this test pins that too: Try again and Open packet
+ * review could send a second application while Litos does not know whether the first one landed, so
+ * they stay gone. Attaching a file sends nothing, and it is work she owes whichever way she answers
+ * the yes/no, so it stays.
+ */
+test("a required document is still answerable while Litos is waiting to hear whether it sent", async () => {
+  const { context, page, state } = await newDashboardPage({
+    viewport: { width: 1280, height: 900 },
+    boardFixture: APPLICATION_PACKET_BOARD_FIXTURE,
+    resumeHistoryFixture: [APPLICATION_PACKET, UNVERIFIED_TRANSCRIPT_PACKET],
+    submissionFixtures: {
+      [UNVERIFIED_TRANSCRIPT_PACKET.id]: {
+        application_id: UNVERIFIED_TRANSCRIPT_PACKET.id,
+        review: UNVERIFIED_TRANSCRIPT_PACKET.spec._review,
+        cover_letter: null,
+        documents: {},
+      },
+    },
+  });
+  try {
+    await page.goto(`${ORIGIN}/dashboard/applications?application=${UNVERIFIED_TRANSCRIPT_PACKET.id}&intent=apply`, {
+      waitUntil: "domcontentloaded",
+    });
+
+    /* The mode's own question is still the lead, and still first. Nothing here demotes it. */
+    await page.getByRole("button", { name: "It is not there", exact: true }).waitFor({ state: "visible" });
+
+    const transcriptTrigger = page.getByRole("button", {
+      name: /Add the file this employer asks for: .*needs your transcript/i,
+    });
+    await transcriptTrigger.waitFor({ state: "visible" });
+
+    /* The controls that could reach the employer a second time stay suppressed. Without these the
+       test would pass just as well against a change that simply deleted the mode. Both of these are
+       unconditional under `needsAttention && !awaitingUnverifiedSubmission`, so their absence is
+       this mode and nothing else; "Check the answers" is deliberately NOT asserted, because it also
+       needs a question to review and this fixture has none, which would make it vacuous. */
+    for (const suppressed of ["Try again", "Open packet review"]) {
+      assert.equal(
+        await page.getByRole("button", { name: suppressed, exact: true }).count(),
+        0,
+        `${suppressed} came back while Litos still does not know whether this application landed`,
+      );
+    }
+
+    await transcriptTrigger.click();
+    const transcriptDialog = page.getByRole("dialog", {
+      name: "transcript for Embedded Software Engineering Intern at Fixture Sensors",
+    });
+    await transcriptDialog.waitFor({ state: "visible" });
+    await transcriptDialog.locator('input[type="file"]').setInputFiles({
+      name: "USC Transcript.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from("%PDF-1.4 fixture transcript"),
+    });
+    await transcriptDialog.locator('[data-transcript-action="attach"]').click();
+    /* The employer's requirement is now met from inside the mode that used to hide it. Where the
+       ROW goes after this is a plan question, not a browser one, and it is pinned in
+       submission-checklist.test.mts ("the attached confirmation stays in the list"): asserting it
+       here as well would race the 2.5s submission poll, whose fixture envelope is static and would
+       hand the screen a pre-upload `documents: {}` back. */
+    await transcriptDialog.getByRole("heading", { name: "Transcript attached" }).waitFor({ state: "visible" });
+    assertNoPageErrors(state, "Unverified submission document step");
   } finally {
     await context.close();
   }
