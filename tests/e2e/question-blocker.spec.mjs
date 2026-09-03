@@ -15,6 +15,8 @@
  *   incomplete-options   the partial-list warning, because options_complete is false
  *   litos-drafted-essay  the box arrives FILLED by Litos, saying so, waiting on her approval
  *   optional-unknown     free text with an explicit Skip: a decision, not a default
+ *   unreadable-choice-list  an answer on none of the choices Litos read, which is the one state
+ *                        with no correct press until the managed re-read is offered beside it
  *
  * Runs the production Next build with the QA gate satisfied by a fabricated local secret. The
  * backend is stubbed by a catch-all route that RECORDS what it answers, so an on-mount fetch
@@ -118,10 +120,12 @@ const HEADINGS = {
   "incomplete-options": /office location would you prefer/i,
   "optional-unknown": /someone referred you/i,
   "litos-drafted-essay": /multimodal\/cv system you personally shipped/i,
+  "unreadable-choice-list": /classifications of protected veteran/i,
 };
 
 const INCOMPLETE_WARNING = /could not read this employer.+full list of choices/is;
 const DRAFT_NOTICE = /Litos wrote this answer from your resume and this job/i;
+const UNREADABLE_LIST_NOTICE = /it is on none of the choices it\s+read for this field/is;
 
 const heading = (page, id) => page.locator("main h2").filter({ hasText: HEADINGS[id] });
 
@@ -164,6 +168,9 @@ async function controlFingerprint(page) {
        render exactly one textarea and nothing else, so without this the pairwise-distinctness test
        below could not tell them apart and one of the two render paths would go dark. */
     draftNotice: (await page.locator("main").innerText()).match(DRAFT_NOTICE) !== null,
+    /* The fifth and sixth fixtures both render one radio group, so without this they would be one
+       render path as far as the distinctness test below can see. */
+    unreadableListNotice: (await page.locator("main").innerText()).match(UNREADABLE_LIST_NOTICE) !== null,
   };
 }
 
@@ -217,6 +224,7 @@ blockerTest("short choice list: the employer's own options as radios, and the sa
     textareas: 0,
     incompleteWarning: false,
     draftNotice: false,
+    unreadableListNotice: false,
   });
   /* The employer's vocabulary, not a paraphrase. */
   const labels = await page.locator('main input[type="radio"]').evaluateAll(
@@ -252,6 +260,7 @@ blockerTest("long choice list: past the limit it collapses to a select that read
     textareas: 0,
     incompleteWarning: false,
     draftNotice: false,
+    unreadableListNotice: false,
   });
 
   const select = page.locator("main select");
@@ -284,6 +293,7 @@ blockerTest("incomplete options: the partial list is presented as partial, not a
     textareas: 0,
     incompleteWarning: true,
     draftNotice: false,
+    unreadableListNotice: false,
   });
   const labels = await page.locator('main input[type="radio"]').evaluateAll(
     (inputs) => inputs.map((input) => input.value));
@@ -303,6 +313,7 @@ blockerTest("drafted essay: Litos filled the box, said so, and waits on her appr
     textareas: 1,
     incompleteWarning: false,
     draftNotice: true,
+    unreadableListNotice: false,
   });
 
   const box = page.locator("main textarea");
@@ -342,6 +353,7 @@ blockerTest("optional unknown: free text with an explicit answer-or-skip decisio
     textareas: 1,
     incompleteWarning: false,
     draftNotice: false,
+    unreadableListNotice: false,
   });
   assert.match(await page.locator("main").innerText(), /Optional\. Answer it or skip it\./);
 
@@ -355,7 +367,42 @@ blockerTest("optional unknown: free text with an explicit answer-or-skip decisio
   assert.equal(await page.getByRole("button", { name: "Save answer" }).isDisabled(), false);
 });
 
-blockerTest("the five cases are five different renders, not five coats of the same paint", async (page) => {
+blockerTest("an unreadable choice list offers the re-read, because nothing else on the screen is right", async (page) => {
+  await openHarness(page);
+  await openCase(page, "short-choice-list", "unreadable-choice-list");
+
+  /* One radio, and it is the claim. Her stored "No" is on none of it, so the save is blocked and
+     the question is required, so there is no Skip either. Before the re-read control was put here
+     this screen had no correct press on it at all. */
+  assert.deepEqual(await controlFingerprint(page), {
+    radios: 1,
+    selects: 0,
+    textareas: 0,
+    incompleteWarning: false,
+    draftNotice: false,
+    unreadableListNotice: true,
+  });
+  /* "Save and next" rather than "Save answer": this fixture is not the last tab. Either way it is
+     the only submit control, and it is disabled. */
+  assert.equal(await page.getByRole("button", { name: "Save and next" }).isDisabled(), true);
+  assert.equal(await page.getByRole("button", { name: "Skip" }).count(), 0);
+  assert.equal(await page.locator("main input[type=\"radio\"]").first().isChecked(), false,
+    "nothing may be selected on her behalf");
+
+  /* Her own words are quoted, never replaced. */
+  assert.match(await page.locator("main").innerText(), /Litos is holding your answer, .No.,/);
+
+  /* THE EXIT. It is live, and pressing it asks for the run rather than doing nothing. */
+  const reread = page.getByRole("button", { name: "Review and fill again" });
+  assert.equal(await reread.count(), 1, "the managed re-read must be offered here");
+  assert.equal(await reread.isDisabled(), false);
+  assert.equal(await page.locator("[data-litos-qa-refresh-requests]").getAttribute("data-litos-qa-refresh-requests"), "0");
+  await reread.click();
+  assert.equal(await page.locator("[data-litos-qa-refresh-requests]").getAttribute("data-litos-qa-refresh-requests"), "1",
+    "the control is bound to the re-read, not decoration");
+});
+
+blockerTest("the six cases are six different renders, not six coats of the same paint", async (page) => {
   await openHarness(page);
 
   /* The direct jumps above never traverse 2 to 3 or 3 to 4, and a fingerprint measured after
@@ -363,7 +410,7 @@ blockerTest("the five cases are five different renders, not five coats of the sa
      show. So this walks the tabs adjacently and re-measures every case on the path. */
   const order = [
     "short-choice-list", "long-choice-list", "incomplete-options", "litos-drafted-essay",
-    "optional-unknown",
+    "optional-unknown", "unreadable-choice-list",
   ];
   const fingerprints = new Map([[order[0], await controlFingerprint(page)]]);
   for (let i = 1; i < order.length; i += 1) {

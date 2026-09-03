@@ -7560,7 +7560,7 @@ function UnverifiedSubmissionCard({ attentionReason, submitting, error, onSubmit
   );
 }
 
-export function DirectApplicationQuestion({ task, position, total, saving, saved, focusToken, hasPrevious, hasNext, preservedDraft, externalFailure, onDraftChange, onClearDraft, onClearFailure, onPrevious, onNext, onReviewApplication, onSave, onSkip }: {
+export function DirectApplicationQuestion({ task, position, total, saving, saved, focusToken, hasPrevious, hasNext, preservedDraft, externalFailure, onDraftChange, onClearDraft, onClearFailure, onPrevious, onNext, onReviewApplication, onSave, onSkip, onRefreshMetadata, refreshingMetadata, metadataRefreshDisabled, metadataRefreshNeedsPacketReview, metadataRefreshError }: {
   task: DirectQuestionTask;
   position: number;
   total: number;
@@ -7579,6 +7579,14 @@ export function DirectApplicationQuestion({ task, position, total, saving, saved
   onReviewApplication: () => void;
   onSave: (questionId: string, answer: string, intent: DirectQuestionTaskIntent, promptFingerprint: string, taskFingerprint: string, task: DirectQuestionTask) => Promise<DirectAnswerSaveResult>;
   onSkip: (questionId: string, intent: DirectQuestionTaskIntent, promptFingerprint: string, taskFingerprint: string, task: DirectQuestionTask) => Promise<DirectAnswerSaveResult>;
+  /* The managed re-read, and the same four facts the answers screen's own panel renders it with.
+     Passed in rather than derived here so the two controls cannot drift into offering the run
+     under different conditions. */
+  onRefreshMetadata: () => void;
+  refreshingMetadata: boolean;
+  metadataRefreshDisabled: boolean;
+  metadataRefreshNeedsPacketReview: boolean;
+  metadataRefreshError: string | null;
 }) {
   const [promptFingerprint] = useState(() => directQuestionPromptFingerprint(task));
   const [taskFingerprint] = useState(() => directQuestionTaskFingerprint(task));
@@ -7632,6 +7640,38 @@ export function DirectApplicationQuestion({ task, position, total, saving, saved
     : selectedExactOption === null);
   const choiceErrorVisible = choiceMissing && (choiceTouched || Boolean(answer.trim()));
   const answerBlocked = requiredBlank || choiceMissing || optionalDecisionBlank;
+  /* LITOS HOLDS AN ANSWER THIS CONTROL CANNOT TAKE, WHICH IS A SCREEN WITH NO CORRECT PRESS ON IT.
+   *
+   * MEASURED on the Zeus Fire and Security breezy packet (application 31ff26a8 / packet f04623c3,
+   * 2026-09-03). Its veteran control was stored with ONE option, the claim itself, and her answer
+   * is "No":
+   *
+   *   options ["I IDENTIFY AS ONE OR MORE OF THE CLASSIFICATIONS OF PROTECTED VETERAN LISTED ABOVE"]
+   *   answer  "No"
+   *
+   * So `choiceMissing` is true and stays true: Save is disabled under "Choose one of the employer's
+   * current options before saving", the question is required so there is no Skip, and the only
+   * selectable thing on screen is a protected-veteran claim she does not make. Saving cannot end it
+   * either, because a save moves questions_reviewed_at, the navigator's pass resets, and the plan
+   * selects the same question again. She could reach the managed re-read only by leaving for the
+   * answers screen, or by acknowledging every standing attention row until the panel stopped being
+   * occluded. Neither is discoverable from here, and here is where she is stuck.
+   *
+   * WHY THE LIST IS SHORT is not this screen's to decide, and an earlier version of this fix tried.
+   * volley-backend e5d73d4 diagnosed that packet's one-option snapshot as a capture bug in breezy's
+   * markup - three radios sharing name="eeoc.veteran_status", each in a bare <li>, so the reader
+   * fell back to the option's own row - and its option reader now walks input[name="..."] to collect
+   * the whole group. But a control genuinely offering one choice is in exactly the same state from
+   * here, because Litos stores short tokens and single-radio consents carry sentence labels, so any
+   * rule this screen applied would classify the two the same way. It does not need to classify
+   * them: BOTH are answered by re-reading the employer's form, one because the list grows and one
+   * because it comes back the same and she picks from it. So this offers the run and asserts
+   * nothing about which case it is.
+   *
+   * Read off the SAVED answer through the shared predicate, not off the live one, so the prompt is
+   * about what Litos is holding rather than about what she is in the middle of choosing, and so it
+   * says the same thing the badge and the send gate say. */
+  const savedAnswerNamesNoOption = Boolean(savedAnswer.trim()) && !questionReadsAsAnswered(task.question);
   const headingId = `direct-application-question-${encodeURIComponent(task.question.id)}`;
   const progressId = `${headingId}-progress`;
   const helperId = `${headingId}-helper`;
@@ -7766,6 +7806,44 @@ export function DirectApplicationQuestion({ task, position, total, saving, saved
           <p className="mt-3 rounded-inner border border-control-border bg-surface-alt px-3 py-2 text-small leading-6 text-muted">
             Your previous answer did not match the employer&apos;s current choices: {task.question.answer_draft}. Choose again below.
           </p>
+        )}
+
+        {savedAnswerNamesNoOption && (
+          /* The way out, on the screen the applicant is actually on. Same control, same gating and
+             same help text as the answers screen's own panel, because they start the identical run
+             and must never disagree about when it is available. Nothing is selected, nothing is
+             blanked, and her saved answer is quoted rather than replaced. */
+          <div id="direct-question-unreadable-list" className="mt-3 rounded-inner border border-control-border bg-surface-alt px-3 py-3">
+            <p className="text-small leading-6 text-muted">
+              Litos is holding your answer, &ldquo;{savedAnswer.trim()}&rdquo;, and it is on none of the choices it
+              read for this field. If the company&apos;s form offers a choice that is not listed here, Litos did
+              not read the whole list. Reading the form again is what fixes that.
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={onRefreshMetadata}
+                disabled={busy || refreshingMetadata || metadataRefreshDisabled}
+                aria-busy={refreshingMetadata}
+                aria-describedby="direct-question-unreadable-list-help"
+              >
+                {metadataRefreshNeedsPacketReview
+                  ? "Review packet first"
+                  : refreshingMetadata ? "Reviewing and filling..." : "Review and fill again"}
+              </Button>
+              <p id="direct-question-unreadable-list-help" className="text-small leading-6 text-muted">
+                {metadataRefreshDisabled
+                  ? "Save or go back to discard your edits before reading the form again."
+                  : metadataRefreshNeedsPacketReview
+                    ? "Litos needs your exact packet review before it can read the employer form again."
+                    : "Litos opens the employer form, reads its current fields, and fills only your saved answers."}
+              </p>
+            </div>
+            {metadataRefreshError && (
+              <p role="alert" className="mt-2 text-small leading-6 text-danger">{metadataRefreshError}</p>
+            )}
+          </div>
         )}
 
         {task.question.options && task.question.options.length > 0
@@ -8436,6 +8514,11 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
             onReviewApplication={onQuestionsFinished}
             onSave={saveCurrentDirectQuestion}
             onSkip={skipCurrentDirectQuestion}
+            onRefreshMetadata={onRefreshQuestionMetadata}
+            refreshingMetadata={questionMetadataRefreshing}
+            metadataRefreshDisabled={questionMetadataRefreshDisabled}
+            metadataRefreshNeedsPacketReview={questionMetadataNeedsPacketReview}
+            metadataRefreshError={questionMetadataRefreshError}
           />
         ) : (
           <>
