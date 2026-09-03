@@ -97,4 +97,17 @@ describe("the badge and the send gate spell the same rule", () => {
   test("the last gate before the employer reads the same predicate", () => {
     assert.match(page, /question\.required\s*\n\s*&& !questionReadsAsAnswered\(question\)\)/);
   });
+
+  test("the waiting count on the badge's own screen reads it too", () => {
+    // Left on emptiness alone this count disabled nothing for an off-list answer, so the badge
+    // could read Required while Save and continue stayed enabled in the same frame.
+    assert.match(
+      page,
+      /const missingQuestions = editableQuestions\.filter\(\(question\) => question\.required && !questionReadsAsAnswered\(question\)\);/,
+    );
+    assert.doesNotMatch(
+      page,
+      /const missingQuestions = editableQuestions\.filter\(\(question\) => question\.required && !question\.answer\.trim\(\)\);/,
+    );
+  });
 });

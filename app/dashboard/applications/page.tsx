@@ -7057,7 +7057,11 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, metad
   const editableQuestions = presentation.editableQuestions;
   const effectiveMetadataBlockers = presentation.metadataBlockers;
   const metadataBlocked = effectiveMetadataBlockers.length > 0;
-  const missingQuestions = editableQuestions.filter((question) => question.required && !question.answer.trim());
+  /* THE SAME RULE THE BADGE PRINTS, because this count disables the button on that badge's own
+     screen. Left on emptiness alone it read the HRT gender question as answered while the badge
+     beside it read Required, so the screen said "one answer needs you" and offered an enabled
+     Save and continue in the same frame. */
+  const missingQuestions = editableQuestions.filter((question) => question.required && !questionReadsAsAnswered(question));
   const optionalDecisionMissing = editableQuestions.some(optionalQuestionNeedsDecision);
   const focusQuestionId = focusQuestion?.id ?? null;
   const focusToken = focusQuestion?.token ?? 0;
@@ -7233,7 +7237,16 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, metad
               decline carried the profile spelling "Female", every radio rendered unchecked, and
               the badge still read ANSWERED directly above a veteran question whose "No" WAS
               painted. The two badges said the same word about two different states, so the one
-              question on that screen actually waiting for her looked done. */}
+              question on that screen actually waiting for her looked done.
+
+              THE AGREEMENT IS NOT TOTAL, and the gap is worth naming rather than implying away.
+              The card paints a choice control whenever `options` is non-empty, while
+              `answerNamesNoOfferedOption` additionally requires `portal_input_type` to name a
+              closed control. `portal_input_type` is optional and is populated from whatever the
+              backend reports, so a required question carrying options under an absent or
+              unrecognised control type still reads as answered over a control painted blank. One
+              shared closed-choice predicate for the card and this badge is the fix, and it is not
+              this change. */}
           <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
             <p className={`font-mono text-[11px] uppercase tracking-[0.08em] ${question.required && !questionReadsAsAnswered(question) ? "text-warn" : "text-muted"}`}>
               {question.required
