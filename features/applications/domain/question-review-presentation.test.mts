@@ -5,6 +5,7 @@ import {
   answerWithExactOptionToggled,
   exactQuestionOption,
   exactSelectedQuestionOptions,
+  nextStickyNeeding,
   optionalQuestionNeedsDecision,
   questionReviewPresentation,
   questionsNeedingApplicant,
@@ -646,4 +647,47 @@ test("stickyShownIds is a no-op on an empty current list and an empty start", ()
   const previous = new Set(["a"]);
   assert.deepEqual([...stickyShownIds(previous, [])], ["a"]);
   assert.deepEqual([...stickyShownIds(new Set(), [])], []);
+});
+
+/* ---- nextStickyNeeding: the reset-vs-union decision app/dashboard/applications/page.tsx's render
+   body used to make inline, with no test on the reset branch. Pulled out so all three outcomes -
+   reset, no-op, union - are reachable without a running screen. ---- */
+
+test("nextStickyNeeding starts over at this render's ids when reviewDiscovered flips", () => {
+  const previous = { reviewDiscovered: true, ids: new Set(["graduation", "source"]) };
+  const next = nextStickyNeeding(previous, false, ["only-current"]);
+  assert.deepEqual(
+    next,
+    { reviewDiscovered: false, ids: new Set(["only-current"]) },
+    "a different review context starts the memory over - previous.ids does not survive the flip",
+  );
+});
+
+test("nextStickyNeeding returns null when the flag holds and nothing new arrived, so the caller must not setState", () => {
+  const previous = { reviewDiscovered: true, ids: new Set(["graduation", "source"]) };
+  assert.equal(
+    nextStickyNeeding(previous, true, ["graduation"]),
+    null,
+    "graduation is already remembered and no new id arrived - a same-content union must not trigger a render",
+  );
+  assert.equal(
+    nextStickyNeeding(previous, true, []),
+    null,
+    "an empty current set adds nothing either",
+  );
+  assert.equal(
+    nextStickyNeeding(previous, true, ["source", "graduation"]),
+    null,
+    "the full current set is already a subset of previous.ids - still nothing new",
+  );
+});
+
+test("nextStickyNeeding unions in a genuinely new id under the same reviewDiscovered", () => {
+  const previous = { reviewDiscovered: true, ids: new Set(["graduation"]) };
+  const next = nextStickyNeeding(previous, true, ["graduation", "source"]);
+  assert.deepEqual(
+    next,
+    { reviewDiscovered: true, ids: new Set(["graduation", "source"]) },
+    "the new id joins the memory, the old one is kept, and the flag carries through unchanged",
+  );
 });

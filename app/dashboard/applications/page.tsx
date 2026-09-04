@@ -66,7 +66,7 @@ import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX, exactPacketAuditClauses
 import { educationDrift, educationDriftMessage, type EducationProfile } from "@/features/applications";
 import { checklistRowControl, completedSubmissionGroups, directAnswerNavigationTasks, directInputTaskPlan, directQuestionPromptFingerprint, directQuestionTaskFingerprint, displayQuestionLabel, documentAsksByKind, documentControls, documentStepsInPlan, humanInputItems, metadataRefreshOutranksStandingAttention, QUESTION_CHOICE_LIST_LIMIT, reviewedAnswersSaveLanding, unconfirmedDocumentItems, type ChecklistResumeRecord, type DirectQuestionTask, type DirectQuestionTaskIntent, type SubmissionChecklistAction, type SubmissionChecklistItem } from "@/features/applications";
 import { prescriptBlocksProgress, prescriptEditableQuestions, prescriptMetadataBlockers, prescriptNeedsHer, prescriptSummary } from "@/features/applications";
-import { answerWithExactOptionToggled, exactQuestionOption, exactSelectedQuestionOptions, optionalQuestionNeedsDecision, questionAcceptsMultipleOptions, questionOptionsAreComplete, questionReadsAsAnswered, questionReviewPresentation, questionsNeedingApplicant, requiredQuestionReviewRoute, stickyShownIds } from "@/features/applications";
+import { answerWithExactOptionToggled, exactQuestionOption, exactSelectedQuestionOptions, nextStickyNeeding, optionalQuestionNeedsDecision, questionAcceptsMultipleOptions, questionOptionsAreComplete, questionReadsAsAnswered, questionReviewPresentation, questionsNeedingApplicant, requiredQuestionReviewRoute, type StickyNeeding } from "@/features/applications";
 import type { JdMatchResponse, JobMatch } from "@/features/applications";
 import { userFacingError } from "@/lib/user-facing-error";
 import { APPLICATION_DOCUMENT_ACCEPT_ATTRIBUTE, validateApplicationDocument } from "@/lib/document-size";
@@ -7252,17 +7252,15 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, metad
      from a different packet cannot survive to be read here. `reviewDiscovered` can flip on its own
      while this same instance stays mounted (a save can move the review off needs_attention with no
      screen change), and a memory built under a different review context is not this one's to keep. */
-  const [stickyNeeding, setStickyNeeding] = useState<{ reviewDiscovered: boolean; ids: ReadonlySet<string> }>(
+  const [stickyNeeding, setStickyNeeding] = useState<StickyNeeding>(
     () => ({ reviewDiscovered, ids: new Set(currentNeedingIds) }),
   );
-  if (stickyNeeding.reviewDiscovered !== reviewDiscovered) {
-    setStickyNeeding({ reviewDiscovered, ids: new Set(currentNeedingIds) });
-  } else {
-    const unionedNeedingIds = stickyShownIds(stickyNeeding.ids, currentNeedingIds);
-    if (unionedNeedingIds.size !== stickyNeeding.ids.size) {
-      setStickyNeeding({ reviewDiscovered, ids: unionedNeedingIds });
-    }
-  }
+  /* nextStickyNeeding carries both halves of the decision above (the reviewDiscovered-flip reset,
+     and the content-size comparison that keeps a same-content union from calling this setter every
+     render forever) - see its own doc comment in question-review-presentation.ts. `null` means this
+     render changes nothing, so the setter must not be called. */
+  const nextNeeding = nextStickyNeeding(stickyNeeding, reviewDiscovered, currentNeedingIds);
+  if (nextNeeding) setStickyNeeding(nextNeeding);
   /* `|| actionableIds.has(question.id)` unions in the currently-focused id defensively:
      questionsNeedingApplicant already folds actionableIds into actionableQuestions (and so into the
      sticky set above), so this is redundant today, but it keeps the question the applicant was just

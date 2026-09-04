@@ -281,6 +281,43 @@ export function stickyShownIds(
   return next;
 }
 
+export type StickyNeeding = { reviewDiscovered: boolean; ids: ReadonlySet<string> };
+
+/**
+ * The other half of the fix `stickyShownIds` leaves to its caller: WHEN a screen's sticky memory
+ * should start over, and whether this render needs to touch state at all. Pulled out of
+ * app/dashboard/applications/page.tsx so the reset branch - the one arm the running screen never
+ * exercised in a test - is reachable from a unit test instead.
+ *
+ * `reviewDiscovered` is the reset key, not the application id: switching applications already
+ * remounts the caller's component fresh, so a stale accumulator from a different packet cannot
+ * reach this function. `reviewDiscovered` can flip on its own while the same instance stays
+ * mounted (a save can move the review off needs_attention with no screen change), and a memory
+ * built under a different review context is not this one's to keep - so a flip starts over at
+ * exactly this render's ids, discarding `previous.ids` entirely.
+ *
+ * Same flag: the sticky ids only ever grow (see `stickyShownIds`), so "did anything change" has to
+ * be a CONTENT comparison, not identity - `previous.ids` and a same-content result are frequently
+ * two different Set objects, and comparing those by `!==` would call the setter every render
+ * forever. Returning `null` here, and the caller skipping its setter on `null`, is what stops that
+ * loop; a caller that instead diffed `unioned !== previous.ids` would rebuild the exact defect this
+ * function exists to avoid.
+ *
+ * Returns the next `{ reviewDiscovered, ids }` to hold in state, or `null` when this render changes
+ * nothing and the caller must not call its setter.
+ */
+export function nextStickyNeeding(
+  previous: StickyNeeding,
+  reviewDiscovered: boolean,
+  currentIds: Iterable<string>,
+): StickyNeeding | null {
+  if (previous.reviewDiscovered !== reviewDiscovered) {
+    return { reviewDiscovered, ids: new Set(currentIds) };
+  }
+  const unioned = stickyShownIds(previous.ids, Array.from(currentIds));
+  return unioned.size !== previous.ids.size ? { reviewDiscovered, ids: unioned } : null;
+}
+
 function normalizedQuestionLabel(value: string | undefined): string {
   return value?.trim().replace(/\s+/g, " ") ?? "";
 }
