@@ -1003,7 +1003,25 @@ export function humanInputItems(
       });
       continue;
     }
-    if (review.status !== "submitted" && question.kind === "essay" && answer) {
+    /* A DRAFT IS WHAT NEEDS READING, and this row had no way to tell a draft from an answer she had
+     * already read and confirmed.
+     *
+     * The condition was `kind === "essay" && answer`, which is true of every answered essay
+     * forever. The row says "Drafted answer ready for review" and offers Review; pressing it, saving,
+     * and coming back produced the identical row, because nothing in the test could observe that
+     * anything had happened. Measured live 2026-09-04 on Exa packet 73768339 (ashby): its four
+     * essays all carry answer_source "applicant_review" - she has confirmed every one - and the
+     * screen still walks them as "1 of 4", indefinitely.
+     *
+     * `litos_draft` is precisely the provenance the sentence describes: a paragraph LITOS WROTE that
+     * she has not approved. It is also what the backend's own send gate reads - a litos_draft answer
+     * counts as an unanswered required question there (unapprovedLitosDraftQuestionLabels) - so
+     * gating on it makes this row mean the same thing the send gate means, which is the only reading
+     * under which clearing the row can ever clear the send.
+     *
+     * An answer with NO provenance is machine-resolved rather than drafted, and was never what this
+     * row was for; it is covered by the answered/unanswered branches above. */
+    if (review.status !== "submitted" && question.kind === "essay" && answer && question.answer_source === "litos_draft") {
       addUnique(items, {
         id: `review-${question.id}`,
         label: displayQuestionLabel(question.question),
