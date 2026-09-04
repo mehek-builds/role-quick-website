@@ -21,6 +21,9 @@ import type { DirectQuestionTask } from "@/features/applications";
  *   incomplete-options  options_complete false, where discovery saw more choices than it retained
  *                       exactly and the UI must NOT present its partial list as the whole menu
  *   optional-unknown    not required, so it needs an explicit Answer or Skip rather than a default
+ *   unreadable-choice-list  a closed control holding an answer on none of the choices Litos read,
+ *                       which is the one state with no correct press on the screen until the
+ *                       managed re-read is offered beside it
  *
  * Gated and unlinked like every other route under app/qa/. */
 export const metadata: Metadata = {
@@ -111,6 +114,27 @@ const tasks: DirectQuestionTask[] = [
       required: true,
       options: null,
       answer_source: "litos_draft",
+    },
+  },
+  /* THE STATE WITH NO CORRECT PRESS ON IT, measured on the Zeus Fire and Security breezy packet
+     (application 31ff26a8 / packet f04623c3, 2026-09-03). The option reader stored ONE option for a
+     radio group of three, so her real answer is on none of the list, Save is disabled, and the
+     question is required so there is no Skip. The only selectable thing is a claim she does not
+     make. This fixture is that screen, and what it must carry is the re-read. */
+  {
+    kind: "question",
+    id: "unreadable-choice-list",
+    intent: "answer",
+    item: item("unreadable-choice-list", "Protected veteran status"),
+    question: {
+      id: "unreadable-choice-list",
+      question: "i identify as one or more of the classifications of protected veteran listed above eeoc.veteran_status vet_yes",
+      answer: "No",
+      kind: "required",
+      required: true,
+      portal_input_type: "radio",
+      options: ["I IDENTIFY AS ONE OR MORE OF THE CLASSIFICATIONS OF PROTECTED VETERAN LISTED ABOVE"],
+      options_complete: true,
     },
   },
   {
