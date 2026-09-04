@@ -64,7 +64,7 @@ import { applyBankVariant, type ApplyOutcome } from "@/features/applications";
 import { RequirementProvider, RequirementText, MatchLegend } from "@/components/app/RequirementText";
 import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX, exactPacketAuditClauses, exactPacketAuditRanges } from "@/features/applications";
 import { educationDrift, educationDriftMessage, type EducationProfile } from "@/features/applications";
-import { checklistRowControl, completedSubmissionGroups, directAnswerNavigationTasks, directInputTaskPlan, directQuestionPromptFingerprint, directQuestionTaskFingerprint, displayQuestionLabel, documentAsksByKind, documentControls, documentStepsInPlan, humanInputItems, metadataRefreshOutranksStandingAttention, QUESTION_CHOICE_LIST_LIMIT, reviewedAnswersSaveLanding, unconfirmedDocumentItems, type ChecklistResumeRecord, type DirectQuestionTask, type DirectQuestionTaskIntent, type SubmissionChecklistAction, type SubmissionChecklistItem } from "@/features/applications";
+import { checklistRowControl, completedSubmissionGroups, directAnswerNavigationTasks, directInputTaskPlan, directQuestionPromptFingerprint, directQuestionTaskFingerprint, displayQuestionLabel, documentAsksByKind, documentControls, documentStepsInPlan, fillAgainFromReviewControl, humanInputItems, metadataRefreshOutranksStandingAttention, QUESTION_CHOICE_LIST_LIMIT, reviewedAnswersSaveLanding, unconfirmedDocumentItems, type ChecklistResumeRecord, type DirectQuestionTask, type DirectQuestionTaskIntent, type SubmissionChecklistAction, type SubmissionChecklistItem } from "@/features/applications";
 import { prescriptBlocksProgress, prescriptEditableQuestions, prescriptMetadataBlockers, prescriptNeedsHer, prescriptSummary } from "@/features/applications";
 import { answerWithExactOptionToggled, exactQuestionOption, exactSelectedQuestionOptions, nextStickyNeeding, optionalQuestionNeedsDecision, questionAcceptsMultipleOptions, questionOptionsAreComplete, questionReadsAsAnswered, questionReviewPresentation, questionsNeedingApplicant, requiredQuestionReviewRoute, type StickyNeeding } from "@/features/applications";
 import type { JdMatchResponse, JobMatch } from "@/features/applications";
@@ -8512,6 +8512,12 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
     return () => { if (timer !== undefined) window.clearTimeout(timer); };
   }, []);
   const handoffExpired = handoffWindowExpired(review, nowMs);
+  /* THE OTHER ROUTE BACK INTO A FRESH FILL, for a ready packet whose only problem is a document row
+     nothing has confirmed. See fillAgainFromReviewControl for the measured defect this closes and
+     why it reads unconfirmedDocuments' own badge rather than a second derivation. Computed off the
+     same handoffExpired above so the two controls this screen can offer for "run it again" - this
+     one and Start it again - stay mutually exclusive without either reading the other's JSX guard. */
+  const fillAgainControl = fillAgainFromReviewControl(review, unconfirmedDocuments, handoffExpired);
   /* `transcriptPending` is appended AFTER `restarting` rather than inserted anywhere inside. Two
      suites read this expression as a literal, one of them requiring `|| handoffExpired ||` with a
      term on each side, and both exist because a gate term silently dropped from here is a button
@@ -9031,6 +9037,15 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
           {review.status === "ready_for_final_approval" && handoffExpired && (
             <Button onClick={onRestart} disabled={restarting} variant="secondary">{restarting ? "Starting it again..." : "Start it again"}</Button>
           )}
+          {/* THE DOOR BACK for a ready packet whose only problem is a document row nothing has
+              confirmed - see fillAgainFromReviewControl. Bound to the SAME onRestart handler as
+              Start it again above (one caller, the existing submit-request {restart:true} contract,
+              no new backend route), and the two never render together: the helper returns hidden
+              whenever handoffExpired holds, so a session that is both expired and unconfirmed keeps
+              the one control whose wording is true, Start it again. */}
+          {fillAgainControl !== "hidden" && (
+            <Button onClick={onRestart} disabled={restarting} variant="secondary">{restarting ? "Filling again..." : fillAgainControl.label}</Button>
+          )}
           {/* The way out of the eighth reason, one control per outstanding ask. On this status there
               is no Your turn panel, so without these the greyed Send would name a blocker with
               nothing on screen that resolves it, which is the shape of every defect this screen has
@@ -9132,6 +9147,14 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
         {review.status === "ready_for_final_approval" && handoffExpired && (
           <p className="mt-3 text-xs leading-5 text-warn">
             Too much time has passed for Litos to finish this filled form, so it cannot be sent as it stands. Start it again and Litos will fill the company&rsquo;s page fresh.
+          </p>
+        )}
+        {/* Names the button above it, the same way every other control on this row does. Not a
+            warning: this control blocks nothing (see fillAgainFromReviewControl), so it reads as
+            plain information rather than an amber reason Send is grey. */}
+        {fillAgainControl !== "hidden" && (
+          <p className="mt-3 text-xs leading-5 text-muted">
+            Litos opens the company form again with your saved resume and answers and takes a new picture. Nothing goes to the employer.
           </p>
         )}
         {/* The cover letter was the ONE blocking term with no line here, so the greyed-out Send
