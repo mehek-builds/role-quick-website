@@ -222,6 +222,102 @@ export function optionalQuestionNeedsDecision(
     && question.answer_state !== "skipped";
 }
 
+/**
+ * Every editable question that must be visible on a screen whose own button these facts disable.
+ *
+ * A QUESTION THAT DISABLES THIS SCREEN'S BUTTON MUST BE ON THIS SCREEN. `actionableIds` names the
+ * server's humanInputItems plus whichever question the applicant just arrived to answer, and a
+ * focused review used to show exactly that set. The button beside it disables over EVERY editable
+ * question - a required one that does not read as answered (including the off-list case, see
+ * `answerNamesNoOfferedOption`) or an optional one still awaiting an answer or Skip - so a question
+ * humanInputItems never named could hold the button disabled while staying entirely off screen.
+ *
+ * MEASURED live on the Sage Greenhouse packet (aae653a3, 2026-09-04): humanInputItems named one
+ * question, a school select whose stored answer named none of its 24 options. The screen opened
+ * "1 answer needs you." with only that one shown. Two required radio questions - expected
+ * graduation date and how she heard about the role - were both OFF-LIST, not blank: graduation held
+ * "May 2028" against an offered "Spring 2028", and source held "Job board" against the offered
+ * "University Career Center / Job Board". Non-blank is exactly why humanInputItems' required check,
+ * `question.required && !answer`, missed both - the same blank-only gap `answerNamesNoOfferedOption`
+ * closes here also existed in humanInputItems (submission-checklist.ts), closed there the same way.
+ * Both disabled the button, but neither was in humanInputItems, so neither rendered. She answered
+ * the visible question, its badge turned ANSWERED, and the screen's only button stayed disabled
+ * with nothing left on screen to fix.
+ *
+ * This does not change what counts as missing or optional-undecided; it only widens which
+ * questions the applicant is shown to always include both.
+ */
+export function questionsNeedingApplicant(
+  editableQuestions: readonly ApplicationQuestion[],
+  actionableIds: ReadonlySet<string>,
+): ApplicationQuestion[] {
+  return editableQuestions.filter((question) =>
+    actionableIds.has(question.id)
+    || (question.required && !questionReadsAsAnswered(question))
+    || optionalQuestionNeedsDecision(question));
+}
+
+/**
+ * Unions a screen's previously-shown "needs the applicant" ids with this render's fresh set.
+ *
+ * `questionsNeedingApplicant` reads straight off `questions`, the state the applicant's own edits
+ * change, so a question drops out of it the instant she resolves it - before she has pressed Save. A
+ * caller that renders exactly that live set therefore yanks the card, and the control she just used,
+ * out from under her mid-edit: the button disables over the CURRENT set the same render draws, so
+ * the count and the visible cards must not be read from two different moments of it.
+ *
+ * This is the pure half of the fix, deliberately just a union: fold every id a screen instance has
+ * ever had to show into a growing set, so a caller renders (sticky ids ∪ this render's ids) and never
+ * removes a card the applicant is actively looking at. It does not decide when a growing set should
+ * start over - a screen moving to a different application or a different review context is the
+ * caller's call, made by handing back a fresh `previous`, not this function's.
+ */
+export function stickyShownIds(
+  previous: ReadonlySet<string>,
+  current: readonly string[],
+): Set<string> {
+  const next = new Set(previous);
+  for (const id of current) next.add(id);
+  return next;
+}
+
+export type StickyNeeding = { reviewDiscovered: boolean; ids: ReadonlySet<string> };
+
+/**
+ * The other half of the fix `stickyShownIds` leaves to its caller: WHEN a screen's sticky memory
+ * should start over, and whether this render needs to touch state at all. Pulled out of
+ * app/dashboard/applications/page.tsx so the reset branch - the one arm the running screen never
+ * exercised in a test - is reachable from a unit test instead.
+ *
+ * `reviewDiscovered` is the reset key, not the application id: switching applications already
+ * remounts the caller's component fresh, so a stale accumulator from a different packet cannot
+ * reach this function. `reviewDiscovered` can flip on its own while the same instance stays
+ * mounted (a save can move the review off needs_attention with no screen change), and a memory
+ * built under a different review context is not this one's to keep - so a flip starts over at
+ * exactly this render's ids, discarding `previous.ids` entirely.
+ *
+ * Same flag: the sticky ids only ever grow (see `stickyShownIds`), so "did anything change" has to
+ * be a CONTENT comparison, not identity - `previous.ids` and a same-content result are frequently
+ * two different Set objects, and comparing those by `!==` would call the setter every render
+ * forever. Returning `null` here, and the caller skipping its setter on `null`, is what stops that
+ * loop; a caller that instead diffed `unioned !== previous.ids` would rebuild the exact defect this
+ * function exists to avoid.
+ *
+ * Returns the next `{ reviewDiscovered, ids }` to hold in state, or `null` when this render changes
+ * nothing and the caller must not call its setter.
+ */
+export function nextStickyNeeding(
+  previous: StickyNeeding,
+  reviewDiscovered: boolean,
+  currentIds: Iterable<string>,
+): StickyNeeding | null {
+  if (previous.reviewDiscovered !== reviewDiscovered) {
+    return { reviewDiscovered, ids: new Set(currentIds) };
+  }
+  const unioned = stickyShownIds(previous.ids, Array.from(currentIds));
+  return unioned.size !== previous.ids.size ? { reviewDiscovered, ids: unioned } : null;
+}
+
 function normalizedQuestionLabel(value: string | undefined): string {
   return value?.trim().replace(/\s+/g, " ") ?? "";
 }

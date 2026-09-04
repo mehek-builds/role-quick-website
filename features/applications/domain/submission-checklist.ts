@@ -1,6 +1,6 @@
 import type { ApplicationQuestion, ApplicationReview, RequiredDocumentAsk } from "@/lib/api";
 import { screenForStatus, type ReviewScreen } from "./application-review.ts";
-import { questionReviewPresentation, requiredQuestionReviewRoute } from "./question-review-presentation.ts";
+import { questionReadsAsAnswered, questionReviewPresentation, requiredQuestionReviewRoute } from "./question-review-presentation.ts";
 import { withRequiredParentQuestionIds } from "./dependent-questions.ts";
 import { cleanScrapedLabel, cleanScrapedPrompt } from "./scraped-text.ts";
 
@@ -1009,7 +1009,27 @@ export function humanInputItems(
     const serverList = context.sensitiveConfirmations;
     const serverNamesForConfirmation = serverList !== undefined
       && serverList.some((label) => label.trim().toLowerCase() === question.question.trim().toLowerCase());
-    if (question.required && !answer) {
+    /* `!answer` alone missed the off-list case: a required closed control whose stored answer
+       names none of the employer's options is not blank, so it read as answered here while the
+       Questions screen's own badge, its button-disabling count, and the send gate all already knew
+       better (questionReadsAsAnswered folds in answerNamesNoOfferedOption for exactly this reason -
+       see its own doc comment and questionsNeedingApplicant's). MEASURED live on the Sage
+       Greenhouse packet (aae653a3, 2026-09-04): this checklist, and the packet-viewer and
+       sensitive-question counts that read it, named one required question while the Questions
+       screen's newly-widened focused review correctly named three - the other two were off-list,
+       not blank, and this was the surface still missing them. Using the shared predicate is what
+       makes every surface agree again, and it takes priority over the essay/confirm branches below
+       via the same `continue` those already use, so an off-list required question still gets
+       exactly one row - the honest "Answer" one - never an extra "Confirm" beside it.
+
+       `review.status !== "submitted"` GUARDS THIS ONE TOO, same as the four branches below it,
+       and the omission was measurable: ApplicationPacket.tsx (`sent = review.status ===
+       "submitted"`) is a read-only viewer with no control to press, and it feeds this same
+       question list through humanInputItems. A submitted packet's questions are historical -
+       nothing about them is still actionable, off-list-required included - so without the guard a
+       sent packet whose stored answer happened to name none of the employer's options rendered a
+       "Needs your input" panel with an "Answer" row over a form that no longer exists to answer. */
+    if (review.status !== "submitted" && question.required && !questionReadsAsAnswered(question)) {
       addUnique(items, {
         id: `missing-${question.id}`,
         label: displayQuestionLabel(question.question),
@@ -1027,7 +1047,7 @@ export function humanInputItems(
       });
       continue;
     }
-    if (!question.required && !answer && question.answer_state !== "skipped") {
+    if (review.status !== "submitted" && !question.required && !answer && question.answer_state !== "skipped") {
       addUnique(items, {
         id: `optional-${question.id}`,
         label: displayQuestionLabel(question.question),

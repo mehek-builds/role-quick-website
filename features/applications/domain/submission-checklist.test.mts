@@ -190,6 +190,116 @@ test("humanInputItems carries the employer's own options on a missing required a
   assert.equal(essay?.options, undefined, "a question with no list stays a plain Answer row");
 });
 
+/* MEASURED live on the Sage Greenhouse packet (aae653a3, 2026-09-04): a required radio question
+ * holding "May 2028" against an offered "Spring 2028" - non-blank, so `question.required && !answer`
+ * read it as answered here while questionReadsAsAnswered (the Questions screen's own rule) already
+ * knew it named none of the options. See question-review-presentation.ts's questionsNeedingApplicant
+ * doc comment for the fuller incident. */
+test("humanInputItems reads an off-list required answer as missing, not answered", () => {
+  const options = ["Spring 2027", "Fall 2027", "Spring 2028", "2030 or later"];
+  const offList = humanInputItems({
+    status: "needs_attention",
+    attention_reason: "",
+    questions: [{
+      id: "graduation",
+      question: "When do you expect to graduate?",
+      answer: "May 2028",
+      kind: "required",
+      required: true,
+      portal_input_type: "radio",
+      options,
+    }],
+  });
+  assert.deepEqual(
+    offList.map((item) => ({ questionId: item.questionId, detail: item.detail, action: item.action })),
+    [{ questionId: "graduation", detail: "Required answer missing", action: "Answer" }],
+    "a stored answer naming none of the offered options is not an answer the employer's form can accept",
+  );
+
+  const onList = humanInputItems({
+    status: "needs_attention",
+    attention_reason: "",
+    questions: [{
+      id: "graduation",
+      question: "When do you expect to graduate?",
+      answer: "Spring 2028",
+      kind: "required",
+      required: true,
+      portal_input_type: "radio",
+      options,
+    }],
+  });
+  assert.deepEqual(onList, [], "an answer naming an offered option is settled and owes no row");
+});
+
+/* The required-off-list check runs before the sensitive-confirm branch and `continue`s, same as the
+ * blank check always has, so a question that is BOTH off-list and sensitive must still get exactly
+ * one row - the honest "you have not actually answered this" one, not a second "Confirm" row beside
+ * it (or instead of it) for a value the control could never have accepted. */
+test("an off-list required answer on a sensitive question asks her to answer it, not to confirm it", () => {
+  const items = humanInputItems({
+    status: "needs_attention",
+    attention_reason: "",
+    questions: [{
+      id: "visa",
+      question: "Do you require visa sponsorship to work in this location?",
+      // Off-list: the control offers only Yes/No, and this stored answer names neither.
+      answer: "Not sure yet",
+      kind: "required",
+      required: true,
+      portal_input_type: "radio",
+      options: ["Yes", "No"],
+    }],
+  });
+  const visaRows = items.filter((item) => item.questionId === "visa");
+  assert.equal(visaRows.length, 1, "one row, not a missing row and a confirm row both");
+  assert.equal(visaRows[0]?.detail, "Required answer missing");
+  assert.equal(visaRows[0]?.actionKind, "answer");
+});
+
+/* MEASURED via ApplicationPacket.tsx, whose `sent = review.status === "submitted"` feeds this same
+ * question list through humanInputItems for its read-only "Needs your input" panel: the
+ * required-missing and optional-undecided branches were the only two in this loop with no
+ * `review.status !== "submitted"` guard, unlike their four siblings below (the essay-draft,
+ * essay-review, confirm and empty-field branches) and the completed-items builders. A submitted
+ * review's questions are history, not a form still waiting on her, so a sent packet whose stored
+ * answer happened to name none of the employer's options - or whose optional question was never
+ * answered or skipped - rendered an actionable "Answer" row over a form that no longer exists. */
+test("a submitted review's required-missing and optional-undecided questions are not actionable", () => {
+  const questions = [{
+    id: "graduation",
+    question: "When do you expect to graduate?",
+    // Off-list: the control offered these four seasons and the stored answer names none of them.
+    answer: "May 2028",
+    kind: "required" as const,
+    required: true,
+    portal_input_type: "radio",
+    options: ["Spring 2027", "Fall 2027", "Spring 2028", "2030 or later"],
+  }, {
+    id: "optional-location",
+    question: "Which other offices would you consider?",
+    answer: "",
+    answer_state: "unanswered" as const,
+    kind: "required" as const,
+    required: false,
+    portal_input_type: "select-multiple",
+    options: ["Chicago", "New York"],
+  }];
+
+  const sent = humanInputItems({ status: "submitted", attention_reason: "", questions });
+  assert.deepEqual(sent, [], "a submitted packet's questions are history - neither branch owes a row");
+
+  const unsent = humanInputItems({ status: "needs_attention", attention_reason: "", questions });
+  assert.deepEqual(
+    unsent.map((item) => ({ questionId: item.questionId, detail: item.detail, action: item.action })),
+    [
+      { questionId: "graduation", detail: "Required answer missing", action: "Answer" },
+      { questionId: "optional-location", detail: "Optional, answer or skip", action: "Answer" },
+    ],
+    "the identical questions on an unsent review still ask - the guard is status-gated, not a behavior change",
+  );
+});
+
 test("optional questions stay actionable until the applicant answers or skips them", () => {
   const base = {
     status: "needs_attention" as const,
