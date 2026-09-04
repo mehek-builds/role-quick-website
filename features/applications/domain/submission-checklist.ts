@@ -1943,3 +1943,49 @@ export function unconfirmedDocumentItems(
   }
   return items;
 }
+
+/**
+ * Whether the Review screen owes a route back into a fresh fill, and what to call it, for a packet
+ * that has already reached ready_for_final_approval.
+ *
+ * THE GAP THIS CLOSES, measured live on trylitos.com 2026-09-04: Exa "Software Engineer, Intern"
+ * (Ashby), packet 73768339, canonical 9c299345. Every answer was present, the packet sat at
+ * ready_for_final_approval, and this screen's own "Not confirmed" section named the resume -
+ * "Litos says it attached this, and Litos's own application record has no resume linked to it
+ * either. Nothing here can confirm the company got one, so check the picture of the filled form" -
+ * beside a picture of Ashby's own "...Resume.pdf failed to upload" toast (a runner containment bug,
+ * fixed in stratus #171 and deployed). The only repair was a fresh fill so the resume would upload
+ * and a new preview would be taken, and nothing on this screen started one: "Start it again" is
+ * gated on handoffExpired, "Fix an answer" on a missing required answer, "Add <document>" on an
+ * outstanding ask, and none of the three held. She would have had to break a correct answer just to
+ * open a door back to a correct file.
+ *
+ * READS unconfirmedDocumentItems' OWN BADGE, passed in rather than recomputed, so this can only ever
+ * agree with the section it is a recovery for: hand it the exact array the Review screen already
+ * renders under "Not confirmed" and it reads the same `badge` field that heading is printing beside.
+ * Scoped to the "Not confirmed" badge alone, not "Missing" (the run reporting a file outright absent
+ * - see unconfirmedDocumentItems for that state). A reported-empty file is a stronger, more specific
+ * claim than this defect ever measured, and this function does not widen to cover it un-measured.
+ *
+ * handoffExpired WINS WHEN BOTH HOLD. It is a hard, server-enforced deadline (handoffWindowExpired
+ * mirrors the backend's own refusal), and "Start it again" already reruns the exact same
+ * submit-request restart for that case. Two buttons calling onRestart over one expired session would
+ * be one action wearing two names, so this returns hidden and leaves the row to the control already
+ * there. Taking the flag as an argument rather than a clock keeps that one decision made once, off
+ * the same tick the button itself reads, rather than a second clock this function would have to keep
+ * in step with it.
+ *
+ * needs_attention IS OUT OF SCOPE ON PURPOSE. PR #522 puts "Fill again" on the question screen for
+ * that status, over the row class it exists for (attention_reason blockers, missing answers). This
+ * function only ever answers for ready_for_final_approval, where no such control exists at all.
+ */
+export function fillAgainFromReviewControl(
+  review: Pick<ApplicationReview, "status">,
+  notConfirmedDocuments: readonly Pick<SubmissionChecklistItem, "badge">[],
+  handoffExpired: boolean,
+): "hidden" | { label: string } {
+  if (review.status !== "ready_for_final_approval") return "hidden";
+  if (handoffExpired) return "hidden";
+  if (!notConfirmedDocuments.some((item) => item.badge === "Not confirmed")) return "hidden";
+  return { label: "Fill the form again" };
+}
