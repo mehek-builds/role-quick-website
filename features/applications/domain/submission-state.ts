@@ -71,7 +71,17 @@ export type SubmissionRetrySafetyLike =
   }
   | { kind: "blocked_confirmed"; attemptId: string; confirmedAt: string };
 
-const SUBMISSION_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+/* THE LEDGER'S OWN IDENTIFIERS, by layout rather than by RFC-4122 version and variant.
+ *
+ * `attemptId` and `leaseId` are minted by the submission attempt ledger into Postgres `uuid`
+ * columns, which accept any 128 bits, and appendSubmissionAttemptEvent never version-checks them.
+ * Their nibbles are uniformly distributed, so the old `[1-8]` + `[89ab]` rule accepted
+ * (8/16)x(4/16) of what the system mints and quarantined the rest. See submission-projection.ts's
+ * LEDGER_ID_PATTERN for the measured census and for why widening cannot authorize a send: a retry
+ * verdict is only ever READ here, and a `blocked_unverified` or `blocked_confirmed` one refuses the
+ * send whether it parses or is discarded. Only `no_evidence` and `safe_not_sent` permit a retry,
+ * and neither can be produced by relaxing an identifier's alphabet. */
+const SUBMISSION_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function strictSubmissionTimestamp(value: unknown): value is string {
   return typeof value === "string"
