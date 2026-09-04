@@ -743,3 +743,59 @@ test("a direct answer owns the screen and invalidates an older poll snapshot", (
   assert.match(screen, /\{!directAnswerActive && <>[\s\S]*?<Button onClick=\{onReviewPacket\}[^>]*>Open packet review<\/Button>[\s\S]*?<Button onClick=\{onRetry\} variant="secondary">Try again<\/Button>/);
   assert.match(screen, /!awaitingUnverifiedSubmission && !directAnswerActive && filledFormEvidence/);
 });
+
+/* EVERY CALLER OF directInputTaskPlan MUST HAND IT THE SERVER'S OWN LIST, not only the packet
+ * screen's confirmation block that reads humanInputItems directly.
+ *
+ * directInputTaskPlan's own domain test (submission-checklist.test.mts) proves the function is
+ * correct once handed a list; it cannot prove any of these six call sites still HAND it one, because
+ * a call site is not a body a unit test's fixtures can exercise. That gap is exactly how this
+ * shipped: humanInputItems already read the server's list correctly at the packet screen's own call
+ * site, while every one of these six built its context from `{ company, role, documents }` alone and
+ * so fell back to the label guess regardless of what the server said. Measured live 2026-09-04,
+ * Hudson River Trading application 4a79eec1-5c65-4dd4-8e72-e119fbfbd733: an empty
+ * sensitive_questions_requiring_confirmation list did not stop the one-question queue from asking
+ * about the sponsorship question a second time. Deleting `sensitiveConfirmations:` back out of any
+ * one of these six call sites reopens that exact dead end without ever touching the function body a
+ * plain unit test would still pass against. */
+test("every direct-plan call site hands the server's own confirmation list forward", () => {
+  const actionable = page.slice(
+    page.indexOf("const actionableQuestionIds = useMemo("),
+    page.indexOf(".filter((item) => item.settled !== true && item.questionId)"),
+  );
+  assert.match(
+    actionable,
+    /humanInputItems\(selectedSubmission\.review, \{[\s\S]*?sensitiveConfirmations: selectedSubmission\.sensitive_questions_requiring_confirmation,/,
+    "actionableQuestionIds must read the server's list, not just company/role/documents",
+  );
+
+  const save = functionBody("  async function saveReviewedAnswers(");
+  assert.match(
+    save,
+    /const activeDirectTaskPlan = direct\s*\? directInputTaskPlan\(activeSubmission\.review, \{[\s\S]{0,200}?sensitiveConfirmations: activeSubmission\.sensitive_questions_requiring_confirmation,/,
+    "the pre-flight revalidation plan must agree with the server's list, or a save the server already refused looks locally legitimate",
+  );
+  assert.match(
+    save,
+    /const latestDirectTaskPlan = direct\s*\? directInputTaskPlan\(latestSubmission\.review, \{[\s\S]{0,200}?sensitiveConfirmations: latestSubmission\.sensitive_questions_requiring_confirmation,/,
+    "the post-response plan must agree with the server's list",
+  );
+  assert.match(
+    save,
+    /const savedDirectTaskPlan = directInputTaskPlan\(saved\.review, \{[\s\S]{0,200}?sensitiveConfirmations: saved\.sensitive_questions_requiring_confirmation,/,
+    "the accepted-answer plan must agree with the server's list, or the next question in the queue can be one the server already cleared",
+  );
+
+  assert.match(
+    page,
+    /total: directInputTaskPlan\(selectedSubmission\.review, \{[\s\S]{0,300}?sensitiveConfirmations: selectedSubmission\.sensitive_questions_requiring_confirmation,/,
+    "the navigator's own total must agree with the server's list, or the position counter promises a question the queue will never draw",
+  );
+
+  const screen = sourceSection("function SubmissionScreen(", "function SubmissionReceipt(");
+  assert.match(
+    screen,
+    /const directTaskPlan = directInputTaskPlan\(attentionReview, \{[\s\S]{0,200}?sensitiveConfirmations: submission\.sensitive_questions_requiring_confirmation,/,
+    "the screen's own plan - the one that decides whether DirectApplicationQuestion renders at all - must agree with the server's list",
+  );
+});

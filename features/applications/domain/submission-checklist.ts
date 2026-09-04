@@ -1089,10 +1089,27 @@ export function humanInputItems(
  * box. `humanInputItems` decides whether a review row still needs the applicant, while
  * `questionReviewPresentation` decides whether the employer's exact prompt and accepted answers are
  * trustworthy enough to edit. A direct question must pass both decisions.
+ *
+ * `sensitiveConfirmations` HAS TO REACH `humanInputItems` HERE TOO, not only at the call sites that
+ * build the packet screen's confirmation block. Both read `humanInputItems`; only one carried the
+ * server's own list. Every caller below built its context from `{ company, role, documents }` alone,
+ * so this function fell back to `isHumanOnlyChecklistLabel` unconditionally - the SAME local guess
+ * the packet screen stopped trusting - and the two surfaces could name a different verdict for the
+ * same question.
+ *
+ * Measured live 2026-09-04, Hudson River Trading application 4a79eec1-5c65-4dd4-8e72-e119fbfbd733:
+ * `sensitive_questions_requiring_confirmation` was `[]`, `packet_audit.status` was `passed`, and the
+ * sponsorship question already carried `answer_source: "applicant_review"` from the current review
+ * round. The server had nothing left to ask. This queue asked anyway, because the label matches
+ * `isHumanOnlyChecklistLabel`'s visa-sponsorship pattern regardless of what the server's list says,
+ * so `directAnswerActive` stayed true over a single "confirm" task that could never settle: the
+ * press it draws goes to `PUT /review/answers`, which answers on the STORED row rather than this
+ * screen's belief about it, and had already refused the packet for an unrelated reason. Nothing this
+ * screen could do would clear a question the server had already cleared.
  */
 export function directInputTaskPlan(
   review: Pick<ApplicationReview, "attention_reason" | "attention_categories" | "attention_acknowledgements" | "cover_letter_supported" | "filled_fields" | "questions" | "question_metadata_blockers" | "questions_reviewed_at" | "required_documents" | "transcript_supported" | "stall" | "status">,
-  context: { company?: string; role?: string; documents?: ChecklistDocumentMarks } = {},
+  context: { company?: string; role?: string; documents?: ChecklistDocumentMarks; sensitiveConfirmations?: readonly string[] } = {},
 ): DirectInputTaskPlan {
   const items = humanInputItems(review, context);
   const presentation = questionReviewPresentation(

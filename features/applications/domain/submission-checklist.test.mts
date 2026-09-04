@@ -2122,3 +2122,88 @@ test("the packet record says the same thing the review screen does", () => {
     "the read-only record must not list under Done by Litos a file the review screen calls unconfirmed",
   );
 });
+
+/* THE ONE-QUESTION QUEUE HAS TO READ THE SERVER'S LIST TOO, not only the packet screen's
+ * confirmation block.
+ *
+ * Measured live 2026-09-04, Hudson River Trading application 4a79eec1-5c65-4dd4-8e72-e119fbfbd733:
+ * sensitive_questions_requiring_confirmation was [], packet_audit.status was "passed", 0 required
+ * questions were unanswered, and the sponsorship question already carried answer_source
+ * "applicant_review" with answer_reviewed_at equal to questions_reviewed_at. The server had nothing
+ * left to ask. The one-question queue asked anyway: directInputTaskPlan built its plan by calling
+ * humanInputItems WITHOUT the server's list, so it fell back to isHumanOnlyChecklistLabel, which
+ * matches this exact label regardless of what the server says. The screen showed "1 of 1", the
+ * question pre-answered "Yes", and a live "Confirm answer" button over a question already settled.
+ *
+ * These two cases are the whole of the regression: the plan must agree with the server when the
+ * server has spoken, and keep the old label-guess only when it has not. */
+test("the direct plan drops a question the server's own list has already cleared", () => {
+  const SPONSORSHIP =
+    "Will you now, or in the future, require visa sponsorship to legally work in the country specified for this position?";
+  const ROUND = "2026-09-01T21:28:12.934Z";
+  const review: Pick<ApplicationReview, "attention_reason" | "questions" | "questions_reviewed_at" | "status"> = {
+    status: "needs_attention",
+    attention_reason: "",
+    questions_reviewed_at: ROUND,
+    questions: [{
+      id: "sponsorship",
+      question: SPONSORSHIP,
+      answer: "Yes",
+      kind: "required",
+      required: true,
+      portal_input_type: "select-one",
+      options: ["Yes", "No"],
+      answer_source: "applicant_review",
+      answer_reviewed_at: ROUND,
+      // No answer_confirmed_of: the server does not serve one for a question it is not asking about.
+    }],
+  };
+
+  // With no server list at all (an older payload), the previous label-guess behaviour is untouched.
+  const fallbackPlan = directInputTaskPlan(review);
+  assert.equal(fallbackPlan.questionTasks[0]?.intent, "confirm", "an older payload still falls back to the label classes");
+  assert.equal(fallbackPlan.current?.id, "confirm-sponsorship");
+  assert.equal(fallbackPlan.remaining, 1);
+
+  // The server's own list, exactly as measured: empty. Nothing is outstanding, so nothing is asked.
+  const clearedPlan = directInputTaskPlan(review, { sensitiveConfirmations: [] });
+  assert.deepEqual(clearedPlan.questionTasks, [], "the server named nothing, so the queue has no question left to ask");
+  assert.equal(clearedPlan.current, null, "there is no packet-review dead end left to route to");
+  assert.equal(clearedPlan.remaining, 0);
+
+  // The server's list still names the label: the queue must still ask, or a genuine confirmation
+  // requirement would go silent instead of merely a stale one.
+  const namedPlan = directInputTaskPlan(review, { sensitiveConfirmations: [SPONSORSHIP] });
+  assert.equal(namedPlan.questionTasks[0]?.intent, "confirm");
+  assert.equal(namedPlan.current?.id, "confirm-sponsorship");
+});
+
+test("the direct plan's server list clears one label without silencing a genuinely outstanding one", () => {
+  const SPONSORSHIP = "Do you require visa sponsorship?";
+  const GENDER = "What is your gender?";
+  const ROUND = "2026-09-01T21:28:12.934Z";
+  const review: Pick<ApplicationReview, "attention_reason" | "questions" | "questions_reviewed_at" | "status"> = {
+    status: "needs_attention",
+    attention_reason: "",
+    questions_reviewed_at: ROUND,
+    questions: [
+      {
+        id: "sponsorship", question: SPONSORSHIP, answer: "No", kind: "required", required: true,
+        portal_input_type: "select-one", options: ["Yes", "No"],
+        answer_source: "applicant_review", answer_reviewed_at: ROUND,
+      },
+      {
+        id: "gender", question: GENDER, answer: "Woman", kind: "required", required: true,
+        portal_input_type: "select-one", options: ["Woman", "Man", "Non-binary"],
+        answer_source: "applicant_review", answer_reviewed_at: ROUND,
+      },
+    ],
+  };
+
+  // The server names only gender now: sponsorship is cleared, gender still asks.
+  const plan = directInputTaskPlan(review, { sensitiveConfirmations: [GENDER] });
+  const ids = plan.questionTasks.map((task) => task.question.id);
+  assert.ok(!ids.includes("sponsorship"), "the server dropped this one, so the queue must not invent it back");
+  assert.ok(ids.includes("gender"), "the server still names this one, so the queue must still ask");
+  assert.equal(plan.remaining, 1);
+});

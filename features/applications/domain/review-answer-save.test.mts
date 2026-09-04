@@ -151,6 +151,41 @@ describe("saving answers from the Review-answers screen", () => {
     assert.equal("notice" in result, false, "there is no success banner on a save that did not happen");
   });
 
+  /* THE EXACT R-004 REFUSAL, WORD FOR WORD, IS WHAT REACHES HER SCREEN - not a generic apology and
+   * not silence.
+   *
+   * Measured live 2026-09-04, Hudson River Trading application 4a79eec1-5c65-4dd4-8e72-e119fbfbd733:
+   * review.status "failed" from a submit-request run that had already attempted the employer's page
+   * before an unrelated GPA-control defect stopped it (#920, since fixed). PUT /review/answers on a
+   * row in that shape answers 409 REVIEW_ANSWERS_NOT_EDITABLE - see
+   * student-outreach-backend/src/routes/reviewAnswerSave.test.ts, "a failed run carrying a recorded
+   * submit attempt refuses the save" - and the gate is correct: R-004 exists exactly so a stopped run
+   * that may already be at the employer cannot have its record of that quietly rewritten.
+   *
+   * What this asserts is the other half: `api()` throws an Error whose `.message` IS the server's
+   * `error` string (apiErrorMessage reads that field, not `code`), and this function's catch block
+   * must hand that string back rather than substituting REVIEW_ANSWERS_SAVE_FAILED's generic text -
+   * or a press that the server explained in one clear sentence reaches the screen as nothing at all. */
+  test("the R-004 refusal on a failed packet reaches the caller as the server's own sentence", async () => {
+    const refused = recorder(async () => {
+      throw new Error("These answers can no longer be edited from this application’s current submission state");
+    });
+
+    const result = await saveReviewAnswers({
+      applicationId: APPLICATION_ID,
+      questions: answered,
+      send: refused.send,
+    });
+
+    assert.equal(result.saved, false);
+    assert.equal(
+      result.saved === false && result.message,
+      "These answers can no longer be edited from this application’s current submission state",
+      "the server's own sentence, not a generic fallback and not an empty string",
+    );
+    assert.notEqual(result.saved === false && result.message, "", "a defined refusal is never blank");
+  });
+
   /* THE 202 THAT LOOKS EXACTLY LIKE A 200.
    *
    * A run wrote to the packet between the route's read and its write, so nothing typed here was
