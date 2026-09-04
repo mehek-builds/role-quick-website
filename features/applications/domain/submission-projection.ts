@@ -10,6 +10,42 @@ export type SubmissionProjectionIdentity = {
 };
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/**
+ * THE LEDGER'S OWN IDENTIFIERS, WHICH ARE NOT RFC-4122 UUIDs.
+ *
+ * `attempt_id` is minted by the submission attempt ledger into a Postgres `uuid` column, which
+ * accepts any 128 bits, and appendSubmissionAttemptEvent never version-checks it. So its version
+ * and variant nibbles are uniformly distributed, and holding it to `[1-5]` + `[89ab]` accepts only
+ * (5/16)x(4/16) of the identifiers the system actually mints.
+ *
+ * THAT IS MEASURED, NOT MODELLED. From the backend's census of this account on 2026-09-03
+ * (volley-backend submissionAuthorityEnvelope.ts:65-88): of 37 board cards that published an
+ * envelope, the 9 carrying an identifier had version nibbles 1,1,1,3,4,4,4,4,5 and variants
+ * 8,8,9,a,a,b,b,b,b - a spread randomUUID() (always 4) could not produce. And 162 of the 163
+ * refused cards were refused on `projection.attempt_id` ALONE: 115 on the version nibble, 47 on the
+ * variant. That is PR #918's `unpublishable_attempt_identity`.
+ *
+ * The cost of that refusal is not cosmetic. The backend deliberately withholds an envelope this
+ * parser would quarantine, so the packet arrives with NO authority at all;
+ * applicationPacketAuthorityState then answers `uncertain`, and the review screen refuses the send
+ * with "Litos cannot start another employer attempt until the exact prior submission evidence is
+ * verified" - on packets whose ledger verdict is `no_evidence`, i.e. nothing was ever attempted and
+ * nothing ever reached an employer. No control can clear that, because there is no evidence to
+ * verify. Measured live 2026-09-04 on the Mercari packets.
+ *
+ * WIDENING THIS CANNOT AUTHORIZE A SEND, and that is why it is the safe direction. These ids are
+ * opaque correlation keys, compared only for EQUALITY against other server-supplied values. The
+ * send decision is `projection.state === "none"` AND a retry verdict of `no_evidence`/
+ * `safe_not_sent` AND no mutable sent claim AND not quarantined. A wider identifier alphabet cannot
+ * turn a `confirmed` or `unverified` projection into `none`; it only lets an envelope that already
+ * says `unverified` be READ as unverified instead of being discarded. Both readings refuse the
+ * send, so no packet carrying real attempt evidence becomes sendable by this change.
+ *
+ * Row identifiers keep UUID_PATTERN: `canonical_application_id` and `packet_id` are table primary
+ * keys minted by `gen_random_uuid()`, which really is v4, so the strict rule costs them nothing.
+ */
+const LEDGER_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CONFIRMED_SOURCES = new Set([
   "managed_browser",
   "direct_browser",
@@ -53,6 +89,11 @@ function timestampString(value: unknown): value is string {
 
 function uuidString(value: unknown): value is string {
   return typeof value === "string" && UUID_PATTERN.test(value);
+}
+
+/** A ledger-minted identifier: UUID layout, any version and variant nibble. See LEDGER_ID_PATTERN. */
+function ledgerIdString(value: unknown): value is string {
+  return typeof value === "string" && LEDGER_ID_PATTERN.test(value);
 }
 
 function safeReceiptUrl(value: unknown): value is string {
@@ -117,7 +158,7 @@ export function authoritativeSubmissionProjectionFromUnknown(
     return Object.keys(projection).length === 1 ? { state: "none" } : null;
   }
   if (projection.state === "unverified"
-    && uuidString(projection.attempt_id)
+    && ledgerIdString(projection.attempt_id)
     && timestampString(projection.observed_at)
     && (projection.reason === "opened"
       || projection.reason === "boundary_authorized"
@@ -130,7 +171,7 @@ export function authoritativeSubmissionProjectionFromUnknown(
     && projection.reasons.length > 0
     && projection.reasons.every(nonEmptyString)
     && projection.reasons.every((reason) => REPAIR_REASONS.has(reason))
-    && (projection.attempt_id === undefined || uuidString(projection.attempt_id))
+    && (projection.attempt_id === undefined || ledgerIdString(projection.attempt_id))
     && (projection.canonical_application_id === undefined
       || uuidString(projection.canonical_application_id))
     && (projection.packet_id === undefined
@@ -139,7 +180,7 @@ export function authoritativeSubmissionProjectionFromUnknown(
     return value as AuthoritativeSubmissionProjection;
   }
   if (projection.state !== "confirmed"
-    || !uuidString(projection.attempt_id)
+    || !ledgerIdString(projection.attempt_id)
     || !uuidString(projection.canonical_application_id)
     || (projection.packet_id !== null && !uuidString(projection.packet_id))
     || !timestampString(projection.submitted_at)
