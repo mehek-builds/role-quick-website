@@ -130,6 +130,79 @@ export function auditAnswerWrite(status: string): AuditAnswerWrite {
   return "none";
 }
 
+/**
+ * WHERE A TYPED ANSWER CAN ACTUALLY LAND, ASKED BEFORE THE CONTROL THAT TYPES IT IS DRAWN.
+ *
+ * THE DEFECT THIS NAMES. Measured live 2026-09-04, account mehekmandal05@gmail.com: Flow Traders
+ * packet 8dc65cd0-cab5-4af2-a1d8-2583766fd2d4 (greenhouse) at `ready_for_final_approval`. The
+ * Tracker card drew "Answer 1 question", the press opened the per-question editor with the essay
+ * pre-filled, the box accepted typing, and Save returned
+ * `409 REVIEW_ANSWERS_NOT_EDITABLE`. Every keystroke of a correction to a factual error was
+ * unlandable, and nothing on either screen said so until after the press.
+ *
+ * THE SERVER IS RIGHT, AND THIS IS NOT A CLIENT COPY OF ITS GATE. The backend refusal is
+ * reviewAnswerSaveDisposition (student-outreach-backend src/lib/submissionSafety.ts:308), and its
+ * own comment gives the reason in full: "The form is already filled and there is a preview
+ * screenshot of it on screen. New answers underneath it would leave the picture the applicant
+ * approves describing something else." PUT /review/answers writes the answers "and nothing else" -
+ * it leaves the status, the filled form and that screenshot exactly where they were - so a save
+ * through it is precisely the divergence the refusal exists to prevent. Widening it is not
+ * available, and this file does not attempt to predict every state it refuses: `save` below means
+ * "no reason known HERE to route this anywhere else", and the server stays the enforcement point.
+ *
+ * WHAT IS ADDED IS THE THIRD ANSWER, and it is the one the screen was missing. A packet at
+ * `ready_for_final_approval` that carries NO claim and NO send evidence has reached no employer,
+ * and the backend already has a door for exactly that shape: preparedRunCanRestart
+ * (submissionSafety.ts:140) admits it, and POST /applications/:id/submit-request takes
+ * `{ questions, restart: true }` - discarding the filled form, refilling it from the posted answers
+ * and taking a fresh preview. So the corrected answer and the picture move TOGETHER, in one
+ * request, which is the invariant rather than a hole in it. `reopen` says "this answer has a route,
+ * and it is that one".
+ *
+ * STRICTLY NARROWER THAN THE SERVER'S DOOR, deliberately. preparedRunCanRestart asks only about the
+ * claim; this also refuses a stored `receipt` or an open `unverified_submission`, so a client can
+ * never offer a reopen the server would then refuse. The cost of being narrow is a `frozen` verdict
+ * on a packet that might have been reopenable; the cost of being wide is a second dead control,
+ * which is the defect itself.
+ */
+export type ReviewAnswerEditRoute = "save" | "reopen" | "frozen";
+
+/** The fields this decision reads. A subset of the live review, so tests state the shape exactly. */
+export type ReviewAnswerEditState = {
+  status: string;
+  submission_claimed_at?: string;
+  submission_claim_id?: string;
+  unverified_submission?: { resolution?: "sent" | "not_sent" };
+  receipt?: unknown;
+};
+
+export function reviewAnswerEditRoute(review: ReviewAnswerEditState): ReviewAnswerEditRoute {
+  if (review.status !== "ready_for_final_approval") return "save";
+  /* Any of these means something may already be at the employer, and then the answers on the row are
+     the record of what was given rather than a draft. There is no correction route for that and the
+     screen must not invent one. */
+  const mayBeAtEmployer = Boolean(review.submission_claimed_at)
+    || Boolean(review.submission_claim_id)
+    || Boolean(review.receipt)
+    || (Boolean(review.unverified_submission) && !review.unverified_submission?.resolution);
+  return mayBeAtEmployer ? "frozen" : "reopen";
+}
+
+/** Said when the correction is going down the reopen route, so the press is not mistaken for the
+ *  ordinary save: this one throws away a form that is already filled and fills it again. */
+export const REVIEW_ANSWERS_REOPEN_NOTICE =
+  "This company's form is already filled in, so Litos is filling it again with your correction. A new preview will be here in a minute.";
+
+/** The reopen the server would not take. Says what every refusal on this path says - the answer is
+ *  still hers and still on the screen - and leaves the server's own sentence to the banner
+ *  prepareApplication has already written, rather than restating it in different words. */
+export const REVIEW_ANSWERS_REOPEN_REFUSED =
+  "Litos could not start filling this company's form again, so your correction has not been saved yet. It is still on this screen, so try again.";
+
+/** The one state with no correction route at all, said as the reason rather than as an apology. */
+export const REVIEW_ANSWERS_FROZEN_NOTICE =
+  "Litos has already started sending this application, so its answers are now the record of what the company was given and cannot be edited.";
+
 export function reviewAnswersRequest(questions: readonly ReviewAnswerSaveQuestion[]): {
   method: string;
   body: string;
