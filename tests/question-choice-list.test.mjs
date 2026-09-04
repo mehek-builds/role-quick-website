@@ -77,8 +77,34 @@ test("historical closed controls are partitioned before the textarea branch", ()
   const screen = functionBody(PAGE, "function QuestionsScreen(");
   assert.match(screen, /const presentation = questionReviewPresentation\(questions, metadataBlockers\)/);
   assert.match(screen, /const editableQuestions = presentation\.editableQuestions/);
-  assert.match(screen, /focusedReview \? actionableQuestions : editableQuestions/);
+  assert.match(screen, /focusedReview \? shownQuestions : editableQuestions/);
   assert.match(screen, /effectiveMetadataBlockers\.map/);
+});
+
+/* PINS THE WIRING A REVERT WOULD SILENTLY UNDO. JSX cannot be mounted under
+ * --experimental-strip-types (the file header explains why this whole suite reads source instead),
+ * so nothing here would otherwise catch a QuestionsScreen edit that swapped its actionable/visible
+ * computation back to the narrower shape it replaced - `editableQuestions.filter((q) =>
+ * actionableIds.has(q.id))`, which is exactly the set humanInputItems names and exactly what stayed
+ * silent on the Sage Greenhouse packet (aae653a3, 2026-09-04) while two off-list required questions
+ * held the button disabled off screen. See question-review-presentation.test.mts for the behavioral
+ * coverage of questionsNeedingApplicant and stickyShownIds themselves; this only pins that
+ * QuestionsScreen still calls them. */
+test("the button-disabling set is still computed through questionsNeedingApplicant, and the shown cards stay sticky", () => {
+  const screen = functionBody(PAGE, "function QuestionsScreen(");
+  assert.match(screen, /const actionableQuestions = questionsNeedingApplicant\(editableQuestions, actionableIds\);/);
+  assert.doesNotMatch(
+    screen,
+    /editableQuestions\.filter\(\(q\) => actionableIds\.has\(q\.id\)\)/,
+    "a revert to the narrower, humanInputItems-only set must fail this test",
+  );
+  /* The visibility-churn fix: actionableQuestions is recomputed fresh from live-edited state every
+     render, so rendering it directly under focused review drops a card, and the control she just
+     used with it, the instant her new answer reads as valid - before Save. shownQuestions is the
+     sticky superset that must render instead. */
+  assert.match(screen, /const \[stickyNeeding, setStickyNeeding\] = useState</);
+  assert.match(screen, /stickyShownIds\(stickyNeeding\.ids, currentNeedingIds\)/);
+  assert.match(screen, /focusedReview \? shownQuestions : editableQuestions/);
 });
 
 test("the Your turn row draws the employer's options as radio inputs, never as buttons", () => {
