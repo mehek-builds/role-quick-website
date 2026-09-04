@@ -77,7 +77,7 @@ import { applicationSelectionPath } from "./application-selection-url";
 import { applicationMatchesQuery, applicationNextActionRank, applicationWorkflowRevision } from "@/features/applications";
 import { ExactPacketPdf } from "@/components/app/ExactPacketPdf";
 import { AuditedJobDescription, manualHandoffMatchesPacket, manualTrialPacketEvidenceIsFresh, PacketAuditBreakdown, packetAuditDisplayIsExact, packetAuditResponseMatchesApplication } from "@/components/app/PacketAuditEvidence";
-import { acknowledgePacketAudit, acknowledgePacketEvidence, packetQuestionsSnapshot, reconcilePacketPdfVerification, reconcileUnacknowledgedPacketPoll, revalidateAcknowledgedPacketEvidence, type PacketEvidenceSession, type PacketPdfEvidenceVerification } from "@/features/applications";
+import { acknowledgePacketAudit, acknowledgePacketEvidence, attentionRefillOffered, packetQuestionsSnapshot, reconcilePacketPdfVerification, reconcileUnacknowledgedPacketPoll, revalidateAcknowledgedPacketEvidence, type PacketEvidenceSession, type PacketPdfEvidenceVerification } from "@/features/applications";
 import { useBilling } from "@/components/billing/BillingProvider";
 import { isStructuredUpgradeDenial } from "@/features/billing";
 import { completeOperationId, operationIdFor } from "@/lib/operation-id";
@@ -7989,11 +7989,26 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
      awaitingUnverifiedSubmission): only once she has answered "it is not there" does a recovery
      control belong on screen at all. Narrower than that gate alone, though - `challenge_on_screen`
      is a fact about THIS specific stop, not about needs_attention in general, so an ordinary timeout
-     or provider error still offers only Try again. A CAPTCHA wall is not always deterministic (a
-     retry can draw an easier challenge, or none), so this sits ALONGSIDE Try again rather than
-     replacing it: the extension path is the guaranteed way to finish it now, not the only way. */
+     or provider error is left to the audited re-fill and packet review below. A CAPTCHA wall is not
+     always deterministic (a re-run can draw an easier challenge, or none), so this sits ALONGSIDE
+     those rather than replacing them: the extension path is the guaranteed way to finish it now, not
+     the only way. It is deliberately NOT given refillOfferedHere's gates: the synced extension fill
+     opens the employer's own page with the reviewed answers instead of going through the audited
+     send, so it is the control that survives on a row with no current acknowledged packet. */
   const captchaBlockedLastAttempt = needsAttention && !awaitingUnverifiedSubmission
     && review.unverified_submission?.challenge_on_screen === true;
+  /* WHETHER THE ROW BELOW REALLY CARRIES A RE-FILL, computed once because two surfaces depend on the
+     answer and must not be able to disagree: the action row renders the control off this, and the
+     Restart inside Litos help line names a control off this. The terms live in the domain predicate
+     rather than in this conjunction, so each one can be tested for what it refuses instead of only
+     being read. `questionMetadataNeedsPacketReview` is `!packetEvidenceReady` at the page's own call
+     site, which is the same thing refreshEmployerQuestionMetadata checks before it fills anything. */
+  const refillOfferedHere = attentionRefillOffered({
+    needsAttention,
+    awaitingUnverifiedSubmission,
+    packetReviewRequired: questionMetadataNeedsPacketReview,
+    authorityState: packetAuthorityForEmployerAction(packet, submission).state,
+  });
   const attendedHandoffUrl = awaitingUnverifiedSubmission ? null : exactAttendedHandoffUrl(review);
   const canFinishInDashboard = Boolean(handoffUrl) && !attendedHandoffUrl;
   /* An external-recovery control (Finish in this dashboard / Open exact company form / Open in
@@ -8785,9 +8800,23 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
         {needsAttention && !awaitingUnverifiedSubmission && !canFinishInDashboard && !attendedHandoffUrl && (
           <div className="mt-4 rounded-inner border border-border bg-surface-alt px-4 py-3">
             <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">{staysInsideLitos ? "Restart inside Litos" : "No live browser to reopen"}</p>
+            {/* THE HELP LINE HAS TO NAME A CONTROL THAT IS ACTUALLY IN THE ROW BELOW IT.
+                The first sentence is true either way and always was: submit-request really does
+                re-navigate, rebuild the packet and fill the employer's form again. The sentence that
+                could go false is the one naming the control, because which control is down there
+                depends on refillOfferedHere, so it is read off the SAME value rather than restated.
+                A help line that names a one-press re-fill over a row not offering one is the defect
+                this panel compounded when the control beside it could not succeed.
+
+                It deliberately does NOT say anything about what reaches the employer. A run started
+                from here can end in a send: standing consent turns the same request into one, and an
+                unsupported portal emails the packet inside it. PR #522's help line promised "nothing
+                goes to the employer" on this handler and that promise was false. */}
             <p className="mt-1 text-xs leading-5 text-muted">
               {staysInsideLitos
-                ? "Litos can run this company form again from your saved resume and answers. Open packet review to check them and start the fill again. You do not need the company site."
+                ? refillOfferedHere
+                  ? "Litos can run this company form again from your saved resume and answers. Review and fill again approves this exact packet and starts that run. You do not need the company site."
+                  : "Litos can run this company form again from your saved resume and answers. Open packet review to check them against the exact packet first, and the run starts from there. You do not need the company site."
                 : "This stop came from a managed run or a pre-fill gate, so Litos only has the filled preview and the blocker list here. Open the company page once, finish the check, then mark it done."}
             </p>
           </div>
@@ -8814,17 +8843,58 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
               review controls both demote; otherwise the primary is the control the current task
               resolves through. */}
           {hasQuestionsToReview && <Button onClick={onReviewQuestions} variant={rowExternalPrimary || (needsAttention && currentNonQuestionTask) ? "secondary" : "primary"}>Check the answers</Button>}
-          {/* The audited re-run. "Try again" replays submit-request against the LAST acknowledged
-              packet, and any saved answer since then changes packet_version, so on exactly the rows
-              this screen exists for it answers 409 packet_stale forever. The review screen owns the
-              fresh audit, the exact-PDF gate and the acknowledged send, and needs_attention rows had
-              no route to it: measured on Belvedere 2026-08-18, where every exit from this screen was
-              a stale retry. */}
           {/* None of these four replay or resolve anything while the claim is still on the row for
               an unverified send - submit-request would just answer the same 409 again - so they wait
               for UnverifiedSubmissionCard's yes/no to release it first. */}
           {needsAttention && !awaitingUnverifiedSubmission && <Button onClick={onReviewPacket} variant={!rowExternalPrimary && (!hasQuestionsToReview || currentNonQuestionTask) ? "primary" : "secondary"}>Open packet review</Button>}
-          {needsAttention && !awaitingUnverifiedSubmission && <Button onClick={onRetry} variant="secondary">Try again</Button>}
+          {/* "TRY AGAIN" USED TO SIT HERE, AND IT IS NOW THE AUDITED RE-FILL BESIDE IT.
+              The comment this replaces said Try again replays a submit against the last acknowledged
+              packet and so answers 409 packet_stale forever. Measured against origin/main rather than
+              taken on faith, and it was wrong in both halves.
+
+              WHAT onRetry REALLY DID. retryPreparation -> prepareApplication -> POST
+              /applications/:id/submit-request with no restart flag, and that route is a real re-fill,
+              not a replay: submitRequestDisposition answers 'start' for a needs_attention row that is
+              unclaimed, that she answered "it is not there" on, or that the row itself proves never
+              reached the employer, and the run then re-navigates, rebuilds the packet and re-discovers
+              the form against whatever resolver code is live. restart:true is NOT the door here;
+              preparedRunCanRestart admits only ready_for_final_approval.
+
+              WHAT ACTUALLY KILLED IT was the next gate, not the disposition. submit-request runs
+              currentAcknowledgedPacketAudit, which is 409 PACKET_AUDIT_STALE once packet_version moves
+              (a question's visible label, answer or control, the spec, the JD, the PDF or the employer
+              binding) and 409 PACKET_AUDIT_ACK_REQUIRED once the stored acknowledgement stops binding
+              that audit, which submissionRunner writes as `packet_audit_acknowledgement: undefined` on
+              every packet-drift park. So the bare retry was dead on any row whose packet had moved
+              since she last approved it, which is most of the rows this screen exists for, and its
+              only visible outcome was a preparing screen painted over a run that never started before
+              recoverPacketAuditReview bounced her to packet review anyway.
+
+              WHY THIS HANDLER INSTEAD OF A GATE ON THE OLD ONE. refreshEmployerQuestionMetadata is the
+              same re-fill with the missing step in front of it: it refuses unsaved answer edits, it
+              requires the exact packet to have been audited, and it then acknowledges that audit
+              before posting the identical submit-request through continueFromVerifiedPacket. It also
+              carries allowServerAnswerRefresh, so a blank required answer does not turn the run into a
+              closed loop only the run can open. It already exists on this screen, but ONLY inside the
+              metadata-blocker branch above, so a packet whose fields all read cleanly and whose stored
+              answers went stale behind a resolver fix had no route back to the fill at all.
+
+              WHY THE TWO GATES ARE ON THE CONTROL AND NOT INSIDE IT. Without packetEvidenceReady the
+              handler does not fill anything, it calls reviewPacketAgain and routes to packet review,
+              which is what the button beside this one already does and says. Without safe_not_sent,
+              prepareApplication refuses before any request is made, which is the arm that was dead
+              100% of the time in PR #522. A control that renders in either state is the same defect
+              this one is replacing, so it renders only where it re-fills. */}
+          {refillOfferedHere && (
+            <Button
+              onClick={onRefreshQuestionMetadata}
+              disabled={questionMetadataRefreshing || questionMetadataRefreshDisabled}
+              aria-busy={questionMetadataRefreshing}
+              variant="secondary"
+            >
+              {questionMetadataRefreshing ? <PendingLabel>Reading company form...</PendingLabel> : "Review and fill again"}
+            </Button>
+          )}
           {/* The synced-fill recovery: the extension reads the SAME reviewed answers this managed
               run already produced (handoff-packet.ts on the extension side), so nothing here
               regenerates or re-syncs anything - it opens the employer's page with those answers

@@ -2096,12 +2096,19 @@ test("a required document is still answerable while Litos is waiting to hear whe
     });
     await transcriptTrigger.waitFor({ state: "visible" });
 
-    /* The controls that could reach the employer a second time stay suppressed. Without these the
-       test would pass just as well against a change that simply deleted the mode. Both of these are
-       unconditional under `needsAttention && !awaitingUnverifiedSubmission`, so their absence is
-       this mode and nothing else; "Check the answers" is deliberately NOT asserted, because it also
-       needs a question to review and this fixture has none, which would make it vacuous. */
-    for (const suppressed of ["Try again", "Open packet review"]) {
+    /* The control that could reach the employer a second time stays suppressed. Without this the
+       test would pass just as well against a change that simply deleted the mode.
+
+       DOWN TO ONE NAME, AND THE ONE THAT STILL PROVES SOMETHING. "Open packet review" is
+       unconditional under `needsAttention && !awaitingUnverifiedSubmission`, so its absence is this
+       mode and nothing else. "Try again" used to be asserted beside it on the same reasoning; the
+       row now carries "Review and fill again" in its place, and that control is additionally gated
+       on refillOfferedHere's packet-evidence and safe_not_sent terms, neither of which this fixture
+       satisfies. Asserting it here would pass against a deleted mode, which is exactly the vacuity
+       this paragraph exists to prevent, so it is left out rather than counted. "Check the answers"
+       is out for the same kind of reason: it also needs a question to review and this fixture has
+       none. */
+    for (const suppressed of ["Open packet review"]) {
       assert.equal(
         await page.getByRole("button", { name: suppressed, exact: true }).count(),
         0,
