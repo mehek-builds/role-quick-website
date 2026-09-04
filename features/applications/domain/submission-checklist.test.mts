@@ -1847,9 +1847,14 @@ test("the screen keeps the document step alive in the unverified-submission mode
     /\{awaitingUnverifiedSubmission && unverifiedDocumentSteps\.length > 0 && \(\s*<BlockerList\s+items=\{unverifiedDocumentSteps\}\s+onAddDocument=\{onAddDocument\}/,
     "the unverified-submission mode must still draw the document steps, with the control that resolves them",
   );
+  /* The third conjunct arrived with the stalled-fill fix (Palantir packet f1cfb841, 2026-09-04) and
+     is a SECOND independent suppression, not a replacement for this one: a quarantined authority
+     rewrites a live `filling` row into "needs_attention", so this button used to render on a packet
+     whose handler returns before its fetch. Pinned together so neither can be dropped by an edit
+     aimed at the other - this test still owns `!awaitingUnverifiedSubmission`. */
   assert.match(
     page,
-    /\{needsAttention && !awaitingUnverifiedSubmission && <Button onClick=\{onRetry\}/,
+    /\{needsAttention && !awaitingUnverifiedSubmission && !employerActionRefusal && <Button onClick=\{onRetry\}/,
     "Try again must stay suppressed while Litos does not know whether the first application landed",
   );
 });
