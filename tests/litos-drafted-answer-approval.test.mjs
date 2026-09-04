@@ -115,9 +115,26 @@ describe("the press is Save, and the word on it is Approve", () => {
 });
 
 describe("a drafted answer is routed to that screen in the first place", () => {
-  test("an essay with an answer is a Review row, which opens the direct question", () => {
+  test("an essay Litos drafted is a Review row, which opens the direct question", () => {
     assert.match(checklist, /question\.kind === "essay" && answer/);
-    assert.match(checklist, /detail: "Drafted answer ready for review"/);
+    /* The drafted sentence lives UNDER the provenance test now rather than being printed for every
+       answered essay. It was unconditional, which is how four essays she had already approved on
+       Exa packet 73768339 came back as "1 of 4" after four confirming saves: the row re-raised
+       itself out of the answer the save had just written. The contract this file is about is
+       unchanged - Litos drafts it, she is told so, and the press approves it - and it is now stated
+       only about the answers Litos actually drafted. */
+    assert.match(checklist, /answer_source === "litos_draft"\s*\n\s*\? "Drafted answer ready for review"/);
     assert.match(checklist, /actionKind: "review"/);
+  });
+
+  test("an answer she has approved is not asked about again", () => {
+    /* The other half of the same gate. applicantApprovedAnswer names the two APPROVING sources
+       rather than excluding the drafting one, so an answer the server named no source for keeps
+       asking: the backend reads an absent source as a machine answer and counts the row
+       unacknowledged, and a row settled here would be one the server is still holding open with
+       nothing left in the queue to press. */
+    assert.match(checklist, /function applicantApprovedAnswer\(/);
+    assert.match(checklist, /answer_source === "applicant_review"\s*\n\s*\|\| question\.answer_source === "consent_permission"/);
+    assert.match(checklist, /if \(!applicantApprovedAnswer\(question\)\) \{/);
   });
 });

@@ -1092,27 +1092,108 @@ test("the same four essays, approved, ask nothing and take the queue to zero", (
   assert.equal(plan.remaining, 0);
 });
 
-/* An essay whose writer the server does not name is not hers to be told she reviewed, and it is not
- * a draft the send gate will block on either. It settles with the neutral sentence rather than
- * asking - the ask would be the loop again, on a payload that never carried the field. */
-test("an essay the server names no source for settles without claiming she reviewed it", () => {
-  const items = humanInputItems({
-    status: "needs_attention",
+/* ABSENT IS NOT APPROVED, and settling on it was a dead end with nothing to press.
+ *
+ * The first cut of this gate settled every essay that was not `litos_draft`, which swept in the
+ * answers the server names no source for. The backend reads exactly that state as a machine answer
+ * and counts the row unacknowledged - measured on the Akuna Python SWE packet 2026-08-27, where a
+ * pre-filled answer pressed unchanged minted nothing, `questionsMatch` stayed false and the packet
+ * parked - so the screen would have called a row done that the server was still holding open, and
+ * settled it out of the queue that carries the only press which mints the claim.
+ *
+ * It also must not print "Drafted answer": the server never said Litos wrote it. */
+test("an essay the server names no source for keeps asking, without attributing it to Litos", () => {
+  const unnamed = {
+    status: "needs_attention" as const,
     attention_reason: "",
     questions: [{
       id: "why-us",
       question: "Why us?",
       answer: "Because the retrieval problem is the interesting one.",
-      kind: "essay",
+      kind: "essay" as const,
       required: true,
       portal_input_type: "textarea",
     }],
-  });
+  };
 
+  const row = humanInputItems(unnamed).find((item) => item.questionId === "why-us");
+  assert.equal(row?.settled, undefined, "nobody has approved it, so it is still work");
+  assert.equal(row?.detail, "Ready for your review");
+  assert.equal(row?.action, "Review");
+  assert.equal(row?.actionKind, "review");
+
+  const plan = directInputTaskPlan(unnamed);
+  assert.equal(plan.remaining, 1, "and it keeps a press in the queue, which is what mints the claim");
+  assert.equal(plan.current?.id, "review-why-us");
+});
+
+/* THE RUN'S OWN EMPTY REPORT OUTRANKS HER APPROVAL, because Done is a claim about the EMPLOYER's
+ * form and an approval is not.
+ *
+ * A settled row here was the only thing on screen for an approved essay whose box the run measured
+ * empty: blockerDuplicatesQuestion had already dropped the employer's blocker on the reasoning that
+ * a question record covers it, and the essay branch's own `continue` kept the `empty-` row from
+ * being built. One confirmation, out of the amber panel and out of the count, standing in for a
+ * required answer the employer never received. The same substitution the `empty-` branch was
+ * written to end, one row class over. */
+test("an approved essay the run reports still empty is work, not a confirmation", () => {
+  const stillEmpty = {
+    status: "needs_attention" as const,
+    attention_reason: '"Why do you want to work here?" is required and is still empty',
+    questions: [{
+      id: "why-us",
+      question: "Why do you want to work here?",
+      answer: "Her approved paragraph.",
+      kind: "essay" as const,
+      required: true,
+      portal_input_type: "textarea",
+      answer_source: "applicant_review" as const,
+    }],
+  };
+
+  const items = humanInputItems(stillEmpty);
   const row = items.find((item) => item.questionId === "why-us");
-  assert.equal(row?.settled, true);
-  assert.equal(row?.detail, "Answer drafted", "no provenance claim, because the server made none");
-  assert.equal(row?.action, "Change");
+  assert.ok(row, "the field the run reported empty must have a row");
+  assert.equal(row.settled, undefined, "nothing may state this is handled while the box is empty");
+  assert.equal(row.id, "empty-why-us", "and it is the row that says what is actually wrong");
+  assert.equal(row.detail, "Answered here, still empty on the form");
+  assert.equal(row.action, "Answer");
+  assert.equal(directInputTaskPlan(stillEmpty).remaining, 1);
+
+  /* The Done column has to agree: an approval is not the employer receiving it. */
+  assert.deepEqual(completedSubmissionItems(stillEmpty).map((item) => item.label), []);
+});
+
+/* AN APPROVED ESSAY IS ON THE RECORD OF THE APPLICATION, which settling alone did not achieve.
+ *
+ * The packet viewer drops server-settled rows deliberately (it is read-only and prints no action
+ * words), and completedSubmissionItems excluded every unsubmitted essay, so an approved essay
+ * landed on none of that screen's lists: not needsInput, not acknowledged, not completed. The
+ * exclusion existed only because an essay was ALWAYS outstanding review work while unsubmitted,
+ * which is the thing that stopped being true. */
+test("an approved essay reaches the Done column while the application is still unsent", () => {
+  const approved = {
+    status: "needs_attention" as const,
+    attention_reason: "",
+    questions: [
+      {
+        id: "why-us", question: "Why us?", answer: "Her approved paragraph.",
+        kind: "essay" as const, required: true, answer_source: "applicant_review" as const,
+      },
+      {
+        id: "why-them", question: "Why this team?", answer: "A paragraph Litos wrote.",
+        kind: "essay" as const, required: true, answer_source: "litos_draft" as const,
+      },
+    ],
+  };
+
+  const done = completedSubmissionItems(approved);
+  assert.deepEqual(done.map((item) => item.label), ["Why us?"], "only the approved one is done");
+  assert.equal(done[0]?.detail, "Reviewed by you", "and it is not filed under the drafted sentence");
+
+  const groups = completedSubmissionGroups(approved);
+  const questions = groups.find((group) => group.label === "Employer questions");
+  assert.equal(questions?.detail, "1 item completed", "the group count must agree with the row list about one essay");
 });
 
 /* THE SERVER NAMES THE ROWS, because only the server can.

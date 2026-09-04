@@ -893,6 +893,30 @@ function applicantConfirmedAnswer(
   );
 }
 
+/**
+ * THE SERVER SAYS THIS ANSWER STANDS, as opposed to being a paragraph Litos wrote and nobody has
+ * approved. Read by the essay row below and by BOTH Done-column builders, in one definition,
+ * because the row list and the group count saying different things about one essay is the same
+ * class of defect as the two columns disagreeing about a file.
+ *
+ * ABSENT IS NOT APPROVED, and that is the whole point of naming the approving sources rather than
+ * excluding the drafting one. The backend reads a missing `answer_source` as a machine answer and
+ * counts the row unacknowledged (see the Akuna measurement at app/dashboard/applications/page.tsx,
+ * where that is exactly what parked the packet), so a client that settled on "not a draft" would
+ * call a row done that the server is still holding open, with nothing left in the queue to press.
+ * Testing the two approving values fails closed instead: an answer the server named no source for
+ * goes on asking, and her save is what names it.
+ *
+ * NOT the same question as applicantConfirmedAnswer below. That one asks whether she pressed
+ * Confirm on a SENSITIVE question, which mints answer_confirmed_of and nothing else does. This one
+ * asks who the answer belongs to. An essay is a plain drafted answer that no gate asks her to
+ * confirm, so reading the confirmation field for it would never come true.
+ */
+function applicantApprovedAnswer(question: Pick<ApplicationQuestion, "answer_source">): boolean {
+  return question.answer_source === "applicant_review"
+    || question.answer_source === "consent_permission";
+}
+
 export function humanInputItems(
   review: Pick<ApplicationReview, "attention_reason" | "attention_categories" | "attention_acknowledgements" | "cover_letter_supported" | "filled_fields" | "questions" | "question_metadata_blockers" | "questions_reviewed_at" | "required_documents" | "transcript_supported" | "stall" | "status">,
   /* The employer, the role, and what the application already carries. None of the three is on the
@@ -1042,30 +1066,50 @@ export function humanInputItems(
      * could open it again. */
     if (review.status !== "submitted" && question.kind === "essay" && answer) {
       const label = displayQuestionLabel(question.question);
-      addUnique(items, question.answer_source === "litos_draft"
-        ? {
+      if (!applicantApprovedAnswer(question)) {
+        addUnique(items, {
           id: `review-${question.id}`,
           label,
-          detail: "Drafted answer ready for review",
+          /* Two sentences, because only one of them is a claim this screen is entitled to make.
+             `litos_draft` is the server saying Litos composed the paragraph, so the row may say so.
+             An absent source is an answer with nobody named, and printing "Drafted answer" over it
+             would be attributing words to Litos the server never attributed. Both still ASK: see
+             applicantApprovedAnswer for why absent fails closed. */
+          detail: question.answer_source === "litos_draft"
+            ? "Drafted answer ready for review"
+            : "Ready for your review",
           action: "Review",
           actionKind: "review",
           questionId: question.id,
-        }
-        : {
+        });
+        continue;
+      }
+      /* SETTLED, UNLESS THE RUN SAYS THE BOX IS STILL EMPTY, and the exception is the whole reason
+         this is not one unconditional addUnique.
+       *
+       * The blocker naming this field is already suppressed by blockerDuplicatesQuestion, on the
+       * reasoning that a question record covers it, and the `continue` below the essay branch keeps
+       * the `empty-` row from ever being built for an essay. So a settled row here was the ONLY
+       * thing on screen for an approved essay whose box the run measured empty: a confirmation, out
+       * of the amber panel and out of the count, standing in for a required answer the employer
+       * never received. Falling through hands the field to the `empty-` branch, which states the
+       * one true thing about it and gives her a control that fills it. */
+      if (!questionReportedEmpty(question.question, emptySubjects)) {
+        addUnique(items, {
           id: `review-${question.id}`,
           label,
-          /* Says only what the server said. `applicant_review` is her own hand on this answer and
-             is worth naming back to her; any other value, or none at all, is an answer that stands
-             with nobody named, and "Reviewed by you" there would be this screen inventing a record
-             of an act. "Answer drafted" is the sentence completedSubmissionItems already prints for
-             an essay answer whose writer it cannot name. */
-          detail: question.answer_source === "applicant_review" ? "Reviewed by you" : "Answer drafted",
+          /* Her own hand is worth naming back to her; a standing permission is Litos acting for her
+             and must not be printed as her review. */
+          detail: question.answer_source === "applicant_review"
+            ? "Reviewed by you"
+            : "Accepted under your standing permission",
           action: "Change",
           actionKind: "review",
           questionId: question.id,
           settled: true,
         });
-      continue;
+        continue;
+      }
     }
     /* WHEN THE SERVER SENDS ITS LIST, THE LIST IS THE WHOLE ANSWER - not one input to it.
      *
@@ -1447,7 +1491,13 @@ export function completedSubmissionItems(review: Pick<ApplicationReview, "attent
   for (const question of review.questions ?? []) {
     const answer = (question.answer ?? "").trim();
     if (!answer) continue;
-    if (question.kind === "essay" && review.status !== "submitted") continue;
+    /* An essay was excluded here for one reason: while unsubmitted it was ALWAYS an outstanding
+       review row, so listing it as complete would have contradicted the panel beside it. An essay
+       she has approved is no longer outstanding anywhere, and the row list drops server-settled
+       rows on the packet viewer, so leaving the exclusion whole is what made an approved essay
+       render on none of that screen's lists at all. Still the run's own empty report below outranks
+       this, exactly as it does for every other answer. */
+    if (question.kind === "essay" && review.status !== "submitted" && !applicantApprovedAnswer(question)) continue;
     if (isHumanOnlyChecklistLabel(question.question)) continue;
     // The run says this box is still empty. A stored answer is not the employer having received it,
     // and Done is a claim about the employer's form.
@@ -1455,7 +1505,12 @@ export function completedSubmissionItems(review: Pick<ApplicationReview, "attent
     addUnique(items, {
       id: `answer-${question.id}`,
       label: displayQuestionLabel(question.question),
-      detail: question.kind === "essay" ? "Answer drafted" : "Answer filled",
+      /* An approved essay reaches this column now, so it must not be listed under the sentence for
+         a paragraph nobody has approved. Same words the checklist row uses, so the two surfaces
+         describe one answer the same way. */
+      detail: question.kind === "essay"
+        ? (applicantApprovedAnswer(question) ? "Reviewed by you" : "Answer drafted")
+        : "Answer filled",
     });
   }
 
@@ -1712,7 +1767,13 @@ export function completedSubmissionGroups(
   }
   for (const question of review.questions ?? []) {
     if (!(question.answer ?? "").trim()) continue;
-    if (question.kind === "essay" && review.status !== "submitted") continue;
+    /* An essay was excluded here for one reason: while unsubmitted it was ALWAYS an outstanding
+       review row, so listing it as complete would have contradicted the panel beside it. An essay
+       she has approved is no longer outstanding anywhere, and the row list drops server-settled
+       rows on the packet viewer, so leaving the exclusion whole is what made an approved essay
+       render on none of that screen's lists at all. Still the run's own empty report below outranks
+       this, exactly as it does for every other answer. */
+    if (question.kind === "essay" && review.status !== "submitted" && !applicantApprovedAnswer(question)) continue;
     if (isHumanOnlyChecklistLabel(question.question)) continue;
     if (review.status !== "submitted" && questionReportedEmpty(question.question, emptySubjects)) continue;
     add("questions", question.id || normalizedChecklistText(question.question));
