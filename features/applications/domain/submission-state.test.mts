@@ -348,6 +348,67 @@ test("never asked and asked-then-cleared are two different answers, for the conf
   assert.equal(nextSubmissionState(unmeasured, measuredEmpty), measuredEmpty);
 });
 
+/* THE SAME DEFECT AGAIN, IN THE FIELD volley-backend PR #945 ADDED.
+ *
+ * `resume_contact_stale` lives outside `review` and is versioned by nothing, exactly like
+ * `sensitive_questions_requiring_confirmation` above. Left out of the comparison, a poll where only
+ * the PROFILE changed - the applicant's city or phone moving while a packet sits parked at
+ * ready_for_final_approval, with `review.updated_at` frozen because nothing about the review itself
+ * advanced - matched on every other term here and was thrown away, silently hiding the "This
+ * resume's contact details are out of date." notice from a screen the server was actively telling
+ * to show it. */
+const DUBAI_STORED_CONTACT = {
+  full_name: "Test Applicant",
+  email: "resume@example.com",
+  phone: "+971 567417451",
+  location: "Dubai, Dubai",
+};
+const LOS_ANGELES_CURRENT_CONTACT = {
+  full_name: "Test Applicant",
+  email: "resume@example.com",
+  phone: "+1 213 574 6270",
+  location: "Los Angeles, California",
+};
+
+test("a resume-contact-stale signal that appears with the review clock frozen is not thrown away", () => {
+  const clean: SubmissionSnapshot = { ...fromServer, resume_contact_stale: undefined };
+  const stale: SubmissionSnapshot = {
+    ...clean,
+    resume_contact_stale: { stored: DUBAI_STORED_CONTACT, current: LOS_ANGELES_CURRENT_CONTACT },
+  };
+
+  // The setup only tests the staleness comparison if nothing else distinguishes the two.
+  assert.equal(clean.review.updated_at, stale.review.updated_at);
+  assert.equal(coverLetterIdentity(clean.cover_letter), coverLetterIdentity(stale.cover_letter));
+
+  assert.equal(nextSubmissionState(clean, stale), stale);
+  // And the applicant pressing "Update the contact details on this resume" clears it the same way.
+  assert.equal(nextSubmissionState(stale, clean), clean);
+});
+
+test("a poll that repeats the same staleness signal still dedupes, so the screen does not re-render forever", () => {
+  const stale: SubmissionSnapshot = {
+    ...fromServer,
+    resume_contact_stale: { stored: DUBAI_STORED_CONTACT, current: LOS_ANGELES_CURRENT_CONTACT },
+  };
+  const nextTick: SubmissionSnapshot = {
+    ...stale,
+    resume_contact_stale: { stored: { ...DUBAI_STORED_CONTACT }, current: { ...LOS_ANGELES_CURRENT_CONTACT } },
+  };
+  assert.equal(nextSubmissionState(stale, nextTick), stale, "same pair, new object, no re-render");
+});
+
+test("never measured and measured-but-resolved are two different answers, for resume-contact-stale too", () => {
+  // Mirrors the same rule for `sensitive_questions_requiring_confirmation` and `documents`: an
+  // older payload that never carried the field must not collapse into a resolved, up-to-date one.
+  const unmeasured: SubmissionSnapshot = { ...fromServer, resume_contact_stale: undefined };
+  const resolved: SubmissionSnapshot = {
+    ...fromServer,
+    resume_contact_stale: { stored: LOS_ANGELES_CURRENT_CONTACT, current: LOS_ANGELES_CURRENT_CONTACT },
+  };
+  assert.equal(nextSubmissionState(unmeasured, resolved), resolved);
+});
+
 /* THE 2.5 SECOND BLIND WINDOW.
  *
  * selectPacket seeds the first snapshot from the board row and the first poll is 2.5s behind it.

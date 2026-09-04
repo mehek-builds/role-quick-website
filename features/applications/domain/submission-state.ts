@@ -1,3 +1,5 @@
+import { resumeContactStaleIdentity, type ResumeContactStaleLike } from "./resume-contact-stale.ts";
+
 /**
  * Which submission snapshot the dashboard keeps when a poll answers.
  *
@@ -175,6 +177,19 @@ export type SubmissionSnapshot = {
    * versioned by nothing: see the comparison this type's sibling fields already needed below.
    */
   sensitive_questions_requiring_confirmation?: readonly string[];
+  /**
+   * WHETHER THIS PACKET'S RESUME HEADER HAS DRIFTED FROM THE APPLICANT'S CURRENT PROFILE, off
+   * GET /applications/:id/submission (volley-backend PR #945). Present only when the packet's
+   * stored resume header disagrees with what the current profile would produce; absent is the
+   * common case, and a backend before #945 omits the field entirely. Lives outside `review` and is
+   * versioned by nothing, exactly like `sensitive_questions_requiring_confirmation` above - see
+   * resumeContactStaleIdentity below for why that means it needs its own comparison term.
+   *
+   * Read only through resumeContactStaleNotice (./resume-contact-stale.ts), never off this key
+   * directly, so the packet screen and the Review screen's checklist cannot disagree about what
+   * counts as stale.
+   */
+  resume_contact_stale?: ResumeContactStaleLike;
   /**
    * True only on the snapshot selectPacket seeds from a board row. It is a statement about
    * PROVENANCE, not about content: a seed is not a server answer, so the first real answer always
@@ -452,6 +467,16 @@ export function nextSubmissionState<T extends SubmissionSnapshot>(current: T | n
      defect class as the cover-letter and documents fixes above, one field later. */
   if (sensitiveConfirmationIdentity(current.sensitive_questions_requiring_confirmation)
     !== sensitiveConfirmationIdentity(nextIncoming.sensitive_questions_requiring_confirmation)) return nextIncoming;
+  /* THE RESUME-CONTACT-STALE SIGNAL, one more field outside `review` and versioned by nothing,
+     exactly like `sensitive_questions_requiring_confirmation` immediately above. Left uncompared, a
+     poll that added or cleared this field while `review.updated_at` stayed frozen - the applicant's
+     profile moving while a packet sits parked at ready_for_final_approval, with nothing about the
+     review itself touched - matched on every other term here and was thrown away, silently hiding
+     the "This resume's contact details are out of date." notice from a screen the server was
+     actively telling to show it. Same defect class as the cover-letter and documents fixes above,
+     one field later. */
+  if (resumeContactStaleIdentity(current.resume_contact_stale)
+    !== resumeContactStaleIdentity(nextIncoming.resume_contact_stale)) return nextIncoming;
   return current;
 }
 

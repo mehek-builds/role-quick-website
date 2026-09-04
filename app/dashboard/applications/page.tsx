@@ -38,7 +38,7 @@ import { REVIEW_ANSWERS_FROZEN_NOTICE, REVIEW_ANSWERS_REOPEN_NOTICE, REVIEW_ANSW
 import { saveAttentionAcknowledgement, type AttentionAcknowledgementResponse } from "@/features/applications";
 import { duplicateBadge, duplicatePostingMarks, duplicatePostingNote } from "@/features/applications";
 import { isHttpsJobUrl, missingApplicationFields, type ApplicationDraftField } from "@/features/applications";
-import { COVER_LETTER_WAIT_MS, HANDOFF_CLOCK_TICK_MS, coverLetterBlocks, coverLetterGate, documentsFromSpecMarks, handoffWindowExpired, nextCoverLetterValue, nextSubmissionState, publishSubmissionEnvelope, reconcilePacketEvidenceWithSubmission, submissionAfterPacketAudit, submissionCoverLetterField, submissionReviewPacketIdentity, submissionSnapshotIsOlder } from "@/features/applications";
+import { COVER_LETTER_WAIT_MS, HANDOFF_CLOCK_TICK_MS, coverLetterBlocks, coverLetterGate, documentsFromSpecMarks, handoffWindowExpired, nextCoverLetterValue, nextSubmissionState, publishSubmissionEnvelope, reconcilePacketEvidenceWithSubmission, resumeContactStaleNotice, submissionAfterPacketAudit, submissionCoverLetterField, submissionReviewPacketIdentity, submissionSnapshotIsOlder, type ResumeContactStaleLike } from "@/features/applications";
 import { MatchScore, MatchGaps } from "@/components/app/MatchScore";
 import { auditRefusalCode, historicalPacketAuditStaleMessage, nextMatchScoreRequest, packetAuditReviewRecoveryCode } from "@/features/applications";
 import { getBaseResume } from "@/lib/base-resume";
@@ -69,6 +69,12 @@ import { prescriptBlocksProgress, prescriptEditableQuestions, prescriptMetadataB
 import { answerWithExactOptionToggled, exactQuestionOption, exactSelectedQuestionOptions, nextStickyNeeding, optionalQuestionNeedsDecision, questionAcceptsMultipleOptions, questionOptionsAreComplete, questionReadsAsAnswered, questionReviewPresentation, questionsNeedingApplicant, requiredQuestionReviewRoute, type StickyNeeding } from "@/features/applications";
 import type { JdMatchResponse, JobMatch } from "@/features/applications";
 import { userFacingError } from "@/lib/user-facing-error";
+/* Shared with the packet pane and the review screen's resume preview via contactName/contactLine
+   above, rather than re-derived a third time: the record's key names have already been got wrong
+   once (see the import comment on ApplicationPacket above). Used directly here, not through
+   contactLine, because the stale-header notice formats a `{ stored, current }` pair off
+   resume_contact_stale rather than a full packet spec. */
+import { resumeContactLine } from "@/lib/resumeContact";
 import { APPLICATION_DOCUMENT_ACCEPT_ATTRIBUTE, validateApplicationDocument } from "@/lib/document-size";
 import { messageAsksForTheExtension } from "@/lib/extension-store-link";
 import { track } from "@/lib/analytics";
@@ -255,6 +261,16 @@ export type SubmissionResponse = {
    * Optional because an older payload may not carry it; absent means "fall back to the label
    * classes", which is exactly the previous behaviour. */
   sensitive_questions_requiring_confirmation?: string[];
+  /**
+   * WHETHER THIS PACKET'S RESUME HEADER HAS DRIFTED FROM THE APPLICANT'S CURRENT PROFILE, off
+   * volley-backend PR #945. Present only when the packet's stored resume header (name/phone/
+   * location/email/links frozen in the spec's `_contact`) disagrees with what the current profile
+   * would produce; absent is the common case, and a backend before #945 simply never sends the
+   * field. Read only through resumeContactStaleNotice
+   * (features/applications/domain/resume-contact-stale.ts), never off this key directly, so the
+   * packet screen and the Review screen's checklist cannot disagree about what counts as stale.
+   */
+  resume_contact_stale?: ResumeContactStaleLike;
   partial?: boolean;
 };
 
@@ -1200,6 +1216,12 @@ function Applications() {
   const metadataRefreshRef = useRef<string | null>(null);
   const [metadataRefreshId, setMetadataRefreshId] = useState<string | null>(null);
   const [metadataRefreshError, setMetadataRefreshError] = useState<{ applicationId: string; message: string } | null>(null);
+  /* The applicant-facing fix for a frozen resume header (volley-backend PR #945): busy/error state
+     for POST /applications/:id/resume/contact-refresh, kept the same shape as metadataRefreshId /
+     metadataRefreshError immediately above and for the same reason - a refresh on packet A must not
+     grey out or caption the button on packet B. */
+  const [resumeContactRefreshId, setResumeContactRefreshId] = useState<string | null>(null);
+  const [resumeContactRefreshError, setResumeContactRefreshError] = useState<{ applicationId: string; message: string } | null>(null);
   const refuseSend = useCallback((applicationId: string, message: string, issues: string[] = []) => {
     // One live region at a time, the rule refuseInComposer already sets on this screen.
     setError(null);
@@ -2412,6 +2434,10 @@ function Applications() {
     : storedReview
       ? reviewWithLists(storedReview)
       : undefined;
+  /* The one decision both the packet review screen (below) and SubmissionScreen's own checklist
+     read off - see resumeContactStaleNotice and refreshResumeContact for why. `null` on every
+     packet whose resume header still matches the current profile, which must be the common case. */
+  const resumeContactStale = resumeContactStaleNotice(selectedSubmission);
   const actionableQuestionIds = useMemo(() => {
     if (!selected || !selectedSubmission) return [];
     return humanInputItems(selectedSubmission.review, {
@@ -4507,6 +4533,68 @@ function Applications() {
     }
   }
 
+  /* THE APPLICANT-FACING FIX FOR A FROZEN RESUME HEADER, off volley-backend PR #945.
+   *
+   * MEASURED live on trylitos.com 2026-09-04: every packet built before the applicant moved (Pony.ai
+   * fdcf4ccb, Belvedere Trading c4413bff/6fda0404/4de84885, Transparent Hiring 6f8524ca, among
+   * others) still attaches its exact resume PDF with the contact header printed at generation time,
+   * while application_profile and the managed form's own live fill both read her current phone,
+   * city and links. "Tailor resume" was the only existing remedy and is the wrong tool for a fact
+   * the tailoring never touches: it spends a monthly build, calls the LLM to reword content that
+   * was already correct, and forks a second Tracker row (#855). "Edit resume" exposes dates and
+   * bullets but has no control for the header at all.
+   *
+   * POST /applications/:id/resume/contact-refresh is that fact, by itself: the same renderer, no
+   * LLM, no quota, no new row (see the route's own comment in student-outreach-backend
+   * src/routes/applications.ts). It returns only `{ application_id, review, contact }`, never a
+   * full submission envelope, so the response is merged into the LATEST known submission exactly
+   * the way saveReviewedAnswers below merges a PUT /review/answers response - never through
+   * submissionResponseForDisplay, which would quarantine this packet's submission authority as a
+   * side effect of a request that has nothing to do with it.
+   *
+   * `resume_contact_stale` is cleared explicitly rather than left for the next poll: a successful
+   * response IS the backend's own proof that resumeContactStaleness now reads clean for this packet
+   * (see the route's "no-op when nothing drifted" rule), so the header this request just produced
+   * cannot still be stale, and waiting up to 2.5s to say so would leave the notice on screen beside
+   * the fix that just resolved it. */
+  async function refreshResumeContact(applicationId: string) {
+    if (resumeContactRefreshId) return;
+    setResumeContactRefreshId(applicationId);
+    setResumeContactRefreshError(null);
+    try {
+      const result = await api<{ application_id: string; review: SubmissionResponse["review"] }>(
+        `/applications/${applicationId}/resume/contact-refresh`,
+        { method: "POST" },
+      );
+      const latestSubmission = submissionSnapshotsRef.current.get(applicationId)
+        ?? (submissionRef.current?.application_id === applicationId ? submissionRef.current : selectedSubmission);
+      if (latestSubmission && latestSubmission.application_id === applicationId) {
+        const refreshed: SubmissionResponse = {
+          ...latestSubmission,
+          application_id: applicationId,
+          review: result.review,
+          resume_contact_stale: undefined,
+        };
+        const reconciled = nextSubmissionState(latestSubmission, refreshed);
+        submissionSnapshotsRef.current.set(applicationId, reconciled);
+        setPackets((current) => current?.map((packet) => packet.id === applicationId ? packetWithDirectSubmission(packet, reconciled) : packet) ?? current);
+        if (selectedIdRef.current === applicationId) {
+          const published = publishSubmissionEnvelope(submissionRef, reconciled, "direct");
+          setSubmission(published);
+        }
+      }
+    } catch (reason) {
+      if (selectedIdRef.current === applicationId) {
+        setResumeContactRefreshError({
+          applicationId,
+          message: userFacingError(reason, "Litos could not update this resume's contact details. Try again."),
+        });
+      }
+    } finally {
+      setResumeContactRefreshId(null);
+    }
+  }
+
   /* The one place an answer can be seen, edited and saved. "Check the answers" has always come
      here; the Your turn rows now come here too, carrying WHICH question was pressed so the student
      lands on it rather than at the top of a list of twelve. Save from here writes through
@@ -6157,6 +6245,9 @@ function Applications() {
           }, "submission")}
           extensionFillBusy={creating === "fill"}
           extensionFillError={submissionFillError}
+          onRefreshResumeContact={() => void refreshResumeContact(selected.id)}
+          resumeContactRefreshBusy={resumeContactRefreshId === selected.id}
+          resumeContactRefreshError={resumeContactRefreshError?.applicationId === selected.id ? resumeContactRefreshError.message : null}
         />
       ) : screen === "submitted" ? (
         <SubmissionReceipt review={selectedSubmission?.review ?? review} role={selected.job_context.role ?? "Role"} company={selected.job_context.company ?? "Company"} />
@@ -6336,6 +6427,15 @@ function Applications() {
               </section>
             </div>
           </RequirementProvider>
+
+          {resumeContactStale && (
+            <ResumeContactStaleNotice
+              notice={resumeContactStale}
+              busy={resumeContactRefreshId === selected.id}
+              error={resumeContactRefreshError?.applicationId === selected.id ? resumeContactRefreshError.message : null}
+              onRefresh={() => void refreshResumeContact(selected.id)}
+            />
+          )}
 
           {review.cover_letter_supported === true ? <Card className="p-6">
             <div className="flex flex-wrap items-start justify-between gap-4">
@@ -6928,6 +7028,44 @@ function ApplicationField({ label, value, onChange, placeholder, type = "text", 
  * `name` is NOT editable here and that is deliberate. `onChange` carries a ResumeSpec, which has
  * nowhere to put a name; a field that looked editable and silently discarded the edit would be
  * worse than a printed line. The name is changed where it is stored, on the profile. */
+/**
+ * "THIS RESUME'S CONTACT DETAILS ARE OUT OF DATE.", the one notice both the packet review screen
+ * and the Review-and-send screen's checklist render, off the SAME resumeContactStaleNotice decision
+ * (features/applications/domain/resume-contact-stale.ts) - see refreshResumeContact above for why a
+ * second, independently-worded copy of this box is exactly how the two screens would end up
+ * disagreeing about what counts as stale.
+ *
+ * Both headers print in plain text through resumeContactLine, the same shared formatter
+ * contactLine/contactName already use for the resume itself (lib/resumeContact.ts) - no ids, just
+ * the words an applicant reads on a page: location, email, phone, then links.
+ */
+function ResumeContactStaleNotice({ notice, busy, error, onRefresh }: {
+  notice: ResumeContactStaleLike;
+  busy: boolean;
+  error: string | null;
+  onRefresh: () => void;
+}) {
+  return (
+    <div role="alert" className="rounded-inner border border-warn/30 bg-warn-soft px-4 py-3 text-sm leading-6 text-warn">
+      <p className="font-medium">This resume&apos;s contact details are out of date.</p>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <div>
+          <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-warn">On this resume</p>
+          <p className="mt-1 text-ink">{resumeContactLine(notice.stored) || "No contact details on file"}</p>
+        </div>
+        <div>
+          <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-warn">Your current details</p>
+          <p className="mt-1 text-ink">{resumeContactLine(notice.current) || "No contact details on file"}</p>
+        </div>
+      </div>
+      {error && <p className="mt-3 text-warn">{error}</p>}
+      <Button type="button" onClick={onRefresh} disabled={busy} size="sm" className="mt-3">
+        {busy ? "Updating..." : "Update the contact details on this resume"}
+      </Button>
+    </div>
+  );
+}
+
 function ResumeEditor({ spec, name, contact, editedTerms, onChange, onPatchEntry }: { spec: ResumeSpec; name: string; contact: string; editedTerms: ReadonlySet<string>; onChange: (spec: ResumeSpec) => void; onPatchEntry: (index: number, patch: Partial<ResumeSpec["experience"][number]>) => void }) {
   return (
     <div className="mx-auto max-w-[640px] rounded-inner border border-border bg-white px-5 py-5 font-serif text-[11.5px] leading-[1.35] text-black shadow-[0_1px_2px_rgba(0,0,0,0.06),0_12px_32px_-12px_rgba(0,0,0,0.18)] sm:px-8">
@@ -8113,8 +8251,12 @@ export function DirectApplicationQuestion({ task, position, total, saving, saved
   );
 }
 
-function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceReviewed, manualTrialPacket, approving, securityCodeSubmitting, securityCodeError, onSubmitSecurityCode, unverifiedSubmissionSubmitting, unverifiedSubmissionError, onSubmitUnverifiedOutcome, educationProfile, educationProfileStatus, onCheckResume, onReloadCoverLetter, onWriteCoverLetter, coverLetterReloading, onHandoffComplete, onApprove, sendRefusal, onRestart, restarting, onRetry, employerActionRefusal, onReviewPacket, onReviewQuestions, onOpenQuestion, onChooseOption, onSaveQuestion, onSkipQuestion, savingAnswer, answeredQuestionFingerprints, directAnswerProgress, directAnswerDrafts, directAnswerFailure, onDirectAnswerDraftChange, onClearDirectAnswerDraft, onNavigateDirectQuestion, onClearDirectAnswerFailure, onRefreshQuestionMetadata, questionMetadataRefreshing, questionMetadataRefreshDisabled, questionMetadataNeedsPacketReview, questionMetadataRefreshError, onQuestionsFinished, onAddDocument, onToggleAcknowledged, attentionTicking, onSelfSubmitted, onPacketAuditRefusal, onOpenWithExtension, extensionFillBusy, extensionFillError }: { packet: GeneratedResume; resumeRecord?: ChecklistResumeRecord; submission: SubmissionResponse; packetEvidenceReviewed: boolean; manualTrialPacket: PacketAuditResponse | null; approving: boolean; securityCodeSubmitting: boolean; securityCodeError: string | null; onSubmitSecurityCode: (code: string) => void; unverifiedSubmissionSubmitting: boolean; unverifiedSubmissionError: string | null; onSubmitUnverifiedOutcome: (found: boolean) => void; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onReloadCoverLetter: () => void; onWriteCoverLetter: () => void; coverLetterReloading: boolean; onHandoffComplete: (outcome?: "cleared" | "submitted") => void; onApprove: () => void; sendRefusal: { message: string; issues: string[] } | null; onRestart: () => void; restarting: boolean; onRetry: () => void; employerActionRefusal: string | null; onReviewPacket: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string, intent?: SubmissionChecklistAction) => void; onChooseOption: (questionId: string, option: string) => void; onSaveQuestion: (questionId: string, answer: string, intent: DirectQuestionTaskIntent, promptFingerprint: string, taskFingerprint: string, task: DirectQuestionTask) => Promise<DirectAnswerSaveResult>; onSkipQuestion: (questionId: string, intent: DirectQuestionTaskIntent, promptFingerprint: string, taskFingerprint: string, task: DirectQuestionTask) => Promise<DirectAnswerSaveResult>; savingAnswer: boolean; answeredQuestionFingerprints: ReadonlySet<string>; directAnswerProgress: DirectAnswerProgress | null; directAnswerDrafts: ReadonlyMap<string, DirectAnswerDraft>; directAnswerFailure: DirectAnswerFailure | null; onDirectAnswerDraftChange: (questionId: string, promptFingerprint: string, taskFingerprint: string, answer: string) => void; onClearDirectAnswerDraft: (promptFingerprint: string) => void; onNavigateDirectQuestion: (promptFingerprint: string) => void; onClearDirectAnswerFailure: (promptFingerprint: string) => void; onRefreshQuestionMetadata: () => void; questionMetadataRefreshing: boolean; questionMetadataRefreshDisabled: boolean; questionMetadataNeedsPacketReview: boolean; questionMetadataRefreshError: string | null; onQuestionsFinished: () => void; onAddDocument: (kind: string) => void; onToggleAcknowledged: (item: SubmissionChecklistItem, acknowledged: boolean) => void; attentionTicking: ReadonlySet<string>; onSelfSubmitted: () => void; onPacketAuditRefusal: (reason: unknown) => Promise<boolean>; onOpenWithExtension: () => void; extensionFillBusy: boolean; extensionFillError: string | null }) {
+function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceReviewed, manualTrialPacket, approving, securityCodeSubmitting, securityCodeError, onSubmitSecurityCode, unverifiedSubmissionSubmitting, unverifiedSubmissionError, onSubmitUnverifiedOutcome, educationProfile, educationProfileStatus, onCheckResume, onReloadCoverLetter, onWriteCoverLetter, coverLetterReloading, onHandoffComplete, onApprove, sendRefusal, onRestart, restarting, onRetry, employerActionRefusal, onReviewPacket, onReviewQuestions, onOpenQuestion, onChooseOption, onSaveQuestion, onSkipQuestion, savingAnswer, answeredQuestionFingerprints, directAnswerProgress, directAnswerDrafts, directAnswerFailure, onDirectAnswerDraftChange, onClearDirectAnswerDraft, onNavigateDirectQuestion, onClearDirectAnswerFailure, onRefreshQuestionMetadata, questionMetadataRefreshing, questionMetadataRefreshDisabled, questionMetadataNeedsPacketReview, questionMetadataRefreshError, onQuestionsFinished, onAddDocument, onToggleAcknowledged, attentionTicking, onSelfSubmitted, onPacketAuditRefusal, onOpenWithExtension, extensionFillBusy, extensionFillError, onRefreshResumeContact, resumeContactRefreshBusy, resumeContactRefreshError }: { packet: GeneratedResume; resumeRecord?: ChecklistResumeRecord; submission: SubmissionResponse; packetEvidenceReviewed: boolean; manualTrialPacket: PacketAuditResponse | null; approving: boolean; securityCodeSubmitting: boolean; securityCodeError: string | null; onSubmitSecurityCode: (code: string) => void; unverifiedSubmissionSubmitting: boolean; unverifiedSubmissionError: string | null; onSubmitUnverifiedOutcome: (found: boolean) => void; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onReloadCoverLetter: () => void; onWriteCoverLetter: () => void; coverLetterReloading: boolean; onHandoffComplete: (outcome?: "cleared" | "submitted") => void; onApprove: () => void; sendRefusal: { message: string; issues: string[] } | null; onRestart: () => void; restarting: boolean; onRetry: () => void; employerActionRefusal: string | null; onReviewPacket: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string, intent?: SubmissionChecklistAction) => void; onChooseOption: (questionId: string, option: string) => void; onSaveQuestion: (questionId: string, answer: string, intent: DirectQuestionTaskIntent, promptFingerprint: string, taskFingerprint: string, task: DirectQuestionTask) => Promise<DirectAnswerSaveResult>; onSkipQuestion: (questionId: string, intent: DirectQuestionTaskIntent, promptFingerprint: string, taskFingerprint: string, task: DirectQuestionTask) => Promise<DirectAnswerSaveResult>; savingAnswer: boolean; answeredQuestionFingerprints: ReadonlySet<string>; directAnswerProgress: DirectAnswerProgress | null; directAnswerDrafts: ReadonlyMap<string, DirectAnswerDraft>; directAnswerFailure: DirectAnswerFailure | null; onDirectAnswerDraftChange: (questionId: string, promptFingerprint: string, taskFingerprint: string, answer: string) => void; onClearDirectAnswerDraft: (promptFingerprint: string) => void; onNavigateDirectQuestion: (promptFingerprint: string) => void; onClearDirectAnswerFailure: (promptFingerprint: string) => void; onRefreshQuestionMetadata: () => void; questionMetadataRefreshing: boolean; questionMetadataRefreshDisabled: boolean; questionMetadataNeedsPacketReview: boolean; questionMetadataRefreshError: string | null; onQuestionsFinished: () => void; onAddDocument: (kind: string) => void; onToggleAcknowledged: (item: SubmissionChecklistItem, acknowledged: boolean) => void; attentionTicking: ReadonlySet<string>; onSelfSubmitted: () => void; onPacketAuditRefusal: (reason: unknown) => Promise<boolean>; onOpenWithExtension: () => void; extensionFillBusy: boolean; extensionFillError: string | null; onRefreshResumeContact: () => void; resumeContactRefreshBusy: boolean; resumeContactRefreshError: string | null }) {
   const { review } = submission;
+  /* The same decision the packet review screen renders from - see resumeContactStaleNotice and
+     refreshResumeContact in this file. Computed once here rather than at each read below, so the
+     checklist and any other reader in this component see the identical object. */
+  const resumeContactStale = resumeContactStaleNotice(submission);
   const awaitingSecurityCode = review.status === "awaiting_security_code";
   const needsAttention = review.status === "needs_attention";
   const failedPacketAuditStale = review.status === "failed" && historicalPacketAuditStaleMessage(review);
@@ -8805,6 +8947,20 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
           <div role="alert" className="mt-4 rounded-inner bg-warn-soft px-4 py-3 text-sm leading-6 text-warn">
             <p>Review the exact resume beside the job description and its evidence colours before sending.</p>
             <Button onClick={onCheckResume} size="sm" className="mt-3">Check packet</Button>
+          </div>
+        )}
+        {/* Off the SAME resumeContactStaleNotice decision the packet review screen renders from -
+            see refreshResumeContact and ResumeContactStaleNotice in this file. Gated to
+            ready_for_final_approval like the two checks immediately above: this is the checklist
+            she reads right before Send, not a standing banner on every state this screen renders. */}
+        {review.status === "ready_for_final_approval" && resumeContactStale && (
+          <div className="mt-4">
+            <ResumeContactStaleNotice
+              notice={resumeContactStale}
+              busy={resumeContactRefreshBusy}
+              error={resumeContactRefreshError}
+              onRefresh={onRefreshResumeContact}
+            />
           </div>
         )}
         {/* Its own block with its own heading, never folded into the list below: those rows are
