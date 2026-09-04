@@ -2262,9 +2262,12 @@ test("a confirmed essay is not a draft, so it stops asking", () => {
   assert.equal(drafted.actionKind, "review");
 });
 
-test("an essay with no provenance is machine-resolved, not a draft, and is not a Review row", () => {
-  /* An absent answer_source is what a machine-resolved answer looks like; the Review row's sentence
-     claims Litos WROTE the paragraph, which is a different thing and a different recovery. */
+test("an essay with NO provenance is still an unapproved draft and keeps its Review row", () => {
+  /* Corrected after review measured the backend: machineAuthored is `source === undefined ||
+     source === 'litos_draft'`, and submissionSafety records that "the essay drafter used to push its
+     paragraph with no flag at all". So an absent provenance is a Litos-written paragraph on an older
+     packet, not a machine-resolved field - and unapprovedLitosDraftQuestionLabels matches the literal
+     only, so the send gate does not stop it either. This row is the only thing that shows it to her. */
   const review: Pick<ApplicationReview, "attention_reason" | "questions" | "questions_reviewed_at" | "status"> = {
     status: "needs_attention",
     attention_reason: "",
@@ -2273,8 +2276,48 @@ test("an essay with no provenance is machine-resolved, not a draft, and is not a
       { id: "machine", question: "Why here?", answer: "Because the work matches.", kind: "essay", required: true },
     ],
   };
+  const row = humanInputItems(review).find((item) => item.id === "review-machine");
+  assert.ok(row, "an AI-written paragraph nobody flagged must still be shown before it is sent");
+  assert.equal(row.detail, "Drafted answer ready for review");
+});
+
+/* THE LOOP MUST NOT COME BACK WEARING A DIFFERENT WORD.
+ *
+ * Letting a confirmed essay through the Review branch newly exposed it to the confirm branch below,
+ * whose label guess matches salary, consent/recording and non-US sponsorship wording. Measured before
+ * the guard: an answered essay labelled "What are your compensation expectations?" produced
+ * "Needs your confirmation" on the fallback path, and it could never settle - settling reads
+ * answer_confirmed_of, which does not reach this client - so directInputTaskPlan still reported
+ * remaining: 1 after a save. The local guess is therefore barred from claiming essays; the SERVER's
+ * list is not, because a question the backend names has a real exit. */
+test("a confirmed essay whose label reads human-only does not fall into an unsettleable confirm row", () => {
+  const SALARY_ESSAY = "What are your compensation expectations?";
+  const review: Pick<ApplicationReview, "attention_reason" | "questions" | "questions_reviewed_at" | "status"> = {
+    status: "needs_attention",
+    attention_reason: "",
+    questions_reviewed_at: "2026-09-04T00:00:00.000Z",
+    questions: [
+      {
+        id: "salary-essay",
+        question: SALARY_ESSAY,
+        answer: "I am flexible and would defer to the band for the role.",
+        kind: "essay",
+        required: true,
+        answer_source: "applicant_review",
+      },
+    ],
+  };
+
+  // Fallback path: no server list, so only the local label guess is available - and it must not fire.
   assert.equal(
-    humanInputItems(review).find((item) => item.id === "review-machine"),
+    humanInputItems(review).find((item) => item.questionId === "salary-essay"),
     undefined,
+    "she confirmed it; a label guess must not re-ask it as a confirmation it can never settle",
   );
+
+  // But when the SERVER names it, the ask is real and the row appears.
+  const named = humanInputItems(review, { sensitiveConfirmations: [SALARY_ESSAY] })
+    .find((item) => item.questionId === "salary-essay");
+  assert.ok(named, "the backend naming a question outranks the local guess");
+  assert.equal(named.actionKind, "confirm");
 });
