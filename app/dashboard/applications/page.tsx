@@ -2395,6 +2395,7 @@ function Applications() {
       company: selected.job_context.company,
       role: selected.job_context.role,
       documents: selectedSubmission.documents,
+      sensitiveConfirmations: selectedSubmission.sensitive_questions_requiring_confirmation,
     })
       .filter((item) => item.settled !== true && item.questionId)
       .map((item) => item.questionId!);
@@ -4635,6 +4636,7 @@ function Applications() {
         company: selected.job_context.company,
         role: selected.job_context.role,
         documents: activeSubmission.documents,
+        sensitiveConfirmations: activeSubmission.sensitive_questions_requiring_confirmation,
       })
       : null;
     const activeDirectPassKey = direct ? directAnswerPassKey(activeSubmission.review) : null;
@@ -4820,6 +4822,7 @@ function Applications() {
           company: selected.job_context.company,
           role: selected.job_context.role,
           documents: latestSubmission.documents,
+          sensitiveConfirmations: latestSubmission.sensitive_questions_requiring_confirmation,
         })
         : null;
       const latestDirectTask = direct
@@ -4891,6 +4894,7 @@ function Applications() {
           company: selected.job_context.company,
           role: selected.job_context.role,
           documents: saved.documents,
+          sensitiveConfirmations: saved.sensitive_questions_requiring_confirmation,
         });
         const remainingDirectQuestions = savedDirectTaskPlan.questionTasks.filter((task) => (
           !completedDirectPromptFingerprints.has(directQuestionPromptFingerprint(task))
@@ -6012,6 +6016,7 @@ function Applications() {
                       company: selected.job_context.company,
                       role: selected.job_context.role,
                       documents: selectedSubmission.documents,
+                      sensitiveConfirmations: selectedSubmission.sensitive_questions_requiring_confirmation,
                     }).questionTasks.length,
                   };
                 const next = new Map(current);
@@ -8130,10 +8135,15 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
     ? userFacingError(review.attention_reason, "Litos could not finish the company’s form. Try again in a minute.")
     : undefined;
   const attentionReview = { ...review, attention_reason: safeAttentionReason };
+  /* THE SERVER'S OWN LIST, THE SAME ONE THIS SCREEN ALREADY READS BELOW for
+     `unconfirmedSensitiveRows` and the send gate. Omitting it here is what let this queue keep
+     asking about a question `sensitive_questions_requiring_confirmation` had already dropped: see
+     directInputTaskPlan's own comment for the measured HRT packet. */
   const directTaskPlan = directInputTaskPlan(attentionReview, {
     company: packet.job_context.company,
     role: packet.job_context.role,
     documents: submission.documents,
+    sensitiveConfirmations: submission.sensitive_questions_requiring_confirmation,
   });
   const directProgressKey = directAnswerPassKey(review);
   const directProgress = directAnswerProgress?.key === directProgressKey
