@@ -279,6 +279,7 @@ export function ApplicationPacket({
   packet,
   resumeRecord,
   review,
+  sensitiveConfirmations,
   onClose,
 }: {
   packet: GeneratedResume;
@@ -286,6 +287,19 @@ export function ApplicationPacket({
    *  unconfirmedDocumentItems: undefined is silence, never an answer. */
   resumeRecord?: ChecklistResumeRecord;
   review: ApplicationReview;
+  /** THE SERVER'S OWN LIST of the questions it will refuse to send without a confirmation, off the
+   *  submission snapshot the page holds for THIS packet id.
+   *
+   *  This viewer resolves from `packets` and deliberately never holds a submission, so the list
+   *  cannot be read off anything already in scope: it lives only on SubmissionResponse, and neither
+   *  packetWithSubmission nor packetWithDirectSubmission copies it onto the packet. Hence a prop.
+   *
+   *  `[]` and `undefined` are DIFFERENT ANSWERS and the distinction is the whole point. `[]` is the
+   *  server saying it checked and found none, and it must settle every row; `undefined` is an older
+   *  payload saying nothing, and only then may the label classes guess. Collapsing the two - with a
+   *  `.length` test, or by defaulting to `[]` here - would either re-open this bug or invent a
+   *  server verdict that was never served. See humanInputItems, which branches on exactly this. */
+  sensitiveConfirmations?: readonly string[];
   onClose: () => void;
 }) {
   const scroller = useRef<HTMLDivElement>(null);
@@ -416,10 +430,17 @@ export function ApplicationPacket({
      dropping it erased the only record of what she handled by hand - three blockers vanishing from
      the packet record with no trace, while the heading went on saying input was needed. It stays,
      rendered as done, with its detail saying whose word the tick is. */
+  /* THE SERVER'S LIST FIRST, the label classes only when there is no list at all. Without this
+     argument the fallback below it - isHumanOnlyChecklistLabel - decides alone, and it matches
+     visa-sponsorship phrasing whatever the server says. Measured on Hudson River Trading packet
+     4a79eec1-5c65-4dd4-8e72-e119fbfbd733, whose sensitive_questions_requiring_confirmation is
+     EMPTY: every other surface showed the sponsorship question settled and this viewer went on
+     listing it under "Needs your input", the product contradicting itself about one question. */
   const inputItems = humanInputItems(attentionReview, {
     company: packet.job_context.company,
     role: packet.job_context.role,
     documents: contentPacket.spec._documents,
+    sensitiveConfirmations,
   });
   const needsInput = inputItems.filter((item) => !item.settled);
   const acknowledgedItems = inputItems.filter((item) => item.acknowledged === true);
