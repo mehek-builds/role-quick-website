@@ -5991,7 +5991,21 @@ function Applications() {
              the metadata-refresh launch needs (the Mytos loop, application 55de7c9e). Until the
              response lands, packetEvidenceReady already fails closed on the local edit. */
           onSubmit={() => {
-            if (selectedSubmission?.review.status === "needs_attention") {
+            /* THE APPLY CARRY'S PREMISE IS FALSE ON A FILLED PACKET, WHICH IS WHY THIS IS NOT ONE
+               STATUS ANY MORE.
+               saveApplyAnswers keeps the answers in local state and says "Saved." because, from
+               Apply, the very next press IS the submit-request that carries them - the comment above
+               says so. On `ready_for_final_approval` the next press is Send, which posts no
+               questions at all, so a correction typed here was announced as saved and then silently
+               dropped on the way to the employer. Measured 2026-09-04 on Flow Traders packet
+               8dc65cd0, the same packet whose Tracker card drew "Answer 1 question".
+               reviewAnswerEditRoute is what tells those two apart, and it sends the filled packet
+               through the one route that can land its correction: saveReviewedAnswers reopens it,
+               refills the company's form from the corrected answer and retakes the preview. A packet
+               whose answers are genuinely frozen ("frozen") comes here too, and gets the reason
+               rather than a "Saved." that is not true of it either. */
+            if (selectedSubmission?.review.status === "needs_attention"
+              || (selectedSubmission && reviewAnswerEditRoute(selectedSubmission.review) !== "save")) {
               void saveReviewedAnswers();
             } else {
               setPacketEvidence(null);
@@ -6010,6 +6024,7 @@ function Applications() {
           lookaheadError={activePrescriptLookaheadIssue?.message ?? null}
           blockContinuation={Boolean(activePrescriptLookaheadIssue)}
           reviewDiscovered={selectedSubmission?.review.status === "needs_attention"}
+          refillsFormOnSave={Boolean(selectedSubmission) && reviewAnswerEditRoute(selectedSubmission!.review) === "reopen"}
           focusQuestion={focusQuestion}
           prescriptNote={prescriptNote}
         />
@@ -7170,7 +7185,7 @@ function EditableHighlight({ value, terms, onChange, className = "" }: { value: 
   );
 }
 
-function QuestionsScreen({ applicationRole, applicationCompany, questions, metadataBlockers = [], actionableQuestionIds = [], onChange, onBack, onSubmit, onRefreshMetadata, saving = false, refreshingMetadata = false, metadataRefreshDisabled = false, metadataRefreshNeedsPacketReview = false, metadataRefreshError = null, lookaheadError = null, blockContinuation = false, reviewDiscovered = false, focusQuestion = null, prescriptNote = "" }: {
+function QuestionsScreen({ applicationRole, applicationCompany, questions, metadataBlockers = [], actionableQuestionIds = [], onChange, onBack, onSubmit, onRefreshMetadata, saving = false, refreshingMetadata = false, metadataRefreshDisabled = false, metadataRefreshNeedsPacketReview = false, metadataRefreshError = null, lookaheadError = null, blockContinuation = false, reviewDiscovered = false, refillsFormOnSave = false, focusQuestion = null, prescriptNote = "" }: {
   applicationRole: string;
   applicationCompany: string;
   questions: ApplicationQuestion[];
@@ -7188,6 +7203,14 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, metad
   lookaheadError?: string | null;
   blockContinuation?: boolean;
   reviewDiscovered?: boolean;
+  /* TRUE WHEN THIS PACKET'S FORM IS ALREADY FILLED AND THE SAVE WILL FILL IT AGAIN.
+     On `ready_for_final_approval` the answers cannot be rewritten under the preview screenshot the
+     applicant is about to approve, so the press reopens the packet instead: the filled form is
+     discarded and refilled from these answers, and a new preview is taken. That is a real thing to
+     do to a company's page and the button has to say so BEFORE it is pressed - this screen's own
+     comment two lines below already holds itself to that rule for the other save it carries.
+     Defaulted, so every Apply-time and stopped-run packet keeps the wording it has. */
+  refillsFormOnSave?: boolean;
   focusQuestion?: { id: string; token: number } | null;
   prescriptNote?: string;
 }) {
@@ -7527,7 +7550,9 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, metad
                 ? "Answer required questions"
                 : optionalDecisionMissing
                   ? "Answer or skip optional questions"
-              : "Save and continue"}
+              : refillsFormOnSave
+                ? "Save and fill the form again"
+                : "Save and continue"}
         </Button>
       </TerminalActionBar>
     </div>
@@ -7670,7 +7695,7 @@ function UnverifiedSubmissionCard({ attentionReason, submitting, error, onSubmit
   );
 }
 
-export function DirectApplicationQuestion({ task, position, total, saving, saved, focusToken, hasPrevious, hasNext, refillsFormOnSave = false, preservedDraft, externalFailure, onDraftChange, onClearDraft, onClearFailure, onPrevious, onNext, onReviewApplication, onSave, onSkip }: {
+export function DirectApplicationQuestion({ task, position, total, saving, saved, focusToken, hasPrevious, hasNext, preservedDraft, externalFailure, onDraftChange, onClearDraft, onClearFailure, onPrevious, onNext, onReviewApplication, onSave, onSkip }: {
   task: DirectQuestionTask;
   position: number;
   total: number;
@@ -7679,15 +7704,6 @@ export function DirectApplicationQuestion({ task, position, total, saving, saved
   focusToken: number;
   hasPrevious: boolean;
   hasNext: boolean;
-  /* TRUE WHEN THIS PACKET'S FORM IS ALREADY FILLED, so the press does more than store an answer.
-     On `ready_for_final_approval` the save cannot land in place - the preview screenshot and the
-     answers under it would stop describing the same form - so saveReviewedAnswers routes it through
-     the restart, which discards that filled form and fills it again from this answer. That is a real
-     thing to do to an application and the button has to say so BEFORE the press: "Save and next"
-     over a control that refills a company's form and ends the pass is the same broken promise as
-     "Answer 1 question" over an editor that could not save, only quieter. Defaulted so the QA
-     harness and every ordinary packet keep the wording they already have. */
-  refillsFormOnSave?: boolean;
   preservedDraft: DirectAnswerDraft | null;
   externalFailure: DirectAnswerFailure | null;
   onDraftChange: (questionId: string, promptFingerprint: string, taskFingerprint: string, answer: string) => void;
@@ -7826,30 +7842,6 @@ export function DirectApplicationQuestion({ task, position, total, saving, saved
       : litosDrafted && !answerDirty
         ? hasNext ? "Approve and next" : "Approve answer"
         : saved ? hasNext ? "Save changes and next" : "Save changes" : hasNext ? "Save and next" : "Save answer";
-
-  /* WHAT THIS PRESS DOES, WHICH ON A FILLED PACKET IS MORE THAN WHAT IT SAVES.
-   *
-   * A SEPARATE CONSTANT, NOT A FOURTH ARM ON actionLabel. That ternary answers "how were the words
-   * under this box produced" - typed, drafted by Litos, or already confirmed - and
-   * tests/litos-drafted-answer-approval.test.mjs evaluates it as a closed expression over exactly
-   * those six variables to hold the drafted-answer wording in place. This is a different question,
-   * asked of a different fact, and folding it in would have made that guard unevaluable. It wraps
-   * instead, so both stay readable and both stay tested.
-   *
-   * On `ready_for_final_approval` the save cannot land in place - the preview screenshot and the
-   * answers beneath it would stop describing the same form - so saveReviewedAnswers routes it
-   * through the restart, which throws that filled form away and fills it again from this answer.
-   * That is a real thing to do to a company's form and the button has to say so BEFORE the press.
-   * "Save and next" over a control that refills a form and ends the pass is the same broken promise
-   * as "Answer 1 question" over an editor that could not save, only quieter - and there is no next
-   * here either, because the refill ends the pass by construction.
-   *
-   * Overrides every arm above it, including "Approve and next": an untouched Litos draft on a filled
-   * packet refills the form exactly as an edited one does. contextOnly is exempt because that press
-   * writes nothing at all - it navigates - so no refill follows it. */
-  const pressLabel = refillsFormOnSave && !contextOnly
-    ? "Save answer and fill the form again"
-    : actionLabel;
 
   function updateAnswer(next: string) {
     if (busy) return;
@@ -8068,7 +8060,7 @@ export function DirectApplicationQuestion({ task, position, total, saving, saved
                     </Button>
                   )}
                   <Button type="submit" block className="sm:w-auto" disabled={busy || answerBlocked}>
-                    {saving || submitting ? <PendingLabel onColor>Saving...</PendingLabel> : pressLabel}
+                    {saving || submitting ? <PendingLabel onColor>Saving...</PendingLabel> : actionLabel}
                   </Button>
                 </div>
               )}
@@ -8572,7 +8564,6 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
         )}
         {directAnswerActive ? (
           <DirectApplicationQuestion
-            refillsFormOnSave={reviewAnswerEditRoute(review) === "reopen"}
             key={directQuestionTaskFingerprint(currentDirectQuestion)}
             task={currentDirectQuestion}
             position={directQuestionPosition}

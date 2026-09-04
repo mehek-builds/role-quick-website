@@ -104,25 +104,37 @@ test("no second answer-writing route was added to get past the refusal", async (
     + " which is what stops this page pointing a second request at it");
 });
 
-/* THE OTHER HALF OF THE SAME PROMISE. The press on a filled packet refills a company's form and ends
- * the answer pass, so "Save and next" describes neither what it does nor where it goes. This screen's
- * whole history is controls that said one thing and did another; the fix is not allowed to add one. */
-test("the editor's own button says the save will refill the company's form", async () => {
+/* THE SCREEN THE CONTROL OPENS, AND THE SAVE THAT NEVER LEFT THE TAB.
+ *
+ * "Fix an answer" opens the questions screen, whose onSubmit routed everything that was not
+ * needs_attention to saveApplyAnswers - a LOCAL save that keeps the answers in component state and
+ * prints "Saved." The premise is written above it: from Apply the very next press is the
+ * submit-request that carries them. On `ready_for_final_approval` the next press is Send, which
+ * posts no questions, so the correction was announced as saved and then dropped. A dead control and
+ * a lying one are the same defect measured at different points.
+ */
+test("a filled packet's questions screen saves to the server instead of carrying answers locally", async () => {
+  const code = shippedCode(await readFile(PAGE, "utf8"));
+  assert.match(
+    code,
+    /if \(selectedSubmission\?\.review\.status === "needs_attention"\s*\|\|\s*\(selectedSubmission && reviewAnswerEditRoute\(selectedSubmission\.review\) !== "save"\)\)\s*\{\s*void saveReviewedAnswers\(\);/,
+    "a packet whose answers cannot ride in on the next press must be written through the guarded"
+    + " save, not kept in local state under a 'Saved.' banner",
+  );
+});
+
+/* THE OTHER HALF OF THE SAME PROMISE. The press on a filled packet refills a company's form, so
+ * "Save and continue" describes neither what it does nor where it goes. This screen's whole history
+ * is controls that said one thing and did another; the fix is not allowed to add one. */
+test("the questions screen's own button says the save will refill the company's form", async () => {
   const code = shippedCode(await readFile(PAGE, "utf8"));
   assert.match(code, /refillsFormOnSave = false/,
-    "defaulted, so an ordinary packet keeps the wording it has");
+    "defaulted, so every Apply-time and stopped-run packet keeps the wording it has");
+  assert.match(code, /: refillsFormOnSave\s*\?\s*"Save and fill the form again"\s*:\s*"Save and continue"/,
+    "and the wording changes only for the packet whose save really does refill a form");
   assert.match(
     code,
-    /const pressLabel = refillsFormOnSave && !contextOnly\s*\?\s*"Save answer and fill the form again"\s*:\s*actionLabel;/,
-    "wrapping actionLabel rather than becoming a fourth arm on it - that ternary answers how the words"
-    + " under the box were produced, and litos-drafted-answer-approval.test.mjs evaluates it as a"
-    + " closed expression over exactly six variables to hold the drafted wording in place",
-  );
-  assert.match(code, /: pressLabel\}/,
-    "and the button renders the wrapped label, not the inner one");
-  assert.match(
-    code,
-    /refillsFormOnSave=\{reviewAnswerEditRoute\(review\) === "reopen"\}/,
+    /refillsFormOnSave=\{Boolean\(selectedSubmission\) && reviewAnswerEditRoute\(selectedSubmission!\.review\) === "reopen"\}/,
     "bound to the SAME predicate the save branches on, so the label and the request cannot disagree",
   );
 });
