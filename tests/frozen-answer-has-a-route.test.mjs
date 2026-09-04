@@ -126,3 +126,22 @@ test("the editor's own button says the save will refill the company's form", asy
     "bound to the SAME predicate the save branches on, so the label and the request cannot disagree",
   );
 });
+
+/* THE LAW THIS MODULE WAS WRITTEN TO ENFORCE, APPLIED TO THE NEW PATH. review-answer-save.ts: "A
+ * success message rendered before the write is a message about nothing, and that is the exact shape
+ * of the defect." A restart the server refuses leaves the packet where it was; announcing a refill
+ * over that would be the same lie in a new place. */
+test("the reopen announces itself only after the packet actually moved", async () => {
+  const code = shippedCode(await readFile(PAGE, "utf8"));
+  const branch = code.slice(code.indexOf('if (editRoute === "reopen")'));
+  const notice = branch.indexOf("setNotice(REVIEW_ANSWERS_REOPEN_NOTICE)");
+  const request = branch.indexOf("await prepareApplication(answerDraftQuestions");
+  assert.ok(request >= 0 && notice > request,
+    "the banner is built from the outcome, never fired before the request");
+  assert.match(
+    branch.slice(0, notice),
+    /if \(reopened\.review\.status === "ready_for_final_approval"\)[\s\S]{0,200}?saved: false, message: REVIEW_ANSWERS_REOPEN_REFUSED/,
+    "a packet still sitting at ready_for_final_approval is a restart that did not land, and it must"
+    + " report a refusal rather than a refill",
+  );
+});

@@ -34,7 +34,7 @@ import { ThinkingOrb } from "thinking-orbs";
 import { canonicalApplicationFromPacket, canRemoveFromTracker, canonicalEnvelopeLegacyHydrationId, canonicalEnvelopeWithMissingLegacyHydration, canonicalTrackerPacket, explicitTerms, sendableLinkedPacketFromCanonicalEnvelope, withRestoredLinkedPackets, linkedLegacyPacketFromCanonicalTrackerPacket, mergeCanonicalApplicationHistory, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, reviewWithLists, screenForStatus, sectionHeading, selectedPacketForRequest, startsNewSection, statusLabel, stripMetadata, upsertCanonicalApplicationHistory } from "@/features/applications";
 import { applicationFilterFromSearch, applicationFilterHeading, cleanJdCapture, ledgerRendersOnLanding, pipelineCounts, reviewCanBeSent, sentSince, startOfLocalDay, statusMatchesApplicationFilter, unansweredRequiredQuestionCount, type ApplicationFilter } from "@/features/applications";
 import { nextPreferredReadyPacket, packetMatchesJob } from "@/features/applications";
-import { REVIEW_ANSWERS_FROZEN_NOTICE, REVIEW_ANSWERS_REOPEN_NOTICE, auditAnswerWrite, reviewAnswerEditRoute, reviewAnswersNeedSave, saveReviewAnswers, type ReviewAnswerSaveResponse } from "@/features/applications";
+import { REVIEW_ANSWERS_FROZEN_NOTICE, REVIEW_ANSWERS_REOPEN_NOTICE, REVIEW_ANSWERS_REOPEN_REFUSED, auditAnswerWrite, reviewAnswerEditRoute, reviewAnswersNeedSave, saveReviewAnswers, type ReviewAnswerSaveResponse } from "@/features/applications";
 import { saveAttentionAcknowledgement, type AttentionAcknowledgementResponse } from "@/features/applications";
 import { duplicateBadge, duplicatePostingMarks, duplicatePostingNote } from "@/features/applications";
 import { isHttpsJobUrl, missingApplicationFields, type ApplicationDraftField } from "@/features/applications";
@@ -4765,10 +4765,20 @@ function Applications() {
       return { saved: false, message: REVIEW_ANSWERS_FROZEN_NOTICE };
     }
     if (editRoute === "reopen") {
-      setNotice(REVIEW_ANSWERS_REOPEN_NOTICE);
       await prepareApplication(answerDraftQuestions, { allowServerAnswerRefresh: true, restart: true, source: "answer_correction" });
       const reopened = submissionSnapshotsRef.current.get(applicationId)
         ?? (submissionRef.current?.application_id === applicationId ? submissionRef.current : activeSubmission);
+      /* THE BANNER IS BUILT FROM THE OUTCOME, WHICH IS THIS MODULE'S OWN LAW AND NOT A STYLE NOTE.
+         See review-answer-save.ts: "A success message rendered before the write is a message about
+         nothing, and that is the exact shape of the defect." A restart the server refuses - a
+         duplicate verdict, a claim taken between the read and the press - leaves the packet exactly
+         where it was and prepareApplication has already put the reason on screen. Announcing a
+         refill over that would be the 202 lie again, in a new place. The status having moved off
+         ready_for_final_approval is what the restart landing looks like from here. */
+      if (reopened.review.status === "ready_for_final_approval") {
+        return { saved: false, message: REVIEW_ANSWERS_REOPEN_REFUSED, review: reopened.review };
+      }
+      setNotice(REVIEW_ANSWERS_REOPEN_NOTICE);
       return { saved: true, review: reopened.review, mayAdvance: false };
     }
     const completedDirectPromptFingerprints = new Set(

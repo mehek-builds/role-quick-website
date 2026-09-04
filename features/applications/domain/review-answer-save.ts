@@ -193,6 +193,12 @@ export function reviewAnswerEditRoute(review: ReviewAnswerEditState): ReviewAnsw
 export const REVIEW_ANSWERS_REOPEN_NOTICE =
   "This company's form is already filled in, so Litos is filling it again with your correction. A new preview will be here in a minute.";
 
+/** The reopen the server would not take. Says what every refusal on this path says - the answer is
+ *  still hers and still on the screen - and leaves the server's own sentence to the banner
+ *  prepareApplication has already written, rather than restating it in different words. */
+export const REVIEW_ANSWERS_REOPEN_REFUSED =
+  "Litos could not start filling this company's form again, so your correction has not been saved yet. It is still on this screen, so try again.";
+
 /** The one state with no correction route at all, said as the reason rather than as an apology. */
 export const REVIEW_ANSWERS_FROZEN_NOTICE =
   "Litos has already started sending this application, so its answers are now the record of what the company was given and cannot be edited.";
