@@ -4762,9 +4762,19 @@ function Applications() {
     const editRoute = reviewAnswerEditRoute(activeSubmission.review);
     if (editRoute === "frozen") {
       rememberDirectFailure(REVIEW_ANSWERS_FROZEN_NOTICE);
+      /* AND ON THE PAGE TOO WHEN NO CARD IS LISTENING. rememberDirectFailure addresses the
+         per-question card, which is the only caller that reads the returned message; the questions
+         screen calls this as `void saveReviewedAnswers()` and discards the result. Without this, a
+         packet whose answers are genuinely closed answered a press with nothing on screen at all -
+         which is the same silence the local Apply carry used to give it, only quieter. */
+      if (!direct) setError(REVIEW_ANSWERS_FROZEN_NOTICE);
       return { saved: false, message: REVIEW_ANSWERS_FROZEN_NOTICE };
     }
     if (editRoute === "reopen") {
+      /* The previous screen's banner goes before the request, not after it. prepareApplication
+         clears the error and the send refusal and does not touch this one, so a stale "Saved."
+         from an earlier press would otherwise sit above the refusal this one may return. */
+      setNotice(null);
       await prepareApplication(answerDraftQuestions, { allowServerAnswerRefresh: true, restart: true, source: "answer_correction" });
       const reopened = submissionSnapshotsRef.current.get(applicationId)
         ?? (submissionRef.current?.application_id === applicationId ? submissionRef.current : activeSubmission);
