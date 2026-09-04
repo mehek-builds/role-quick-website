@@ -81,7 +81,7 @@ import { acknowledgePacketAudit, acknowledgePacketEvidence, packetQuestionsSnaps
 import { useBilling } from "@/components/billing/BillingProvider";
 import { isStructuredUpgradeDenial } from "@/features/billing";
 import { completeOperationId, operationIdFor } from "@/lib/operation-id";
-import { applicationPacketAuthorityState, confirmedProjectionForPacket, managedPrepareAuthorityEnvelopeFromUnknown, managedPrepareAuthorityMatchesPacket, quarantinedSubmissionAuthority, reviewClaimsSubmissionSent, reviewForSubmissionProjection, submissionAuthorityEnvelopeFromUnknown, submissionMutationResponseMatchesApplication, submissionProjectionIsConfirmed } from "@/features/applications";
+import { applicationPacketAuthorityState, employerActionRefusalMessage, confirmedProjectionForPacket, managedPrepareAuthorityEnvelopeFromUnknown, managedPrepareAuthorityMatchesPacket, quarantinedSubmissionAuthority, reviewClaimsSubmissionSent, reviewForSubmissionProjection, submissionAuthorityEnvelopeFromUnknown, submissionMutationResponseMatchesApplication, submissionProjectionIsConfirmed } from "@/features/applications";
 import { useSidebarCollapse } from "@/app/dashboard/dashboard-shell";
 
 type Screen = "review" | "questions" | "submitting" | "portal" | "submitted";
@@ -511,48 +511,16 @@ function packetAuthorityForEmployerAction(
 }
 
 /**
- * The statuses that mean a RUN HOLDS THIS PACKET RIGHT NOW, in the server's own words.
+ * The page's binding of the shared refusal rule to a packet in hand.
  *
- * Read only from `server_review_status`, never from the displayed review: the display rewrite is
- * exactly what turns one of these into "needs_attention", so asking the rewritten copy would always
- * answer no. The same five the backend's own in-flight list carries (applicationStall.ts), and the
- * same five submitRequestDisposition answers `in_flight` for.
- */
-const SERVER_RUN_IN_FLIGHT_STATUSES: ReadonlySet<string> = new Set([
-  "submit_requested",
-  "preparing",
-  "filling",
-  "submitting",
-  "submission_claimed",
-]);
-
-/**
- * WHY AN EMPLOYER ACTION CANNOT START, or null when it can. ONE computation for the refusal
- * sentence AND for whether the control that would trigger it is rendered at all.
+ * The RULE - which refusal, and when there is none - lives in
+ * features/applications/domain/employer-action-refusal.ts so it can be asserted directly; this
+ * only supplies its two inputs. `qaMode` mirrors prepareApplication's own bypass, so the control
+ * and the handler cannot disagree about it either.
  *
- * THE DEFECT THIS CLOSES, measured live 2026-09-04 on Palantir packet f1cfb841. The packet's server
- * status was `filling` - a managed fill run had died mid-flight - and its authority envelope was
- * `state: none` with `no_evidence` retry safety: the ledger saying, in as many words, that not one
- * attempt had ever been opened and nothing had reached an employer. The screen said:
- *
- *   "Litos cannot start another employer attempt until the exact prior submission evidence is
- *    verified."
- *
- * Every clause of that is false for this packet. There is no prior submission, so there is no
- * evidence, so there is nothing to verify, and the applicant is told to wait for a thing that will
- * never happen. What was actually true is that the server still believed a run held the packet.
- *
- * AND THE SAME FACT RENDERED THE DEAD CONTROL. `/applications/:id/submission` attaches the
- * authority envelope only for FIRST_SEND_REVIEW_STATUSES, which does not include `filling`, so the
- * response arrived with no envelope; submissionResponseForDisplay quarantines an absent envelope;
- * reviewForSubmissionProjection then rewrites a quarantined packet's status to "needs_attention";
- * and the retry controls are gated on that rewritten status. So the missing envelope BOTH rendered
- * "Try again" and guaranteed the handler behind it would return before firing a request. Deriving
- * the control's presence from this function is what makes that impossible: the button exists only
- * where this answers null, which is exactly where prepareApplication proceeds.
- *
- * `qaMode` mirrors prepareApplication's own bypass, so the control and the handler cannot disagree
- * about it either.
+ * `server_review_status` and not `submission.review.status`: the display rewrite overwrites the
+ * latter with "needs_attention" on a quarantined packet, which is precisely the case this has to
+ * recognise. See employer-action-refusal.ts for the measured defect.
  */
 function employerActionRefusal(
   packet: GeneratedResume,
@@ -560,18 +528,10 @@ function employerActionRefusal(
   qaMode: boolean,
 ): string | null {
   if (qaMode) return null;
-  if (packetAuthorityForEmployerAction(packet, submission).state === "safe_not_sent") return null;
-  const serverStatus = submission?.server_review_status;
-  if (serverStatus && SERVER_RUN_IN_FLIGHT_STATUSES.has(serverStatus)) {
-    /* The honest sentence, and it says what happens next WITHOUT it. A run that stops without
-       writing a terminal state is bounded server-side and the packet returns to a state she can
-       act on by itself, so the truthful instruction here is to wait rather than to go and check an
-       employer page for an application that was never filed. */
-    return "Litos still has a fill running on this application, so it will not start a second one."
-      + " Nothing has been sent to the employer. If the run has stopped, Litos releases it on its"
-      + " own and this application becomes startable again - no need to check the company's page.";
-  }
-  return "Litos cannot start another employer attempt until the exact prior submission evidence is verified.";
+  return employerActionRefusalMessage(
+    packetAuthorityForEmployerAction(packet, submission).state,
+    submission?.server_review_status,
+  );
 }
 
 type ProfileIdentity = {
