@@ -1617,7 +1617,16 @@ function Applications() {
          poll answers, and marked `partial` because that is exactly what it is. The cover letter
          and document marks come from that same stored packet. Absent document marks stay absent:
          an empty object would claim the application had been measured and could block a send on
-         an ask this seed cannot confirm. */
+         an ask this seed cannot confirm.
+
+         resume_contact_stale rides along the same way, and for the same reason it cannot be left
+         off: this seed is also what resumeContactStaleNotice reads on a fresh load of the packet
+         review screen, because that load never calls GET /applications/:id/submission on its own
+         (measured on trylitos.com 2026-09-04 - Pony.ai and Mercari both loaded stale packets with
+         no submission fetch in the network log). /resume/history now publishes the same field GET
+         /applications/:id/submission does, off the same resumeContactStaleness comparison; leaving
+         it out of this named list would have silently dropped it here exactly like every other
+         field this literal does not name. */
       setSubmission(rememberedSubmission ?? (status
         ? {
           application_id: packet.id,
@@ -1628,6 +1637,7 @@ function Applications() {
           retry_safety: qaMode === true ? { kind: "no_evidence" } : packet.retry_safety ?? null,
           cover_letter: packet.spec._cover_letter ?? null,
           documents: documentsFromSpecMarks(packet.spec._documents),
+          resume_contact_stale: packet.resume_contact_stale,
           partial: true,
         }
         : null));

@@ -500,6 +500,22 @@ export type GeneratedResume = {
   submission_projection?: AuthoritativeSubmissionProjection;
   retry_safety?: SubmissionRetrySafety | null;
   submission_authority_quarantined?: true;
+  /**
+   * WHETHER THIS PACKET'S RESUME HEADER HAS DRIFTED FROM THE APPLICANT'S CURRENT PROFILE, off
+   * volley-backend PR #945's `resumeContactStaleness` - the SAME comparison GET
+   * /applications/:id/submission already published this from, now ALSO published on /resume/history
+   * rows because /resume/history, not the submission route, is what the packet review screen's
+   * `submission` state is seeded from on a fresh load (see app/dashboard/applications/page.tsx's
+   * `selectPacket`). Present only when the packet's stored header (spec._contact) disagrees with
+   * what a refresh would produce from the current profile; absent is the common case, and a backend
+   * before this ships simply never sends it. Read only through resumeContactStaleNotice
+   * (features/applications/domain/resume-contact-stale.ts), never off this key directly - see that
+   * module for why.
+   */
+  resume_contact_stale?: {
+    stored: Record<string, string | undefined>;
+    current: Record<string, string | undefined>;
+  };
   /* job_id is the monitored posting this packet was built for. Absent on everything generated
      before 2026-07-28 and on anything from the extension, which has no posting to point at, so
      every reader needs a path that works without it. */
