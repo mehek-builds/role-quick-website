@@ -36,6 +36,23 @@ function shippedCode(source) {
   return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
 }
 
+/* GUARD-ORDERING HELPERS, the same shape tests/application-direct-answer-flow.test.mjs already pins
+ * guard ordering with: a plain substring search that fails loudly when the needle is gone (rather
+ * than a regex whose failure mode is "silently matches zero times"), and an explicit index order
+ * check so a guard that survives but moves AFTER the write it was supposed to gate still fails. */
+function requiredIndex(source, needle, label = needle, fromIndex = 0) {
+  const index = source.indexOf(needle, fromIndex);
+  assert.ok(index >= 0, `${label} is missing`);
+  return index;
+}
+
+function assertOrdered(indices, message) {
+  assert.ok(indices.every((index) => index >= 0), `${message}: every source marker must exist`);
+  for (let index = 1; index < indices.length; index += 1) {
+    assert.ok(indices[index] > indices[index - 1], message);
+  }
+}
+
 let pageSource;
 let domainSource;
 let handlerBody;
@@ -231,6 +248,44 @@ test("a successful refresh invalidates cached packet evidence for this applicati
     "this route leaves review.packet_audit unchanged, so the identity-diffing reconcile every other"
     + " handler uses would compare the unchanged audit to itself, report a match, and keep a"
     + " now-stale acknowledgement alive - the exact bug this finding closes",
+  );
+});
+
+/* FINDING 3. `latestSubmission.application_id === applicationId` and
+ * `selectedIdRef.current === applicationId` could each be deleted (or loosened to `if (true)`) and
+ * every test above would still pass, because none of them checks that the guard actually WRAPS the
+ * write it appears to gate - only that the guard's text and the write's text both exist somewhere in
+ * the function. requiredIndex/assertOrdered close that: a guard that is deleted, or that survives
+ * but moves to after the write it was meant to protect, fails this test either way. Mirrors the
+ * precedent in tests/application-direct-answer-flow.test.mjs, which pins
+ * "selectedIdRef.current === applicationId" the same way for saveReviewedAnswers's own refused-save
+ * branch. */
+test("the two id-matching guards actually wrap the writes they gate, not just decorate them", () => {
+  const latestGuard = requiredIndex(
+    handlerBody,
+    "latestSubmission.application_id === applicationId",
+    "latest-submission ownership guard",
+  );
+  const snapshotWrite = requiredIndex(
+    handlerBody,
+    "submissionSnapshotsRef.current.set(applicationId, reconciled)",
+    "submission snapshot write",
+    latestGuard,
+  );
+  const packetsWrite = requiredIndex(handlerBody, "setPackets((current)", "packet list write", latestGuard);
+  const selectedGuard = requiredIndex(
+    handlerBody,
+    "selectedIdRef.current === applicationId",
+    "selected-application ownership guard",
+    Math.max(snapshotWrite, packetsWrite),
+  );
+  const evidenceWrite = requiredIndex(handlerBody, "setPacketEvidence(nextEvidence)", "packet evidence write", selectedGuard);
+  const submissionWrite = requiredIndex(handlerBody, "setSubmission(published)", "visible submission write", evidenceWrite);
+  assertOrdered(
+    [latestGuard, snapshotWrite, packetsWrite, selectedGuard, evidenceWrite, submissionWrite],
+    "latest-submission ownership must wrap the snapshot/packet writes every caller gets, and"
+    + " selected-application ownership must additionally wrap the writes only the visible screen"
+    + " gets - deleting or reordering either guard must fail this test",
   );
 });
 
