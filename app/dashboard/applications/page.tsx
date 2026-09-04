@@ -34,7 +34,7 @@ import { ThinkingOrb } from "thinking-orbs";
 import { canonicalApplicationFromPacket, canRemoveFromTracker, canonicalEnvelopeLegacyHydrationId, canonicalEnvelopeWithMissingLegacyHydration, canonicalTrackerPacket, explicitTerms, sendableLinkedPacketFromCanonicalEnvelope, withRestoredLinkedPackets, linkedLegacyPacketFromCanonicalTrackerPacket, mergeCanonicalApplicationHistory, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, reviewWithLists, screenForStatus, sectionHeading, selectedPacketForRequest, startsNewSection, statusLabel, stripMetadata, upsertCanonicalApplicationHistory } from "@/features/applications";
 import { applicationFilterFromSearch, applicationFilterHeading, cleanJdCapture, ledgerRendersOnLanding, pipelineCounts, reviewCanBeSent, sentSince, startOfLocalDay, statusMatchesApplicationFilter, unansweredRequiredQuestionCount, type ApplicationFilter } from "@/features/applications";
 import { nextPreferredReadyPacket, packetMatchesJob } from "@/features/applications";
-import { auditAnswerWrite, reviewAnswersNeedSave, saveReviewAnswers, type ReviewAnswerSaveResponse } from "@/features/applications";
+import { REVIEW_ANSWERS_FROZEN_NOTICE, REVIEW_ANSWERS_REOPEN_NOTICE, auditAnswerWrite, reviewAnswerEditRoute, reviewAnswersNeedSave, saveReviewAnswers, type ReviewAnswerSaveResponse } from "@/features/applications";
 import { saveAttentionAcknowledgement, type AttentionAcknowledgementResponse } from "@/features/applications";
 import { duplicateBadge, duplicatePostingMarks, duplicatePostingNote } from "@/features/applications";
 import { isHttpsJobUrl, missingApplicationFields, type ApplicationDraftField } from "@/features/applications";
@@ -101,7 +101,10 @@ type PrepareApplicationOptions = {
   allowServerAnswerRefresh?: boolean;
   restart?: boolean;
   failureScreen?: "questions" | "portal" | "review";
-  source?: "metadata_refresh";
+  /* Named so the analytics event says which press started this run. "answer_correction" is the
+     reopen route in saveReviewedAnswers: a restart the applicant asked for by editing an answer on
+     an already-filled form, which is a different thing to measure from a stale-build restart. */
+  source?: "metadata_refresh" | "answer_correction";
 };
 
 type DirectAnswerSaveResult = {
@@ -4736,6 +4739,37 @@ function Applications() {
       const message = "Litos could not match this answer to the employer's question. Review the packet and try again.";
       rememberDirectFailure(message);
       return { saved: false, message };
+    }
+    /* THE SAVE THAT COULD NEVER LAND, AND THE ROUTE THAT MAKES THE SAME CORRECTION.
+     *
+     * Measured live 2026-09-04 on Flow Traders packet 8dc65cd0 at `ready_for_final_approval`: this
+     * function posted to PUT /review/answers and got 409 REVIEW_ANSWERS_NOT_EDITABLE, every time,
+     * with the editor open and the applicant's corrected essay in the box. The server is right -
+     * see reviewAnswerEditRoute for the invariant it is holding - so the fix is not a wider gate,
+     * it is the request this correction should have been all along.
+     *
+     * `reopen` posts the SAME answers to submit-request with `restart: true`, which is the door
+     * preparedRunCanRestart opens for exactly this status: the stale filled form is discarded, the
+     * employer's page is filled again FROM these answers, and a fresh preview is taken. The picture
+     * the applicant approves and the answers underneath it therefore move in one request and cannot
+     * diverge, which is the property the 409 exists to protect rather than one it gives up.
+     *
+     * answerDraftQuestions, not `questions`: this is the stored list with her one correction merged
+     * in, so the refill carries every other answer the run already resolved unchanged.
+     *
+     * `mayAdvance: false` because prepareApplication moves the screen to "submitting" itself. There
+     * is no next question to step to on a packet that is being filled again; the pass is over. */
+    const editRoute = reviewAnswerEditRoute(activeSubmission.review);
+    if (editRoute === "frozen") {
+      rememberDirectFailure(REVIEW_ANSWERS_FROZEN_NOTICE);
+      return { saved: false, message: REVIEW_ANSWERS_FROZEN_NOTICE };
+    }
+    if (editRoute === "reopen") {
+      setNotice(REVIEW_ANSWERS_REOPEN_NOTICE);
+      await prepareApplication(answerDraftQuestions, { allowServerAnswerRefresh: true, restart: true, source: "answer_correction" });
+      const reopened = submissionSnapshotsRef.current.get(applicationId)
+        ?? (submissionRef.current?.application_id === applicationId ? submissionRef.current : activeSubmission);
+      return { saved: true, review: reopened.review, mayAdvance: false };
     }
     const completedDirectPromptFingerprints = new Set(
       activeDirectPassKey && activeDirectPass?.key === activeDirectPassKey
