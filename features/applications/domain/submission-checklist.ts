@@ -1003,7 +1003,32 @@ export function humanInputItems(
       });
       continue;
     }
-    if (review.status !== "submitted" && question.kind === "essay" && answer) {
+    /* A DRAFT IS WHAT NEEDS READING, and this row had no way to tell a draft from an answer she had
+     * already read and confirmed.
+     *
+     * The condition was `kind === "essay" && answer`, which is true of every answered essay
+     * forever. The row says "Drafted answer ready for review" and offers Review; pressing it, saving,
+     * and coming back produced the identical row, because nothing in the test could observe that
+     * anything had happened. Measured live 2026-09-04 on Exa packet 73768339 (ashby): its four
+     * essays all carry answer_source "applicant_review" - she has confirmed every one - and the
+     * screen still walks them as "1 of 4", indefinitely.
+     *
+     * `litos_draft` is precisely the provenance the sentence describes: a paragraph LITOS WROTE that
+     * she has not approved. It is also what the backend's own send gate reads - a litos_draft answer
+     * counts as an unanswered required question there (unapprovedLitosDraftQuestionLabels) - so
+     * gating on it makes this row mean the same thing the send gate means, which is the only reading
+     * under which clearing the row can ever clear the send.
+     *
+     * AN ABSENT answer_source COUNTS AS A DRAFT HERE, and reading it as "machine-resolved, not our
+     * problem" was wrong. The backend classifies `source === undefined || source === 'litos_draft'`
+     * as machineAuthored (submissionRunner.ts machineAuthored), and submissionSafety's own comment
+     * records why: "the essay drafter used to push its paragraph with no flag at all". So a packet
+     * built before the marker existed carries Litos-composed prose with no provenance, and the send
+     * gate does not stop it either - unapprovedLitosDraftQuestionLabels matches the literal only.
+     * This row is the sole surface that puts such a paragraph in front of her, so it has to keep
+     * catching them or an AI-written answer reaches an employer in her name unread. */
+    const essayIsUnapprovedDraft = question.answer_source === "litos_draft" || question.answer_source === undefined;
+    if (review.status !== "submitted" && question.kind === "essay" && answer && essayIsUnapprovedDraft) {
       addUnique(items, {
         id: `review-${question.id}`,
         label: displayQuestionLabel(question.question),
@@ -1034,9 +1059,24 @@ export function humanInputItems(
      * Case- and space-insensitive, because the two sides carry the same label through different
      * transports and only the TEXT is its identity. */
     const serverList = context.sensitiveConfirmations;
+    /* THE LABEL FALLBACK NEVER CLAIMS AN ESSAY, and the essay branch above is why.
+     *
+     * That branch now passes an essay through once she has approved it, which newly exposed this one
+     * to a class it never used to see: an answered essay whose LABEL happens to read human-only -
+     * salary, consent/recording/privacy, non-US sponsorship. Measured on the fallback path (a payload
+     * with no sensitive_questions_requiring_confirmation): it produced "Needs your confirmation" on a
+     * free-prose paragraph, and the row could never settle, because settling reads
+     * answer_confirmed_of and this file's own measurement records that the field never reaches this
+     * client. directInputTaskPlan still reported remaining: 1 after a save - the same never-ending
+     * ask this change exists to remove, wearing a different word.
+     *
+     * The server's list is exempt from this, deliberately. When the backend NAMES a question it will
+     * refuse to send unconfirmed, that is authoritative and an essay among them is a real ask with a
+     * real exit. Only the local label guess is barred from claiming essays, because a guess plus an
+     * unsettleable row is how the loop comes back. */
     const needsConfirmation = serverList
       ? serverList.some((label) => label.trim().toLowerCase() === question.question.trim().toLowerCase())
-      : isHumanOnlyChecklistLabel(question.question);
+      : isHumanOnlyChecklistLabel(question.question) && question.kind !== "essay";
     if (review.status !== "submitted" && answer && needsConfirmation) {
       /* Confirmed once is confirmed, and the row has to say so or the ask never ends. The settled
          shape keeps the control - she can still change the answer - while taking the row out of the
