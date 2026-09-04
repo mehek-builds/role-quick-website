@@ -1014,12 +1014,30 @@ export function humanInputItems(
       });
       continue;
     }
-    /* Case- and space-insensitive, because the two sides carry the same label through different
-       transports and only the TEXT is its identity. */
-    const serverAsksToConfirm = (context.sensitiveConfirmations ?? []).some(
-      (label) => label.trim().toLowerCase() === question.question.trim().toLowerCase(),
-    );
-    if (review.status !== "submitted" && answer && (serverAsksToConfirm || isHumanOnlyChecklistLabel(question.question))) {
+    /* WHEN THE SERVER SENDS ITS LIST, THE LIST IS THE WHOLE ANSWER - not one input to it.
+     *
+     * Measured live 2026-09-04 on Exa packet 73768339, after pressing Confirm and saving: the
+     * server dropped the visa question from sensitive_questions_requiring_confirmation, so its gate
+     * was satisfied - and `answer_confirmed_of` was ABSENT from the served question. It is persisted
+     * and read by the backend's own gate, but it does not round-trip to this client, so
+     * applicantConfirmedAnswer can never return true here no matter what she confirms.
+     *
+     * ORing the local label classes into the condition therefore built a row that could never
+     * settle: the question kept asking, sensitiveQuestionPresent stayed true, and Send stayed
+     * disabled after a successful confirmation. That is the same dead end as before with the
+     * polarity flipped, and it is why the list has to be authoritative rather than additive.
+     *
+     * So: list present -> a row exists exactly while the server still names the question, and it
+     * disappears when the server stops. List absent (an older payload) -> fall back to the label
+     * classes and the confirmation field, which is precisely the previous behaviour.
+     *
+     * Case- and space-insensitive, because the two sides carry the same label through different
+     * transports and only the TEXT is its identity. */
+    const serverList = context.sensitiveConfirmations;
+    const needsConfirmation = serverList
+      ? serverList.some((label) => label.trim().toLowerCase() === question.question.trim().toLowerCase())
+      : isHumanOnlyChecklistLabel(question.question);
+    if (review.status !== "submitted" && answer && needsConfirmation) {
       /* Confirmed once is confirmed, and the row has to say so or the ask never ends. The settled
          shape keeps the control - she can still change the answer - while taking the row out of the
          amber panel and out of the "N to check" count. See applicantConfirmedAnswer. */

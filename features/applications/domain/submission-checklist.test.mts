@@ -1036,6 +1036,41 @@ test("the server's list matches a label regardless of case and surrounding space
   assert.equal(asking?.action, "Confirm", "the two sides carry the same label through different transports");
 });
 
+/* THE LIST IS THE WHOLE ANSWER, and an EMPTY list means nothing is outstanding.
+ *
+ * Measured live 2026-09-04 on Exa packet 73768339, immediately after the confirmation saved: the
+ * server dropped the visa question from its list, and `answer_confirmed_of` was ABSENT from the
+ * served question - it does not round-trip to this client. While the local label classes were ORed
+ * into the condition, that combination built a row nothing could settle: still asking, still
+ * blocking Send, after a confirmation the server had already accepted. */
+test("an empty server list clears the row even for a label the local classes match", () => {
+  const VISA = "Do you require visa sponsorship to work in your selected location?";
+  const review: Pick<ApplicationReview, "attention_reason" | "questions" | "questions_reviewed_at" | "status"> = {
+    status: "ready_for_final_approval",
+    attention_reason: "",
+    questions_reviewed_at: "2026-09-04T00:00:00.000Z",
+    questions: [
+      // No answer_confirmed_of, because the server does not serve one.
+      { id: "visa", question: VISA, answer: "No sponsorship for an internship.", kind: "required", required: true, answer_source: "applicant_review" },
+    ],
+  };
+
+  assert.ok(
+    humanInputItems(review, { sensitiveConfirmations: [VISA] }).some((item) => item.questionId === "visa"),
+    "while the server names it, it asks",
+  );
+  assert.equal(
+    humanInputItems(review, { sensitiveConfirmations: [] }).find((item) => item.questionId === "visa"),
+    undefined,
+    "once the server stops naming it, the row is gone - not merely settled",
+  );
+  // And with no list at all the old label-class behaviour is untouched.
+  assert.ok(
+    humanInputItems(review).some((item) => item.questionId === "visa"),
+    "an older payload with no list still falls back to the label classes",
+  );
+});
+
 test("a question the server has stopped naming settles once it is confirmed", () => {
   const LABEL = "What is your gender?";
   const review: Pick<ApplicationReview, "attention_reason" | "questions" | "questions_reviewed_at" | "status"> = {
