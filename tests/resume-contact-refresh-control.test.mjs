@@ -154,6 +154,36 @@ test("a successful refresh is installed through the shared submission reducer", 
     + " response through the authority-quarantine path would misread silence as a rejection");
 });
 
+/* FINDING 1. Every other handler in this file that installs a new `review` also reconciles the
+ * client's packet evidence off it (reconcilePacketEvidenceWithSubmission, ~5 call sites) - this one
+ * did not, so after the backend regenerated the PDF the cached activePacketEvidence kept reporting
+ * the OLD file as verified and acknowledged: the exact-packet panel kept showing the pre-refresh
+ * digest and download link, and Send stayed enabled over a file nobody had reviewed.
+ *
+ * NOT reconcilePacketEvidenceWithSubmission, deliberately: that function diffs `review.packet_audit`,
+ * and this route leaves `_review.packet_audit` untouched on the backend (see
+ * reconcilePacketEvidenceAfterResumeRegeneration's own doc comment in packet-evidence-session.ts),
+ * so handing it the response's `review.packet_audit` would compare the unchanged audit to itself and
+ * report a match - code that compiles, reads plausibly, and keeps the exact bug this finding is
+ * about. The doesNotMatch below pins that this handler does not silently regress onto it. */
+test("a successful refresh invalidates cached packet evidence for this application", () => {
+  assert.match(
+    handlerBody,
+    /const nextEvidence = reconcilePacketEvidenceAfterResumeRegeneration\(packetEvidenceRef\.current, applicationId\);/,
+    "the one reconcile that actually clears a now-stale acknowledgement for this route - see its own"
+    + " doc comment in packet-evidence-session.ts for why the identity-diffing reconcile cannot",
+  );
+  assert.match(handlerBody, /packetEvidenceRef\.current = nextEvidence;/);
+  assert.match(handlerBody, /setPacketEvidence\(nextEvidence\);/);
+  assert.doesNotMatch(
+    handlerBody,
+    /reconcilePacketEvidenceWithSubmission\(/,
+    "this route leaves review.packet_audit unchanged, so the identity-diffing reconcile every other"
+    + " handler uses would compare the unchanged audit to itself, report a match, and keep a"
+    + " now-stale acknowledgement alive - the exact bug this finding closes",
+  );
+});
+
 test("a refusal renders through userFacingError, including the documented 409s", () => {
   assert.match(
     handlerBody,

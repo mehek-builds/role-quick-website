@@ -126,3 +126,34 @@ export function reconcilePacketEvidenceWithSubmission(
     || !packetAuditIdentityMatches(current.response.packet_audit, packetAudit)) return null;
   return current;
 }
+
+/**
+ * THE ONE EVENT reconcilePacketEvidenceWithSubmission ABOVE CANNOT SEE.
+ *
+ * POST /applications/:id/resume/contact-refresh (volley-backend PR #945) regenerates the resume PDF
+ * but, on the route's own admission, deliberately leaves `_review.packet_audit` untouched: "the very
+ * next currentPacketAudit / currentAcknowledgedPacketAudit call... reads
+ * stored.pdf.objectKey !== currentBindings.pdf.objectKey, answers 'packet_stale'". That next call is
+ * a SEPARATE request (the poll, "Check packet", or the send gate's own audit fetch) - the
+ * contact-refresh response's own `review.packet_audit` is byte-identical to whatever was already
+ * cached here. Feeding it through reconcilePacketEvidenceWithSubmission therefore compares an
+ * unchanged audit to itself, packetAuditIdentityMatches reports a match, and a stale acknowledgement
+ * survives a PDF that has already changed underneath it - exactly the gap
+ * tests/resume-contact-refresh-control.test.mjs and this module's own test exist to close.
+ *
+ * So this asks a narrower, more honest question than an identity diff ever could here: was there
+ * evidence cached for THIS packet at all. A successful refresh is reachable only from a button that
+ * is itself gated on resumeContactStaleNotice already reading true for this packet (see
+ * refreshResumeContact and ResumeContactStaleNotice in app/dashboard/applications/page.tsx), so
+ * unconditionally invalidating on that packet's evidence - rather than trying to diff
+ * `contact.before`/`contact.after`, which the route also returns - is the safe default even on the
+ * rare race where the server finds nothing left to refresh. Evidence for any OTHER packet is left
+ * alone: this event has no bearing on it.
+ */
+export function reconcilePacketEvidenceAfterResumeRegeneration(
+  current: PacketEvidenceSession | null,
+  applicationId: string,
+): PacketEvidenceSession | null {
+  if (!current || current.applicationId !== applicationId) return current;
+  return null;
+}

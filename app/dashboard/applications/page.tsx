@@ -38,7 +38,7 @@ import { REVIEW_ANSWERS_FROZEN_NOTICE, REVIEW_ANSWERS_REOPEN_NOTICE, REVIEW_ANSW
 import { saveAttentionAcknowledgement, type AttentionAcknowledgementResponse } from "@/features/applications";
 import { duplicateBadge, duplicatePostingMarks, duplicatePostingNote } from "@/features/applications";
 import { isHttpsJobUrl, missingApplicationFields, type ApplicationDraftField } from "@/features/applications";
-import { COVER_LETTER_WAIT_MS, HANDOFF_CLOCK_TICK_MS, coverLetterBlocks, coverLetterGate, documentsFromSpecMarks, handoffWindowExpired, nextCoverLetterValue, nextSubmissionState, publishSubmissionEnvelope, reconcilePacketEvidenceWithSubmission, resumeContactStaleNotice, submissionAfterPacketAudit, submissionCoverLetterField, submissionReviewPacketIdentity, submissionSnapshotIsOlder, type ResumeContactStaleLike } from "@/features/applications";
+import { COVER_LETTER_WAIT_MS, HANDOFF_CLOCK_TICK_MS, coverLetterBlocks, coverLetterGate, documentsFromSpecMarks, handoffWindowExpired, nextCoverLetterValue, nextSubmissionState, publishSubmissionEnvelope, reconcilePacketEvidenceAfterResumeRegeneration, reconcilePacketEvidenceWithSubmission, resumeContactStaleNotice, submissionAfterPacketAudit, submissionCoverLetterField, submissionReviewPacketIdentity, submissionSnapshotIsOlder, type ResumeContactStaleLike } from "@/features/applications";
 import { MatchScore, MatchGaps } from "@/components/app/MatchScore";
 import { auditRefusalCode, historicalPacketAuditStaleMessage, nextMatchScoreRequest, packetAuditReviewRecoveryCode } from "@/features/applications";
 import { getBaseResume } from "@/lib/base-resume";
@@ -4580,6 +4580,16 @@ function Applications() {
         setPackets((current) => current?.map((packet) => packet.id === applicationId ? packetWithDirectSubmission(packet, reconciled) : packet) ?? current);
         if (selectedIdRef.current === applicationId) {
           const published = publishSubmissionEnvelope(submissionRef, reconciled, "direct");
+          /* NOT reconcilePacketEvidenceWithSubmission, unlike every sibling handler above - see
+             reconcilePacketEvidenceAfterResumeRegeneration's own doc comment in
+             packet-evidence-session.ts. This route deliberately leaves `_review.packet_audit`
+             untouched, so the identity diff every other handler uses would compare the unchanged
+             audit to itself and keep a now-stale acknowledgement alive: the exact-packet PDF this
+             request just replaced would still show as reviewed, and Send would stay enabled over a
+             file nobody looked at. */
+          const nextEvidence = reconcilePacketEvidenceAfterResumeRegeneration(packetEvidenceRef.current, applicationId);
+          packetEvidenceRef.current = nextEvidence;
+          setPacketEvidence(nextEvidence);
           setSubmission(published);
         }
       }
