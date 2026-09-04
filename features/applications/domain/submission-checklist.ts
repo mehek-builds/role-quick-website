@@ -1,6 +1,6 @@
 import type { ApplicationQuestion, ApplicationReview, RequiredDocumentAsk } from "@/lib/api";
 import { screenForStatus, type ReviewScreen } from "./application-review.ts";
-import { questionReviewPresentation, requiredQuestionReviewRoute } from "./question-review-presentation.ts";
+import { questionReadsAsAnswered, questionReviewPresentation, requiredQuestionReviewRoute } from "./question-review-presentation.ts";
 import { withRequiredParentQuestionIds } from "./dependent-questions.ts";
 import { cleanScrapedLabel, cleanScrapedPrompt } from "./scraped-text.ts";
 
@@ -1009,7 +1009,19 @@ export function humanInputItems(
     const serverList = context.sensitiveConfirmations;
     const serverNamesForConfirmation = serverList !== undefined
       && serverList.some((label) => label.trim().toLowerCase() === question.question.trim().toLowerCase());
-    if (question.required && !answer) {
+    /* `!answer` alone missed the off-list case: a required closed control whose stored answer
+       names none of the employer's options is not blank, so it read as answered here while the
+       Questions screen's own badge, its button-disabling count, and the send gate all already knew
+       better (questionReadsAsAnswered folds in answerNamesNoOfferedOption for exactly this reason -
+       see its own doc comment and questionsNeedingApplicant's). MEASURED live on the Sage
+       Greenhouse packet (aae653a3, 2026-09-04): this checklist, and the packet-viewer and
+       sensitive-question counts that read it, named one required question while the Questions
+       screen's newly-widened focused review correctly named three - the other two were off-list,
+       not blank, and this was the surface still missing them. Using the shared predicate is what
+       makes every surface agree again, and it takes priority over the essay/confirm branches below
+       via the same `continue` those already use, so an off-list required question still gets
+       exactly one row - the honest "Answer" one - never an extra "Confirm" beside it. */
+    if (question.required && !questionReadsAsAnswered(question)) {
       addUnique(items, {
         id: `missing-${question.id}`,
         label: displayQuestionLabel(question.question),
