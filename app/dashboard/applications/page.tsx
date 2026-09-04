@@ -7134,6 +7134,21 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, metad
       ? { ...item, answer: "", answer_state: "skipped" as const }
       : item));
   };
+  /* THE WAY BACK OUT OF A BLANK, whether she left it or Litos did.
+     It records "unanswered" rather than clearing the field to nothing, and both halves matter.
+     `questionsLeftBlankByKnownFalseCondition` treats an absent answer_state as "she has said
+     nothing yet" and would re-apply its blank on the next render, so an explicit unanswered is what
+     makes Answer instead hold; and leaving `answer` alone means pressing it never deletes a stored
+     value she might want back. A question she skipped herself is already blank, so this reads
+     identically there. */
+  const reopenSkippedQuestion = (questionId: string) => {
+    onChange(questions.map((item) => item.id === questionId && !item.required
+      ? { ...item, answer_state: "unanswered" as const }
+      : item));
+  };
+  const leftBlankConditions = new Map(
+    presentation.leftBlankQuestions.map((entry) => [entry.questionId, entry.conditionQuestion]),
+  );
   /* Arriving from a Your turn row means the student pressed ONE thing, so the caret belongs in that
      answer. Without this the screen opens at the top of a list of every question the form asked and
      the row she pressed can be several screens down, which is close enough to nothing happening.
@@ -7300,12 +7315,14 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, metad
               {question.required
                 ? questionReadsAsAnswered(question) ? "Answered" : "Required"
                 : question.answer_state === "skipped"
-                  ? "Skipped"
+                  /* "Skipped" is a claim that SHE decided, so it is not printed over a blank Litos
+                     left on its own. See questionsLeftBlankByKnownFalseCondition. */
+                  ? leftBlankConditions.has(question.id) ? "Left blank by Litos" : "Skipped"
                   : questionReadsAsAnswered(question) ? "Optional, answered" : "Optional, answer or skip"}
             </p>
             {!question.required && (
               question.answer_state === "skipped" ? (
-                <button type="button" onClick={() => updateQuestionAnswer(question.id, "")} className="min-h-9 text-xs font-medium text-brand-ink underline underline-offset-2">
+                <button type="button" onClick={() => reopenSkippedQuestion(question.id)} className="min-h-9 text-xs font-medium text-brand-ink underline underline-offset-2">
                   Answer instead
                 </button>
               ) : (
@@ -7327,7 +7344,20 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, metad
           )}
           {!question.required && question.answer_state === "skipped" ? (
             <p className="mt-4 rounded-inner border border-border bg-surface-alt px-4 py-3 text-sm leading-6 text-muted">
-              This optional question will be left blank. Choose Answer instead if you want to include a response.
+              {/* SAY WHICH BLANK THIS IS, and when Litos left it, say what decided it. A blank the
+                  applicant never chose, described in the words of one she did, is the screen taking
+                  credit for a decision on her behalf. */}
+              {!leftBlankConditions.has(question.id)
+                ? "This optional question will be left blank. Choose Answer instead if you want to include a response."
+                : leftBlankConditions.get(question.id) === question.question
+                  ? "None of the employer's choices is true for you, and Litos does not pick one that is not. This is left blank. Choose Answer instead if you want to answer it anyway."
+                  /* This used to make a claim about the PARENT'S TRUTH, and that claim was false
+                     in both directions the PR #530 review found: a follow-up opening "if no"
+                     applies BECAUSE the parent is false, and a follow-up matched by proximity alone
+                     may not be about that parent at all. The rule now only reaches a follow-up that
+                     says it applies on a yes and names the same subject, so the sentence states
+                     exactly that and nothing wider. */
+                  : `Litos left this blank: it applies only if the answer to "${displayQuestionLabel(leftBlankConditions.get(question.id) ?? "")}" is yes, and yours is no. Choose Answer instead if you want to answer it anyway.`}
             </p>
           ) : question.options && question.options.length > 0 ? (
             /* The employer's own list, so a fixed choice is a choice rather than a box she has to

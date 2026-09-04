@@ -1,11 +1,31 @@
 import type { ApplicationQuestion, ApplicationQuestionMetadataBlocker } from "../../../lib/api.ts";
+import {
+  conditionAnswerIsKnownNegative,
+  dependentConditionPolarity,
+  dependentQuestionParents,
+  optionsOfferANegative,
+  optionsOfferAnAffirmative,
+  promptAsksAPolarQuestion,
+  questionsWithPolarFollowUps,
+  subjectResolvedParents,
+} from "./dependent-questions.ts";
 
 const CLOSED_QUESTION_CONTROL = /^(?:select(?:-one|-multiple)?|radio|checkbox|combobox|listbox)$/i;
 const GENERIC_ANSWER_CONTROL_LABEL = /^(?:(?:please\s+)?(?:type|enter|write)(?:\s+your)?\s+)?(?:your\s+)?(?:answer|response)(?:\s+here)?[\s.:]*$/i;
 
+/** One optional question Litos left blank, and the condition question whose answer decided that. */
+export type LeftBlankQuestion = { questionId: string; conditionQuestion: string };
+
 export type QuestionReviewPresentation = {
   editableQuestions: ApplicationQuestion[];
   metadataBlockers: ApplicationQuestionMetadataBlocker[];
+  /**
+   * The optional questions in `editableQuestions` that carry `answer_state: "skipped"` because
+   * LITOS left them blank, not because the applicant did. The screen needs the difference so it can
+   * say which it was and name the condition, and so the badge does not credit her with a decision
+   * she never made. See `questionsLeftBlankByKnownFalseCondition`.
+   */
+  leftBlankQuestions: LeftBlankQuestion[];
 };
 
 export type RequiredQuestionReviewRoute =
@@ -222,6 +242,151 @@ export function optionalQuestionNeedsDecision(
     && question.answer_state !== "skipped";
 }
 
+/**
+ * The employer's whole choice list for a control that can only hold one of those choices.
+ *
+ * Null for anything the membership rules below cannot speak about: an incomplete inventory
+ * (`options_complete: false` is discovery saying it saw more choices than it kept), an open box
+ * that happens to carry suggestions, a control type that names no closed control, and a
+ * multi-select, which is not a polar question whatever its options say. Every null hands the
+ * question back to the applicant, which is the safe direction.
+ */
+function closedSingleChoiceOptions(
+  question: Pick<ApplicationQuestion, "options" | "options_complete" | "optionsComplete" | "portal_input_type">,
+): string[] | null {
+  if (!questionOptionsAreComplete(question)) return null;
+  if (!CLOSED_QUESTION_CONTROL.test(normalizedControlType(question.portal_input_type))) return null;
+  if (questionAcceptsMultipleOptions(question)) return null;
+  const options = usableQuestionOptions(question.options);
+  return options.length > 0 ? options : null;
+}
+
+/**
+ * The optional questions Litos must leave blank rather than put in front of the applicant, each
+ * mapped to the condition question whose known-false answer decided it.
+ *
+ * Read `dependent-questions.ts` first: it holds the measurement, the two shapes, and the reason the
+ * parent link is taken off the form's own words instead of off a shared noun. This function is only
+ * the composition, and it lives here because deciding what an option list means is this file's job
+ * (`questionOptionsAreComplete`, `CLOSED_QUESTION_CONTROL`, `questionReadsAsAnswered`) while
+ * deciding what refers back to what is that file's.
+ *
+ * A REQUIRED QUESTION IS NEVER LEFT BLANK BY THIS, AND THAT IS DELIBERATE, NOT AN OVERSIGHT.
+ * A required question whose options are all untrue is an EMPLOYER FORM problem, and the applicant
+ * is the only party who can decide what to do about it: pick the least wrong option, or abandon the
+ * application. Skipping it on her behalf would send a blank required field, which the portal either
+ * refuses outright or accepts as an answer she never gave. So `required` stands the rule down at
+ * every one of the three places it could apply, and
+ * `tests/question-with-no-true-option.test.mjs` pins it.
+ *
+ * NOTHING IS WRITTEN AND NOTHING IS SENT. The result is recomputed from stored answers on every
+ * read, so a condition that later flips to yes brings its follow-ups straight back. The save path
+ * carries the applicant's own `questions` state, never this presentation's copy.
+ */
+export function questionsLeftBlankByKnownFalseCondition(
+  questions: readonly ApplicationQuestion[],
+  /**
+   * Ids this presentation is holding back because their label, control or options could not be
+   * read. AN UNREADABLE CONTROL SETTLES NOTHING AND IS OWED NOTHING. Without this, a parent that
+   * renders as "Exact choices not read" could still be cited as the reason its follow-up was left
+   * blank, so both questions would leave the screen: the parent into a blocker card with no answer,
+   * the follow-up into a blank justified by an answer the same screen has just called unreadable.
+   * That composition is reachable today and gets likelier as the metadata rules tighten, so this
+   * closes it here rather than relying on any other change to not create it.
+   */
+  unreadableQuestionIds: ReadonlySet<string> = new Set(),
+): Map<string, string> {
+  const knownFalseConditions = new Map<string, string>();
+  const leftBlank = new Map<string, string>();
+  /* Resolved over the employer's WHOLE stored form, holes included, for the reason
+     `directInputTaskPlan` documents: "the nearest free-standing question above" computed over a
+     list with a metadata blocker missing from it silently names the wrong one.
+
+     Read lazily, and the reason is cost rather than tidiness. Several screens call
+     questionReviewPresentation on every render, and reading prompts is the expensive part of this
+     rule, so the scan below pays for it only on a form that actually reaches shape B. */
+  let provenConditions: ReadonlySet<string> | null = null;
+
+  for (const question of questions) {
+    const id = question.id?.trim();
+    if (!id || knownFalseConditions.has(id)) continue;
+    if (unreadableQuestionIds.has(id)) continue;
+    if (!conditionAnswerIsKnownNegative(question)) continue;
+    const options = closedSingleChoiceOptions(question);
+    if (!options) continue;
+
+    if (optionsOfferANegative(options)) {
+      /* SHAPE A, the ordinary yes/no parent. Its own list proves it is polar, so no prompt reading
+         is involved at all. She is on the no, the condition is established, and only its follow-ups
+         are affected: the parent itself is answered and is left exactly as it stands. */
+      if (!optionsOfferAnAffirmative(options)) continue;
+      /* AND THE NO HAS TO BE ONE THE EMPLOYER OFFERED. NEGATIVE_ANSWER accepts "N/A" and "Not
+         applicable", and volley writes 'N/A' into some controls, so without this the condition
+         could be settled by a value this same file simultaneously reports as unanswered:
+         questionReadsAsAnswered is false for it, answerNamesNoOfferedOption is true, and the card
+         paints the control blank. A follow-up must never be hidden on the strength of an answer
+         nothing on screen shows. This is the fill path's own equivalence, trim plus case fold, the
+         one the rest of this file already uses. Shape B is different by construction: its list
+         holds no negative at all, so no negative answer can ever be on it. */
+      if (exactQuestionOption(question.answer, options) === null) continue;
+      knownFalseConditions.set(id, question.question);
+      continue;
+    }
+
+    /* SHAPE B, the parent with no way to say no. Nothing on the list proves this question is polar,
+       so two independent signals have to agree before it counts: the form's own explicit follow-up
+       ("If yes, what company...") and a polar opener in the prompt itself. Either one alone would
+       reach questions it must not. */
+    provenConditions ??= questionsWithPolarFollowUps(questions);
+    if (!provenConditions.has(id)) continue;
+    if (!promptAsksAPolarQuestion(question.question)) continue;
+    /* A REQUIRED ONE OF THESE SETTLES NOTHING, NOT EVEN FOR ITS FOLLOW-UPS. It must reach her, and
+       every option on it asserts the affirmative, so whatever she picks makes the condition TRUE.
+       Registering it as known-false would blank the follow-ups of a question she is about to answer
+       yes to. Shape A is different and is registered above whether it is required or not: there she
+       is on a real negative option the employer offered, so the condition is settled. */
+    if (question.required) continue;
+    knownFalseConditions.set(id, question.question);
+    /* Her own word outranks this rule in both directions: "skipped" is a decision she already made,
+       and "unanswered" is what the screen writes when she presses Answer instead, which is the way
+       back out of a blank Litos left. Neither is overwritten. */
+    if (question.answer_state === "skipped" || question.answer_state === "unanswered") continue;
+    leftBlank.set(id, question.question);
+  }
+
+  /* NOTHING BELOW CAN FIRE WITHOUT A SETTLED CONDITION, and the two walks below are the whole cost
+     of this rule. Most employer forms carry no closed control answered with a negative at all, so
+     leaving here is the ordinary path rather than an optimisation for a rare one. */
+  if (knownFalseConditions.size === 0) return leftBlank;
+
+  const parents = dependentQuestionParents(questions);
+  const subjectParents = subjectResolvedParents(questions);
+  for (const question of questions) {
+    const id = question.id?.trim();
+    if (!id || leftBlank.has(id) || unreadableQuestionIds.has(id)) continue;
+    const parentId = parents.get(id);
+    const conditionQuestion = parentId ? knownFalseConditions.get(parentId) : undefined;
+    if (!conditionQuestion) continue;
+    if (question.required) continue;
+    /* WHICH ANSWER MAKES IT APPLY. A backward reference points up; it does not say the follow-up
+       applies on a YES. "If no, will you now or in the future require sponsorship" applies BECAUSE
+       the condition is false, and was blanked by it before this line existed. */
+    if (dependentConditionPolarity(question.question) !== "affirmative") continue;
+    /* WHICH QUESTION IT MEANS. Proximity and the follow-up's own subject have to name the SAME
+       question, independently. Proximity alone put "If yes, how many years of Python experience do
+       you have?" under a Rust question, and one shared word alone could not separate them because
+       both questions were about experience. See subjectResolvedParents for the measurements. */
+    if (subjectParents.get(id) !== parentId) continue;
+    if (question.answer_state === "skipped" || question.answer_state === "unanswered") continue;
+    /* An answer she can see standing in the control is hers to keep, whoever put it there. Only a
+       follow-up with nothing usable in it is left blank, so this never discards a value. */
+    if (questionReadsAsAnswered(question)) continue;
+    leftBlank.set(id, conditionQuestion);
+  }
+
+  return leftBlank;
+}
+
 function normalizedQuestionLabel(value: string | undefined): string {
   return value?.trim().replace(/\s+/g, " ") ?? "";
 }
@@ -376,12 +541,33 @@ export function questionReviewPresentation(
     }
   }
 
+  /* An optional question whose condition Litos already holds a no for is not hers to decide, so it
+     is presented already left blank rather than as work waiting on her. Written as `skipped`
+     because that IS the state - a blank optional field with a way back - and because every reader
+     of that state, the waiting count, the continue route, the "your turn" checklist and the badge,
+     then agrees without a fifth rule being invented for them. The stored answer is untouched: only
+     this presentation copy carries the blank, and `leftBlankQuestions` below tells the screen it
+     was Litos and not her. */
+  const leftBlank = questionsLeftBlankByKnownFalseCondition(
+    questions,
+    new Set([...blockedQuestionIds].map((questionId) => questionId.trim())),
+  );
+
   const editableQuestions = questions.flatMap((question) => {
     if (blockedQuestionIds.has(question.id)) return [];
     const options = usableQuestionOptions(question.options);
     const staleMultiValueAnswer = questionAcceptsMultipleOptions(question)
       && exactSelectedQuestionOptions(question.answer, options) === null;
-    const safeQuestion = staleMultiValueAnswer
+    const safeQuestion = leftBlank.has(question.id.trim())
+      ? {
+        ...question,
+        answer: "",
+        answer_state: "skipped" as const,
+        ...(question.answer_draft?.trim()
+          ? { answer_draft: question.answer_draft }
+          : question.answer.trim() ? { answer_draft: question.answer } : {}),
+      }
+      : staleMultiValueAnswer
       ? {
         ...question,
         answer: "",
@@ -399,7 +585,16 @@ export function questionReviewPresentation(
     return [{ ...safeQuestion, options }];
   });
 
-  return { editableQuestions, metadataBlockers };
+  /* Only what actually reached the screen is announced, and under the id that reached it. A
+     question held back as a metadata blocker renders no card, so naming it here would describe a
+     blank nobody can see or undo; and reporting a trimmed id the card does not key on would leave
+     the card printing "Skipped" over a blank the applicant never chose. */
+  const leftBlankQuestions = editableQuestions.flatMap((question) => {
+    const conditionQuestion = leftBlank.get(question.id.trim());
+    return conditionQuestion ? [{ questionId: question.id, conditionQuestion }] : [];
+  });
+
+  return { editableQuestions, metadataBlockers, leftBlankQuestions };
 }
 
 /**
