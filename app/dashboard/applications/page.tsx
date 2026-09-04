@@ -240,6 +240,21 @@ export type SubmissionResponse = {
   submission_projection?: AuthoritativeSubmissionProjection;
   rejected_submission_projection?: unknown;
   submission_authority_quarantined?: true;
+  /* THE STATUS THE SERVER ACTUALLY SENT, kept because the display rewrite destroys it.
+   *
+   * reviewForSubmissionProjection overwrites `review.status` with "needs_attention" whenever the
+   * authority is quarantined, and an ABSENT envelope is one of the things that quarantines. So a
+   * packet the server says is mid-run is displayed as though a run had stopped and left it to the
+   * applicant, and nothing downstream could tell the two apart - which is how a control that
+   * cannot act came to be rendered on a live fill. Measured 2026-09-04 on Palantir packet
+   * f1cfb841: server status `filling`, no envelope on /applications/:id/submission (the route
+   * attaches one only for FIRST_SEND_REVIEW_STATUSES, and `filling` is not one), quarantined,
+   * displayed as needs_attention, "Try again" rendered, and pressing it fired no request.
+   *
+   * Recorded, never acted on as authority. The rewrite is still the display rule and is still
+   * fail-closed; this is the raw fact beside it, read only to say true things about WHY an action
+   * is refused. */
+  server_review_status?: ApplicationReview["status"];
   retry_safety?: SubmissionRetrySafety | null;
   cover_letter?: CoverLetter | null;
   documents?: Record<string, AttachedDocument>;
@@ -330,6 +345,8 @@ function submissionResponseForDisplay(
     )),
     submission_projection: projectionForReview,
     retry_safety: retrySafety as SubmissionRetrySafety | null,
+    /* Captured from the WIRE review, above the rewrite, so it survives being overwritten. */
+    server_review_status: response.review.status,
     ...(rejectedProjection === undefined
       ? {}
       : { rejected_submission_projection: rejectedProjection }),
@@ -491,6 +508,70 @@ function packetAuthorityForEmployerAction(
     exactSubmission?.submission_authority_quarantined === true
       || exactPacket.submission_authority_quarantined === true,
   );
+}
+
+/**
+ * The statuses that mean a RUN HOLDS THIS PACKET RIGHT NOW, in the server's own words.
+ *
+ * Read only from `server_review_status`, never from the displayed review: the display rewrite is
+ * exactly what turns one of these into "needs_attention", so asking the rewritten copy would always
+ * answer no. The same five the backend's own in-flight list carries (applicationStall.ts), and the
+ * same five submitRequestDisposition answers `in_flight` for.
+ */
+const SERVER_RUN_IN_FLIGHT_STATUSES: ReadonlySet<string> = new Set([
+  "submit_requested",
+  "preparing",
+  "filling",
+  "submitting",
+  "submission_claimed",
+]);
+
+/**
+ * WHY AN EMPLOYER ACTION CANNOT START, or null when it can. ONE computation for the refusal
+ * sentence AND for whether the control that would trigger it is rendered at all.
+ *
+ * THE DEFECT THIS CLOSES, measured live 2026-09-04 on Palantir packet f1cfb841. The packet's server
+ * status was `filling` - a managed fill run had died mid-flight - and its authority envelope was
+ * `state: none` with `no_evidence` retry safety: the ledger saying, in as many words, that not one
+ * attempt had ever been opened and nothing had reached an employer. The screen said:
+ *
+ *   "Litos cannot start another employer attempt until the exact prior submission evidence is
+ *    verified."
+ *
+ * Every clause of that is false for this packet. There is no prior submission, so there is no
+ * evidence, so there is nothing to verify, and the applicant is told to wait for a thing that will
+ * never happen. What was actually true is that the server still believed a run held the packet.
+ *
+ * AND THE SAME FACT RENDERED THE DEAD CONTROL. `/applications/:id/submission` attaches the
+ * authority envelope only for FIRST_SEND_REVIEW_STATUSES, which does not include `filling`, so the
+ * response arrived with no envelope; submissionResponseForDisplay quarantines an absent envelope;
+ * reviewForSubmissionProjection then rewrites a quarantined packet's status to "needs_attention";
+ * and the retry controls are gated on that rewritten status. So the missing envelope BOTH rendered
+ * "Try again" and guaranteed the handler behind it would return before firing a request. Deriving
+ * the control's presence from this function is what makes that impossible: the button exists only
+ * where this answers null, which is exactly where prepareApplication proceeds.
+ *
+ * `qaMode` mirrors prepareApplication's own bypass, so the control and the handler cannot disagree
+ * about it either.
+ */
+function employerActionRefusal(
+  packet: GeneratedResume,
+  submission: SubmissionResponse | null | undefined,
+  qaMode: boolean,
+): string | null {
+  if (qaMode) return null;
+  if (packetAuthorityForEmployerAction(packet, submission).state === "safe_not_sent") return null;
+  const serverStatus = submission?.server_review_status;
+  if (serverStatus && SERVER_RUN_IN_FLIGHT_STATUSES.has(serverStatus)) {
+    /* The honest sentence, and it says what happens next WITHOUT it. A run that stops without
+       writing a terminal state is bounded server-side and the packet returns to a state she can
+       act on by itself, so the truthful instruction here is to wait rather than to go and check an
+       employer page for an application that was never filed. */
+    return "Litos still has a fill running on this application, so it will not start a second one."
+      + " Nothing has been sent to the employer. If the run has stopped, Litos releases it on its"
+      + " own and this application becomes startable again - no need to check the company's page.";
+  }
+  return "Litos cannot start another employer attempt until the exact prior submission evidence is verified.";
 }
 
 type ProfileIdentity = {
@@ -4291,8 +4372,11 @@ function Applications() {
     if (!selected) return;
     const applicationId = selected.id;
     if (!options.allowServerAnswerRefresh && routeMissingRequiredAnswers(finalQuestions)) return;
-    if (!qaMode && packetAuthorityForEmployerAction(selected, submission).state !== "safe_not_sent") {
-      setError("Litos cannot start another employer attempt until the exact prior submission evidence is verified.");
+    /* The SAME value the retry control's presence is derived from, so a button that renders can
+       never reach a handler that refuses. See employerActionRefusal for the measured defect. */
+    const refusal = employerActionRefusal(selected, submission, qaMode === true);
+    if (refusal) {
+      setError(refusal);
       moveToScreen("review");
       return;
     }
@@ -5959,6 +6043,10 @@ function Applications() {
           onRestart={() => void restartPreparedRun()}
           restarting={restartingId === selected.id}
           onRetry={retryPreparation}
+          /* The one value that decides BOTH whether Try again renders and what
+             prepareApplication says when it refuses, so the control and its handler can
+             never disagree. See employerActionRefusal. */
+          employerActionRefusal={employerActionRefusal(selected, selectedSubmission, qaMode === true)}
           onReviewPacket={reviewPacketAgain}
           onReviewQuestions={() => reviewPortalQuestions()}
           onOpenQuestion={(questionId, intent) => reviewPortalQuestions(questionId, intent)}
@@ -7951,7 +8039,7 @@ export function DirectApplicationQuestion({ task, position, total, saving, saved
   );
 }
 
-function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceReviewed, manualTrialPacket, approving, securityCodeSubmitting, securityCodeError, onSubmitSecurityCode, unverifiedSubmissionSubmitting, unverifiedSubmissionError, onSubmitUnverifiedOutcome, educationProfile, educationProfileStatus, onCheckResume, onReloadCoverLetter, onWriteCoverLetter, coverLetterReloading, onHandoffComplete, onApprove, sendRefusal, onRestart, restarting, onRetry, onReviewPacket, onReviewQuestions, onOpenQuestion, onChooseOption, onSaveQuestion, onSkipQuestion, savingAnswer, answeredQuestionFingerprints, directAnswerProgress, directAnswerDrafts, directAnswerFailure, onDirectAnswerDraftChange, onClearDirectAnswerDraft, onNavigateDirectQuestion, onClearDirectAnswerFailure, onRefreshQuestionMetadata, questionMetadataRefreshing, questionMetadataRefreshDisabled, questionMetadataNeedsPacketReview, questionMetadataRefreshError, onQuestionsFinished, onAddDocument, onToggleAcknowledged, attentionTicking, onSelfSubmitted, onPacketAuditRefusal, onOpenWithExtension, extensionFillBusy, extensionFillError }: { packet: GeneratedResume; resumeRecord?: ChecklistResumeRecord; submission: SubmissionResponse; packetEvidenceReviewed: boolean; manualTrialPacket: PacketAuditResponse | null; approving: boolean; securityCodeSubmitting: boolean; securityCodeError: string | null; onSubmitSecurityCode: (code: string) => void; unverifiedSubmissionSubmitting: boolean; unverifiedSubmissionError: string | null; onSubmitUnverifiedOutcome: (found: boolean) => void; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onReloadCoverLetter: () => void; onWriteCoverLetter: () => void; coverLetterReloading: boolean; onHandoffComplete: (outcome?: "cleared" | "submitted") => void; onApprove: () => void; sendRefusal: { message: string; issues: string[] } | null; onRestart: () => void; restarting: boolean; onRetry: () => void; onReviewPacket: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string, intent?: SubmissionChecklistAction) => void; onChooseOption: (questionId: string, option: string) => void; onSaveQuestion: (questionId: string, answer: string, intent: DirectQuestionTaskIntent, promptFingerprint: string, taskFingerprint: string, task: DirectQuestionTask) => Promise<DirectAnswerSaveResult>; onSkipQuestion: (questionId: string, intent: DirectQuestionTaskIntent, promptFingerprint: string, taskFingerprint: string, task: DirectQuestionTask) => Promise<DirectAnswerSaveResult>; savingAnswer: boolean; answeredQuestionFingerprints: ReadonlySet<string>; directAnswerProgress: DirectAnswerProgress | null; directAnswerDrafts: ReadonlyMap<string, DirectAnswerDraft>; directAnswerFailure: DirectAnswerFailure | null; onDirectAnswerDraftChange: (questionId: string, promptFingerprint: string, taskFingerprint: string, answer: string) => void; onClearDirectAnswerDraft: (promptFingerprint: string) => void; onNavigateDirectQuestion: (promptFingerprint: string) => void; onClearDirectAnswerFailure: (promptFingerprint: string) => void; onRefreshQuestionMetadata: () => void; questionMetadataRefreshing: boolean; questionMetadataRefreshDisabled: boolean; questionMetadataNeedsPacketReview: boolean; questionMetadataRefreshError: string | null; onQuestionsFinished: () => void; onAddDocument: (kind: string) => void; onToggleAcknowledged: (item: SubmissionChecklistItem, acknowledged: boolean) => void; attentionTicking: ReadonlySet<string>; onSelfSubmitted: () => void; onPacketAuditRefusal: (reason: unknown) => Promise<boolean>; onOpenWithExtension: () => void; extensionFillBusy: boolean; extensionFillError: string | null }) {
+function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceReviewed, manualTrialPacket, approving, securityCodeSubmitting, securityCodeError, onSubmitSecurityCode, unverifiedSubmissionSubmitting, unverifiedSubmissionError, onSubmitUnverifiedOutcome, educationProfile, educationProfileStatus, onCheckResume, onReloadCoverLetter, onWriteCoverLetter, coverLetterReloading, onHandoffComplete, onApprove, sendRefusal, onRestart, restarting, onRetry, employerActionRefusal, onReviewPacket, onReviewQuestions, onOpenQuestion, onChooseOption, onSaveQuestion, onSkipQuestion, savingAnswer, answeredQuestionFingerprints, directAnswerProgress, directAnswerDrafts, directAnswerFailure, onDirectAnswerDraftChange, onClearDirectAnswerDraft, onNavigateDirectQuestion, onClearDirectAnswerFailure, onRefreshQuestionMetadata, questionMetadataRefreshing, questionMetadataRefreshDisabled, questionMetadataNeedsPacketReview, questionMetadataRefreshError, onQuestionsFinished, onAddDocument, onToggleAcknowledged, attentionTicking, onSelfSubmitted, onPacketAuditRefusal, onOpenWithExtension, extensionFillBusy, extensionFillError }: { packet: GeneratedResume; resumeRecord?: ChecklistResumeRecord; submission: SubmissionResponse; packetEvidenceReviewed: boolean; manualTrialPacket: PacketAuditResponse | null; approving: boolean; securityCodeSubmitting: boolean; securityCodeError: string | null; onSubmitSecurityCode: (code: string) => void; unverifiedSubmissionSubmitting: boolean; unverifiedSubmissionError: string | null; onSubmitUnverifiedOutcome: (found: boolean) => void; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onReloadCoverLetter: () => void; onWriteCoverLetter: () => void; coverLetterReloading: boolean; onHandoffComplete: (outcome?: "cleared" | "submitted") => void; onApprove: () => void; sendRefusal: { message: string; issues: string[] } | null; onRestart: () => void; restarting: boolean; onRetry: () => void; employerActionRefusal: string | null; onReviewPacket: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string, intent?: SubmissionChecklistAction) => void; onChooseOption: (questionId: string, option: string) => void; onSaveQuestion: (questionId: string, answer: string, intent: DirectQuestionTaskIntent, promptFingerprint: string, taskFingerprint: string, task: DirectQuestionTask) => Promise<DirectAnswerSaveResult>; onSkipQuestion: (questionId: string, intent: DirectQuestionTaskIntent, promptFingerprint: string, taskFingerprint: string, task: DirectQuestionTask) => Promise<DirectAnswerSaveResult>; savingAnswer: boolean; answeredQuestionFingerprints: ReadonlySet<string>; directAnswerProgress: DirectAnswerProgress | null; directAnswerDrafts: ReadonlyMap<string, DirectAnswerDraft>; directAnswerFailure: DirectAnswerFailure | null; onDirectAnswerDraftChange: (questionId: string, promptFingerprint: string, taskFingerprint: string, answer: string) => void; onClearDirectAnswerDraft: (promptFingerprint: string) => void; onNavigateDirectQuestion: (promptFingerprint: string) => void; onClearDirectAnswerFailure: (promptFingerprint: string) => void; onRefreshQuestionMetadata: () => void; questionMetadataRefreshing: boolean; questionMetadataRefreshDisabled: boolean; questionMetadataNeedsPacketReview: boolean; questionMetadataRefreshError: string | null; onQuestionsFinished: () => void; onAddDocument: (kind: string) => void; onToggleAcknowledged: (item: SubmissionChecklistItem, acknowledged: boolean) => void; attentionTicking: ReadonlySet<string>; onSelfSubmitted: () => void; onPacketAuditRefusal: (reason: unknown) => Promise<boolean>; onOpenWithExtension: () => void; extensionFillBusy: boolean; extensionFillError: string | null }) {
   const { review } = submission;
   const awaitingSecurityCode = review.status === "awaiting_security_code";
   const needsAttention = review.status === "needs_attention";
@@ -8824,7 +8912,14 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
               an unverified send - submit-request would just answer the same 409 again - so they wait
               for UnverifiedSubmissionCard's yes/no to release it first. */}
           {needsAttention && !awaitingUnverifiedSubmission && <Button onClick={onReviewPacket} variant={!rowExternalPrimary && (!hasQuestionsToReview || currentNonQuestionTask) ? "primary" : "secondary"}>Open packet review</Button>}
-          {needsAttention && !awaitingUnverifiedSubmission && <Button onClick={onRetry} variant="secondary">Try again</Button>}
+          {/* A CONTROL THAT CANNOT ACT IS NOT SHOWN. `needsAttention` here is the DISPLAYED
+              status, and a quarantined authority rewrites a live `filling` row into exactly
+              that (reviewForSubmissionProjection) - so this button used to render on the
+              measured Palantir packet, be pressable, and fire nothing at all, because the
+              same missing envelope that rendered it also made prepareApplication return
+              before its fetch. Gating on the handler's own refusal is what forecloses that
+              class: this exists only where the press would reach the network. */}
+          {needsAttention && !awaitingUnverifiedSubmission && !employerActionRefusal && <Button onClick={onRetry} variant="secondary">Try again</Button>}
           {/* The synced-fill recovery: the extension reads the SAME reviewed answers this managed
               run already produced (handoff-packet.ts on the extension side), so nothing here
               regenerates or re-syncs anything - it opens the employer's page with those answers
@@ -8841,7 +8936,10 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
           )}
           {needsAttention && !awaitingUnverifiedSubmission && submission.handoff_url && <Button onClick={() => onHandoffComplete("cleared")} variant="secondary">I cleared the check</Button>}
           {needsAttention && !awaitingUnverifiedSubmission && submission.handoff_url && <Button onClick={() => onHandoffComplete("submitted")} variant="secondary">I submitted it myself</Button>}
-          {review.status === "failed" && (failedPacketAuditStale
+          {/* Same rule on the failed-run exit: a stale audit already routes to packet review,
+              and a refused employer action now routes there too rather than offering a
+              retry that returns before it fetches. */}
+          {review.status === "failed" && (failedPacketAuditStale || employerActionRefusal
             ? <Button onClick={onReviewPacket}>Open packet review</Button>
             : <Button onClick={onRetry}>Try again</Button>)}
           {review.status === "ready_for_final_approval" && educationDriftWarning && <Button onClick={onCheckResume} variant="secondary">Check resume</Button>}
