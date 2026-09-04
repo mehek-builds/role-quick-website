@@ -38,7 +38,7 @@ import { REVIEW_ANSWERS_FROZEN_NOTICE, REVIEW_ANSWERS_REOPEN_NOTICE, REVIEW_ANSW
 import { saveAttentionAcknowledgement, type AttentionAcknowledgementResponse } from "@/features/applications";
 import { duplicateBadge, duplicatePostingMarks, duplicatePostingNote } from "@/features/applications";
 import { isHttpsJobUrl, missingApplicationFields, type ApplicationDraftField } from "@/features/applications";
-import { COVER_LETTER_WAIT_MS, HANDOFF_CLOCK_TICK_MS, coverLetterBlocks, coverLetterGate, documentsFromSpecMarks, handoffWindowExpired, nextCoverLetterValue, nextSubmissionState, publishSubmissionEnvelope, reconcilePacketEvidenceAfterResumeRegeneration, reconcilePacketEvidenceWithSubmission, resumeContactStaleNotice, submissionAfterPacketAudit, submissionCoverLetterField, submissionReviewPacketIdentity, submissionSnapshotIsOlder, type ResumeContactStaleLike } from "@/features/applications";
+import { COVER_LETTER_WAIT_MS, HANDOFF_CLOCK_TICK_MS, coverLetterBlocks, coverLetterGate, documentsFromSpecMarks, handoffWindowExpired, nextCoverLetterValue, nextSubmissionState, publishSubmissionEnvelope, reconcilePacketEvidenceAfterResumeRegeneration, reconcilePacketEvidenceWithSubmission, resumeContactRefreshBlockedReason, resumeContactStaleNotice, submissionAfterPacketAudit, submissionCoverLetterField, submissionReviewPacketIdentity, submissionSnapshotIsOlder, type ResumeContactStaleLike } from "@/features/applications";
 import { MatchScore, MatchGaps } from "@/components/app/MatchScore";
 import { auditRefusalCode, historicalPacketAuditStaleMessage, nextMatchScoreRequest, packetAuditReviewRecoveryCode } from "@/features/applications";
 import { getBaseResume } from "@/lib/base-resume";
@@ -6444,6 +6444,11 @@ function Applications() {
               busy={resumeContactRefreshId === selected.id}
               error={resumeContactRefreshError?.applicationId === selected.id ? resumeContactRefreshError.message : null}
               onRefresh={() => void refreshResumeContact(selected.id)}
+              /* The backend 409s a refresh on plenty of statuses this screen renders for
+                 (submission_claimed, submitting, submitted among them - see
+                 resumeContactRefreshBlockedReason), and until now the button here was clickable on
+                 every one of them with no hint why the press would fail. */
+              unavailableReason={review ? resumeContactRefreshBlockedReason(review) : null}
             />
           )}
 
@@ -7049,11 +7054,21 @@ function ApplicationField({ label, value, onChange, placeholder, type = "text", 
  * contactLine/contactName already use for the resume itself (lib/resumeContact.ts) - no ids, just
  * the words an applicant reads on a page: location, email, phone, then links.
  */
-function ResumeContactStaleNotice({ notice, busy, error, onRefresh }: {
+/* `disabled` and `unavailableReason` are two different refusals and neither substitutes for the
+ * other. `disabled` is transient and self-explanatory: some OTHER control on this same screen
+ * (Start it again, Fill the form again, Send) already names itself as the reason nothing else is
+ * clickable right now, so this needs no prose of its own - see the mutual-exclusion wiring at both
+ * render sites below. `unavailableReason` is structural: resumeContactRefreshBlockedReason has
+ * already worked out that this application's OWN status means a press would 409, which the packet
+ * review screen has no sibling control to explain, so it prints the one-line reason rather than
+ * leaving a press to discover it. Both disable the same button; only one ever has words. */
+function ResumeContactStaleNotice({ notice, busy, error, onRefresh, disabled, unavailableReason }: {
   notice: ResumeContactStaleLike;
   busy: boolean;
   error: string | null;
   onRefresh: () => void;
+  disabled?: boolean;
+  unavailableReason?: string | null;
 }) {
   return (
     <div role="alert" className="rounded-inner border border-warn/30 bg-warn-soft px-4 py-3 text-sm leading-6 text-warn">
@@ -7069,9 +7084,10 @@ function ResumeContactStaleNotice({ notice, busy, error, onRefresh }: {
         </div>
       </div>
       {error && <p className="mt-3 text-warn">{error}</p>}
-      <Button type="button" onClick={onRefresh} disabled={busy} size="sm" className="mt-3">
+      <Button type="button" onClick={onRefresh} disabled={busy || disabled || Boolean(unavailableReason)} size="sm" className="mt-3">
         {busy ? "Updating..." : "Update the contact details on this resume"}
       </Button>
+      {unavailableReason && <p className="mt-2 text-warn">{unavailableReason}</p>}
     </div>
   );
 }
@@ -8680,8 +8696,14 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
      this one, prepended at the head for the same reason in reverse. Both terms survive the merge:
      they block on unrelated facts, neither implies the other, and a resolution that kept one end of
      this line and dropped the other would have re-opened a real employer send. That is what the
-     whole-expression pin in tests/application-submission-gate.test.mjs is for. */
-  const finalApprovalBlocked = !packetEvidenceReviewed || educationProfilePending || Boolean(educationDriftWarning) || coverLetterPending || requiredAnswerMissing || sensitiveQuestionPresent || !previewReady || handoffExpired || approving || restarting || transcriptPending;
+     whole-expression pin in tests/application-submission-gate.test.mjs is for.
+
+     `resumeContactRefreshBusy` is appended last, for the same reason: a resume regeneration in
+     flight is about to swap the exact PDF this send is about to approve, and
+     reconcilePacketEvidenceAfterResumeRegeneration only clears packetEvidenceReviewed once that
+     response LANDS, which leaves the gap between the press and the response with no term of its own
+     unless this one covers it. */
+  const finalApprovalBlocked = !packetEvidenceReviewed || educationProfilePending || Boolean(educationDriftWarning) || coverLetterPending || requiredAnswerMissing || sensitiveQuestionPresent || !previewReady || handoffExpired || approving || restarting || transcriptPending || resumeContactRefreshBusy;
   function approveVerifiedPreview() {
     if (finalApprovalBlocked) return;
     onApprove();
@@ -8976,6 +8998,12 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
               busy={resumeContactRefreshBusy}
               error={resumeContactRefreshError}
               onRefresh={onRefreshResumeContact}
+              /* Mutual exclusion with this screen's other in-flight review mutations: a restart
+                 (Start it again / Fill the form again, both onRestart) is about to replace the
+                 filled form and its preview, and an approval is about to send it, so neither may
+                 race a resume regeneration underneath them. See the disabled props on those three
+                 controls below for the other half of this. */
+              disabled={restarting || approving}
             />
           </div>
         )}
@@ -9201,7 +9229,11 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
               `<button type="button">` and takes onClick and disabled directly, so there is no shape
               here that can go dead. */}
           {review.status === "ready_for_final_approval" && handoffExpired && (
-            <Button onClick={onRestart} disabled={restarting} variant="secondary">{restarting ? "Starting it again..." : "Start it again"}</Button>
+            /* resumeContactRefreshBusy joins restarting here, never replacing it, for the same
+               reason transcriptPending only ever appends to finalApprovalBlocked below: a contact
+               refresh in flight is about to swap the resume PDF this restart would otherwise fill
+               the company's form and take a fresh preview from underneath. */
+            <Button onClick={onRestart} disabled={restarting || resumeContactRefreshBusy} variant="secondary">{restarting ? "Starting it again..." : "Start it again"}</Button>
           )}
           {/* THE DOOR BACK for a ready packet whose only problem is a document row nothing has
               confirmed - see fillAgainFromReviewControl. Bound to the SAME onRestart handler as
@@ -9210,7 +9242,7 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
               whenever handoffExpired holds, so a session that is both expired and unconfirmed keeps
               the one control whose wording is true, Start it again. */}
           {fillAgainControl !== "hidden" && (
-            <Button onClick={onRestart} disabled={restarting} variant="secondary">{restarting ? "Filling again..." : fillAgainControl.label}</Button>
+            <Button onClick={onRestart} disabled={restarting || resumeContactRefreshBusy} variant="secondary">{restarting ? "Filling again..." : fillAgainControl.label}</Button>
           )}
           {/* The way out of the eighth reason, one control per outstanding ask. On this status there
               is no Your turn panel, so without these the greyed Send would name a blocker with

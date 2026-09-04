@@ -38,6 +38,72 @@
  */
 
 /**
+ * WHETHER POST /applications/:id/resume/contact-refresh WOULD EVEN BE ATTEMPTED, ASKED BEFORE THE
+ * BUTTON THAT CALLS IT IS DRAWN.
+ *
+ * MEASURED: the packet review screen's own resumeContactStale notice was gated on nothing but
+ * resumeContactStaleNotice reading true - clickable on a submission_claimed, submitting or submitted
+ * packet exactly as readily as on a resume_ready one - so a press there 409s with no hint beforehand
+ * why. volley-backend PR #945 wires the route through `reviewAnswerSaveDisposition`
+ * (src/lib/submissionSafety.ts), the SAME disposition PUT /applications/:id/review/answers already
+ * refuses through (see review-answer-save.ts's own header for why a second, independently-written
+ * copy of a backend disposition is how a client ends up offering a control the server was always
+ * going to refuse). Ported rather than imported for the same reason every other disposition mirror
+ * in this feature is: this is a Next.js dashboard with no access to the backend's own module, the
+ * check is a handful of status names plus four evidence fields already on ApplicationReview, and a
+ * network round trip has no place deciding whether a BUTTON is clickable.
+ *
+ * status ALONE is not enough, which is what the backend's own comment on reviewAnswerSaveDisposition
+ * argues at length: a `submit_requested` row is refused only once claimed, and ANY status can be
+ * refused by evidence a run may already have reached the employer
+ * (employerMayHoldApplication, managedSubmitOutcome.ts) - the exact shape that made needs_attention
+ * fall through to 'save' unconditionally before that gate existed. So this reads the same evidence
+ * fields reviewAnswerEditRoute already reads in this file for its own, narrower question about one
+ * status.
+ *
+ * Returns the one-line reason to show instead of an actionable button, or null when a press would
+ * reach the route rather than a 409.
+ */
+export type ResumeContactRefreshGate = {
+  status: string;
+  submission_claimed_at?: string;
+  submission_attempted_at?: string;
+  security_code?: unknown;
+  unverified_submission?: { resolution?: "sent" | "not_sent" };
+  receipt?: unknown;
+};
+
+const MAY_BE_AT_EMPLOYER_REASON =
+  "Litos cannot refresh this resume's contact details once the application may have reached the employer.";
+const RUN_IN_PROGRESS_REASON =
+  "Litos is already working on this application, so its resume cannot be refreshed right now.";
+
+export function resumeContactRefreshBlockedReason(review: ResumeContactRefreshGate): string | null {
+  const status = review.status;
+  // The picture she is previewing must not change under her - the same reason PUT /review/answers
+  // refuses this status outright, with no exception for a claim (reviewAnswerSaveDisposition).
+  if (status === "ready_for_final_approval") {
+    return "This application's form is already filled and previewed, so its resume cannot be"
+      + " refreshed from here.";
+  }
+  if (status === "preparing" || status === "filling" || status === "submitting" || status === "submission_claimed"
+    || (status === "submit_requested" && Boolean(review.submission_claimed_at))) {
+    return RUN_IN_PROGRESS_REASON;
+  }
+  // employerMayHoldApplication, ported: a receipt, a standing security code, or an unresolved /
+  // unlooked-at unverified_submission or submission_attempted_at each independently mean the
+  // employer may already hold this application, regardless of what the status column says.
+  const lookedAndNotThere = review.unverified_submission?.resolution === "not_sent";
+  const mayBeAtEmployer = status === "submitted" || status === "awaiting_security_code"
+    || Boolean(review.receipt)
+    || Boolean(review.security_code)
+    || (Boolean(review.unverified_submission) && !lookedAndNotThere)
+    || (Boolean(review.submission_attempted_at) && !lookedAndNotThere);
+  if (mayBeAtEmployer) return MAY_BE_AT_EMPLOYER_REASON;
+  return null;
+}
+
+/**
  * One resume header's mutable contact facts, as the backend's ContactHeader sends them over the
  * wire (student-outreach-backend src/lib/resumeContactOfRecord.ts). Structural and all-optional:
  * this module only ever READS a header a caller already has, so a field it does not recognise is

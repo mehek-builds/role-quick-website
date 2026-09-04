@@ -108,13 +108,63 @@ test("the notice names the problem and shows both headers in plain text", () => 
 
 test("the button names the action and disables while the request is in flight", () => {
   assert.match(pageSource, /Update the contact details on this resume/);
-  assert.match(pageSource, /<Button type="button" onClick=\{onRefresh\} disabled=\{busy\}/,
-    "the shared component's own button must disable on its `busy` prop");
+  assert.match(
+    pageSource,
+    /<Button type="button" onClick=\{onRefresh\} disabled=\{busy \|\| disabled \|\| Boolean\(unavailableReason\)\} size="sm"/,
+    "the shared component's own button must disable on its `busy` prop, its `disabled` prop (another"
+    + " in-flight mutation on the same screen), and whenever `unavailableReason` says this"
+    + " application's own status would 409 - dropping any one of the three re-opens a press the"
+    + " server was always going to refuse or a race with a sibling control",
+  );
   // Both call sites must feed a real busy signal, not a constant.
   assert.match(pageSource, /busy=\{resumeContactRefreshId === selected\.id\}/,
     "the packet review screen's busy flag, scoped to the selected packet");
   assert.match(pageSource, /busy=\{resumeContactRefreshBusy\}/,
     "SubmissionScreen's busy flag, passed down as a prop rather than re-derived");
+});
+
+/* FINDING 2, FIRST HALF: the packet review screen's own notice was gated on nothing but
+ * resumeContactStaleNotice, so its button was clickable on a submission_claimed, submitting or
+ * submitted packet exactly as readily as on a resume_ready one, and the backend's 409 arrived with
+ * no hint beforehand why. resumeContactRefreshBlockedReason mirrors the backend's own
+ * reviewAnswerSaveDisposition gate - see its doc comment in resume-contact-stale.ts - and this
+ * screen is the one that had no other control to explain a refusal, so it gets the reason text; the
+ * checklist screen below gets mutual exclusion instead (bullet two of the same finding). */
+test("the packet review screen's notice explains a status the backend would refuse before the press", () => {
+  assert.match(domainSource, /export function resumeContactRefreshBlockedReason\(/,
+    "ported from the backend's reviewAnswerSaveDisposition rather than discovered only by a 409");
+  assert.match(
+    pageSource,
+    /unavailableReason=\{review \? resumeContactRefreshBlockedReason\(review\) : null\}/,
+    "the packet review screen's own call site, off the same `review` its other status checks read",
+  );
+});
+
+/* FINDING 2, SECOND HALF: mutual exclusion between the checklist screen's own in-flight review
+ * mutations. Before this, the contact-refresh button sat beside Start it again / Fill the form
+ * again (both `disabled={restarting}` only) and Send (`disabled={finalApprovalBlocked}`, which read
+ * `approving` and `restarting` but had never heard of a contact refresh), so any two of the four
+ * could be pressed together and race the same packet. */
+test("the checklist screen's four review mutations are pairwise mutually exclusive", () => {
+  assert.match(
+    pageSource,
+    /disabled=\{restarting \|\| approving\}/,
+    "the refresh button must disable while a restart OR an approval is in flight",
+  );
+  const startAgainAndFillAgain = pageSource.match(/disabled=\{restarting \|\| resumeContactRefreshBusy\}/g) ?? [];
+  assert.equal(
+    startAgainAndFillAgain.length,
+    2,
+    "both Start it again and Fill the form again must disable while a contact refresh is in flight -"
+    + ` found ${startAgainAndFillAgain.length} matching button(s)`,
+  );
+  assert.match(
+    pageSource,
+    /const finalApprovalBlocked = [^;]*\|\| transcriptPending \|\| resumeContactRefreshBusy;/,
+    "Send must disable while a contact refresh is in flight too, appended at the end of"
+    + " finalApprovalBlocked like every other term this line has ever gained - see"
+    + " tests/application-submission-gate.test.mjs for why this line is pinned whole elsewhere",
+  );
 });
 
 /* THE HANDLER ITSELF: posts the documented route through api(), the app's existing authenticated

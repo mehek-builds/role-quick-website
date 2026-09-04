@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test, { describe } from "node:test";
 
-import { resumeContactStaleIdentity, resumeContactStaleNotice, type ResumeContactStaleLike } from "./resume-contact-stale.ts";
+import {
+  resumeContactRefreshBlockedReason,
+  resumeContactStaleIdentity,
+  resumeContactStaleNotice,
+  type ResumeContactStaleLike,
+} from "./resume-contact-stale.ts";
 
 /* THE MEASURED FIXTURE, PINNED. Live on trylitos.com, 2026-09-04: packets built while the account
    read Dubai/+971 still carry that header on GET /applications/:id/submission after the applicant's
@@ -99,5 +104,78 @@ describe("resumeContactStaleIdentity", () => {
       current: { ...LOS_ANGELES_CURRENT, full_name: "A Different Name" },
     };
     assert.notEqual(resumeContactStaleIdentity(STALE), resumeContactStaleIdentity(renamed));
+  });
+});
+
+/* MIRRORS volley-backend's reviewAnswerSaveDisposition (src/lib/submissionSafety.ts), the SAME
+ * disposition PR #945 wires POST /applications/:id/resume/contact-refresh through. A status this
+ * suite says is available and the backend refuses is a client that offers a control it 409s; a
+ * status this suite blocks and the backend accepts is a control that was reachable and is now
+ * hidden for nothing - both directions matter equally here. */
+describe("resumeContactRefreshBlockedReason", () => {
+  test("the ordinary editable statuses are available", () => {
+    for (const status of ["resume_ready", "questions_ready", "ready_to_submit", "needs_attention"]) {
+      assert.equal(resumeContactRefreshBlockedReason({ status }), null, status);
+    }
+  });
+
+  test("an unclaimed submit_requested row is available - only a claim makes it a run in progress", () => {
+    assert.equal(resumeContactRefreshBlockedReason({ status: "submit_requested" }), null);
+  });
+
+  test("a claimed submit_requested row is blocked as a run in progress", () => {
+    assert.ok(resumeContactRefreshBlockedReason({ status: "submit_requested", submission_claimed_at: "2026-09-04T00:00:00Z" }));
+  });
+
+  test("preparing, filling, submitting and submission_claimed are all blocked as a run in progress", () => {
+    for (const status of ["preparing", "filling", "submitting", "submission_claimed"]) {
+      assert.ok(resumeContactRefreshBlockedReason({ status }), status);
+    }
+  });
+
+  /* THE STATUS THIS PR SHIPPED THE CHECKLIST-SCREEN NOTICE FOR, AND THE ONE THE BACKEND NEVER
+   * ACCEPTS: reviewAnswerSaveDisposition refuses ready_for_final_approval unconditionally, with no
+   * exception for an unclaimed row - "the picture she is previewing must not change under her" is
+   * the same reason PUT /review/answers refuses it. */
+  test("ready_for_final_approval is always blocked, claimed or not", () => {
+    assert.ok(resumeContactRefreshBlockedReason({ status: "ready_for_final_approval" }));
+    assert.ok(resumeContactRefreshBlockedReason({ status: "ready_for_final_approval", submission_claimed_at: "2026-09-04T00:00:00Z" }));
+  });
+
+  test("submitted and awaiting_security_code are blocked - the record of what the employer was given", () => {
+    assert.ok(resumeContactRefreshBlockedReason({ status: "submitted" }));
+    assert.ok(resumeContactRefreshBlockedReason({ status: "awaiting_security_code" }));
+  });
+
+  /* employerMayHoldApplication, ported: each of these four facts independently means the employer
+   * may already hold the application, regardless of what the status column says - a needs_attention
+   * row carrying one of these is not the ordinary stopped run reviewAnswerSaveDisposition exists to
+   * keep saveable. */
+  test("evidence the employer may already hold the application blocks an otherwise-open status", () => {
+    assert.ok(resumeContactRefreshBlockedReason({ status: "needs_attention", receipt: { confirmation_text: "x" } }));
+    assert.ok(resumeContactRefreshBlockedReason({ status: "needs_attention", security_code: { digits: 8 } }));
+    assert.ok(resumeContactRefreshBlockedReason({ status: "needs_attention", unverified_submission: {} }));
+    assert.ok(resumeContactRefreshBlockedReason({ status: "needs_attention", submission_attempted_at: "2026-09-04T00:00:00Z" }));
+  });
+
+  /* lookedAndNotThere: she looked, in her own portal or mailbox, and it was not there. The one
+   * resolution that clears the evidence rather than confirming it - same rule
+   * employerMayHoldApplication itself is built from. */
+  test("an unverified submission she already resolved as not_sent does not block", () => {
+    assert.equal(
+      resumeContactRefreshBlockedReason({
+        status: "needs_attention",
+        unverified_submission: { resolution: "not_sent" },
+        submission_attempted_at: "2026-09-04T00:00:00Z",
+      }),
+      null,
+    );
+  });
+
+  test("an unverified submission resolved as sent still blocks", () => {
+    assert.ok(resumeContactRefreshBlockedReason({
+      status: "needs_attention",
+      unverified_submission: { resolution: "sent" },
+    }));
   });
 });
