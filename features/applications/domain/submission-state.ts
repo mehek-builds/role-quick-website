@@ -283,6 +283,30 @@ export function documentsIdentity(documents: Readonly<Record<string, AttachedDoc
 }
 
 /**
+ * THE SENSITIVE-QUESTION LIST AS A SET, because a reorder is not a change.
+ *
+ * `documentsIdentity` above sorts its keys for exactly this reason and the comment on the comparison
+ * below claims this field is handled "the same way". A raw JSON.stringify is not the same way: two
+ * polls of an unchanged packet whose list comes back in a different element order would compare
+ * unequal, and this function's whole contract is to answer "is this response NEW". Reporting new on
+ * every poll is the forever-re-render this module's own header exists to prevent, and it costs a
+ * send: the screen rebuilds under her every 2.5 seconds.
+ *
+ * Realistic rather than theoretical. The dashboard's own comment names the EEO and US
+ * work-authorization families as questions that co-occur on one packet, so a multi-entry list is the
+ * expected shape, and nothing in this repo pins the server's ordering of it.
+ *
+ * Length is carried separately so that a list which sorts to the same string by coincidence, or one
+ * carrying a duplicate label, still reads as a different list.
+ */
+export function sensitiveConfirmationIdentity(
+  labels: readonly string[] | null | undefined,
+): string {
+  if (!labels) return "";
+  return `${labels.length}|${[...labels].sort().join("|")}`;
+}
+
+/**
  * A stored mark as the SEED reads it, which is a wider read than the comparison above needs.
  *
  * `AttachedDocumentLike` names the four fields that can tell two marks apart, because that is all
@@ -416,8 +440,8 @@ export function nextSubmissionState<T extends SubmissionSnapshot>(current: T | n
      and was thrown away, so `directInputTaskPlan` went on reading the STALE list handed to it from
      `current` and kept building a queue entry for a question the server had already cleared. Same
      defect class as the cover-letter and documents fixes above, one field later. */
-  if (JSON.stringify(current.sensitive_questions_requiring_confirmation ?? null)
-    !== JSON.stringify(nextIncoming.sensitive_questions_requiring_confirmation ?? null)) return nextIncoming;
+  if (sensitiveConfirmationIdentity(current.sensitive_questions_requiring_confirmation)
+    !== sensitiveConfirmationIdentity(nextIncoming.sensitive_questions_requiring_confirmation)) return nextIncoming;
   return current;
 }
 

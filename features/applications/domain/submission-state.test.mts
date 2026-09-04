@@ -290,6 +290,56 @@ test("a poll that repeats the same confirmation list still dedupes, so the scree
   assert.equal(nextSubmissionState(needsConfirmation, nextTick), needsConfirmation, "same list, new array, no re-render");
 });
 
+test("the same two questions in a different order is the same list, not a new one", () => {
+  /* THE SINGLE-ENTRY FIXTURE ABOVE CANNOT REACH THIS. A one-element array has only one ordering, so
+     the dedupe test passes whether the comparison sorts or not. The dashboard's own comment names
+     the EEO and US work-authorization families as questions that co-occur on one packet, so a
+     multi-entry list is the expected shape, and nothing in this repo pins the server's ordering of
+     it. Compared unsorted, a reorder reads as "this response is new" on every 2.5s poll and the
+     screen rebuilds under her forever, which is the exact regression this module exists to stop. */
+  const asked = {
+    ...fromServer,
+    sensitive_questions_requiring_confirmation: [
+      "Will you now or in the future require sponsorship for employment visa status?",
+      "What is your gender?",
+    ],
+  } satisfies SubmissionSnapshot;
+  const reordered = {
+    ...asked,
+    sensitive_questions_requiring_confirmation: [
+      "What is your gender?",
+      "Will you now or in the future require sponsorship for employment visa status?",
+    ],
+  };
+  assert.equal(nextSubmissionState(asked, reordered), asked, "a reorder is not a change");
+});
+
+test("a genuinely different pair of questions is still a new list", () => {
+  // The other direction, so the sort cannot be satisfied by collapsing everything to equal.
+  const asked = {
+    ...fromServer,
+    sensitive_questions_requiring_confirmation: ["What is your gender?", "Are you a veteran?"],
+  } satisfies SubmissionSnapshot;
+  const different = {
+    ...asked,
+    sensitive_questions_requiring_confirmation: ["What is your gender?", "Do you have a disability?"],
+  };
+  assert.equal(nextSubmissionState(asked, different), different);
+});
+
+test("a duplicated label is not the same list as a single one", () => {
+  // Length is carried alongside the sorted join so a repeated label cannot read as one entry.
+  const once = {
+    ...fromServer,
+    sensitive_questions_requiring_confirmation: ["What is your gender?"],
+  } satisfies SubmissionSnapshot;
+  const twice = {
+    ...once,
+    sensitive_questions_requiring_confirmation: ["What is your gender?", "What is your gender?"],
+  };
+  assert.equal(nextSubmissionState(once, twice), twice);
+});
+
 test("never asked and asked-then-cleared are two different answers, for the confirmation list too", () => {
   // Mirrors "never measured and measured-but-empty are two different answers" for `documents`:
   // no list at all (an older payload, absent field) must not collapse into an empty, answered one.
