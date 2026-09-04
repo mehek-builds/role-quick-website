@@ -127,7 +127,12 @@ test("the way out the sentence promises is a real control bound to the restart f
      is indistinguishable from a working control. `Button` renders <button type="button"> and takes
      onClick and disabled directly. Asserted as the shared component AND as a bound handler, so
      neither a hand-rolled <span> nor a Button with no onClick can pass. */
-  const restartControl = dashboard.match(/<Button onClick=\{onRestart\} disabled=\{restarting\}[^>]*>[^<]*<\/Button>/);
+  /* `|| resumeContactRefreshBusy` joined `restarting` here for the resume-contact-refresh feature's
+     own mutual-exclusion fix (tests/resume-contact-refresh-control.test.mjs): a restart must not
+     race a resume regeneration for the same packet any more than it may race another restart. This
+     assertion cares that the flag this test is about still gates the button, not that it gates it
+     alone. */
+  const restartControl = dashboard.match(/<Button onClick=\{onRestart\} disabled=\{restarting(?: \|\| resumeContactRefreshBusy)?\}[^>]*>[^<]*<\/Button>/);
   assert.ok(restartControl, "the restart must render as the shared Button with a bound handler");
   assert.match(dashboard, /handoffExpired && \(\s*<Button onClick=\{onRestart\}/);
   assert.match(dashboard, /onRestart=\{\(\) => void restartPreparedRun\(\)\}/);

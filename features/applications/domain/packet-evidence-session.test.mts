@@ -1,6 +1,12 @@
-import test from "node:test";
+import test, { describe } from "node:test";
 import assert from "node:assert/strict";
-import { acknowledgePacketEvidence, reconcilePacketPdfVerification } from "./packet-evidence-session.ts";
+import {
+  acknowledgePacketEvidence,
+  reconcilePacketEvidenceAfterResumeRegeneration,
+  reconcilePacketEvidenceWithSubmission,
+  reconcilePacketPdfVerification,
+  type PacketEvidenceSession,
+} from "./packet-evidence-session.ts";
 
 /* THE TWO FUNCTIONS THE SEND GATE RESTS ON, AND THEY HAD NO DIRECT TEST.
  *
@@ -90,4 +96,47 @@ test("the acknowledged session drops any stale server revalidation stamp", () =>
   const acknowledged = acknowledgePacketEvidence(session({ serverRevalidatedAt: 123 }), session());
   assert.equal(acknowledged?.acknowledged, true);
   assert.equal(acknowledged?.serverRevalidatedAt, null);
+});
+
+/* THE GAP reconcilePacketEvidenceAfterResumeRegeneration CLOSES, PINNED DIRECTLY.
+ *
+ * POST /applications/:id/resume/contact-refresh (volley-backend PR #945) regenerates the resume PDF
+ * but deliberately leaves `_review.packet_audit` untouched - see that function's own doc comment for
+ * the route's exact wording. Handed that unchanged audit, the identity-diffing reconcile above
+ * cannot tell a regeneration happened at all: it compares the exact same bytes it already cached
+ * against itself and reports a match, so a stale acknowledgement survives a PDF that has already
+ * changed underneath it. This is not a bug in reconcilePacketEvidenceWithSubmission - the audit
+ * really has not moved yet, by the backend's own design - which is exactly why a second, narrower
+ * function exists for this one event rather than teaching the identity diff to see something it
+ * structurally cannot. */
+test("the identity-diffing reconcile alone cannot see a resume regeneration - the gap the new function closes", () => {
+  // session() returns `never` (see its own definition above) so every other test in this file can
+  // pass it straight into a PacketEvidenceSession | null parameter with no per-call cast. This is
+  // the first test that needs to read a field back off it, which a `never` cannot do - `never` is
+  // assignable to any type, including this one, so an explicit annotation is enough.
+  const acknowledged: PacketEvidenceSession = session({ acknowledged: true });
+  const unchangedAudit = acknowledged.response.packet_audit;
+  assert.equal(
+    reconcilePacketEvidenceWithSubmission(acknowledged, "app-1", [], unchangedAudit),
+    acknowledged,
+    "an audit that is byte-identical to what was already cached reads as a match, even though the"
+    + " PDF behind it may already have been regenerated - refreshResumeContact must not rely on this"
+    + " call alone",
+  );
+});
+
+describe("reconcilePacketEvidenceAfterResumeRegeneration", () => {
+  test("a regeneration clears cached evidence for that packet outright, acknowledged or not", () => {
+    assert.equal(reconcilePacketEvidenceAfterResumeRegeneration(session({ acknowledged: true }), "app-1"), null);
+    assert.equal(reconcilePacketEvidenceAfterResumeRegeneration(session({ acknowledged: false }), "app-1"), null);
+  });
+
+  test("evidence cached for a different packet is untouched - this event is not about it", () => {
+    const other = session({ applicationId: "app-2", acknowledged: true });
+    assert.equal(reconcilePacketEvidenceAfterResumeRegeneration(other, "app-1"), other);
+  });
+
+  test("nothing cached is a no-op, not a crash", () => {
+    assert.equal(reconcilePacketEvidenceAfterResumeRegeneration(null, "app-1"), null);
+  });
 });

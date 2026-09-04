@@ -112,9 +112,11 @@ test("an unconfirmed document on a filled packet has a control on the screen tha
   );
   assert.match(
     code,
-    /\{fillAgainControl !== "hidden" && \(\s*<Button onClick=\{onRestart\} disabled=\{restarting\} variant="secondary">/,
+    /\{fillAgainControl !== "hidden" && \(\s*<Button onClick=\{onRestart\} disabled=\{restarting \|\| resumeContactRefreshBusy\} variant="secondary">/,
     "Fill the form again must call the SAME onRestart handler and restarting flag Start it again uses"
-    + " - one caller, the existing submit-request {restart:true} contract, no new backend route",
+    + " - one caller, the existing submit-request {restart:true} contract, no new backend route."
+    + " resumeContactRefreshBusy joined restarting later (tests/resume-contact-refresh-control.test.mjs)"
+    + " so a restart cannot race a resume regeneration for the same packet either",
   );
 });
 
