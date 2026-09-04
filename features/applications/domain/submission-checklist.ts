@@ -1061,9 +1061,15 @@ export function humanInputItems(
      *
      * THE APPROVED ROW SETTLES RATHER THAN DISAPPEARING, for the reason every settled row in this
      * file exists: a control that vanishes the moment its job is done takes the way back with it.
-     * completedSubmissionItems deliberately keeps an unsubmitted essay out of the Done column, so a
-     * dropped row would leave her approved essay on no list at all, with nothing on the screen that
-     * could open it again. */
+     * Settling alone did not put her approved essay on the record, though, and the first cut of this
+     * believed it had: the packet viewer DROPS server-settled rows (it is read-only and prints no
+     * action words), so an approved essay landed on none of that screen's lists until both
+     * Done-column builders were taught to admit one. The two changes are halves of the same fact and
+     * have to move together, which is why they read one shared predicate.
+     *
+     * THE TEST IS applicantApprovedAnswer, NOT `!== "litos_draft"`, and the difference is a packet
+     * that cannot converge. See that predicate: an absent source is not an approval, and settling on
+     * one would take the row out of the queue that carries the only press which names it. */
     if (review.status !== "submitted" && question.kind === "essay" && answer) {
       const label = displayQuestionLabel(question.question);
       if (!applicantApprovedAnswer(question)) {
