@@ -107,11 +107,14 @@ describe("resumeContactStaleIdentity", () => {
   });
 });
 
-/* MIRRORS volley-backend's reviewAnswerSaveDisposition (src/lib/submissionSafety.ts), the SAME
- * disposition PR #945 wires POST /applications/:id/resume/contact-refresh through. A status this
- * suite says is available and the backend refuses is a client that offers a control it 409s; a
- * status this suite blocks and the backend accepts is a control that was reachable and is now
- * hidden for nothing - both directions matter equally here. */
+/* MIRRORS volley-backend's resumeContactRefreshDisposition (src/lib/submissionSafety.ts), the
+ * disposition PR #945's round 2 wires POST /applications/:id/resume/contact-refresh through - NOT
+ * reviewAnswerSaveDisposition, which round 1 ported and which refuses ready_for_final_approval
+ * unconditionally (see submissionSafety.test.ts, "an unclaimed final-approval packet can refresh its
+ * contact header, a claimed one cannot"). A status this suite says is available and the backend
+ * refuses is a client that offers a control it 409s; a status this suite blocks and the backend
+ * accepts is a control that was reachable and is now hidden for nothing - both directions matter
+ * equally here. */
 describe("resumeContactRefreshBlockedReason", () => {
   test("the ordinary editable statuses are available", () => {
     for (const status of ["resume_ready", "questions_ready", "ready_to_submit", "needs_attention"]) {
@@ -127,19 +130,52 @@ describe("resumeContactRefreshBlockedReason", () => {
     assert.ok(resumeContactRefreshBlockedReason({ status: "submit_requested", submission_claimed_at: "2026-09-04T00:00:00Z" }));
   });
 
-  test("preparing, filling, submitting and submission_claimed are all blocked as a run in progress", () => {
-    for (const status of ["preparing", "filling", "submitting", "submission_claimed"]) {
+  test("preparing, filling and submitting are all blocked as a run in progress", () => {
+    for (const status of ["preparing", "filling", "submitting"]) {
       assert.ok(resumeContactRefreshBlockedReason({ status }), status);
     }
   });
 
-  /* THE STATUS THIS PR SHIPPED THE CHECKLIST-SCREEN NOTICE FOR, AND THE ONE THE BACKEND NEVER
-   * ACCEPTS: reviewAnswerSaveDisposition refuses ready_for_final_approval unconditionally, with no
-   * exception for an unclaimed row - "the picture she is previewing must not change under her" is
-   * the same reason PUT /review/answers refuses it. */
-  test("ready_for_final_approval is always blocked, claimed or not", () => {
-    assert.ok(resumeContactRefreshBlockedReason({ status: "ready_for_final_approval" }));
-    assert.ok(resumeContactRefreshBlockedReason({ status: "ready_for_final_approval", submission_claimed_at: "2026-09-04T00:00:00Z" }));
+  /* NOT listed with the group above, on purpose - see this file's own header. Neither
+   * reviewAnswerSaveDisposition nor resumeContactRefreshDisposition names `submission_claimed` in a
+   * status check; the backend's only door that closes on it is employerMayHoldApplication, so a row
+   * sitting there with no claim timestamp and no evidence field is open, exactly like round 1's own
+   * "submission_claimed" case would no longer be if the backend function were read literally. */
+  test("submission_claimed with no evidence is not itself a reason to block", () => {
+    assert.equal(resumeContactRefreshBlockedReason({ status: "submission_claimed" }), null);
+  });
+
+  test("submission_claimed carrying employer-may-hold evidence still blocks", () => {
+    assert.ok(resumeContactRefreshBlockedReason({ status: "submission_claimed", receipt: { confirmation_text: "x" } }));
+  });
+
+  /* THE ROUND 2 FIX ITSELF: THE STATUS THIS PR SHIPPED THE CHECKLIST-SCREEN NOTICE FOR IS NOW
+   * REACHABLE FROM IT. Pinned against submissionSafety.test.ts's own fixtures
+   * (`resumeContactRefreshDisposition({ status: 'ready_for_final_approval' })` -> 'save'), since this
+   * is the one branch a silent divergence from the backend would be most costly on - the exact
+   * measured defect (Pony.ai, Belvedere Trading, Transparent Hiring) sits here. */
+  test("an unclaimed, no-evidence ready_for_final_approval packet is available", () => {
+    assert.equal(resumeContactRefreshBlockedReason({ status: "ready_for_final_approval" }), null);
+  });
+
+  test("a claimed ready_for_final_approval packet is blocked - a run holds it right now", () => {
+    assert.ok(resumeContactRefreshBlockedReason({
+      status: "ready_for_final_approval",
+      submission_claimed_at: "2026-09-04T00:00:00Z",
+    }));
+  });
+
+  /* THE BRANCH resumeEditDisposition ALONE WOULD HAVE MISSED, per resumeContactRefreshDisposition's
+   * own comment: unclaimed is not the same question as "no evidence of an employer hold". */
+  test("an unclaimed ready_for_final_approval packet with employer-may-hold evidence is still blocked", () => {
+    assert.ok(resumeContactRefreshBlockedReason({
+      status: "ready_for_final_approval",
+      submission_attempted_at: "2026-09-04T00:00:00Z",
+    }));
+    assert.ok(resumeContactRefreshBlockedReason({
+      status: "ready_for_final_approval",
+      security_code: { digits: 6 },
+    }));
   });
 
   test("submitted and awaiting_security_code are blocked - the record of what the employer was given", () => {

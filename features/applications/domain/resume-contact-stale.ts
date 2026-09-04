@@ -44,25 +44,51 @@
  * MEASURED: the packet review screen's own resumeContactStale notice was gated on nothing but
  * resumeContactStaleNotice reading true - clickable on a submission_claimed, submitting or submitted
  * packet exactly as readily as on a resume_ready one - so a press there 409s with no hint beforehand
- * why. volley-backend PR #945 wires the route through `reviewAnswerSaveDisposition`
- * (src/lib/submissionSafety.ts), the SAME disposition PUT /applications/:id/review/answers already
- * refuses through (see review-answer-save.ts's own header for why a second, independently-written
- * copy of a backend disposition is how a client ends up offering a control the server was always
- * going to refuse). Ported rather than imported for the same reason every other disposition mirror
- * in this feature is: this is a Next.js dashboard with no access to the backend's own module, the
- * check is a handful of status names plus four evidence fields already on ApplicationReview, and a
- * network round trip has no place deciding whether a BUTTON is clickable.
+ * why. volley-backend PR #945 wires the route through a disposition in src/lib/submissionSafety.ts.
+ * Ported rather than imported for the same reason every other disposition mirror in this feature is:
+ * this is a Next.js dashboard with no access to the backend's own module, the check is a handful of
+ * status names plus four evidence fields already on ApplicationReview, and a network round trip has
+ * no place deciding whether a BUTTON is clickable.
  *
- * status ALONE is not enough, which is what the backend's own comment on reviewAnswerSaveDisposition
- * argues at length: a `submit_requested` row is refused only once claimed, and ANY status can be
- * refused by evidence a run may already have reached the employer
- * (employerMayHoldApplication, managedSubmitOutcome.ts) - the exact shape that made needs_attention
- * fall through to 'save' unconditionally before that gate existed. So this reads the same evidence
- * fields reviewAnswerEditRoute already reads in this file for its own, narrower question about one
- * status.
+ * ROUND 2: THE BACKEND SWAPPED WHICH DISPOSITION THE ROUTE ASKS, AND THIS WAS PORTING THE OLD ONE.
+ * PR #945 first wired the route through `reviewAnswerSaveDisposition` - the same one
+ * PUT /applications/:id/review/answers refuses through - which refuses `ready_for_final_approval`
+ * UNCONDITIONALLY: right for an ANSWER save, since a rewritten answer would change what the preview
+ * she is looking at means, and wrong here - a header refresh does not touch the preview's answers,
+ * and the packet-audit path already voids her acknowledgement the moment the PDF's bytes move (see
+ * `packet_stale` in the route's own tests). Ported literally, that refusal made the one status this
+ * notice exists to show the button FOR the one status it always hid the button on - and every
+ * packet measured in this file's own header (Pony.ai, Belvedere Trading, Transparent Hiring) sits at
+ * exactly that status.
+ *
+ * The backend now reads `resumeContactRefreshDisposition` instead: reviewAnswerSaveDisposition's OWN
+ * rule, with its one unconditional `ready_for_final_approval` refusal narrowed to the one case
+ * resumeEditDisposition already proves safe - unclaimed, and no employer-may-hold evidence on the
+ * row. Every OTHER status keeps reviewAnswerSaveDisposition's answer exactly (submissionSafety.test.ts,
+ * "every status it refuses outright...keeps refusing" / "every status reviewAnswerSaveDisposition
+ * already saves keeps saving"), which is why this mirrors that whole function and not only its new
+ * clause: `mayBeAtEmployer` below is `employerMayHoldApplication` (managedSubmitOutcome.ts), read
+ * here exactly as reviewAnswerEditRoute already reads it in this file for its own, narrower question
+ * about one status.
+ *
+ * status ALONE is still not enough for every status besides ready_for_final_approval, which is what
+ * the backend's own comment on reviewAnswerSaveDisposition argues at length: a `submit_requested`
+ * row is refused only once claimed, and ANY other status can still be refused by evidence a run may
+ * already have reached the employer - the exact shape that made needs_attention fall through to
+ * 'save' unconditionally before that gate existed.
+ *
+ * DELIBERATELY NOT LISTING `submission_claimed` AMONG THE RUN-IN-PROGRESS STATUSES, unlike round 1.
+ * reviewAnswerSaveDisposition's own named branches are 'submitted', 'awaiting_security_code',
+ * 'preparing' / 'filling' / 'submitting', and 'submit_requested' once claimed - never the
+ * `submission_claimed` status literal, so a row sitting there with no claim timestamp and no
+ * employer-may-hold evidence reads 'save' from the function this is a port of. A tighter client
+ * guess would not be a mirror, and the server stays the enforcement point either way (see
+ * reviewAnswerEditRoute's own header on why this file is deliberately narrow rather than wide).
  *
  * Returns the one-line reason to show instead of an actionable button, or null when a press would
- * reach the route rather than a 409.
+ * reach the route rather than a 409. The two reasons stay true of the ROW rather than of the screen
+ * showing it: a claim means a run holds this packet right now, whatever its status; evidence means
+ * the employer may already hold it, whatever the row's claim says.
  */
 export type ResumeContactRefreshGate = {
   status: string;
@@ -78,29 +104,51 @@ const MAY_BE_AT_EMPLOYER_REASON =
 const RUN_IN_PROGRESS_REASON =
   "Litos is already working on this application, so its resume cannot be refreshed right now.";
 
-export function resumeContactRefreshBlockedReason(review: ResumeContactRefreshGate): string | null {
-  const status = review.status;
-  // The picture she is previewing must not change under her - the same reason PUT /review/answers
-  // refuses this status outright, with no exception for a claim (reviewAnswerSaveDisposition).
-  if (status === "ready_for_final_approval") {
-    return "This application's form is already filled and previewed, so its resume cannot be"
-      + " refreshed from here.";
-  }
-  if (status === "preparing" || status === "filling" || status === "submitting" || status === "submission_claimed"
-    || (status === "submit_requested" && Boolean(review.submission_claimed_at))) {
-    return RUN_IN_PROGRESS_REASON;
-  }
-  // employerMayHoldApplication, ported: a receipt, a standing security code, or an unresolved /
-  // unlooked-at unverified_submission or submission_attempted_at each independently mean the
-  // employer may already hold this application, regardless of what the status column says.
+/**
+ * employerMayHoldApplication (managedSubmitOutcome.ts), ported: a receipt, a standing security
+ * code, or an unresolved / unlooked-at unverified_submission or submission_attempted_at each
+ * independently mean the employer may already hold this application, regardless of what the status
+ * column says. `lookedAndNotThere` is the one resolution that neutralises the latter two rather
+ * than confirming them: she looked, in her own portal or mailbox, and it was not there.
+ *
+ * Shared by two call sites below (the ready_for_final_approval branch and the fall-through for
+ * every other status) rather than inlined twice, which is the only thing separating this from
+ * round 1's version of the same four lines.
+ */
+function mayBeAtEmployer(review: ResumeContactRefreshGate): boolean {
   const lookedAndNotThere = review.unverified_submission?.resolution === "not_sent";
-  const mayBeAtEmployer = status === "submitted" || status === "awaiting_security_code"
-    || Boolean(review.receipt)
+  return Boolean(review.receipt)
     || Boolean(review.security_code)
     || (Boolean(review.unverified_submission) && !lookedAndNotThere)
     || (Boolean(review.submission_attempted_at) && !lookedAndNotThere);
-  if (mayBeAtEmployer) return MAY_BE_AT_EMPLOYER_REASON;
-  return null;
+}
+
+export function resumeContactRefreshBlockedReason(review: ResumeContactRefreshGate): string | null {
+  const status = review.status;
+  // reviewAnswerSaveDisposition's three named in-progress branches: a run holds this row right now
+  // and will write the same _review blob back when it finishes, so a refresh racing that write is
+  // refused rather than half-applied. submit_requested only joins this group once claimed - an
+  // unclaimed one falls through below like any other pre-run status.
+  if (status === "preparing" || status === "filling" || status === "submitting"
+    || (status === "submit_requested" && Boolean(review.submission_claimed_at))) {
+    return RUN_IN_PROGRESS_REASON;
+  }
+  // resumeContactRefreshDisposition's OWN clause, and the one this whole round exists to add: refuse
+  // ready_for_final_approval only when this packet is claimed (a run holds it right now, exactly
+  // like the group above) or the row's own evidence says the employer may already hold it. Every
+  // other unclaimed, no-evidence ready_for_final_approval packet - the shape every packet measured
+  // in this file's header is in - is now open.
+  if (status === "ready_for_final_approval") {
+    if (Boolean(review.submission_claimed_at)) return RUN_IN_PROGRESS_REASON;
+    return mayBeAtEmployer(review) ? MAY_BE_AT_EMPLOYER_REASON : null;
+  }
+  // The record of what the employer was given must not be rewritten underneath it.
+  if (status === "submitted" || status === "awaiting_security_code") return MAY_BE_AT_EMPLOYER_REASON;
+  // Every remaining status - resume_ready, questions_ready, ready_to_submit, needs_attention,
+  // submission_claimed, and anything this predicate does not yet have a name for - keeps
+  // reviewAnswerSaveDisposition's fall-through answer: open unless the row's own evidence says
+  // otherwise.
+  return mayBeAtEmployer(review) ? MAY_BE_AT_EMPLOYER_REASON : null;
 }
 
 /**
