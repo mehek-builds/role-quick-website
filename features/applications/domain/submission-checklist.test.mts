@@ -37,6 +37,8 @@ const review: Pick<ApplicationReview, "attention_reason" | "questions" | "status
       answer: "I like infrastructure products that hide complex workflows behind simple APIs.",
       kind: "essay",
       required: true,
+      // A paragraph Litos wrote and she has not approved - which is what a Review row is FOR.
+      answer_source: "litos_draft",
     },
     {
       id: "start-date",
@@ -140,8 +142,8 @@ test("a measured unsupported cover letter is not left as applicant work", () => 
     status: "needs_attention",
     cover_letter_supported: false,
     questions: [
-      { id: "cover", question: "Cover letter", answer: "A historical draft", kind: "essay", required: false },
-      { id: "why", question: "Why did your cover letter focus on this team?", answer: "Because the work matches my background.", kind: "essay", required: false },
+      { id: "cover", question: "Cover letter", answer: "A historical draft", kind: "essay", required: false, answer_source: "litos_draft" },
+      { id: "why", question: "Why did your cover letter focus on this team?", answer: "Because the work matches my background.", kind: "essay", required: false, answer_source: "litos_draft" },
     ],
   });
 
@@ -356,7 +358,7 @@ const anduril: Pick<ApplicationReview, "attention_reason" | "attention_categorie
     "question:u.s. work authorization",
   ],
   questions: [
-    { id: "q-in-person", question: "are you willing to work in-person for 12 weeks during the internship?", answer: "Yes, I'm fully willing and glad to work in-person for the full twelve weeks.", kind: "essay", required: false },
+    { id: "q-in-person", question: "are you willing to work in-person for 12 weeks during the internship?", answer: "Yes, I'm fully willing and glad to work in-person for the full twelve weeks.", kind: "essay", required: false, answer_source: "litos_draft" },
     { id: "q-work-auth", question: "u.s. work authorization", answer: "Yes", kind: "required", required: false },
     { id: "q-sponsorship", question: "will you require sponsorship from anduril for employment now or in the future (e.g, h1b visa)?", answer: "Yes", kind: "required", required: false },
     { id: "q-heard", question: "how did you hear about anduril?", answer: "Company website", kind: "required", required: false },
@@ -1250,6 +1252,7 @@ test("the direct input plan keeps safe open and closed questions in employer ord
         kind: "essay",
         required: true,
         portal_input_type: "textarea",
+        answer_source: "litos_draft",
       },
       {
         id: "location",
@@ -2211,4 +2214,115 @@ test("the direct plan's server list clears one label without silencing a genuine
   assert.ok(!ids.includes("sponsorship"), "the server dropped this one, so the queue must not invent it back");
   assert.ok(ids.includes("gender"), "the server still names this one, so the queue must still ask");
   assert.equal(plan.remaining, 1);
+});
+
+/* A CONFIRMED ESSAY IS NOT A DRAFT, and while this row could not tell the two apart it asked forever.
+ *
+ * The condition was `kind === "essay" && answer`, true of every answered essay for the life of the
+ * packet. The row says "Drafted answer ready for review"; pressing Review, saving, and returning
+ * rebuilt the identical row, because nothing in the test could observe that anything had happened.
+ *
+ * Measured live 2026-09-04 on Exa "Software Engineer, Intern", packet 73768339 (ashby): all four of
+ * its essays carry answer_source "applicant_review" - every one confirmed - and the screen still
+ * walked them as "1 of 4", indefinitely, with no exit.
+ *
+ * litos_draft is exactly the provenance the row's own sentence describes, and it is what the
+ * backend's send gate reads (unapprovedLitosDraftQuestionLabels), so gating on it makes the row mean
+ * what the send means.
+ */
+test("a confirmed essay is not a draft, so it stops asking", () => {
+  const review: Pick<ApplicationReview, "attention_reason" | "questions" | "questions_reviewed_at" | "status"> = {
+    status: "needs_attention",
+    attention_reason: "",
+    questions_reviewed_at: "2026-09-04T00:00:00.000Z",
+    questions: [
+      {
+        id: "confirmed-essay",
+        question: "Why are you interested in working at exa?",
+        answer: "Exa's work on retrieval connects directly to the systems I have been building.",
+        kind: "essay",
+        required: true,
+        answer_source: "applicant_review",
+      },
+      {
+        id: "drafted-essay",
+        question: "What motivates you?",
+        answer: "A paragraph Litos wrote that she has not read yet.",
+        kind: "essay",
+        required: true,
+        answer_source: "litos_draft",
+      },
+    ],
+  };
+
+  const items = humanInputItems(review);
+  assert.equal(
+    items.find((item) => item.questionId === "confirmed-essay"),
+    undefined,
+    "she confirmed it; asking again is the loop this test exists to stop",
+  );
+  const drafted = items.find((item) => item.questionId === "drafted-essay");
+  assert.ok(drafted, "an unapproved Litos draft still needs her eyes");
+  assert.equal(drafted.detail, "Drafted answer ready for review");
+  assert.equal(drafted.actionKind, "review");
+});
+
+test("an essay with NO provenance is still an unapproved draft and keeps its Review row", () => {
+  /* Corrected after review measured the backend: machineAuthored is `source === undefined ||
+     source === 'litos_draft'`, and submissionSafety records that "the essay drafter used to push its
+     paragraph with no flag at all". So an absent provenance is a Litos-written paragraph on an older
+     packet, not a machine-resolved field - and unapprovedLitosDraftQuestionLabels matches the literal
+     only, so the send gate does not stop it either. This row is the only thing that shows it to her. */
+  const review: Pick<ApplicationReview, "attention_reason" | "questions" | "questions_reviewed_at" | "status"> = {
+    status: "needs_attention",
+    attention_reason: "",
+    questions_reviewed_at: "2026-09-04T00:00:00.000Z",
+    questions: [
+      { id: "machine", question: "Why here?", answer: "Because the work matches.", kind: "essay", required: true },
+    ],
+  };
+  const row = humanInputItems(review).find((item) => item.id === "review-machine");
+  assert.ok(row, "an AI-written paragraph nobody flagged must still be shown before it is sent");
+  assert.equal(row.detail, "Drafted answer ready for review");
+});
+
+/* THE LOOP MUST NOT COME BACK WEARING A DIFFERENT WORD.
+ *
+ * Letting a confirmed essay through the Review branch newly exposed it to the confirm branch below,
+ * whose label guess matches salary, consent/recording and non-US sponsorship wording. Measured before
+ * the guard: an answered essay labelled "What are your compensation expectations?" produced
+ * "Needs your confirmation" on the fallback path, and it could never settle - settling reads
+ * answer_confirmed_of, which does not reach this client - so directInputTaskPlan still reported
+ * remaining: 1 after a save. The local guess is therefore barred from claiming essays; the SERVER's
+ * list is not, because a question the backend names has a real exit. */
+test("a confirmed essay whose label reads human-only does not fall into an unsettleable confirm row", () => {
+  const SALARY_ESSAY = "What are your compensation expectations?";
+  const review: Pick<ApplicationReview, "attention_reason" | "questions" | "questions_reviewed_at" | "status"> = {
+    status: "needs_attention",
+    attention_reason: "",
+    questions_reviewed_at: "2026-09-04T00:00:00.000Z",
+    questions: [
+      {
+        id: "salary-essay",
+        question: SALARY_ESSAY,
+        answer: "I am flexible and would defer to the band for the role.",
+        kind: "essay",
+        required: true,
+        answer_source: "applicant_review",
+      },
+    ],
+  };
+
+  // Fallback path: no server list, so only the local label guess is available - and it must not fire.
+  assert.equal(
+    humanInputItems(review).find((item) => item.questionId === "salary-essay"),
+    undefined,
+    "she confirmed it; a label guess must not re-ask it as a confirmation it can never settle",
+  );
+
+  // But when the SERVER names it, the ask is real and the row appears.
+  const named = humanInputItems(review, { sensitiveConfirmations: [SALARY_ESSAY] })
+    .find((item) => item.questionId === "salary-essay");
+  assert.ok(named, "the backend naming a question outranks the local guess");
+  assert.equal(named.actionKind, "confirm");
 });
