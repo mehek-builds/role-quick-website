@@ -298,14 +298,18 @@ export function checklistRowControl(
     return { element: "attach", label: item.action, name, kind: item.documentKind };
   }
   if (!item.questionId) return null;
+  /* Two sentences per intent, because the accessible name is a promise about what pressing this
+     does. On a settled row the answer already stands and the only thing behind the control is the
+     editor that can change it, so "Confirm your answer" would be a screen reader announcing work
+     that is already done. Same rule as the attach control above, and it has to hold for REVIEW as
+     well as CONFIRM now that an approved essay settles instead of going on asking: a settled row
+     still named "Review the drafted answer" would be restating the exact ask her approval ended. */
   const name = item.actionKind === "answer"
     ? `Answer: ${item.label}`
     : item.actionKind === "review"
-      ? `Review the drafted answer to: ${item.label}`
-      /* Two sentences for one intent, because the accessible name is a promise about what pressing
-         this does. On a settled row the answer is already confirmed and the only thing behind the
-         control is the editor that can change it, so "Confirm your answer" would be a screen reader
-         announcing work that is already done. Same rule as the attach control above. */
+      ? item.settled
+        ? `Change your reviewed answer to: ${item.label}`
+        : `Review the drafted answer to: ${item.label}`
       : item.settled
         ? `Change your confirmed answer to: ${item.label}`
         : `Confirm your answer to: ${item.label}`;
@@ -1003,15 +1007,64 @@ export function humanInputItems(
       });
       continue;
     }
+    /* AN ESSAY SHE HAS ALREADY APPROVED IS NOT WORK, and nothing here used to test that.
+     *
+     * This branch asked on the KIND and on the presence of an answer alone, "it is an essay and it
+     * has words in it", so it re-raised its own row out of the answer the previous pass had just
+     * saved. The sentence it prints is a claim about PROVENANCE (Litos wrote this, you have not
+     * approved it) and the condition never checked provenance.
+     *
+     * Measured live 2026-09-04, Exa "Software Engineer, Intern" packet
+     * 73768339-7fef-4493-aa75-1d47c61ae51f (ashby): four required essays, all four answered, four
+     * confirming saves all returning 200, and a reload that opened on "1 of 4 / Save and next"
+     * again. directInputTaskPlan turns every row emitted here into a question task unless the row
+     * is settled, so four rows that could not settle were four steps that could not be walked off.
+     *
+     * answer_source IS THE FIELD, and it is the same one the backend's own send gate reads
+     * (unapprovedLitosDraftQuestionLabels in src/lib/submissionSafety.ts), so what this screen asks
+     * for and what the gate refuses to send are now one test rather than two guesses about one
+     * thing. `litos_draft` is a paragraph Litos wrote that she has not approved; her save mints
+     * `applicant_review` over it. That mint is the backend half of this fix (volley-backend
+     * fix/answered-essay-stops-being-asked, 6440c5b): before it a confirming save moved nothing at
+     * all, because the stored label carried the employer's required marker while every read path
+     * served normalizeReviewQuestionLabel's output and the merge's confirmation gate compared the
+     * two byte for byte.
+     *
+     * NOT answer_confirmed_of, which belongs to the branch below and would be the wrong field here:
+     * that one is minted only by a per-question `confirmed: true` on a SENSITIVE question, and an
+     * essay is a plain drafted answer no gate asks her to confirm. Reading it here would put this
+     * row straight back into the loop it is leaving, because approving an essay never mints it.
+     *
+     * THE APPROVED ROW SETTLES RATHER THAN DISAPPEARING, for the reason every settled row in this
+     * file exists: a control that vanishes the moment its job is done takes the way back with it.
+     * completedSubmissionItems deliberately keeps an unsubmitted essay out of the Done column, so a
+     * dropped row would leave her approved essay on no list at all, with nothing on the screen that
+     * could open it again. */
     if (review.status !== "submitted" && question.kind === "essay" && answer) {
-      addUnique(items, {
-        id: `review-${question.id}`,
-        label: displayQuestionLabel(question.question),
-        detail: "Drafted answer ready for review",
-        action: "Review",
-        actionKind: "review",
-        questionId: question.id,
-      });
+      const label = displayQuestionLabel(question.question);
+      addUnique(items, question.answer_source === "litos_draft"
+        ? {
+          id: `review-${question.id}`,
+          label,
+          detail: "Drafted answer ready for review",
+          action: "Review",
+          actionKind: "review",
+          questionId: question.id,
+        }
+        : {
+          id: `review-${question.id}`,
+          label,
+          /* Says only what the server said. `applicant_review` is her own hand on this answer and
+             is worth naming back to her; any other value, or none at all, is an answer that stands
+             with nobody named, and "Reviewed by you" there would be this screen inventing a record
+             of an act. "Answer drafted" is the sentence completedSubmissionItems already prints for
+             an essay answer whose writer it cannot name. */
+          detail: question.answer_source === "applicant_review" ? "Reviewed by you" : "Answer drafted",
+          action: "Change",
+          actionKind: "review",
+          questionId: question.id,
+          settled: true,
+        });
       continue;
     }
     /* WHEN THE SERVER SENDS ITS LIST, THE LIST IS THE WHOLE ANSWER - not one input to it.

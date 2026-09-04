@@ -82,6 +82,9 @@ const SENT_REVIEW: ApplicationReview = {
         "I spent the last year building a CRDT-backed editor, so the sync problems in this posting are the ones I already think about outside of work.",
       kind: "essay",
       required: true,
+      /* Litos wrote it and she has not approved it: the state the unsent variant's Review row is
+         about. humanInputItems reads this field, so an essay without it renders settled instead. */
+      answer_source: "litos_draft",
     },
     { id: "q2", question: "Are you authorized to work in the US?", answer: "Yes", kind: "required", required: true },
     { id: "q3", question: "How did you hear about us?", answer: "LinkedIn", kind: "required", required: false },

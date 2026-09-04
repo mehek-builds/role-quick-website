@@ -72,6 +72,11 @@ export const QA_PACKET: GeneratedResume = {
           answer: "I am drawn to Acme Labs because the role combines product judgment with hands-on engineering. I have built workflow systems and customer-facing tools where speed only mattered when the experience stayed clear and reliable.",
           kind: "essay",
           required: true,
+          /* Litos wrote the paragraph and she has not approved it yet, which is what makes the
+             checklist raise a Review row for it. Stated on every drafted essay in this file
+             because humanInputItems reads the field rather than inferring the state from the
+             kind: an essay without it is one that stands, and renders settled here instead. */
+          answer_source: "litos_draft",
         },
         {
           id: "example",
@@ -79,6 +84,7 @@ export const QA_PACKET: GeneratedResume = {
           answer: "At Elemental AI, I built a TypeScript workflow engine that automated 18 client handoffs and reduced turnaround time by 42%. I mapped failure states first, then added visible recovery paths so every handoff remained traceable.",
           kind: "essay",
           required: true,
+          answer_source: "litos_draft",
         },
       ],
       skipped_reasons: [],
@@ -125,6 +131,7 @@ export const QA_SCENARIOS: Record<string, GeneratedResume> = {
       answer: "While designing a workflow dashboard, I saw that users understood system status but could not recover confidently from a failed handoff. I added visible recovery paths, tested the revised interaction, and used the findings to simplify the surrounding controls.",
       kind: "essay",
       required: true,
+      answer_source: "litos_draft",
     }],
   }),
   figma: qaVariant(QA_PACKET, {
@@ -164,6 +171,7 @@ export const QA_SCENARIOS: Record<string, GeneratedResume> = {
         answer: "I enjoy teaching state and failure handling because a small, concrete demo can turn an abstract reliability concept into something a developer can immediately apply.",
         kind: "essay",
         required: true,
+        answer_source: "litos_draft",
       },
       {
         id: "vercel-community",
@@ -171,6 +179,7 @@ export const QA_SCENARIOS: Record<string, GeneratedResume> = {
         answer: "I would combine direct conversations with support themes, documentation searches, and product feedback, then test a small piece of content before investing in a larger program.",
         kind: "essay",
         required: true,
+        answer_source: "litos_draft",
       },
       {
         id: "vercel-why",
@@ -178,6 +187,7 @@ export const QA_SCENARIOS: Record<string, GeneratedResume> = {
         answer: "Vercel sits at the intersection of product engineering and developer education, which matches how I like to work: build the example, understand the friction, and explain the path clearly.",
         kind: "essay",
         required: true,
+        answer_source: "litos_draft",
       },
     ],
   }),
@@ -204,6 +214,7 @@ export const QA_SCENARIOS: Record<string, GeneratedResume> = {
       answer: "Deepgram is interesting to me because voice agents live or die on timing: recognizing when someone is done speaking, handling interruptions, and returning speech without awkward lag. Flux's turn detection and the unified Voice Agent API are exactly the kind of infrastructure problem I want to work on, because the engineering has to be both low-latency and developer-friendly. My closest fit is Litos and Elemental AI: I have built TypeScript workflow systems, tested recovery paths, and developer-facing tools where reliability and clear handoffs mattered more than demo polish.",
       kind: "essay",
       required: true,
+      answer_source: "litos_draft",
     }, {
       id: "deepgram-build",
       question: "What is the most impressive thing you have built or automated with AI?",
@@ -270,6 +281,7 @@ export const QA_SCENARIOS: Record<string, GeneratedResume> = {
         answer: "Yes. I am glad to be on site in Los Angeles for the full twelve weeks and can arrange housing for the internship period.",
         kind: "essay",
         required: false,
+        answer_source: "litos_draft",
       },
       {
         id: "anduril-work-auth",
