@@ -7660,7 +7660,7 @@ function UnverifiedSubmissionCard({ attentionReason, submitting, error, onSubmit
   );
 }
 
-export function DirectApplicationQuestion({ task, position, total, saving, saved, focusToken, hasPrevious, hasNext, preservedDraft, externalFailure, onDraftChange, onClearDraft, onClearFailure, onPrevious, onNext, onReviewApplication, onSave, onSkip }: {
+export function DirectApplicationQuestion({ task, position, total, saving, saved, focusToken, hasPrevious, hasNext, refillsFormOnSave = false, preservedDraft, externalFailure, onDraftChange, onClearDraft, onClearFailure, onPrevious, onNext, onReviewApplication, onSave, onSkip }: {
   task: DirectQuestionTask;
   position: number;
   total: number;
@@ -7669,6 +7669,15 @@ export function DirectApplicationQuestion({ task, position, total, saving, saved
   focusToken: number;
   hasPrevious: boolean;
   hasNext: boolean;
+  /* TRUE WHEN THIS PACKET'S FORM IS ALREADY FILLED, so the press does more than store an answer.
+     On `ready_for_final_approval` the save cannot land in place - the preview screenshot and the
+     answers under it would stop describing the same form - so saveReviewedAnswers routes it through
+     the restart, which discards that filled form and fills it again from this answer. That is a real
+     thing to do to an application and the button has to say so BEFORE the press: "Save and next"
+     over a control that refills a company's form and ends the pass is the same broken promise as
+     "Answer 1 question" over an editor that could not save, only quieter. Defaulted so the QA
+     harness and every ordinary packet keep the wording they already have. */
+  refillsFormOnSave?: boolean;
   preservedDraft: DirectAnswerDraft | null;
   externalFailure: DirectAnswerFailure | null;
   onDraftChange: (questionId: string, promptFingerprint: string, taskFingerprint: string, answer: string) => void;
@@ -7807,6 +7816,30 @@ export function DirectApplicationQuestion({ task, position, total, saving, saved
       : litosDrafted && !answerDirty
         ? hasNext ? "Approve and next" : "Approve answer"
         : saved ? hasNext ? "Save changes and next" : "Save changes" : hasNext ? "Save and next" : "Save answer";
+
+  /* WHAT THIS PRESS DOES, WHICH ON A FILLED PACKET IS MORE THAN WHAT IT SAVES.
+   *
+   * A SEPARATE CONSTANT, NOT A FOURTH ARM ON actionLabel. That ternary answers "how were the words
+   * under this box produced" - typed, drafted by Litos, or already confirmed - and
+   * tests/litos-drafted-answer-approval.test.mjs evaluates it as a closed expression over exactly
+   * those six variables to hold the drafted-answer wording in place. This is a different question,
+   * asked of a different fact, and folding it in would have made that guard unevaluable. It wraps
+   * instead, so both stay readable and both stay tested.
+   *
+   * On `ready_for_final_approval` the save cannot land in place - the preview screenshot and the
+   * answers beneath it would stop describing the same form - so saveReviewedAnswers routes it
+   * through the restart, which throws that filled form away and fills it again from this answer.
+   * That is a real thing to do to a company's form and the button has to say so BEFORE the press.
+   * "Save and next" over a control that refills a form and ends the pass is the same broken promise
+   * as "Answer 1 question" over an editor that could not save, only quieter - and there is no next
+   * here either, because the refill ends the pass by construction.
+   *
+   * Overrides every arm above it, including "Approve and next": an untouched Litos draft on a filled
+   * packet refills the form exactly as an edited one does. contextOnly is exempt because that press
+   * writes nothing at all - it navigates - so no refill follows it. */
+  const pressLabel = refillsFormOnSave && !contextOnly
+    ? "Save answer and fill the form again"
+    : actionLabel;
 
   function updateAnswer(next: string) {
     if (busy) return;
@@ -8025,7 +8058,7 @@ export function DirectApplicationQuestion({ task, position, total, saving, saved
                     </Button>
                   )}
                   <Button type="submit" block className="sm:w-auto" disabled={busy || answerBlocked}>
-                    {saving || submitting ? <PendingLabel onColor>Saving...</PendingLabel> : actionLabel}
+                    {saving || submitting ? <PendingLabel onColor>Saving...</PendingLabel> : pressLabel}
                   </Button>
                 </div>
               )}
@@ -8529,6 +8562,7 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
         )}
         {directAnswerActive ? (
           <DirectApplicationQuestion
+            refillsFormOnSave={reviewAnswerEditRoute(review) === "reopen"}
             key={directQuestionTaskFingerprint(currentDirectQuestion)}
             task={currentDirectQuestion}
             position={directQuestionPosition}

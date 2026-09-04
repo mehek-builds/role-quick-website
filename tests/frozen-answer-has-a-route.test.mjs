@@ -103,3 +103,26 @@ test("no second answer-writing route was added to get past the refusal", async (
     "the answers path is still named only inside features/applications/domain/review-answer-save.ts,"
     + " which is what stops this page pointing a second request at it");
 });
+
+/* THE OTHER HALF OF THE SAME PROMISE. The press on a filled packet refills a company's form and ends
+ * the answer pass, so "Save and next" describes neither what it does nor where it goes. This screen's
+ * whole history is controls that said one thing and did another; the fix is not allowed to add one. */
+test("the editor's own button says the save will refill the company's form", async () => {
+  const code = shippedCode(await readFile(PAGE, "utf8"));
+  assert.match(code, /refillsFormOnSave = false/,
+    "defaulted, so an ordinary packet keeps the wording it has");
+  assert.match(
+    code,
+    /const pressLabel = refillsFormOnSave && !contextOnly\s*\?\s*"Save answer and fill the form again"\s*:\s*actionLabel;/,
+    "wrapping actionLabel rather than becoming a fourth arm on it - that ternary answers how the words"
+    + " under the box were produced, and litos-drafted-answer-approval.test.mjs evaluates it as a"
+    + " closed expression over exactly six variables to hold the drafted wording in place",
+  );
+  assert.match(code, /: pressLabel\}/,
+    "and the button renders the wrapped label, not the inner one");
+  assert.match(
+    code,
+    /refillsFormOnSave=\{reviewAnswerEditRoute\(review\) === "reopen"\}/,
+    "bound to the SAME predicate the save branches on, so the label and the request cannot disagree",
+  );
+});
