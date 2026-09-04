@@ -222,6 +222,37 @@ export function optionalQuestionNeedsDecision(
     && question.answer_state !== "skipped";
 }
 
+/**
+ * Every editable question that must be visible on a screen whose own button these facts disable.
+ *
+ * A QUESTION THAT DISABLES THIS SCREEN'S BUTTON MUST BE ON THIS SCREEN. `actionableIds` names the
+ * server's humanInputItems plus whichever question the applicant just arrived to answer, and a
+ * focused review used to show exactly that set. The button beside it disables over EVERY editable
+ * question - a required one that does not read as answered (including the off-list case, see
+ * `answerNamesNoOfferedOption`) or an optional one still awaiting an answer or Skip - so a question
+ * humanInputItems never named could hold the button disabled while staying entirely off screen.
+ *
+ * MEASURED live on the Sage Greenhouse packet (aae653a3, 2026-09-04): humanInputItems named one
+ * question, a school select whose stored answer named none of its 24 options. The screen opened
+ * "1 answer needs you." with only that one shown. Two required radio questions - expected
+ * graduation date and how she heard about the role - were both unanswered and both disabling the
+ * button, but neither was in humanInputItems, so neither rendered. She answered the visible
+ * question, its badge turned ANSWERED, and the screen's only button stayed disabled with nothing
+ * left on screen to fix.
+ *
+ * This does not change what counts as missing or optional-undecided; it only widens which
+ * questions the applicant is shown to always include both.
+ */
+export function questionsNeedingApplicant(
+  editableQuestions: readonly ApplicationQuestion[],
+  actionableIds: ReadonlySet<string>,
+): ApplicationQuestion[] {
+  return editableQuestions.filter((question) =>
+    actionableIds.has(question.id)
+    || (question.required && !questionReadsAsAnswered(question))
+    || optionalQuestionNeedsDecision(question));
+}
+
 function normalizedQuestionLabel(value: string | undefined): string {
   return value?.trim().replace(/\s+/g, " ") ?? "";
 }

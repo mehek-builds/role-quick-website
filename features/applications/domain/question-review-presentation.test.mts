@@ -7,6 +7,7 @@ import {
   exactSelectedQuestionOptions,
   optionalQuestionNeedsDecision,
   questionReviewPresentation,
+  questionsNeedingApplicant,
   requiredQuestionReviewRoute,
   unansweredRequiredQuestionCount,
 } from "./question-review-presentation.ts";
@@ -530,4 +531,86 @@ test("an optional off-list answer is hers to leave alone", () => {
   const optional = question({ ...offListDegree(), required: false, answer_state: "answered" });
   assert.equal(unansweredRequiredQuestionCount([optional]), 0);
   assert.deepEqual(requiredQuestionReviewRoute([optional]), { kind: "continue" });
+});
+
+/* ---- questionsNeedingApplicant: a question that disables the button must be shown ---- */
+/* MEASURED live on the Sage Greenhouse packet (aae653a3, 2026-09-04). humanInputItems named one
+   question, a school select whose stored answer named none of its options. The focused review
+   showed only that one under "1 answer needs you." Two required radio questions - expected
+   graduation date and how she heard about the role - were both unanswered and both disabling the
+   Save and continue button, but humanInputItems named neither, so the focused review hid both:
+   answering the visible question left the badge ANSWERED and the only button on screen disabled
+   with nothing left to fix. */
+
+test("a required closed-choice question with an off-list answer needs the applicant even when actionableIds omits it", () => {
+  const graduation = question({
+    id: "graduation",
+    question: "When do you expect to graduate?",
+    answer: "May 2028",
+    portal_input_type: "radio",
+    options: ["Spring 2027", "Fall 2027", "Spring 2028", "2030 or later"],
+  });
+  assert.deepEqual(questionsNeedingApplicant([graduation], new Set()), [graduation]);
+});
+
+test("an answered on-list question is left out when it is not otherwise actionable", () => {
+  const source = question({
+    id: "source",
+    question: "How did you hear about this role?",
+    answer: "University Career Center / Job Board",
+    portal_input_type: "radio",
+    options: ["University Career Center / Job Board", "LinkedIn", "Referral"],
+  });
+  assert.deepEqual(questionsNeedingApplicant([source], new Set()), []);
+});
+
+test("an optional undecided question needs the applicant even when actionableIds omits it", () => {
+  const optional = question({
+    id: "optional-note",
+    required: false,
+    answer: "",
+    answer_state: "unanswered",
+  });
+  assert.deepEqual(questionsNeedingApplicant([optional], new Set()), [optional]);
+});
+
+test("the focus id is preserved: an answered, non-blocking question stays in when actionableIds names it", () => {
+  const notice = question({ id: "notice", question: "Notice period", answer: "None" });
+  assert.deepEqual(questionsNeedingApplicant([notice], new Set()), [], "not actionable and not blocking, so ordinarily left out");
+  assert.deepEqual(
+    questionsNeedingApplicant([notice], new Set(["notice"])),
+    [notice],
+    "named in actionableIds - as a caller does for the question the applicant just focused - it stays visible regardless",
+  );
+});
+
+test("the full Sage packet gap: both hidden required questions join the one question actionableIds named", () => {
+  const school = question({
+    id: "school",
+    question: "School",
+    answer: "Other",
+    portal_input_type: "select-one",
+    options: ["Other", "University of Southern California"],
+  });
+  const graduation = question({
+    id: "graduation",
+    question: "When do you expect to graduate?",
+    answer: "May 2028",
+    portal_input_type: "radio",
+    options: ["Spring 2027", "Spring 2028", "2030 or later"],
+  });
+  const source = question({
+    id: "source",
+    question: "How did you hear about this role?",
+    answer: "Job board",
+    portal_input_type: "radio",
+    options: ["University Career Center / Job Board", "LinkedIn"],
+  });
+  // humanInputItems named only the school question.
+  const actionableIds = new Set(["school"]);
+  assert.deepEqual(
+    questionsNeedingApplicant([school, graduation, source], actionableIds).map((item) => item.id),
+    ["school", "graduation", "source"],
+    "both questions the server never named join it, because both hold the same button disabled",
+  );
 });

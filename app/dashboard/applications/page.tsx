@@ -66,7 +66,7 @@ import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX, exactPacketAuditClauses
 import { educationDrift, educationDriftMessage, type EducationProfile } from "@/features/applications";
 import { checklistRowControl, completedSubmissionGroups, directAnswerNavigationTasks, directInputTaskPlan, directQuestionPromptFingerprint, directQuestionTaskFingerprint, displayQuestionLabel, documentAsksByKind, documentControls, documentStepsInPlan, humanInputItems, metadataRefreshOutranksStandingAttention, QUESTION_CHOICE_LIST_LIMIT, reviewedAnswersSaveLanding, unconfirmedDocumentItems, type ChecklistResumeRecord, type DirectQuestionTask, type DirectQuestionTaskIntent, type SubmissionChecklistAction, type SubmissionChecklistItem } from "@/features/applications";
 import { prescriptBlocksProgress, prescriptEditableQuestions, prescriptMetadataBlockers, prescriptNeedsHer, prescriptSummary } from "@/features/applications";
-import { answerWithExactOptionToggled, exactQuestionOption, exactSelectedQuestionOptions, optionalQuestionNeedsDecision, questionAcceptsMultipleOptions, questionOptionsAreComplete, questionReadsAsAnswered, questionReviewPresentation, requiredQuestionReviewRoute } from "@/features/applications";
+import { answerWithExactOptionToggled, exactQuestionOption, exactSelectedQuestionOptions, optionalQuestionNeedsDecision, questionAcceptsMultipleOptions, questionOptionsAreComplete, questionReadsAsAnswered, questionReviewPresentation, questionsNeedingApplicant, requiredQuestionReviewRoute } from "@/features/applications";
 import type { JdMatchResponse, JobMatch } from "@/features/applications";
 import { userFacingError } from "@/lib/user-facing-error";
 import { APPLICATION_DOCUMENT_ACCEPT_ATTRIBUTE, validateApplicationDocument } from "@/lib/document-size";
@@ -7219,7 +7219,11 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, metad
   const focusToken = focusQuestion?.token ?? 0;
   const actionableIds = new Set(actionableQuestionIds);
   if (focusQuestionId) actionableIds.add(focusQuestionId);
-  const actionableQuestions = editableQuestions.filter((question) => actionableIds.has(question.id));
+  /* A question that disables the button below must be visible on this same screen, or the
+     applicant is left staring at a disabled button with nothing to fix. MEASURED live on the Sage
+     Greenhouse packet (aae653a3, 2026-09-04): two required radio questions disabled this screen's
+     button while humanInputItems named neither, so a focused review hid both. */
+  const actionableQuestions = questionsNeedingApplicant(editableQuestions, actionableIds);
   const focusedReview = reviewDiscovered && actionableQuestions.length > 0 && !showAllAnswers;
   const visibleQuestions = reviewDiscovered
     ? (focusedReview ? actionableQuestions : editableQuestions)
