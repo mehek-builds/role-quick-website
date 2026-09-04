@@ -2207,3 +2207,120 @@ test("the direct plan's server list clears one label without silencing a genuine
   assert.ok(ids.includes("gender"), "the server still names this one, so the queue must still ask");
   assert.equal(plan.remaining, 1);
 });
+
+/* THE REVISIT PACKET VIEWER IS THE SEVENTH CALL SITE, and it was the one left behind.
+ *
+ * #535 fixed the packet screen's own direct call and #536 threaded the list through the six
+ * directInputTaskPlan call sites on the applications page. ApplicationPacket's own
+ * humanInputItems call was missed, and #536's body says there was only one such call left, which
+ * was wrong by exactly this file.
+ *
+ * The viewer is opened from the tracker independently of the active screen and renders the
+ * unsettled half of humanInputItems under an amber "Needs your input" heading. With no list to read
+ * it fell back to isHumanOnlyChecklistLabel, which matches visa-sponsorship phrasing whatever the
+ * server says. Measured on Hudson River Trading packet 4a79eec1-5c65-4dd4-8e72-e119fbfbd733, whose
+ * sensitive_questions_requiring_confirmation is EMPTY: every other surface showed the sponsorship
+ * question settled and this viewer went on saying she still had to answer it.
+ *
+ * It does not reproduce the dead button - this viewer prints no action words - so nothing here
+ * crashes or spins. It just says the opposite of the rest of the product about the same question,
+ * which is the failure mode a record whose entire job is to be checkable can least afford.
+ *
+ * The context below is the viewer's own, not a reduced one: company and role off
+ * packet.job_context and documents off packet.spec._documents, because a context missing those
+ * builds different rows and would not be evidence about this screen. */
+test("the revisit packet viewer settles a question the server's own list has already cleared", () => {
+  const SPONSORSHIP =
+    "Will you now, or in the future, require visa sponsorship to legally work in the country specified for this position?";
+  const ROUND = "2026-09-01T21:28:12.934Z";
+  const review: Pick<ApplicationReview, "attention_reason" | "questions" | "questions_reviewed_at" | "status"> = {
+    status: "needs_attention",
+    attention_reason: "",
+    questions_reviewed_at: ROUND,
+    questions: [{
+      id: "sponsorship",
+      question: SPONSORSHIP,
+      answer: "Yes",
+      kind: "required",
+      required: true,
+      portal_input_type: "select-one",
+      options: ["Yes", "No"],
+      answer_source: "applicant_review",
+      answer_reviewed_at: ROUND,
+      // No answer_confirmed_of: the server does not round-trip one. See #535.
+    }],
+  };
+  const viewerContext = {
+    company: "Hudson River Trading",
+    role: "Software Engineer",
+    documents: {},
+  };
+  // What ApplicationPacket renders under "Needs your input" is exactly this partition.
+  const needsInput = (sensitiveConfirmations?: readonly string[]) =>
+    humanInputItems(review, { ...viewerContext, sensitiveConfirmations })
+      .filter((item) => !item.settled)
+      .map((item) => item.id);
+
+  // No list at all: an older payload said nothing, so the label classes still guess. Unchanged.
+  assert.deepEqual(
+    needsInput(),
+    ["confirm-sponsorship"],
+    "with no server list the viewer keeps its previous label-guess behaviour",
+  );
+
+  // The server's list exactly as measured: empty. It checked and found none, so nothing is amber.
+  assert.deepEqual(
+    needsInput([]),
+    [],
+    "an empty list is the server saying it found none, not the server saying nothing",
+  );
+
+  // The server still names it: the viewer must still ask, or a real requirement goes silent.
+  assert.deepEqual(
+    needsInput([SPONSORSHIP]),
+    ["confirm-sponsorship"],
+    "a label the server still names must stay under Needs your input",
+  );
+});
+
+/* THE CALL SITES, pinned. The test above proves the behaviour the viewer must have and cannot prove
+ * the viewer still asks for it: `npm test` runs under node's type stripping, which cannot parse
+ * JSX, so no test in this repo renders a component. A domain test alone stays green against a
+ * viewer that has stopped passing the argument, which is precisely how this shipped past #535's and
+ * #536's suites. Both halves of the wiring are pinned to source because both can regress
+ * independently: the viewer can stop forwarding the prop, and the page can stop supplying it. */
+test("the revisit packet viewer forwards the server's confirmation list into its own checklist", () => {
+  const packet = readFileSync("components/app/ApplicationPacket.tsx", "utf8");
+  assert.match(
+    packet,
+    /sensitiveConfirmations\?: readonly string\[\];/,
+    "the viewer must take the list as a prop: it holds no submission of its own to read it from",
+  );
+  assert.match(
+    packet,
+    /const inputItems = humanInputItems\(attentionReview, \{[\s\S]{0,300}?sensitiveConfirmations,\s*\}\);/,
+    "the viewer's own humanInputItems call must hand the list forward, or the label classes decide alone",
+  );
+});
+
+test("the revisit packet viewer is given the snapshot for the packet it is showing", () => {
+  const page = readFileSync("app/dashboard/applications/page.tsx", "utf8");
+  const viewer = page.slice(
+    page.indexOf("{revisitingPacket?.spec._review && ("),
+    page.indexOf("onClose={closeRevisit}"),
+  );
+  assert.ok(viewer.length > 0, "the revisit viewer render site is missing");
+  assert.match(
+    viewer,
+    /sensitiveConfirmations=\{submissionSnapshotsRef\.current\.get\(revisitingPacket\.id\)\?\.sensitive_questions_requiring_confirmation\}/,
+    "the list must be looked up by the revisited packet's own id",
+  );
+  /* selectedSubmission is guarded on `selected`, a DIFFERENT packet from the one the tracker opened
+     this viewer on. Reading it here would print one application's confirmation state onto another's
+     questions: a wrong answer carrying the server's authority, which is worse than the label guess
+     it replaced. */
+  assert.ok(
+    !/sensitiveConfirmations=\{selectedSubmission/.test(viewer),
+    "the viewer must not be handed the selected application's envelope: the tracker opens it on any packet",
+  );
+});

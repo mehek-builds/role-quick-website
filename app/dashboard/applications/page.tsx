@@ -6331,6 +6331,20 @@ function Applications() {
           packet={revisitingPacket}
           resumeRecord={canonicalApplicationsByAnyId[revisitingPacket.id]}
           review={revisitingPacket.spec._review}
+          /* THE SERVER'S OWN LIST, looked up BY THIS PACKET'S ID - the same per-id read
+             activeSubmission and latestSubmission do, and resolved at render for the reason stated
+             above: the snapshot the poll writes must be the one the viewer reads.
+
+             NOT `selectedSubmission`. The tracker opens this viewer independently of the active
+             screen, so the selected application is routinely a DIFFERENT packet, and handing its
+             envelope over would print one application's confirmation state onto another's
+             questions - a wrong answer wearing the server's authority, which is worse than the
+             label guess it replaced.
+
+             Absent snapshot -> undefined -> humanInputItems falls back to the label classes, which
+             is the behaviour this viewer had for every packet before now. Present snapshot with an
+             empty list -> `[]` -> the server checked and found none, and the rows settle. */
+          sensitiveConfirmations={submissionSnapshotsRef.current.get(revisitingPacket.id)?.sensitive_questions_requiring_confirmation}
           onClose={closeRevisit}
         />
       )}
