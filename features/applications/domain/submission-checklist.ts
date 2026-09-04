@@ -1238,6 +1238,56 @@ export function directInputTaskPlan(
 }
 
 /**
+ * The one-question-at-a-time navigator's own list, which is not simply `plan.questionTasks`.
+ *
+ * A UNION of two sources, by prompt fingerprint: `outstandingTasks` (the current plan's remaining
+ * work) OR `answeredTasks` (what `directAnswerProgress` remembers she saved through this exact
+ * navigator in the CURRENT pass). The second half exists so a question does not vanish from the "N
+ * of M" strip and lose its Previous control the instant her own save settles it and the fresh plan
+ * stops calling it outstanding - see `DirectQuestionTask.context` for the sibling case, a parent
+ * re-admitted for its dependent, which this same union also has to keep visible.
+ *
+ * THIS DOES NOT RESURRECT A QUESTION THE SERVER HAS DROPPED FOR AN UNRELATED REASON, and that
+ * safety is not in this function - it is upstream, in `directAnswerProgress`'s own key. The caller
+ * discards `answeredTasks` and starts a fresh empty list whenever `directAnswerPassKey(review)`
+ * (questions_reviewed_at, falling back to submission_run_id, falling back to updated_at) no longer
+ * matches the progress that was stored. So `answeredTasks` can only ever hold prompts from the SAME
+ * review round this call is being made against, and every entry in it is one the server itself
+ * accepted a save for in that round (`onSaveQuestion` only reaches the code that writes into
+ * `directAnswerProgress` on `result.saved === true`, never on a refusal). A question the server
+ * clears without her having answered it in this round is simply never in `answeredTasks`, and drops
+ * out here exactly as `outstandingTasks` says it should - see
+ * "the direct plan drops a question the server's own list has already cleared" for the case that
+ * matters: the measured Hudson River Trading packet, where `answeredTasks` is empty because no save
+ * for that question was ever accepted in the round that cleared it, and the union is therefore
+ * exactly `outstandingTasks`, which is exactly empty.
+ *
+ * `question` on the returned task is always the CURRENT review's copy, not the stale one the task
+ * carried when it was recorded as outstanding or answered: a follow-up question, a relabelled
+ * control or a changed option list must render from what the employer's form says now.
+ */
+export function directAnswerNavigationTasks(
+  review: Pick<ApplicationReview, "questions" | "question_metadata_blockers">,
+  outstandingTasks: readonly DirectQuestionTask[],
+  answeredTasks: readonly DirectQuestionTask[],
+): DirectQuestionTask[] {
+  const outstandingByPrompt = new Map(
+    outstandingTasks.map((task) => [directQuestionPromptFingerprint(task), task]),
+  );
+  const answeredByPrompt = new Map(
+    answeredTasks.map((task) => [directQuestionPromptFingerprint(task), task]),
+  );
+  return questionReviewPresentation(
+    review.questions ?? [],
+    review.question_metadata_blockers ?? [],
+  ).editableQuestions.flatMap((question) => {
+    const promptFingerprint = directQuestionPromptFingerprint({ question });
+    const task = outstandingByPrompt.get(promptFingerprint) ?? answeredByPrompt.get(promptFingerprint);
+    return task ? [{ ...task, question }] : [];
+  });
+}
+
+/**
  * Whether the metadata-refresh launch may lead the attention screen while a non-question attention
  * task still stands.
  *

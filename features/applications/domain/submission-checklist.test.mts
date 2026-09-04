@@ -4,6 +4,7 @@ import {
   checklistRowControl,
   completedSubmissionGroups,
   completedSubmissionItems,
+  directAnswerNavigationTasks,
   directInputTaskPlan,
   directQuestionPromptFingerprint,
   directQuestionTaskFingerprint,
@@ -2206,4 +2207,108 @@ test("the direct plan's server list clears one label without silencing a genuine
   assert.ok(!ids.includes("sponsorship"), "the server dropped this one, so the queue must not invent it back");
   assert.ok(ids.includes("gender"), "the server still names this one, so the queue must still ask");
   assert.equal(plan.remaining, 1);
+});
+
+/* THE FULL QUEUE, BUILT THE WAY THE PAGE ACTUALLY BUILDS IT - not `directInputTaskPlan` alone.
+ *
+ * rqw PR #536's own test above (see "the direct plan drops a question the server's own list has
+ * already cleared") proves `directInputTaskPlan` is correct in isolation. That was never disputed
+ * and is not what left the live screen broken. `SubmissionScreen` never reads `plan.questionTasks`
+ * directly - it filters that plan by `answeredQuestionFingerprints`, then feeds the result AND
+ * `directAnswerProgress.answeredTasks` through `directAnswerNavigationTasks`, and THAT result is
+ * what decides whether `currentDirectQuestion` is null. Two hypotheses were on the table for why
+ * the live queue stayed non-empty even after #536: either `context.sensitiveConfirmations` was not
+ * really `[]` at that call site (a stale `submission` object built by something upstream), or
+ * `directAnswerProgress.answeredTasks` was resurrecting a question the fresh plan had dropped.
+ *
+ * Built end to end against the measured Hudson River Trading packet, with `answeredTasks` empty -
+ * which is what it provably is here: `directAnswerProgresses` is page-local `useState(() => new
+ * Map())` with no restore-from-storage path, so it starts empty on every reload, and the one write
+ * path into it (in `saveReviewedAnswers`) runs only after `result.saved === true` - a 409 from
+ * `employerMayHoldApplication` returns `{ saved: false }` with no `review`, hits the function's
+ * early return, and never reaches that write. Neither hypothesis reduces to a domain-logic gap:
+ * every term below the plan is provably empty, so the plan itself is the only place left for a
+ * stale value to hide, which is what features/applications/domain/submission-state.test.mts's
+ * "a status change is not thrown away" and "a question dropping off the server's confirmation list
+ * is not thrown away" tests were written to close. */
+test("the full navigator is empty for the measured packet when nothing was answered this pass", () => {
+  const SPONSORSHIP =
+    "Will you now, or in the future, require visa sponsorship to legally work in the country specified for this position?";
+  const ROUND = "2026-09-01T21:28:12.934Z";
+  const review: Pick<ApplicationReview, "attention_reason" | "questions" | "question_metadata_blockers" | "questions_reviewed_at" | "status"> = {
+    status: "needs_attention",
+    attention_reason: "",
+    questions_reviewed_at: ROUND,
+    questions: [{
+      id: "sponsorship",
+      question: SPONSORSHIP,
+      answer: "Yes",
+      kind: "required",
+      required: true,
+      portal_input_type: "select-one",
+      options: ["Yes", "No"],
+      answer_source: "applicant_review",
+      answer_reviewed_at: ROUND,
+    }],
+  };
+  const answeredQuestionFingerprints: ReadonlySet<string> = new Set();
+  const directProgressAnsweredTasks: ReturnType<typeof directAnswerNavigationTasks> = [];
+
+  const directTaskPlan = directInputTaskPlan(review, { sensitiveConfirmations: [] });
+  assert.deepEqual(directTaskPlan.questionTasks, [], "directTaskPlan.questionTasks");
+
+  const remainingDirectQuestions = directTaskPlan.questionTasks.filter((task) => (
+    !answeredQuestionFingerprints.has(directQuestionPromptFingerprint(task))
+  ));
+  assert.deepEqual(remainingDirectQuestions, [], "remainingDirectQuestions");
+
+  assert.deepEqual(directProgressAnsweredTasks, [], "directProgress.answeredTasks");
+
+  const directQuestionTasks = directAnswerNavigationTasks(review, remainingDirectQuestions, directProgressAnsweredTasks);
+  assert.deepEqual(directQuestionTasks, [], "directQuestionTasks");
+  // currentDirectQuestion = directQuestionTasks[currentDirectQuestionIndex] ?? null is therefore
+  // null, and directAnswerActive (needsAttention && !awaitingUnverifiedSubmission &&
+  // currentDirectQuestion !== null) is false regardless of needsAttention or
+  // awaitingUnverifiedSubmission - there is no question left for either of them to gate.
+});
+
+/* THE UNION'S OTHER HALF, PROVEN RATHER THAN ASSUMED: `answeredTasks` genuinely can keep a question
+ * in the navigator after the fresh plan drops it - that is what lets her page back to "1 of 3" with
+ * Previous after saving "3 of 3". The reason this is not the H2 defect the caller worried about is
+ * `directAnswerProgress`'s OWN key, not this function: `SubmissionScreen` resets `answeredTasks` to
+ * `[]` the instant `directAnswerPassKey(review)` no longer matches the stored progress, so an entry
+ * only ever survives into this call from the SAME review round, and only for a question the server
+ * itself accepted a save for in that round. This function has no way to tell "she answered it and
+ * the plan retired it" from "the server retired it out from under her", and does not need to: within
+ * one round, both are her own accepted answer standing. */
+test("answeredTasks keeps a question the fresh plan no longer lists navigable within the same pass", () => {
+  const SPONSORSHIP = "Will you now or in the future require sponsorship for employment visa status?";
+  const review: Pick<ApplicationReview, "questions" | "question_metadata_blockers"> = {
+    questions: [{
+      id: "sponsorship", question: SPONSORSHIP, answer: "Yes", kind: "required", required: true,
+      portal_input_type: "select-one", options: ["Yes", "No"], answer_source: "applicant_review",
+    }],
+  };
+  const answeredTask = directAnswerNavigationTasks(
+    review,
+    [{ kind: "question", id: "confirm-sponsorship", item: { id: "confirm-sponsorship", label: SPONSORSHIP, action: "Confirm", actionKind: "confirm" }, question: review.questions[0], intent: "confirm" }],
+    [],
+  )[0];
+  assert.ok(answeredTask, "setup: the question must be outstanding before it can be recorded as answered");
+
+  // The fresh plan has nothing left outstanding - her save settled it - but the navigator still
+  // carries it forward from directAnswerProgress.answeredTasks, which is exactly the point.
+  const navigatorAfterHerSave = directAnswerNavigationTasks(review, [], [answeredTask]);
+  assert.equal(navigatorAfterHerSave.length, 1, "her own accepted answer stays navigable this pass");
+  assert.equal(navigatorAfterHerSave[0]?.question.id, "sponsorship");
+
+  // A question that was never in either list - never outstanding, never answered by her - does not
+  // appear just because the review still lists it: editableQuestions alone is not enough to draw it.
+  const untouchedReview: Pick<ApplicationReview, "questions" | "question_metadata_blockers"> = {
+    questions: [...review.questions, {
+      id: "other", question: "What is your favourite colour?", answer: "", kind: "required", required: false,
+    }],
+  };
+  const navigatorWithUntouchedQuestion = directAnswerNavigationTasks(untouchedReview, [], [answeredTask]);
+  assert.equal(navigatorWithUntouchedQuestion.length, 1, "an untouched question is not drawn into the navigator");
 });

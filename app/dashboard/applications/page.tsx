@@ -64,7 +64,7 @@ import { applyBankVariant, type ApplyOutcome } from "@/features/applications";
 import { RequirementProvider, RequirementText, MatchLegend } from "@/components/app/RequirementText";
 import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX, exactPacketAuditClauses, exactPacketAuditRanges } from "@/features/applications";
 import { educationDrift, educationDriftMessage, type EducationProfile } from "@/features/applications";
-import { checklistRowControl, completedSubmissionGroups, directInputTaskPlan, directQuestionPromptFingerprint, directQuestionTaskFingerprint, displayQuestionLabel, documentAsksByKind, documentControls, documentStepsInPlan, humanInputItems, metadataRefreshOutranksStandingAttention, QUESTION_CHOICE_LIST_LIMIT, reviewedAnswersSaveLanding, unconfirmedDocumentItems, type ChecklistResumeRecord, type DirectQuestionTask, type DirectQuestionTaskIntent, type SubmissionChecklistAction, type SubmissionChecklistItem } from "@/features/applications";
+import { checklistRowControl, completedSubmissionGroups, directAnswerNavigationTasks, directInputTaskPlan, directQuestionPromptFingerprint, directQuestionTaskFingerprint, displayQuestionLabel, documentAsksByKind, documentControls, documentStepsInPlan, humanInputItems, metadataRefreshOutranksStandingAttention, QUESTION_CHOICE_LIST_LIMIT, reviewedAnswersSaveLanding, unconfirmedDocumentItems, type ChecklistResumeRecord, type DirectQuestionTask, type DirectQuestionTaskIntent, type SubmissionChecklistAction, type SubmissionChecklistItem } from "@/features/applications";
 import { prescriptBlocksProgress, prescriptEditableQuestions, prescriptMetadataBlockers, prescriptNeedsHer, prescriptSummary } from "@/features/applications";
 import { answerWithExactOptionToggled, exactQuestionOption, exactSelectedQuestionOptions, optionalQuestionNeedsDecision, questionAcceptsMultipleOptions, questionOptionsAreComplete, questionReadsAsAnswered, questionReviewPresentation, requiredQuestionReviewRoute } from "@/features/applications";
 import type { JdMatchResponse, JobMatch } from "@/features/applications";
@@ -140,27 +140,6 @@ type DirectAnswerProgress = {
 };
 
 const EMPTY_DIRECT_ANSWER_DRAFTS: ReadonlyMap<string, DirectAnswerDraft> = new Map();
-
-function directAnswerNavigationTasks(
-  review: Pick<ApplicationReview, "questions" | "question_metadata_blockers">,
-  outstandingTasks: readonly DirectQuestionTask[],
-  answeredTasks: readonly DirectQuestionTask[],
-): DirectQuestionTask[] {
-  const outstandingByPrompt = new Map(
-    outstandingTasks.map((task) => [directQuestionPromptFingerprint(task), task]),
-  );
-  const answeredByPrompt = new Map(
-    answeredTasks.map((task) => [directQuestionPromptFingerprint(task), task]),
-  );
-  return questionReviewPresentation(
-    review.questions ?? [],
-    review.question_metadata_blockers ?? [],
-  ).editableQuestions.flatMap((question) => {
-    const promptFingerprint = directQuestionPromptFingerprint({ question });
-    const task = outstandingByPrompt.get(promptFingerprint) ?? answeredByPrompt.get(promptFingerprint);
-    return task ? [{ ...task, question }] : [];
-  });
-}
 
 function directAnswerPassKey(review: ApplicationReview): string {
   return review.questions_reviewed_at ?? review.submission_run_id ?? review.updated_at;

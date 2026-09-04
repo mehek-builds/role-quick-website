@@ -136,6 +136,45 @@ test("an authority-only revision is installed even when the mutable review clock
   assert.equal(nextSubmissionState(current, incoming), incoming);
 });
 
+/* STATUS DRIVES WHICH SCREEN RENDERS, AND IT IS NOT PROVABLY A FUNCTION OF `updated_at`.
+ *
+ * rqw PR #536 taught `directInputTaskPlan` to read `sensitive_questions_requiring_confirmation`
+ * instead of re-guessing from the question label, so a cleared confirmation correctly stops
+ * building a one-question queue entry for it - PROVIDED the fresh review actually reaches the
+ * component. It did not always: this function compared `review.updated_at`, the cover letter,
+ * `documents`, `handoff_url` and `configured`, but never `review.status` in its own right, even
+ * though `status` lives inside `review` and can differ while `updated_at` does not (this file's own
+ * header already documents that `updated_at` is not a version for everything it gates).
+ *
+ * Measured against the Hudson River Trading packet 4a79eec1-5c65-4dd4-8e72-e119fbfbd733,
+ * 2026-09-04: GET /applications/:id/submission answered `review.status: "failed"`, and the live
+ * dashboard, on a hard reload of that same packet, still rendered the needs_attention one-question
+ * queue asking her to confirm a question the server had already cleared. A poll that changes only
+ * `status`, while `updated_at` and the rest of the packet identity happen to still agree with what
+ * is installed, is exactly the response this comparison threw away - which is why #536 did not end
+ * the dead end it was written for. */
+test("a status change is not thrown away, even when the review clock does not move", () => {
+  const needsAttention = { ...fromServer, review: { ...fromServer.review, status: "needs_attention" } } satisfies SubmissionSnapshot;
+  const failed = { ...needsAttention, review: { ...needsAttention.review, status: "failed" } } satisfies SubmissionSnapshot;
+
+  // The setup only tests the status comparison if nothing else distinguishes the two.
+  assert.equal(needsAttention.review.updated_at, failed.review.updated_at);
+  assert.equal(
+    submissionReviewPacketIdentity(needsAttention.review),
+    submissionReviewPacketIdentity(failed.review),
+  );
+
+  assert.equal(nextSubmissionState(needsAttention, failed), failed);
+  // And status moving the other way is news too - this is a comparison, not a one-way ratchet.
+  assert.equal(nextSubmissionState(failed, needsAttention), needsAttention);
+});
+
+test("a poll that repeats the same status still dedupes, so the screen does not re-render forever", () => {
+  const failed = { ...fromServer, review: { ...fromServer.review, status: "failed" } } satisfies SubmissionSnapshot;
+  const nextTick = { ...failed, review: { ...failed.review } };
+  assert.equal(nextSubmissionState(failed, nextTick), failed, "same status, new object, no re-render");
+});
+
 /* THE SAME DEFECT AS THE COVER LETTER, IN THE FIELD ADDED AFTER IT.
  *
  * `documents` lives outside `review`, so nothing advances `review.updated_at` when a transcript is
@@ -213,6 +252,50 @@ test("document identity ignores nothing that distinguishes two marks", () => {
     documentsIdentity({ transcript: { file_name: "t.pdf" }, writing_sample: { file_name: "w.pdf" } }),
     documentsIdentity({ writing_sample: { file_name: "w.pdf" }, transcript: { file_name: "t.pdf" } }),
   );
+});
+
+/* THE SAME DEFECT AS `documents`, IN THE FIELD #536 ADDED.
+ *
+ * `sensitive_questions_requiring_confirmation` lives outside `review` and is versioned by nothing,
+ * exactly like `documents` above. Left out of the comparison, a poll that only dropped a question
+ * from this list - the server having decided it no longer needs a confirmation - matched on every
+ * other term here and was thrown away, so the dashboard went on reading the STALE list and kept
+ * building a queue entry for a question the server had already cleared. Same shape as the
+ * transcript bug above, one field later; see the status test above it for the measured packet. */
+test("a question dropping off the server's confirmation list is not thrown away", () => {
+  const needsConfirmation = {
+    ...fromServer,
+    sensitive_questions_requiring_confirmation: ["Will you now or in the future require sponsorship for employment visa status?"],
+  } satisfies SubmissionSnapshot;
+  const cleared = { ...needsConfirmation, sensitive_questions_requiring_confirmation: [] } satisfies SubmissionSnapshot;
+
+  // The setup only tests the list comparison if nothing else distinguishes the two.
+  assert.equal(needsConfirmation.review.updated_at, cleared.review.updated_at);
+  assert.equal(coverLetterIdentity(needsConfirmation.cover_letter), coverLetterIdentity(cleared.cover_letter));
+
+  assert.equal(nextSubmissionState(needsConfirmation, cleared), cleared);
+  // And a question the server starts asking about is news in the same direction.
+  assert.equal(nextSubmissionState(cleared, needsConfirmation), needsConfirmation);
+});
+
+test("a poll that repeats the same confirmation list still dedupes, so the screen does not re-render forever", () => {
+  const needsConfirmation = {
+    ...fromServer,
+    sensitive_questions_requiring_confirmation: ["Will you now or in the future require sponsorship for employment visa status?"],
+  } satisfies SubmissionSnapshot;
+  const nextTick = {
+    ...needsConfirmation,
+    sensitive_questions_requiring_confirmation: [...needsConfirmation.sensitive_questions_requiring_confirmation],
+  };
+  assert.equal(nextSubmissionState(needsConfirmation, nextTick), needsConfirmation, "same list, new array, no re-render");
+});
+
+test("never asked and asked-then-cleared are two different answers, for the confirmation list too", () => {
+  // Mirrors "never measured and measured-but-empty are two different answers" for `documents`:
+  // no list at all (an older payload, absent field) must not collapse into an empty, answered one.
+  const unmeasured: SubmissionSnapshot = { ...fromServer, sensitive_questions_requiring_confirmation: undefined };
+  const measuredEmpty: SubmissionSnapshot = { ...fromServer, sensitive_questions_requiring_confirmation: [] };
+  assert.equal(nextSubmissionState(unmeasured, measuredEmpty), measuredEmpty);
 });
 
 /* THE 2.5 SECOND BLIND WINDOW.
