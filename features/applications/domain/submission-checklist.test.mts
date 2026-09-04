@@ -992,6 +992,211 @@ test("a confirmation naming another question does not settle this one", () => {
   assert.equal(asking?.action, "Confirm");
 });
 
+/* THE ANSWERED ESSAY THAT WOULD NOT STOP ASKING.
+ *
+ * Measured live 2026-09-04, Exa "Software Engineer, Intern" packet
+ * 73768339-7fef-4493-aa75-1d47c61ae51f (ashby, account mehekmandal05@gmail.com): four required
+ * essays, all four already answered, four confirming saves that all returned 200, and a reload that
+ * opened on "1 of 4 / Save and next" again. Nothing she could do inside the queue ever shortened it.
+ *
+ * The row asked on the KIND alone - essay, and it has words in it - so it re-raised itself out of
+ * the very answer the save had just written, while printing a sentence about PROVENANCE it had
+ * never tested: "Drafted answer ready for review". directInputTaskPlan then turns every such row
+ * into a question task unless the row is settled, which is how one untested word became a four-step
+ * loop.
+ *
+ * answer_source is the test, and deliberately the SAME field the backend's send gate reads
+ * (unapprovedLitosDraftQuestionLabels), so the ask here and the refusal there cannot disagree.
+ * NOT answer_confirmed_of, which settles the CONFIRM row two tests above: that field is minted only
+ * by a per-question `confirmed: true` on a sensitive question and is absent from every fixture
+ * below, so an essay read through it would loop forever no matter what she approved.
+ *
+ * The backend half is volley-backend fix/answered-essay-stops-being-asked (6440c5b): before it a
+ * confirming save minted nothing at all, because the stored label carried the employer's required
+ * marker while every read path served normalizeReviewQuestionLabel's output and the merge's
+ * confirmation gate compared the two byte for byte. */
+const EXA_ESSAYS = [
+  ["exa-why", "Why do you want to work at Exa?", "Exa is building search that answers with sources rather than links, and the retrieval quality problem is the one I want to spend a summer inside."],
+  ["exa-project", "Tell us about a technical project you are proud of.", "I built a TypeScript workflow engine that automated 18 client handoffs, mapping the failure states first so every recovery path stayed visible."],
+  ["exa-hard", "Describe the hardest bug you have debugged.", "A queue consumer that lost one message in roughly ten thousand, which turned out to be an ack written before the write it was acknowledging had committed."],
+  ["exa-learn", "What do you want to learn here?", "How a retrieval system is evaluated in production, where the ground truth is thin and the regressions are quiet."],
+] as const;
+
+function exaReview(source: "litos_draft" | "applicant_review"): Pick<ApplicationReview, "attention_reason" | "questions" | "questions_reviewed_at" | "status"> {
+  return {
+    status: "needs_attention",
+    /* Empty on purpose: `remaining` counts non-question work too, so an attention sentence here
+       would let this test pass at zero for a reason that has nothing to do with the essays. */
+    attention_reason: "",
+    questions_reviewed_at: "2026-09-04T18:02:11.000Z",
+    questions: EXA_ESSAYS.map(([id, question, answer]) => ({
+      id,
+      question,
+      answer,
+      kind: "essay" as const,
+      required: true,
+      portal_input_type: "textarea",
+      answer_source: source,
+    })),
+  };
+}
+
+test("four unapproved essay drafts are four things to review", () => {
+  const drafts = exaReview("litos_draft");
+  const items = humanInputItems(drafts).filter((item) => item.questionId);
+
+  assert.equal(items.length, 4);
+  for (const item of items) {
+    assert.equal(item.settled, undefined, `"${item.label}" is an unapproved draft and must still be work`);
+    assert.equal(item.detail, "Drafted answer ready for review");
+    assert.equal(item.action, "Review");
+    assert.equal(item.actionKind, "review");
+  }
+
+  const plan = directInputTaskPlan(drafts);
+  assert.deepEqual(plan.questionTasks.map((task) => task.question.id), EXA_ESSAYS.map(([id]) => id));
+  assert.deepEqual(plan.questionTasks.map((task) => task.intent), ["review", "review", "review", "review"]);
+  assert.equal(plan.remaining, 4, "this is the honest 1 of 4: four drafts nobody has approved");
+});
+
+test("the same four essays, approved, ask nothing and take the queue to zero", () => {
+  const approved = exaReview("applicant_review");
+  const items = humanInputItems(approved).filter((item) => item.questionId);
+
+  assert.equal(items.length, 4, "the rows stay: a control that vanishes takes the way back with it");
+  for (const item of items) {
+    assert.equal(item.settled, true, `"${item.label}" is her own approved answer and is not work`);
+    assert.equal(item.detail, "Reviewed by you");
+    assert.equal(item.action, "Change");
+    assert.equal(item.actionKind, "review", "and the control still opens the editor she wrote it in");
+  }
+
+  /* The settled row's own promise, which the confirm row already had to make and this one did not:
+     a screen reader on an approved essay must not be told there is a draft here to review. */
+  assert.deepEqual(checklistRowControl(items[0]!, {}), {
+    element: "button",
+    label: "Change",
+    name: "Change your reviewed answer to: Why do you want to work at Exa?",
+    intent: "review",
+    questionId: "exa-why",
+  });
+
+  const plan = directInputTaskPlan(approved);
+  assert.deepEqual(plan.questionTasks, [], "nothing is left to walk through");
+  assert.deepEqual(plan.nonQuestionTasks, []);
+  assert.equal(plan.current, null);
+  assert.deepEqual(plan.settled.map((item) => item.questionId), EXA_ESSAYS.map(([id]) => id));
+  /* The measurement this whole test exists for: the reload that used to reopen on "1 of 4". */
+  assert.equal(plan.remaining, 0);
+});
+
+/* ABSENT IS NOT APPROVED, and settling on it was a dead end with nothing to press.
+ *
+ * The first cut of this gate settled every essay that was not `litos_draft`, which swept in the
+ * answers the server names no source for. The backend reads exactly that state as a machine answer
+ * and counts the row unacknowledged - measured on the Akuna Python SWE packet 2026-08-27, where a
+ * pre-filled answer pressed unchanged minted nothing, `questionsMatch` stayed false and the packet
+ * parked - so the screen would have called a row done that the server was still holding open, and
+ * settled it out of the queue that carries the only press which mints the claim.
+ *
+ * It also must not print "Drafted answer": the server never said Litos wrote it. */
+test("an essay the server names no source for keeps asking, without attributing it to Litos", () => {
+  const unnamed = {
+    status: "needs_attention" as const,
+    attention_reason: "",
+    questions: [{
+      id: "why-us",
+      question: "Why us?",
+      answer: "Because the retrieval problem is the interesting one.",
+      kind: "essay" as const,
+      required: true,
+      portal_input_type: "textarea",
+    }],
+  };
+
+  const row = humanInputItems(unnamed).find((item) => item.questionId === "why-us");
+  assert.equal(row?.settled, undefined, "nobody has approved it, so it is still work");
+  /* The drafted sentence, not a neutral one. An absent source is not "provenance we cannot claim":
+     the backend classes `undefined || litos_draft` as machineAuthored precisely because the essay
+     drafter used to push its paragraph with no flag, so the honest reading is that Litos wrote it. */
+  assert.equal(row?.detail, "Drafted answer ready for review");
+  assert.equal(row?.action, "Review");
+  assert.equal(row?.actionKind, "review");
+
+  const plan = directInputTaskPlan(unnamed);
+  assert.equal(plan.remaining, 1, "and it keeps a press in the queue, which is what mints the claim");
+  assert.equal(plan.current?.id, "review-why-us");
+});
+
+/* THE RUN'S OWN EMPTY REPORT OUTRANKS HER APPROVAL, because Done is a claim about the EMPLOYER's
+ * form and an approval is not.
+ *
+ * A settled row here was the only thing on screen for an approved essay whose box the run measured
+ * empty: blockerDuplicatesQuestion had already dropped the employer's blocker on the reasoning that
+ * a question record covers it, and the essay branch's own `continue` kept the `empty-` row from
+ * being built. One confirmation, out of the amber panel and out of the count, standing in for a
+ * required answer the employer never received. The same substitution the `empty-` branch was
+ * written to end, one row class over. */
+test("an approved essay the run reports still empty is work, not a confirmation", () => {
+  const stillEmpty = {
+    status: "needs_attention" as const,
+    attention_reason: '"Why do you want to work here?" is required and is still empty',
+    questions: [{
+      id: "why-us",
+      question: "Why do you want to work here?",
+      answer: "Her approved paragraph.",
+      kind: "essay" as const,
+      required: true,
+      portal_input_type: "textarea",
+      answer_source: "applicant_review" as const,
+    }],
+  };
+
+  const items = humanInputItems(stillEmpty);
+  const row = items.find((item) => item.questionId === "why-us");
+  assert.ok(row, "the field the run reported empty must have a row");
+  assert.equal(row.settled, undefined, "nothing may state this is handled while the box is empty");
+  assert.equal(row.id, "empty-why-us", "and it is the row that says what is actually wrong");
+  assert.equal(row.detail, "Answered here, still empty on the form");
+  assert.equal(row.action, "Answer");
+  assert.equal(directInputTaskPlan(stillEmpty).remaining, 1);
+
+  /* The Done column has to agree: an approval is not the employer receiving it. */
+  assert.deepEqual(completedSubmissionItems(stillEmpty).map((item) => item.label), []);
+});
+
+/* AN APPROVED ESSAY IS ON THE RECORD OF THE APPLICATION, which settling alone did not achieve.
+ *
+ * The packet viewer drops server-settled rows deliberately (it is read-only and prints no action
+ * words), and completedSubmissionItems excluded every unsubmitted essay, so an approved essay
+ * landed on none of that screen's lists: not needsInput, not acknowledged, not completed. The
+ * exclusion existed only because an essay was ALWAYS outstanding review work while unsubmitted,
+ * which is the thing that stopped being true. */
+test("an approved essay reaches the Done column while the application is still unsent", () => {
+  const approved = {
+    status: "needs_attention" as const,
+    attention_reason: "",
+    questions: [
+      {
+        id: "why-us", question: "Why us?", answer: "Her approved paragraph.",
+        kind: "essay" as const, required: true, answer_source: "applicant_review" as const,
+      },
+      {
+        id: "why-them", question: "Why this team?", answer: "A paragraph Litos wrote.",
+        kind: "essay" as const, required: true, answer_source: "litos_draft" as const,
+      },
+    ],
+  };
+
+  const done = completedSubmissionItems(approved);
+  assert.deepEqual(done.map((item) => item.label), ["Why us?"], "only the approved one is done");
+  assert.equal(done[0]?.detail, "Reviewed by you", "and it is not filed under the drafted sentence");
+
+  const groups = completedSubmissionGroups(approved);
+  const questions = groups.find((group) => group.label === "Employer questions");
+  assert.equal(questions?.detail, "1 item completed", "the group count must agree with the row list about one essay");
+});
+
 /* THE SERVER NAMES THE ROWS, because only the server can.
  *
  * Its verdict is computed against the resolver, the applicant profile, the JD and the posting
@@ -2361,11 +2566,20 @@ test("a confirmed essay is not a draft, so it stops asking", () => {
   };
 
   const items = humanInputItems(review);
-  assert.equal(
-    items.find((item) => item.questionId === "confirmed-essay"),
-    undefined,
-    "she confirmed it; asking again is the loop this test exists to stop",
-  );
+  /* IT STOPS ASKING, AND IT DOES NOT VANISH, which are two different things and this used to test
+     the second as a proxy for the first. A settled row asks nothing: it is out of the amber panel,
+     out of "N to check", and out of the queue below, which is the whole property. Absence was a
+     stronger claim than the loop needed and a defect of its own, since the packet viewer drops
+     server-settled rows and the Done column excluded an unsubmitted essay, so the one paragraph she
+     approved herself appeared on no list anywhere. */
+  const confirmed = items.find((item) => item.questionId === "confirmed-essay");
+  assert.ok(confirmed, "her approved answer stays on the record, with the way back to change it");
+  assert.equal(confirmed.settled, true, "she confirmed it; asking again is the loop this test exists to stop");
+  assert.equal(confirmed.detail, "Reviewed by you");
+  assert.equal(confirmed.action, "Change");
+  const plan = directInputTaskPlan(review);
+  assert.deepEqual(plan.questionTasks.map((task) => task.question.id), ["drafted-essay"], "only the draft is walked");
+  assert.equal(plan.remaining, 1);
   const drafted = items.find((item) => item.questionId === "drafted-essay");
   assert.ok(drafted, "an unapproved Litos draft still needs her eyes");
   assert.equal(drafted.detail, "Drafted answer ready for review");
@@ -2418,12 +2632,18 @@ test("a confirmed essay whose label reads human-only does not fall into an unset
     ],
   };
 
-  // Fallback path: no server list, so only the local label guess is available - and it must not fire.
+  /* Fallback path: no server list, so only the local label guess is available - and it must not
+     fire. The property is that no CONFIRM row appears, not that no row appears: her approved essay
+     keeps a settled row so it stays on the record with the way back, which asks nothing. */
+  const guessed = humanInputItems(review).find((item) => item.questionId === "salary-essay");
+  assert.ok(guessed, "her approved answer stays on the record");
+  assert.equal(guessed.settled, true, "she confirmed it; a label guess must not re-ask it");
   assert.equal(
-    humanInputItems(review).find((item) => item.questionId === "salary-essay"),
-    undefined,
-    "she confirmed it; a label guess must not re-ask it as a confirmation it can never settle",
+    guessed.actionKind,
+    "review",
+    "and above all not as a confirmation it can never settle, which reads answer_confirmed_of",
   );
+  assert.equal(directInputTaskPlan(review).remaining, 0, "nothing is left to walk through");
 
   // But when the SERVER names it, the ask is real and the row appears.
   const named = humanInputItems(review, { sensitiveConfirmations: [SALARY_ESSAY] })

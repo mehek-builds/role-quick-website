@@ -298,14 +298,18 @@ export function checklistRowControl(
     return { element: "attach", label: item.action, name, kind: item.documentKind };
   }
   if (!item.questionId) return null;
+  /* Two sentences per intent, because the accessible name is a promise about what pressing this
+     does. On a settled row the answer already stands and the only thing behind the control is the
+     editor that can change it, so "Confirm your answer" would be a screen reader announcing work
+     that is already done. Same rule as the attach control above, and it has to hold for REVIEW as
+     well as CONFIRM now that an approved essay settles instead of going on asking: a settled row
+     still named "Review the drafted answer" would be restating the exact ask her approval ended. */
   const name = item.actionKind === "answer"
     ? `Answer: ${item.label}`
     : item.actionKind === "review"
-      ? `Review the drafted answer to: ${item.label}`
-      /* Two sentences for one intent, because the accessible name is a promise about what pressing
-         this does. On a settled row the answer is already confirmed and the only thing behind the
-         control is the editor that can change it, so "Confirm your answer" would be a screen reader
-         announcing work that is already done. Same rule as the attach control above. */
+      ? item.settled
+        ? `Change your reviewed answer to: ${item.label}`
+        : `Review the drafted answer to: ${item.label}`
       : item.settled
         ? `Change your confirmed answer to: ${item.label}`
         : `Confirm your answer to: ${item.label}`;
@@ -889,6 +893,30 @@ function applicantConfirmedAnswer(
   );
 }
 
+/**
+ * A PARAGRAPH NOBODY HAS APPROVED, which is the state the Review row above is about.
+ *
+ * ONE DEFINITION, and that is why this is a function rather than the inline const it started as.
+ * Three places test it: the row that asks, and BOTH Done-column builders, which had to stop
+ * excluding an approved essay once one could settle. The row list and the group count disagreeing
+ * about a single essay is the same class of defect as the two columns disagreeing about a file, and
+ * they were one edit away from it.
+ *
+ * The terms are the send gate's, not this screen's guess at them. See the Review row's own comment
+ * for why an ABSENT source counts as a draft here: the backend classes `undefined || 'litos_draft'`
+ * as machineAuthored together, because the essay drafter used to push its paragraph with no flag at
+ * all, and this row is the only surface that puts such a paragraph in front of her before it goes
+ * out in her name.
+ *
+ * NOT the same question as applicantConfirmedAnswer above. That one asks whether she pressed
+ * Confirm on a SENSITIVE question, which mints answer_confirmed_of and nothing else does. An essay
+ * is a plain drafted answer no gate asks her to confirm, so reading that field for one would never
+ * come true.
+ */
+function essayDraftAwaitsApproval(question: Pick<ApplicationQuestion, "answer_source">): boolean {
+  return question.answer_source === "litos_draft" || question.answer_source === undefined;
+}
+
 export function humanInputItems(
   review: Pick<ApplicationReview, "attention_reason" | "attention_categories" | "attention_acknowledgements" | "cover_letter_supported" | "filled_fields" | "questions" | "question_metadata_blockers" | "questions_reviewed_at" | "required_documents" | "transcript_supported" | "stall" | "status">,
   /* The employer, the role, and what the application already carries. None of the three is on the
@@ -971,6 +999,16 @@ export function humanInputItems(
     const question = presentedQuestions.get(storedQuestion.id) ?? storedQuestion;
     if (review.cover_letter_supported === false && isCoverLetterFieldLabel(question.question)) continue;
     const answer = (question.answer ?? "").trim();
+    /* HOISTED ABOVE THE ESSAY ROWS, because the settled one has to yield to it.
+       The server's own list is the authority on what it will refuse to send, and settling a row the
+       backend still NAMES would be the client saying done while the server says not done, with
+       nothing on the screen to press: the dead end recorded on applicantConfirmedAnswer, reached by
+       a new door. The local label guess deliberately does NOT hold the settled row back, for the
+       reason the fallback below bars it from essays outright: a guess plus a row that cannot settle
+       is how the loop comes back. */
+    const serverList = context.sensitiveConfirmations;
+    const serverNamesForConfirmation = serverList !== undefined
+      && serverList.some((label) => label.trim().toLowerCase() === question.question.trim().toLowerCase());
     if (question.required && !answer) {
       addUnique(items, {
         id: `missing-${question.id}`,
@@ -1027,7 +1065,7 @@ export function humanInputItems(
      * gate does not stop it either - unapprovedLitosDraftQuestionLabels matches the literal only.
      * This row is the sole surface that puts such a paragraph in front of her, so it has to keep
      * catching them or an AI-written answer reaches an employer in her name unread. */
-    const essayIsUnapprovedDraft = question.answer_source === "litos_draft" || question.answer_source === undefined;
+    const essayIsUnapprovedDraft = essayDraftAwaitsApproval(question);
     if (review.status !== "submitted" && question.kind === "essay" && answer && essayIsUnapprovedDraft) {
       addUnique(items, {
         id: `review-${question.id}`,
@@ -1036,6 +1074,48 @@ export function humanInputItems(
         action: "Review",
         actionKind: "review",
         questionId: question.id,
+      });
+      continue;
+    }
+
+    /* AND AN APPROVED ONE IS NOT INVISIBLE, which is what dropping its row quietly made it.
+     *
+     * The gate above is right and this does not touch it: an approved essay is not work, so it must
+     * not be asked about. But falling out of this loop with no row put her approved essay on NO
+     * LIST AT ALL. The packet viewer renders three lists and it was on none of them: it drops
+     * server-settled rows deliberately (read-only, prints no action words), it had no row here to
+     * drop anyway, and completedSubmissionItems excluded every unsubmitted essay. The one paragraph
+     * she wrote or approved herself was the only thing about the application that the record of the
+     * application did not mention.
+     *
+     * A settled row is the shape this file already has for "handled, and here is the way back", and
+     * it is half the fix: the other half is the two Done-column builders below, which had to stop
+     * excluding an approved essay. They were excluding it for a reason that expired - while
+     * unsubmitted an essay was ALWAYS an outstanding review row, so listing it as complete would
+     * have contradicted the panel beside it - and that stopped being true the moment an essay could
+     * settle.
+     *
+     * NOT WHEN THE RUN SAYS THE BOX IS STILL EMPTY. The employer's own blocker for this field is
+     * already dropped by blockerDuplicatesQuestion, on the reasoning that a question record covers
+     * it, so a settled row here would be the only thing on screen for a required answer the
+     * employer never received: a confirmation standing in for an empty box. Falling through hands
+     * the field to the `empty-` branch, which states the one true thing about it and carries a
+     * control that fills it. */
+    if (review.status !== "submitted" && question.kind === "essay" && answer
+      && !serverNamesForConfirmation
+      && !questionReportedEmpty(question.question, emptySubjects)) {
+      addUnique(items, {
+        id: `review-${question.id}`,
+        label: displayQuestionLabel(question.question),
+        /* Her own hand is worth naming back to her; a standing permission is Litos acting for her
+           under a rule she set, and must not be printed as her review. */
+        detail: question.answer_source === "applicant_review"
+          ? "Reviewed by you"
+          : "Accepted under your standing permission",
+        action: "Change",
+        actionKind: "review",
+        questionId: question.id,
+        settled: true,
       });
       continue;
     }
@@ -1058,7 +1138,6 @@ export function humanInputItems(
      *
      * Case- and space-insensitive, because the two sides carry the same label through different
      * transports and only the TEXT is its identity. */
-    const serverList = context.sensitiveConfirmations;
     /* THE LABEL FALLBACK NEVER CLAIMS AN ESSAY, and the essay branch above is why.
      *
      * That branch now passes an essay through once she has approved it, which newly exposed this one
@@ -1075,7 +1154,7 @@ export function humanInputItems(
      * real exit. Only the local label guess is barred from claiming essays, because a guess plus an
      * unsettleable row is how the loop comes back. */
     const needsConfirmation = serverList
-      ? serverList.some((label) => label.trim().toLowerCase() === question.question.trim().toLowerCase())
+      ? serverNamesForConfirmation
       : isHumanOnlyChecklistLabel(question.question) && question.kind !== "essay";
     if (review.status !== "submitted" && answer && needsConfirmation) {
       /* Confirmed once is confirmed, and the row has to say so or the ask never ends. The settled
@@ -1484,7 +1563,13 @@ export function completedSubmissionItems(review: Pick<ApplicationReview, "attent
   for (const question of review.questions ?? []) {
     const answer = (question.answer ?? "").trim();
     if (!answer) continue;
-    if (question.kind === "essay" && review.status !== "submitted") continue;
+    /* An essay was excluded here for ONE reason, and it expired. While unsubmitted an essay was
+       ALWAYS an outstanding review row, so listing it as complete would have contradicted the panel
+       beside it. An essay she has approved is not outstanding anywhere now, and the packet viewer
+       drops server-settled rows, so keeping the exclusion whole is what left an approved essay on
+       none of that screen's lists. The run's own empty report below still outranks this, exactly as
+       it does for every other answer: an approval is not the employer receiving it. */
+    if (question.kind === "essay" && review.status !== "submitted" && essayDraftAwaitsApproval(question)) continue;
     if (isHumanOnlyChecklistLabel(question.question)) continue;
     // The run says this box is still empty. A stored answer is not the employer having received it,
     // and Done is a claim about the employer's form.
@@ -1492,7 +1577,12 @@ export function completedSubmissionItems(review: Pick<ApplicationReview, "attent
     addUnique(items, {
       id: `answer-${question.id}`,
       label: displayQuestionLabel(question.question),
-      detail: question.kind === "essay" ? "Answer drafted" : "Answer filled",
+      /* An approved essay reaches this column now, so it must not be listed under the sentence for
+         a paragraph nobody has approved. Same words the checklist row uses, so the two surfaces
+         describe one answer the same way. */
+      detail: question.kind === "essay"
+        ? (essayDraftAwaitsApproval(question) ? "Answer drafted" : "Reviewed by you")
+        : "Answer filled",
     });
   }
 
@@ -1749,7 +1839,13 @@ export function completedSubmissionGroups(
   }
   for (const question of review.questions ?? []) {
     if (!(question.answer ?? "").trim()) continue;
-    if (question.kind === "essay" && review.status !== "submitted") continue;
+    /* An essay was excluded here for ONE reason, and it expired. While unsubmitted an essay was
+       ALWAYS an outstanding review row, so listing it as complete would have contradicted the panel
+       beside it. An essay she has approved is not outstanding anywhere now, and the packet viewer
+       drops server-settled rows, so keeping the exclusion whole is what left an approved essay on
+       none of that screen's lists. The run's own empty report below still outranks this, exactly as
+       it does for every other answer: an approval is not the employer receiving it. */
+    if (question.kind === "essay" && review.status !== "submitted" && essayDraftAwaitsApproval(question)) continue;
     if (isHumanOnlyChecklistLabel(question.question)) continue;
     if (review.status !== "submitted" && questionReportedEmpty(question.question, emptySubjects)) continue;
     add("questions", question.id || normalizedChecklistText(question.question));
