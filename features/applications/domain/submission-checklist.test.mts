@@ -2761,3 +2761,60 @@ test("a confirmed essay whose label reads human-only does not fall into an unset
   assert.ok(named, "the backend naming a question outranks the local guess");
   assert.equal(named.actionKind, "confirm");
 });
+
+/* THE MEASURED DEFECT: Exa "Software Engineer, Intern" (Ashby), packet 73768339, 2026-09-04. Every
+ * answer was present, the packet sat at ready_for_final_approval, and the Review screen's own
+ * "Not confirmed" section named the resume - Litos's own record had no resume linked to it either -
+ * beside a picture of Ashby's own "...Resume.pdf failed to upload" toast. Nothing on that screen
+ * could start a fresh fill: Start it again is gated on handoffExpired, Fix an answer on a missing
+ * required answer, and neither held. fillAgainFromReviewControl is the one place that gap closes. */
+import { fillAgainFromReviewControl } from "./submission-checklist.ts";
+
+const readyReview: Pick<ApplicationReview, "status"> = { status: "ready_for_final_approval" };
+const NOT_CONFIRMED_RESUME = [{ badge: "Not confirmed" }];
+
+test("a NOT CONFIRMED document row at ready_for_final_approval offers Fill the form again", () => {
+  assert.deepEqual(
+    fillAgainFromReviewControl(readyReview, NOT_CONFIRMED_RESUME, false),
+    { label: "Fill the form again" },
+  );
+});
+
+test("no unconfirmed document row hides the control", () => {
+  assert.equal(fillAgainFromReviewControl(readyReview, [], false), "hidden");
+  // A settled, fully-confirmed checklist carries rows with no badge at all - still nothing to act on.
+  assert.equal(fillAgainFromReviewControl(readyReview, [{ badge: undefined }], false), "hidden");
+});
+
+test("a reported-empty (Missing) row is a stronger, different claim and does not show this control", () => {
+  // documentClaimState's "reported_empty" state prints badge "Missing", never "Not confirmed" -
+  // this function is scoped to the exact defect it was measured against, not the whole section.
+  assert.equal(fillAgainFromReviewControl(readyReview, [{ badge: "Missing" }], false), "hidden");
+});
+
+test("needs_attention hides the control, even with an unconfirmed document present", () => {
+  const attentionReview: Pick<ApplicationReview, "status"> = { status: "needs_attention" };
+  assert.equal(fillAgainFromReviewControl(attentionReview, NOT_CONFIRMED_RESUME, false), "hidden");
+});
+
+test("an expired handoff keeps the existing Start it again control instead of a second one", () => {
+  assert.equal(
+    fillAgainFromReviewControl(readyReview, NOT_CONFIRMED_RESUME, true),
+    "hidden",
+    "Start it again already reruns the same restart; two buttons calling onRestart would be one action wearing two names",
+  );
+});
+
+test("the review screen wires Fill the form again to the exact Not confirmed array and the Start it again handler", () => {
+  const page = readFileSync("app/dashboard/applications/page.tsx", "utf8");
+  assert.match(
+    page,
+    /const fillAgainControl = fillAgainFromReviewControl\(review, unconfirmedDocuments, handoffExpired\);/,
+    "visibility must be decided off the exact array already rendered as Not confirmed, never a second derivation",
+  );
+  assert.match(
+    page,
+    /\{fillAgainControl !== "hidden" && \([\s\S]{0,200}?<Button onClick=\{onRestart\} disabled=\{restarting\} variant="secondary">[\s\S]{0,100}?fillAgainControl\.label[\s\S]{0,50}?<\/Button>/,
+    "Fill the form again must call the SAME onRestart handler and restarting flag Start it again uses - one caller, no new backend contract",
+  );
+});

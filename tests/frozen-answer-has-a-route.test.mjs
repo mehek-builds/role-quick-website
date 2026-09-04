@@ -93,6 +93,31 @@ test("the required-answer blocker on a filled packet has a control on the screen
     "and the sentence names the button, the way the document-ask sentence beside it already does");
 });
 
+/* THE SAME CLASS OF DEAD END, ONE STATUS OVER. Measured live 2026-09-04, Exa "Software Engineer,
+ * Intern" (Ashby) packet 73768339: every answer present, status ready_for_final_approval, and the
+ * Review screen's own "Not confirmed" section named the resume - Litos's own record had no resume
+ * linked to it either - beside a picture of Ashby's own "...Resume.pdf failed to upload" toast.
+ * Start it again is gated on handoffExpired and Fix an answer on a missing required answer; neither
+ * held, so nothing on the screen could start the fresh fill the resume needed. See
+ * fillAgainFromReviewControl in features/applications/domain/submission-checklist.ts for the pure
+ * decision, unit-tested there; this file's job is only to pin that the Review screen actually wires
+ * it, and wires it to the SAME restart Start it again uses. */
+test("an unconfirmed document on a filled packet has a control on the screen that prints it", async () => {
+  const code = shippedCode(await readFile(PAGE, "utf8"));
+  assert.match(
+    code,
+    /const fillAgainControl = fillAgainFromReviewControl\(review, unconfirmedDocuments, handoffExpired\)/,
+    "visibility must be decided off the exact array this screen already renders as Not confirmed,"
+    + " never a second derivation that could disagree with it",
+  );
+  assert.match(
+    code,
+    /\{fillAgainControl !== "hidden" && \(\s*<Button onClick=\{onRestart\} disabled=\{restarting\} variant="secondary">/,
+    "Fill the form again must call the SAME onRestart handler and restarting flag Start it again uses"
+    + " - one caller, the existing submit-request {restart:true} contract, no new backend route",
+  );
+});
+
 /* THE INVARIANT, ASSERTED AS AN ABSENCE. The fix must never have been "post the frozen save anyway
  * and hope", nor a second answer-writing route. There is exactly one PUT of reviewed answers in this
  * page's shipped code path for a direct save, and the reopen does not add another. */
