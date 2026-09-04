@@ -157,6 +157,22 @@ test("the packet review screen's notice explains a status the backend would refu
   );
 });
 
+/* ROUND 2, FIRST HALF. Before this, the checklist screen's own ResumeContactStaleNotice render (the
+ * one this notice was ADDED for - it renders only at ready_for_final_approval) passed no
+ * `unavailableReason` at all, so its button stayed pressable and undisabled whether or not the
+ * backend's own resumeContactRefreshDisposition would 409 it - the same gap the packet review
+ * screen's own unavailableReason (test above) was written to close, left open on its sibling. Now
+ * that ready_for_final_approval is sometimes open and sometimes refused (a claim, or employer-may-hold
+ * evidence), an unwired button here would silently 409 on exactly the packets this round exists to
+ * unblock, with no reason shown first. */
+test("the checklist screen's notice explains a status the backend would refuse before the press too", () => {
+  assert.match(
+    pageSource,
+    /unavailableReason=\{resumeContactRefreshBlockedReason\(review\)\}/,
+    "SubmissionScreen's own call site, off the same `review` it destructures from its `submission` prop",
+  );
+});
+
 /* FINDING 2, SECOND HALF: mutual exclusion between the checklist screen's own in-flight review
  * mutations. Before this, the contact-refresh button sat beside Start it again / Fill the form
  * again (both `disabled={restarting}` only) and Send (`disabled={finalApprovalBlocked}`, which read
@@ -221,6 +237,25 @@ test("a successful refresh is installed through the shared submission reducer", 
     + " response through the authority-quarantine path would misread silence as a rejection");
 });
 
+/* ROUND 2, SECOND HALF. volley-backend PR #945's round 2 makes the contact-refresh route move an
+ * unclaimed, no-evidence ready_for_final_approval packet's status forward (the same
+ * questions_ready/ready_to_submit move a resume edit's reopen leaves it at), so the packet no longer
+ * belongs on the approval checklist it was just refreshed from. nextSubmissionState's own
+ * status-mismatch branch already installs that new status regardless of `updated_at` - see
+ * submission-state.ts - but `screen` is separate useState nothing here re-derives from `review.status`
+ * on render, exactly like every other direct mutation in this file (saveReviewedAnswers,
+ * completeHandoff, recordSelfSubmitted all call moveToScreen off their own published review). Without
+ * this call the applicant would keep seeing the now-stale checklist for a packet the server has
+ * already moved off it. */
+test("a successful refresh routes the screen off a status it no longer applies to", () => {
+  assert.match(
+    handlerBody,
+    /moveToScreen\(screenForStatus\(published\.review\.status, "portal"\)\)/,
+    "the same screenForStatus(status, \"portal\") shape saveReviewedAnswers's direct flow already"
+    + " uses to route the checklist screen off a review its own mutation moved",
+  );
+});
+
 /* FINDING 1. Every other handler in this file that installs a new `review` also reconciles the
  * client's packet evidence off it (reconcilePacketEvidenceWithSubmission, ~5 call sites) - this one
  * did not, so after the backend regenerated the PDF the cached activePacketEvidence kept reporting
@@ -281,8 +316,16 @@ test("the two id-matching guards actually wrap the writes they gate, not just de
   );
   const evidenceWrite = requiredIndex(handlerBody, "setPacketEvidence(nextEvidence)", "packet evidence write", selectedGuard);
   const submissionWrite = requiredIndex(handlerBody, "setSubmission(published)", "visible submission write", evidenceWrite);
+  // The round 2 screen-routing call: it reads `published`, so it must come from inside the same
+  // selected-application guard as the write above, not merely somewhere in the function.
+  const screenRoute = requiredIndex(
+    handlerBody,
+    "moveToScreen(screenForStatus(published.review.status, \"portal\"))",
+    "screen-routing call",
+    submissionWrite,
+  );
   assertOrdered(
-    [latestGuard, snapshotWrite, packetsWrite, selectedGuard, evidenceWrite, submissionWrite],
+    [latestGuard, snapshotWrite, packetsWrite, selectedGuard, evidenceWrite, submissionWrite, screenRoute],
     "latest-submission ownership must wrap the snapshot/packet writes every caller gets, and"
     + " selected-application ownership must additionally wrap the writes only the visible screen"
     + " gets - deleting or reordering either guard must fail this test",

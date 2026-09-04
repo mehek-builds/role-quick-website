@@ -4591,6 +4591,16 @@ function Applications() {
           packetEvidenceRef.current = nextEvidence;
           setPacketEvidence(nextEvidence);
           setSubmission(published);
+          /* volley-backend PR #945 (round 2): an unclaimed, no-evidence refresh from
+             ready_for_final_approval now moves the review's own status - the same
+             questions_ready/ready_to_submit move PATCH /applications/:id/resume leaves a reopened
+             packet at (see resumeContactRefreshDisposition's own comment) - so the packet no longer
+             belongs on the approval checklist it was just refreshed from. nextSubmissionState above
+             already installs that new status unconditionally (its own status-mismatch check does not
+             defer to `updated_at`), but `screen` is separate useState nothing re-derives on render,
+             exactly like every other direct mutation in this file: without this, the applicant would
+             still see the (now stale) checklist for a packet the server has already moved off it. */
+          moveToScreen(screenForStatus(published.review.status, "portal"));
         }
       }
     } catch (reason) {
@@ -9004,6 +9014,14 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
                  race a resume regeneration underneath them. See the disabled props on those three
                  controls below for the other half of this. */
               disabled={restarting || approving}
+              /* ROUND 2. This screen renders only at ready_for_final_approval, which
+                 resumeContactRefreshBlockedReason now refuses conditionally rather than always - a
+                 claim or employer-may-hold evidence still blocks it, an ordinary unclaimed packet
+                 does not (volley-backend PR #945's resumeContactRefreshDisposition). Left unwired,
+                 as it was before this change, the button here would stay pressable and undisabled
+                 across both cases with no hint which one a press would meet - the same gap the
+                 packet review screen's own unavailableReason was written to close. */
+              unavailableReason={resumeContactRefreshBlockedReason(review)}
             />
           </div>
         )}
