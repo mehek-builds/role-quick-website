@@ -257,6 +257,49 @@ test("an off-list required answer on a sensitive question asks her to answer it,
   assert.equal(visaRows[0]?.actionKind, "answer");
 });
 
+/* MEASURED via ApplicationPacket.tsx, whose `sent = review.status === "submitted"` feeds this same
+ * question list through humanInputItems for its read-only "Needs your input" panel: the
+ * required-missing and optional-undecided branches were the only two in this loop with no
+ * `review.status !== "submitted"` guard, unlike their four siblings below (the essay-draft,
+ * essay-review, confirm and empty-field branches) and the completed-items builders. A submitted
+ * review's questions are history, not a form still waiting on her, so a sent packet whose stored
+ * answer happened to name none of the employer's options - or whose optional question was never
+ * answered or skipped - rendered an actionable "Answer" row over a form that no longer exists. */
+test("a submitted review's required-missing and optional-undecided questions are not actionable", () => {
+  const questions = [{
+    id: "graduation",
+    question: "When do you expect to graduate?",
+    // Off-list: the control offered these four seasons and the stored answer names none of them.
+    answer: "May 2028",
+    kind: "required" as const,
+    required: true,
+    portal_input_type: "radio",
+    options: ["Spring 2027", "Fall 2027", "Spring 2028", "2030 or later"],
+  }, {
+    id: "optional-location",
+    question: "Which other offices would you consider?",
+    answer: "",
+    answer_state: "unanswered" as const,
+    kind: "required" as const,
+    required: false,
+    portal_input_type: "select-multiple",
+    options: ["Chicago", "New York"],
+  }];
+
+  const sent = humanInputItems({ status: "submitted", attention_reason: "", questions });
+  assert.deepEqual(sent, [], "a submitted packet's questions are history - neither branch owes a row");
+
+  const unsent = humanInputItems({ status: "needs_attention", attention_reason: "", questions });
+  assert.deepEqual(
+    unsent.map((item) => ({ questionId: item.questionId, detail: item.detail, action: item.action })),
+    [
+      { questionId: "graduation", detail: "Required answer missing", action: "Answer" },
+      { questionId: "optional-location", detail: "Optional, answer or skip", action: "Answer" },
+    ],
+    "the identical questions on an unsent review still ask - the guard is status-gated, not a behavior change",
+  );
+});
+
 test("optional questions stay actionable until the applicant answers or skips them", () => {
   const base = {
     status: "needs_attention" as const,
