@@ -2812,9 +2812,14 @@ test("the review screen wires Fill the form again to the exact Not confirmed arr
     /const fillAgainControl = fillAgainFromReviewControl\(review, unconfirmedDocuments, handoffExpired\);/,
     "visibility must be decided off the exact array already rendered as Not confirmed, never a second derivation",
   );
+  /* `|| resumeContactRefreshBusy` joined `restarting` here for the resume-contact-refresh feature's
+     own mutual-exclusion fix (tests/resume-contact-refresh-control.test.mjs): a restart must not
+     race a resume regeneration for the same packet any more than it may race another restart. This
+     assertion cares that the flag it is about (restarting) still gates the button, not that it
+     gates it alone. */
   assert.match(
     page,
-    /\{fillAgainControl !== "hidden" && \([\s\S]{0,200}?<Button onClick=\{onRestart\} disabled=\{restarting\} variant="secondary">[\s\S]{0,100}?fillAgainControl\.label[\s\S]{0,50}?<\/Button>/,
+    /\{fillAgainControl !== "hidden" && \([\s\S]{0,200}?<Button onClick=\{onRestart\} disabled=\{restarting(?: \|\| resumeContactRefreshBusy)?\} variant="secondary">[\s\S]{0,100}?fillAgainControl\.label[\s\S]{0,50}?<\/Button>/,
     "Fill the form again must call the SAME onRestart handler and restarting flag Start it again uses - one caller, no new backend contract",
   );
 });
