@@ -26,13 +26,14 @@ import {
   type ManualHandoffResponse,
   type ResumeSpec,
   type SubmissionRetrySafety,
+  confirmPostingStillOpen,
   removeApplicationFromTracker,
 } from "@/lib/api";
 import { Card, Chip, EmptyState, ErrorNote, ExtensionStoreLink, PendingLabel, ScrollableRow, ShimmerRows, TerminalActionBar, formatRelativeDate } from "@/components/app/ui";
 import { CompanyLogo } from "@/components/app/CompanyLogo";
 import { ThinkingOrb } from "thinking-orbs";
 import { canonicalApplicationFromPacket, canRemoveFromTracker, canonicalEnvelopeLegacyHydrationId, canonicalEnvelopeWithMissingLegacyHydration, canonicalTrackerPacket, explicitTerms, sendableLinkedPacketFromCanonicalEnvelope, withRestoredLinkedPackets, linkedLegacyPacketFromCanonicalTrackerPacket, mergeCanonicalApplicationHistory, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, reviewWithLists, screenForStatus, sectionHeading, selectedPacketForRequest, startsNewSection, statusLabel, stripMetadata, upsertCanonicalApplicationHistory } from "@/features/applications";
-import { applicationFilterFromSearch, applicationFilterHeading, cleanJdCapture, ledgerRendersOnLanding, pipelineCounts, reviewCanBeSent, sentSince, startOfLocalDay, statusMatchesApplicationFilter, unansweredRequiredQuestionCount, type ApplicationFilter } from "@/features/applications";
+import { applicationFilterFromSearch, applicationFilterHeading, cleanJdCapture, ledgerRendersOnLanding, pipelineCounts, postingStatusBadge, postingStatusBlocksSend, reviewCanBeSent, sentSince, startOfLocalDay, statusMatchesApplicationFilter, unansweredRequiredQuestionCount, type ApplicationFilter } from "@/features/applications";
 import { nextPreferredReadyPacket, packetMatchesJob } from "@/features/applications";
 import { REVIEW_ANSWERS_FROZEN_NOTICE, REVIEW_ANSWERS_REOPEN_NOTICE, REVIEW_ANSWERS_REOPEN_REFUSED, auditAnswerWrite, reviewAnswerEditRoute, reviewAnswersNeedSave, saveReviewAnswers, type ReviewAnswerSaveResponse } from "@/features/applications";
 import { saveAttentionAcknowledgement, type AttentionAcknowledgementResponse } from "@/features/applications";
@@ -1222,6 +1223,10 @@ function Applications() {
      grey out or caption the button on packet B. */
   const [resumeContactRefreshId, setResumeContactRefreshId] = useState<string | null>(null);
   const [resumeContactRefreshError, setResumeContactRefreshError] = useState<{ applicationId: string; message: string } | null>(null);
+  /* Busy/error state for POST /applications/:id/posting-status/confirm-open, same shape as
+     resumeContactRefreshId/resumeContactRefreshError immediately above and for the same reason. */
+  const [confirmPostingOpenId, setConfirmPostingOpenId] = useState<string | null>(null);
+  const [confirmPostingOpenError, setConfirmPostingOpenError] = useState<{ applicationId: string; message: string } | null>(null);
   const refuseSend = useCallback((applicationId: string, message: string, issues: string[] = []) => {
     // One live region at a time, the rule refuseInComposer already sets on this screen.
     setError(null);
@@ -4615,6 +4620,47 @@ function Applications() {
     }
   }
 
+  /**
+   * Her own word that a posting past its stated deadline still accepts applications.
+   *
+   * Simpler than refreshResumeContact just above, which it otherwise mirrors: this route changes
+   * nothing about the resume, the packet_audit, or which screen the packet belongs on (its own
+   * `status` is untouched, only posting_status and posting_confirmed_open_at move), so there is no
+   * packet-evidence reconciliation and no moveToScreen call to make.
+   */
+  async function confirmPostingOpen(applicationId: string) {
+    if (confirmPostingOpenId) return;
+    setConfirmPostingOpenId(applicationId);
+    setConfirmPostingOpenError(null);
+    try {
+      const result = await confirmPostingStillOpen(applicationId);
+      const latestSubmission = submissionSnapshotsRef.current.get(applicationId)
+        ?? (submissionRef.current?.application_id === applicationId ? submissionRef.current : selectedSubmission);
+      if (latestSubmission && latestSubmission.application_id === applicationId) {
+        const refreshed: SubmissionResponse = {
+          ...latestSubmission,
+          application_id: applicationId,
+          review: result.review,
+        };
+        const reconciled = nextSubmissionState(latestSubmission, refreshed);
+        submissionSnapshotsRef.current.set(applicationId, reconciled);
+        setPackets((current) => current?.map((packet) => packet.id === applicationId ? packetWithDirectSubmission(packet, reconciled) : packet) ?? current);
+        if (selectedIdRef.current === applicationId) {
+          setSubmission(publishSubmissionEnvelope(submissionRef, reconciled, "direct"));
+        }
+      }
+    } catch (reason) {
+      if (selectedIdRef.current === applicationId) {
+        setConfirmPostingOpenError({
+          applicationId,
+          message: userFacingError(reason, "Litos could not confirm this posting is still open. Try again."),
+        });
+      }
+    } finally {
+      setConfirmPostingOpenId(null);
+    }
+  }
+
   /* The one place an answer can be seen, edited and saved. "Check the answers" has always come
      here; the Your turn rows now come here too, carrying WHICH question was pressed so the student
      lands on it rather than at the top of a list of twelve. Save from here writes through
@@ -5726,6 +5772,7 @@ function Applications() {
                 <option value="action">Needs you</option>
                 <option value="ready">Ready</option>
                 <option value="submitted">Sent</option>
+                <option value="closed">Closed</option>
               </select>
               <label className="sr-only" htmlFor="application-sort">Sort applications</label>
               <select id="application-sort" value={applicationSort} onChange={(event) => setApplicationSort(event.target.value as ApplicationSort)} className="min-h-11 rounded-full border border-control-border bg-surface px-3 text-xs text-ink">
@@ -5797,6 +5844,11 @@ function Applications() {
                     {duplicateBadge(duplicateMarks.get(packet.id)) && (
                       <span className="mt-1 truncate text-label uppercase tracking-[0.05em] text-muted">
                         {duplicateBadge(duplicateMarks.get(packet.id))!.label}
+                      </span>
+                    )}
+                    {postingStatusBadge(packet.spec._review) && (
+                      <span className="mt-1 truncate text-label uppercase tracking-[0.05em] text-muted">
+                        {postingStatusBadge(packet.spec._review)!.label}
                       </span>
                     )}
                   </button>
@@ -5878,6 +5930,10 @@ function Applications() {
                         {packet.spec._review && <Chip label={statusLabel(false, packet.spec._review.status)} kind={chipKind(packet.spec._review.status)} />}
                         {(() => {
                           const badge = duplicateBadge(duplicateMarks.get(packet.id));
+                          return badge ? <Chip label={badge.label} kind={badge.kind} /> : null;
+                        })()}
+                        {(() => {
+                          const badge = postingStatusBadge(packet.spec._review);
                           return badge ? <Chip label={badge.label} kind={badge.kind} /> : null;
                         })()}
                       </span>
@@ -6268,6 +6324,9 @@ function Applications() {
           onRefreshResumeContact={() => void refreshResumeContact(selected.id)}
           resumeContactRefreshBusy={resumeContactRefreshId === selected.id}
           resumeContactRefreshError={resumeContactRefreshError?.applicationId === selected.id ? resumeContactRefreshError.message : null}
+          onConfirmPostingOpen={() => void confirmPostingOpen(selected.id)}
+          confirmPostingOpenBusy={confirmPostingOpenId === selected.id}
+          confirmPostingOpenError={confirmPostingOpenError?.applicationId === selected.id ? confirmPostingOpenError.message : null}
         />
       ) : screen === "submitted" ? (
         <SubmissionReceipt review={selectedSubmission?.review ?? review} role={selected.job_context.role ?? "Role"} company={selected.job_context.company ?? "Company"} />
@@ -6281,6 +6340,12 @@ function Applications() {
               scroll INSIDE themselves against a shared height. The page holds still; the panes
               move. The gap list sits under the JD, which is where the dead space was. */}
           <RequirementProvider index={requirementIndex}>
+            <PostingStatusNotice
+              review={review}
+              busy={confirmPostingOpenId === selected.id}
+              error={confirmPostingOpenError?.applicationId === selected.id ? confirmPostingOpenError.message : null}
+              onConfirmOpen={() => void confirmPostingOpen(selected.id)}
+            />
             <div className="rounded-card border border-border bg-surface-alt px-5 py-3">
               <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
                 <div className="min-w-0">
@@ -7098,6 +7163,42 @@ function ResumeContactStaleNotice({ notice, busy, error, onRefresh, disabled, un
         {busy ? "Updating..." : "Update the contact details on this resume"}
       </Button>
       {unavailableReason && <p className="mt-2 text-warn">{unavailableReason}</p>}
+    </div>
+  );
+}
+
+/**
+ * The one place posting_status reaches the applicant, whatever screen or status the packet is
+ * otherwise on - see application-filter.ts's own reviewPostingClosed and
+ * reviewDeadlinePassedUnconfirmed for the two conditions this mirrors. Rendered unconditionally at
+ * the top of SubmissionScreen's card rather than gated to ready_for_final_approval the way
+ * ResumeContactStaleNotice above is: a closed posting or a passed deadline is true from the moment
+ * the backend derives it, long before a packet would otherwise reach a final-approval screen.
+ *
+ * NO SEND CONTROL FOR A TAKE-DOWN, on purpose - a closed posting offers nothing to press here,
+ * matching the backend's own refusal (there is no confirm-open route for one). A stated deadline
+ * gets the one control that can change the outcome: her own word that the employer still accepts
+ * applications, via POST /applications/:id/posting-status/confirm-open.
+ */
+function PostingStatusNotice({ review, busy, error, onConfirmOpen }: {
+  review: Pick<ApplicationReview, "posting_status" | "attention_reason">;
+  busy: boolean;
+  error: string | null;
+  onConfirmOpen: () => void;
+}) {
+  const status = review.posting_status;
+  const deadlinePassedUnconfirmed = status?.state === "deadline_passed" && !status.confirmed_open_at;
+  if (!status || (status.state !== "closed" && !deadlinePassedUnconfirmed)) return null;
+  return (
+    <div role="alert" className="mb-5 rounded-inner border border-warn/30 bg-warn-soft px-4 py-3 text-sm leading-6 text-warn">
+      <p className="font-medium">{status.state === "closed" ? "This posting has closed." : "This posting's stated deadline has passed."}</p>
+      {review.attention_reason && <p className="mt-1 text-ink">{review.attention_reason}</p>}
+      {error && <p className="mt-3 text-warn">{error}</p>}
+      {deadlinePassedUnconfirmed && (
+        <Button type="button" onClick={onConfirmOpen} disabled={busy} size="sm" className="mt-3">
+          {busy ? "Checking..." : "The employer still accepts applications"}
+        </Button>
+      )}
     </div>
   );
 }
@@ -8287,7 +8388,7 @@ export function DirectApplicationQuestion({ task, position, total, saving, saved
   );
 }
 
-function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceReviewed, manualTrialPacket, approving, securityCodeSubmitting, securityCodeError, onSubmitSecurityCode, unverifiedSubmissionSubmitting, unverifiedSubmissionError, onSubmitUnverifiedOutcome, educationProfile, educationProfileStatus, onCheckResume, onReloadCoverLetter, onWriteCoverLetter, coverLetterReloading, onHandoffComplete, onApprove, sendRefusal, onRestart, restarting, onRetry, employerActionRefusal, onReviewPacket, onReviewQuestions, onOpenQuestion, onChooseOption, onSaveQuestion, onSkipQuestion, savingAnswer, answeredQuestionFingerprints, directAnswerProgress, directAnswerDrafts, directAnswerFailure, onDirectAnswerDraftChange, onClearDirectAnswerDraft, onNavigateDirectQuestion, onClearDirectAnswerFailure, onRefreshQuestionMetadata, questionMetadataRefreshing, questionMetadataRefreshDisabled, questionMetadataNeedsPacketReview, questionMetadataRefreshError, onQuestionsFinished, onAddDocument, onToggleAcknowledged, attentionTicking, onSelfSubmitted, onPacketAuditRefusal, onOpenWithExtension, extensionFillBusy, extensionFillError, onRefreshResumeContact, resumeContactRefreshBusy, resumeContactRefreshError }: { packet: GeneratedResume; resumeRecord?: ChecklistResumeRecord; submission: SubmissionResponse; packetEvidenceReviewed: boolean; manualTrialPacket: PacketAuditResponse | null; approving: boolean; securityCodeSubmitting: boolean; securityCodeError: string | null; onSubmitSecurityCode: (code: string) => void; unverifiedSubmissionSubmitting: boolean; unverifiedSubmissionError: string | null; onSubmitUnverifiedOutcome: (found: boolean) => void; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onReloadCoverLetter: () => void; onWriteCoverLetter: () => void; coverLetterReloading: boolean; onHandoffComplete: (outcome?: "cleared" | "submitted") => void; onApprove: () => void; sendRefusal: { message: string; issues: string[] } | null; onRestart: () => void; restarting: boolean; onRetry: () => void; employerActionRefusal: string | null; onReviewPacket: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string, intent?: SubmissionChecklistAction) => void; onChooseOption: (questionId: string, option: string) => void; onSaveQuestion: (questionId: string, answer: string, intent: DirectQuestionTaskIntent, promptFingerprint: string, taskFingerprint: string, task: DirectQuestionTask) => Promise<DirectAnswerSaveResult>; onSkipQuestion: (questionId: string, intent: DirectQuestionTaskIntent, promptFingerprint: string, taskFingerprint: string, task: DirectQuestionTask) => Promise<DirectAnswerSaveResult>; savingAnswer: boolean; answeredQuestionFingerprints: ReadonlySet<string>; directAnswerProgress: DirectAnswerProgress | null; directAnswerDrafts: ReadonlyMap<string, DirectAnswerDraft>; directAnswerFailure: DirectAnswerFailure | null; onDirectAnswerDraftChange: (questionId: string, promptFingerprint: string, taskFingerprint: string, answer: string) => void; onClearDirectAnswerDraft: (promptFingerprint: string) => void; onNavigateDirectQuestion: (promptFingerprint: string) => void; onClearDirectAnswerFailure: (promptFingerprint: string) => void; onRefreshQuestionMetadata: () => void; questionMetadataRefreshing: boolean; questionMetadataRefreshDisabled: boolean; questionMetadataNeedsPacketReview: boolean; questionMetadataRefreshError: string | null; onQuestionsFinished: () => void; onAddDocument: (kind: string) => void; onToggleAcknowledged: (item: SubmissionChecklistItem, acknowledged: boolean) => void; attentionTicking: ReadonlySet<string>; onSelfSubmitted: () => void; onPacketAuditRefusal: (reason: unknown) => Promise<boolean>; onOpenWithExtension: () => void; extensionFillBusy: boolean; extensionFillError: string | null; onRefreshResumeContact: () => void; resumeContactRefreshBusy: boolean; resumeContactRefreshError: string | null }) {
+function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceReviewed, manualTrialPacket, approving, securityCodeSubmitting, securityCodeError, onSubmitSecurityCode, unverifiedSubmissionSubmitting, unverifiedSubmissionError, onSubmitUnverifiedOutcome, educationProfile, educationProfileStatus, onCheckResume, onReloadCoverLetter, onWriteCoverLetter, coverLetterReloading, onHandoffComplete, onApprove, sendRefusal, onRestart, restarting, onRetry, employerActionRefusal, onReviewPacket, onReviewQuestions, onOpenQuestion, onChooseOption, onSaveQuestion, onSkipQuestion, savingAnswer, answeredQuestionFingerprints, directAnswerProgress, directAnswerDrafts, directAnswerFailure, onDirectAnswerDraftChange, onClearDirectAnswerDraft, onNavigateDirectQuestion, onClearDirectAnswerFailure, onRefreshQuestionMetadata, questionMetadataRefreshing, questionMetadataRefreshDisabled, questionMetadataNeedsPacketReview, questionMetadataRefreshError, onQuestionsFinished, onAddDocument, onToggleAcknowledged, attentionTicking, onSelfSubmitted, onPacketAuditRefusal, onOpenWithExtension, extensionFillBusy, extensionFillError, onRefreshResumeContact, resumeContactRefreshBusy, resumeContactRefreshError, onConfirmPostingOpen, confirmPostingOpenBusy, confirmPostingOpenError }: { packet: GeneratedResume; resumeRecord?: ChecklistResumeRecord; submission: SubmissionResponse; packetEvidenceReviewed: boolean; manualTrialPacket: PacketAuditResponse | null; approving: boolean; securityCodeSubmitting: boolean; securityCodeError: string | null; onSubmitSecurityCode: (code: string) => void; unverifiedSubmissionSubmitting: boolean; unverifiedSubmissionError: string | null; onSubmitUnverifiedOutcome: (found: boolean) => void; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onReloadCoverLetter: () => void; onWriteCoverLetter: () => void; coverLetterReloading: boolean; onHandoffComplete: (outcome?: "cleared" | "submitted") => void; onApprove: () => void; sendRefusal: { message: string; issues: string[] } | null; onRestart: () => void; restarting: boolean; onRetry: () => void; employerActionRefusal: string | null; onReviewPacket: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string, intent?: SubmissionChecklistAction) => void; onChooseOption: (questionId: string, option: string) => void; onSaveQuestion: (questionId: string, answer: string, intent: DirectQuestionTaskIntent, promptFingerprint: string, taskFingerprint: string, task: DirectQuestionTask) => Promise<DirectAnswerSaveResult>; onSkipQuestion: (questionId: string, intent: DirectQuestionTaskIntent, promptFingerprint: string, taskFingerprint: string, task: DirectQuestionTask) => Promise<DirectAnswerSaveResult>; savingAnswer: boolean; answeredQuestionFingerprints: ReadonlySet<string>; directAnswerProgress: DirectAnswerProgress | null; directAnswerDrafts: ReadonlyMap<string, DirectAnswerDraft>; directAnswerFailure: DirectAnswerFailure | null; onDirectAnswerDraftChange: (questionId: string, promptFingerprint: string, taskFingerprint: string, answer: string) => void; onClearDirectAnswerDraft: (promptFingerprint: string) => void; onNavigateDirectQuestion: (promptFingerprint: string) => void; onClearDirectAnswerFailure: (promptFingerprint: string) => void; onRefreshQuestionMetadata: () => void; questionMetadataRefreshing: boolean; questionMetadataRefreshDisabled: boolean; questionMetadataNeedsPacketReview: boolean; questionMetadataRefreshError: string | null; onQuestionsFinished: () => void; onAddDocument: (kind: string) => void; onToggleAcknowledged: (item: SubmissionChecklistItem, acknowledged: boolean) => void; attentionTicking: ReadonlySet<string>; onSelfSubmitted: () => void; onPacketAuditRefusal: (reason: unknown) => Promise<boolean>; onOpenWithExtension: () => void; extensionFillBusy: boolean; extensionFillError: string | null; onRefreshResumeContact: () => void; resumeContactRefreshBusy: boolean; resumeContactRefreshError: string | null; onConfirmPostingOpen: () => void; confirmPostingOpenBusy: boolean; confirmPostingOpenError: string | null }) {
   const { review } = submission;
   /* The same decision the packet review screen renders from - see resumeContactStaleNotice and
      refreshResumeContact in this file. Computed once here rather than at each read below, so the
@@ -8713,7 +8814,7 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
      reconcilePacketEvidenceAfterResumeRegeneration only clears packetEvidenceReviewed once that
      response LANDS, which leaves the gap between the press and the response with no term of its own
      unless this one covers it. */
-  const finalApprovalBlocked = !packetEvidenceReviewed || educationProfilePending || Boolean(educationDriftWarning) || coverLetterPending || requiredAnswerMissing || sensitiveQuestionPresent || !previewReady || handoffExpired || approving || restarting || transcriptPending || resumeContactRefreshBusy;
+  const finalApprovalBlocked = !packetEvidenceReviewed || educationProfilePending || Boolean(educationDriftWarning) || coverLetterPending || requiredAnswerMissing || sensitiveQuestionPresent || !previewReady || handoffExpired || approving || restarting || transcriptPending || resumeContactRefreshBusy || postingStatusBlocksSend(review) || confirmPostingOpenBusy;
   function approveVerifiedPreview() {
     if (finalApprovalBlocked) return;
     onApprove();
@@ -8778,6 +8879,12 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
     <div className={`mx-auto grid gap-5 ${needsAttention && !awaitingUnverifiedSubmission ? "max-w-3xl" : "max-w-5xl lg:grid-cols-[1fr_1.15fr]"}`}>
       {awaitingUnverifiedSubmission && filledFormEvidence}
       <Card className={`${needsAttention && !awaitingUnverifiedSubmission ? "p-4 sm:p-6" : "p-7"} ${awaitingUnverifiedSubmission ? "lg:order-1" : ""}`}>
+        <PostingStatusNotice
+          review={review}
+          busy={confirmPostingOpenBusy}
+          error={confirmPostingOpenError}
+          onConfirmOpen={onConfirmPostingOpen}
+        />
         {directRecoveryNeeded && (
           <div role="alert" className="mb-5 rounded-inner border border-border bg-surface-alt p-4">
             <p className="text-small font-medium text-ink">This employer field changed before your answer was saved.</p>

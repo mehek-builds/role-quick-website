@@ -13,15 +13,21 @@
  * link lands on the same five applications.
  */
 
-export type ApplicationFilter = "all" | "action" | "ready" | "submitted";
+export type ApplicationFilter = "all" | "action" | "ready" | "submitted" | "closed";
 
 /** Statuses where Litos has stopped and is waiting on the student. */
 const ACTION_STATUSES = ["needs_attention", "ready_for_final_approval", "failed"];
 /** Built and waiting to go out. */
 const READY_STATUSES = ["resume_ready", "questions_ready", "ready_to_submit"];
-type FilterableReview = { status?: string; portal_supported?: boolean } | null | undefined;
+/**
+ * What the backend derives about the POSTING, not the packet - see volley-backend's
+ * ApplicationReviewState.posting_status and lib/api.ts's own copy of this shape. Computed fresh on
+ * every read there, so this file trusts it exactly the same way it already trusts `status`.
+ */
+type FilterablePostingStatus = { state?: "closed" | "deadline_passed"; confirmed_open_at?: string } | null;
+type FilterableReview = { status?: string; portal_supported?: boolean; posting_status?: FilterablePostingStatus } | null | undefined;
 
-const FILTERS: readonly ApplicationFilter[] = ["all", "action", "ready", "submitted"];
+const FILTERS: readonly ApplicationFilter[] = ["all", "action", "ready", "submitted", "closed"];
 
 export function isApplicationFilter(value: string | null | undefined): value is ApplicationFilter {
   return value !== null && value !== undefined && (FILTERS as readonly string[]).includes(value);
@@ -39,18 +45,65 @@ export function applicationFilterFromSearch(search: string): ApplicationFilter {
   return isApplicationFilter(requested) ? requested : "all";
 }
 
+/** The employer's own posting is gone - the job monitor's regular sweep confirmed a take-down. */
+function reviewPostingClosed(review: FilterableReview): boolean {
+  return review?.posting_status?.state === "closed";
+}
+
+/**
+ * The posting's own text names a deadline that has passed, and she has not told Litos the employer
+ * still accepts applications past it (posting_status.confirmed_open_at, set by POST
+ * /applications/:id/posting-status/confirm-open). Once confirmed, the backend stops setting this
+ * reason at all - it does not merely flip a flag here - so this reads the SAME field either way.
+ */
+function reviewDeadlinePassedUnconfirmed(review: FilterableReview): boolean {
+  return review?.posting_status?.state === "deadline_passed" && !review?.posting_status?.confirmed_open_at;
+}
+
+/**
+ * Whether posting_status alone means Litos must refuse to send this packet - the same question
+ * volley-backend's postingStatusBlocksSend answers server-side, mirrored here so a screen gating a
+ * status OUTSIDE reviewCanBeSent's own READY_STATUSES (ready_for_final_approval's own Send button,
+ * for one) can still ask it. 'closed' always blocks; 'deadline_passed' blocks unless she has
+ * confirmed the employer still accepts applications.
+ */
+export function postingStatusBlocksSend(review: FilterableReview): boolean {
+  return reviewPostingClosed(review) || reviewDeadlinePassedUnconfirmed(review);
+}
+
 export function reviewCanBeSent(review: FilterableReview): boolean {
+  // Checked ahead of the ordinary status/portal test, not folded into it: a closed or
+  // unconfirmed-expired posting is never sendable regardless of what portal_supported says, and
+  // stating that explicitly here is what keeps this file's own answer correct even if a future
+  // backend change ever stopped setting portal_supported for one of these two cases.
+  if (postingStatusBlocksSend(review)) return false;
   return READY_STATUSES.includes(review?.status ?? "") && review?.portal_supported !== false;
 }
 
 function reviewNeedsAction(review: FilterableReview): boolean {
+  // A closed posting gets its own bucket (filter "closed"), not Needs you - there is nothing left
+  // for her to do on one, which is a different message than "open this and finish it".
+  if (reviewPostingClosed(review)) return false;
   return ACTION_STATUSES.includes(review?.status ?? "")
-    || (READY_STATUSES.includes(review?.status ?? "") && review?.portal_supported === false);
+    || (READY_STATUSES.includes(review?.status ?? "") && review?.portal_supported === false)
+    || reviewDeadlinePassedUnconfirmed(review);
+}
+
+/**
+ * A small, distinguishing tag for a Needs-you row whose posting has passed its own stated
+ * deadline - rendered the same way duplicateBadge's chip is (see duplicate-postings.ts), right
+ * beside the ordinary status chip. Sentence case: Chip renders every label uppercase itself.
+ * Returns null for a 'closed' take-down, which needs no extra tag once it has its own bucket and
+ * heading.
+ */
+export function postingStatusBadge(review: FilterableReview): { label: string; kind: string } | null {
+  return reviewDeadlinePassedUnconfirmed(review) ? { label: "Deadline passed", kind: "warn" } : null;
 }
 
 /** Does this application's review belong in the chosen view? */
 export function statusMatchesApplicationFilter(review: string | FilterableReview, filter: ApplicationFilter): boolean {
   const normalized = typeof review === "string" ? { status: review } : review;
+  if (filter === "closed") return reviewPostingClosed(normalized);
   if (filter === "action") return reviewNeedsAction(normalized);
   if (filter === "ready") return reviewCanBeSent(normalized);
   if (filter === "submitted") return normalized?.status === "submitted";
@@ -112,5 +165,6 @@ export function applicationFilterHeading(filter: ApplicationFilter): string {
   if (filter === "action") return "Applications that need you";
   if (filter === "ready") return "Applications ready to send";
   if (filter === "submitted") return "Applications you have sent";
+  if (filter === "closed") return "Applications whose posting has closed";
   return "Your applications";
 }

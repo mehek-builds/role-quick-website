@@ -1093,6 +1093,9 @@ export type ApplicationReview = {
     | "evidence_gap"
     | "cover_letter"
     | "unverified_submission"
+    /** The posting itself, not the packet - a take-down or a stated deadline that has passed. See
+     *  posting_status above for which. */
+    | "posting_closed"
     | "unknown"
   >;
   /* The typed half of attention_reason. Written by the backend when an application stops on a
@@ -1152,6 +1155,27 @@ export type ApplicationReview = {
   /** Whether Litos can fill in this posting's page at all. Derived from portal_url by the backend,
    *  so it is known before the first send rather than discovered after a multi-minute run. */
   portal_supported?: boolean;
+  /** What Litos knows about the POSTING, as opposed to this packet, from a source outside her own
+   *  answers: the job monitor's regular sweep, or a deadline sentence in the employer's own
+   *  description. Computed fresh by the backend on every read (src/lib/applicationPortalRepair.ts
+   *  and src/lib/postingDeadline.ts) - absent means neither check found anything, not that either
+   *  is stale. A 'closed' take-down has no confirmation route; a 'deadline_passed' one clears once
+   *  posting_confirmed_open_at is set below, via POST /applications/:id/posting-status/confirm-open. */
+  posting_status?: {
+    state: "closed" | "deadline_passed";
+    reason: "monitor_inactive" | "stated_deadline";
+    /** 'closed' only: the monitor's own last_seen_at, the last time Litos actually saw it. */
+    observed_at?: string;
+    /** 'deadline_passed' only: the exact UTC instant the backend's parser computed. */
+    deadline?: string;
+    /** Her own confirmation the employer still accepts applications, mirrored here from
+     *  posting_confirmed_open_at below for display convenience. */
+    confirmed_open_at?: string;
+  };
+  /** THE ONE FACT ABOUT posting_status THAT SURVIVES ACROSS READS rather than being re-derived:
+   *  her own word, typed once, that the employer still accepts applications past a stated deadline.
+   *  Everything else about posting_status is recomputed fresh on every read. */
+  posting_confirmed_open_at?: string;
   applicant_email?: {
     address: string;
     source: "litos_alias" | "contact_email" | "account_email";
@@ -1967,6 +1991,22 @@ export type ApplicationRemovalResult = {
  */
 export function removeApplicationFromTracker(applicationId: string): Promise<ApplicationRemovalResult> {
   return api<ApplicationRemovalResult>(`/applications/${applicationId}/remove`, { method: "POST" });
+}
+
+/**
+ * Her own word that a posting past its stated deadline still accepts applications.
+ *
+ * The one action that turns a `posting_status.state === "deadline_passed"` review sendable again -
+ * never available for `"closed"`, which has no confirmation route on the backend either: Litos does
+ * not ask her to override what the employer's own missing posting already proved. Refused with 409
+ * when there is nothing currently unconfirmed to confirm (the deadline moved, or the posting text
+ * changed since she last looked).
+ */
+export function confirmPostingStillOpen(applicationId: string): Promise<{ application_id: string; review: ApplicationReview; saved: boolean }> {
+  return api<{ application_id: string; review: ApplicationReview; saved: boolean }>(
+    `/applications/${applicationId}/posting-status/confirm-open`,
+    { method: "POST" },
+  );
 }
 
 /** Stop this application carrying the document. The library file itself is untouched. */
