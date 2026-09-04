@@ -235,10 +235,14 @@ export function optionalQuestionNeedsDecision(
  * MEASURED live on the Sage Greenhouse packet (aae653a3, 2026-09-04): humanInputItems named one
  * question, a school select whose stored answer named none of its 24 options. The screen opened
  * "1 answer needs you." with only that one shown. Two required radio questions - expected
- * graduation date and how she heard about the role - were both unanswered and both disabling the
- * button, but neither was in humanInputItems, so neither rendered. She answered the visible
- * question, its badge turned ANSWERED, and the screen's only button stayed disabled with nothing
- * left on screen to fix.
+ * graduation date and how she heard about the role - were both OFF-LIST, not blank: graduation held
+ * "May 2028" against an offered "Spring 2028", and source held "Job board" against the offered
+ * "University Career Center / Job Board". Non-blank is exactly why humanInputItems' required check,
+ * `question.required && !answer`, missed both - the same blank-only gap `answerNamesNoOfferedOption`
+ * closes here also existed in humanInputItems (submission-checklist.ts), closed there the same way.
+ * Both disabled the button, but neither was in humanInputItems, so neither rendered. She answered
+ * the visible question, its badge turned ANSWERED, and the screen's only button stayed disabled
+ * with nothing left on screen to fix.
  *
  * This does not change what counts as missing or optional-undecided; it only widens which
  * questions the applicant is shown to always include both.
@@ -251,6 +255,30 @@ export function questionsNeedingApplicant(
     actionableIds.has(question.id)
     || (question.required && !questionReadsAsAnswered(question))
     || optionalQuestionNeedsDecision(question));
+}
+
+/**
+ * Unions a screen's previously-shown "needs the applicant" ids with this render's fresh set.
+ *
+ * `questionsNeedingApplicant` reads straight off `questions`, the state the applicant's own edits
+ * change, so a question drops out of it the instant she resolves it - before she has pressed Save. A
+ * caller that renders exactly that live set therefore yanks the card, and the control she just used,
+ * out from under her mid-edit: the button disables over the CURRENT set the same render draws, so
+ * the count and the visible cards must not be read from two different moments of it.
+ *
+ * This is the pure half of the fix, deliberately just a union: fold every id a screen instance has
+ * ever had to show into a growing set, so a caller renders (sticky ids ∪ this render's ids) and never
+ * removes a card the applicant is actively looking at. It does not decide when a growing set should
+ * start over - a screen moving to a different application or a different review context is the
+ * caller's call, made by handing back a fresh `previous`, not this function's.
+ */
+export function stickyShownIds(
+  previous: ReadonlySet<string>,
+  current: readonly string[],
+): Set<string> {
+  const next = new Set(previous);
+  for (const id of current) next.add(id);
+  return next;
 }
 
 function normalizedQuestionLabel(value: string | undefined): string {

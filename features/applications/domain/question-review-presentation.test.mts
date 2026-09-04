@@ -9,6 +9,7 @@ import {
   questionReviewPresentation,
   questionsNeedingApplicant,
   requiredQuestionReviewRoute,
+  stickyShownIds,
   unansweredRequiredQuestionCount,
 } from "./question-review-presentation.ts";
 
@@ -613,4 +614,36 @@ test("the full Sage packet gap: both hidden required questions join the one ques
     ["school", "graduation", "source"],
     "both questions the server never named join it, because both hold the same button disabled",
   );
+});
+
+/* ---- stickyShownIds: a question shown once must not vanish before she has saved ---- */
+/* The Sage packet above is also the visibility-churn bug: questionsNeedingApplicant reads straight
+   off editable, live-edited state, so the moment she picks a valid option for "graduation", it drops
+   out of that set on the very next render - before Save, taking the card and the control she just
+   used with it. stickyShownIds is the pure accumulator a screen uses to keep showing it anyway. */
+
+test("stickyShownIds unions this render's ids into every id already remembered", () => {
+  const previous = new Set(["a", "b"]);
+  const next = stickyShownIds(previous, ["b", "c"]);
+  assert.deepEqual([...next].sort(), ["a", "b", "c"]);
+  // previous is read, not written: the caller decides when a fresh accumulator starts.
+  assert.deepEqual([...previous].sort(), ["a", "b"]);
+});
+
+test("stickyShownIds keeps an id that is no longer current, which is the whole point of it", () => {
+  const firstRender = stickyShownIds(new Set(), ["graduation", "source"]);
+  assert.deepEqual([...firstRender].sort(), ["graduation", "source"]);
+  // She fixes "source"; the caller's next render computes a smaller current set from her new answer.
+  const afterFix = stickyShownIds(firstRender, ["graduation"]);
+  assert.deepEqual(
+    [...afterFix].sort(),
+    ["graduation", "source"],
+    "source stays remembered even though it dropped out of the current set",
+  );
+});
+
+test("stickyShownIds is a no-op on an empty current list and an empty start", () => {
+  const previous = new Set(["a"]);
+  assert.deepEqual([...stickyShownIds(previous, [])], ["a"]);
+  assert.deepEqual([...stickyShownIds(new Set(), [])], []);
 });

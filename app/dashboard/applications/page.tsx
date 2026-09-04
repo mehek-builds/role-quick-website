@@ -66,7 +66,7 @@ import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX, exactPacketAuditClauses
 import { educationDrift, educationDriftMessage, type EducationProfile } from "@/features/applications";
 import { checklistRowControl, completedSubmissionGroups, directAnswerNavigationTasks, directInputTaskPlan, directQuestionPromptFingerprint, directQuestionTaskFingerprint, displayQuestionLabel, documentAsksByKind, documentControls, documentStepsInPlan, humanInputItems, metadataRefreshOutranksStandingAttention, QUESTION_CHOICE_LIST_LIMIT, reviewedAnswersSaveLanding, unconfirmedDocumentItems, type ChecklistResumeRecord, type DirectQuestionTask, type DirectQuestionTaskIntent, type SubmissionChecklistAction, type SubmissionChecklistItem } from "@/features/applications";
 import { prescriptBlocksProgress, prescriptEditableQuestions, prescriptMetadataBlockers, prescriptNeedsHer, prescriptSummary } from "@/features/applications";
-import { answerWithExactOptionToggled, exactQuestionOption, exactSelectedQuestionOptions, optionalQuestionNeedsDecision, questionAcceptsMultipleOptions, questionOptionsAreComplete, questionReadsAsAnswered, questionReviewPresentation, questionsNeedingApplicant, requiredQuestionReviewRoute } from "@/features/applications";
+import { answerWithExactOptionToggled, exactQuestionOption, exactSelectedQuestionOptions, optionalQuestionNeedsDecision, questionAcceptsMultipleOptions, questionOptionsAreComplete, questionReadsAsAnswered, questionReviewPresentation, questionsNeedingApplicant, requiredQuestionReviewRoute, stickyShownIds } from "@/features/applications";
 import type { JdMatchResponse, JobMatch } from "@/features/applications";
 import { userFacingError } from "@/lib/user-facing-error";
 import { APPLICATION_DOCUMENT_ACCEPT_ATTRIBUTE, validateApplicationDocument } from "@/lib/document-size";
@@ -7221,12 +7221,61 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, metad
   if (focusQuestionId) actionableIds.add(focusQuestionId);
   /* A question that disables the button below must be visible on this same screen, or the
      applicant is left staring at a disabled button with nothing to fix. MEASURED live on the Sage
-     Greenhouse packet (aae653a3, 2026-09-04): two required radio questions disabled this screen's
-     button while humanInputItems named neither, so a focused review hid both. */
+     Greenhouse packet (aae653a3, 2026-09-04): two required radio questions were off-list - non-blank
+     answers naming none of the options offered (graduation date "May 2028" against the offered
+     "Spring 2028"; how she heard about the role "Job board" against the offered "University Career
+     Center / Job Board") - and both disabled this screen's button while humanInputItems named
+     neither, so a focused review hid both. */
   const actionableQuestions = questionsNeedingApplicant(editableQuestions, actionableIds);
+  const currentNeedingIds = actionableQuestions.map((question) => question.id);
+  /* STICKY FOR THE LIFE OF THIS SCREEN INSTANCE, or the fix above only moves the miss one render
+     later. `actionableQuestions` is recomputed on every render straight off `questions`, the state
+     her own edits change, so the instant she picks a valid option for a question that was shown only
+     because it was off-list, it reads as answered and drops out of this set - BEFORE she presses
+     Save, taking the control she was just using with it and shrinking "N answers need you." under
+     her hands. `stickyNeeding.ids` remembers every id this screen instance has ever had to show her,
+     so a card she has started fixing stays on screen until she leaves or saves.
+
+     Neither a ref nor an effect can hold that memory in this codebase: react-hooks/refs (the React
+     Compiler rule this project lints under) refuses to even READ `.current` during render, which
+     `shownQuestions` below needs to do, and react-hooks/set-state-in-effect refuses an effect that
+     unconditionally calls a setter, which is exactly what folding this render's ids into last
+     render's set requires. The sanctioned shape is the one React's own docs describe for deriving
+     state from this render's inputs ("Adjusting some state when a prop changes"): call the setter
+     directly in the render body, guarded by the comparison beside it. That converges to a fixed
+     point in a second pass before anything commits or paints, so this is never one render behind
+     the union it is supposed to be showing, and it does not loop - the second pass finds the
+     guard already satisfied.
+
+     Reset key: `reviewDiscovered`, not the application id. Switching applications already remounts
+     this component fresh - see the `key={selected.id}` on its mount below - so a stale accumulator
+     from a different packet cannot survive to be read here. `reviewDiscovered` can flip on its own
+     while this same instance stays mounted (a save can move the review off needs_attention with no
+     screen change), and a memory built under a different review context is not this one's to keep. */
+  const [stickyNeeding, setStickyNeeding] = useState<{ reviewDiscovered: boolean; ids: ReadonlySet<string> }>(
+    () => ({ reviewDiscovered, ids: new Set(currentNeedingIds) }),
+  );
+  if (stickyNeeding.reviewDiscovered !== reviewDiscovered) {
+    setStickyNeeding({ reviewDiscovered, ids: new Set(currentNeedingIds) });
+  } else {
+    const unionedNeedingIds = stickyShownIds(stickyNeeding.ids, currentNeedingIds);
+    if (unionedNeedingIds.size !== stickyNeeding.ids.size) {
+      setStickyNeeding({ reviewDiscovered, ids: unionedNeedingIds });
+    }
+  }
+  /* `|| actionableIds.has(question.id)` unions in the currently-focused id defensively:
+     questionsNeedingApplicant already folds actionableIds into actionableQuestions (and so into the
+     sticky set above), so this is redundant today, but it keeps the question the applicant was just
+     sent to on screen even if that stops being true, at effectively no cost. */
+  const shownQuestions = editableQuestions.filter((question) => (
+    stickyNeeding.ids.has(question.id) || actionableIds.has(question.id)
+  ));
+  /* focusedReview and the heading below both read the CURRENT (non-sticky) count, so the heading
+     can still drop to "Review answers" once everything is genuinely satisfied - only the card list
+     itself, shownQuestions, stays sticky. */
   const focusedReview = reviewDiscovered && actionableQuestions.length > 0 && !showAllAnswers;
   const visibleQuestions = reviewDiscovered
-    ? (focusedReview ? actionableQuestions : editableQuestions)
+    ? (focusedReview ? shownQuestions : editableQuestions)
     : editableQuestions;
   const continuationBlocked = blockContinuation
     || metadataBlocked
