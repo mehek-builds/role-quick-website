@@ -8964,6 +8964,19 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
           {review.status === "ready_for_final_approval" && outstandingDocumentAsks.map((ask) => (
             <Button key={ask.kind} onClick={() => onAddDocument(ask.kind)} variant="secondary">Add {ask.kind}</Button>
           ))}
+          {/* THE SAME RULE, FOR THE REASON THAT STILL HAD NO CONTROL. "Required answer missing." has
+              been printed under the greyed Send on this status for as long as the paragraph has
+              existed, and `hasQuestionsToReview` - which draws "Check the answers" - is gated on
+              needs_attention, so on THIS status nothing on screen ever opened the question it means.
+              The one route in was the Tracker card's "Answer 1 question", two screens away, and
+              until reviewAnswerEditRoute it led to an editor whose Save returned 409.
+
+              Named for what it does rather than "Check the answers": the editor reached from here
+              refills the company's form from the corrected answer, and a control that hides that is
+              the same broken promise in the other direction. */}
+          {review.status === "ready_for_final_approval" && requiredAnswerMissing && (
+            <Button onClick={onReviewQuestions} variant="secondary">Fix an answer</Button>
+          )}
           {/* An ask she has answered with "I have ordered it" keeps a control, because plenty of
               employers write "official" and take the downloaded PDF, and the modal's own second door
               is the one this opens. It is worded differently from the row above so the two buttons
@@ -9058,9 +9071,13 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
             No cover letter to show you.
           </p>
         )}
+        {/* NAMES THE BUTTON, like the document ask above it. A blocker sentence on this status that
+            points at no control is the shape this screen has been fixed for repeatedly, and this was
+            the last one still doing it. */}
         {review.status === "ready_for_final_approval" && requiredAnswerMissing && (
           <p className="mt-3 text-xs leading-5 text-warn">
             {optionalAnswerDecisionMissing ? "Answer or skip every optional question before sending." : "Required answer missing."}
+            {" "}Press Fix an answer, next to Send application. Litos will fill the company&rsquo;s form again with your correction and show you a fresh preview.
           </p>
         )}
         {review.status === "ready_for_final_approval" && sensitiveQuestionPresent && (
