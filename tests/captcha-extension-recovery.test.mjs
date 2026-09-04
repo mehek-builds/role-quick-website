@@ -46,8 +46,13 @@ describe("a managed run stopped by a rendered CAPTCHA can be finished through th
   });
 
   test("the extension-recovery button renders next to Try again, not instead of it, and only when captchaBlockedLastAttempt", () => {
+    /* `!employerActionRefusal` joined the Try again gate with the stalled-fill fix (2026-09-04): a
+     * quarantined authority displays a live `filling` row as needs_attention, and the button behind
+     * that rewrite fired no request at all. It is matched here rather than skipped over so this
+     * pin keeps meaning "immediately after Try again" rather than "somewhere after something like
+     * it". */
     const buttons = applications.match(
-      /\{needsAttention && !awaitingUnverifiedSubmission && <Button onClick=\{onRetry\}[\s\S]{0,60}Try again<\/Button>\}\s*\n[\s\S]{0,900}?\{captchaBlockedLastAttempt && \(\s*\n\s*<Button onClick=\{onOpenWithExtension\} variant="secondary" disabled=\{extensionFillBusy\}>\s*\n\s*\{extensionFillBusy \? "Checking extension\.\.\." : "Open and fill with extension"\}\s*\n\s*<\/Button>\s*\n\s*\)\}/,
+      /\{needsAttention && !awaitingUnverifiedSubmission && !employerActionRefusal && <Button onClick=\{onRetry\}[\s\S]{0,60}Try again<\/Button>\}\s*\n[\s\S]{0,900}?\{captchaBlockedLastAttempt && \(\s*\n\s*<Button onClick=\{onOpenWithExtension\} variant="secondary" disabled=\{extensionFillBusy\}>\s*\n\s*\{extensionFillBusy \? "Checking extension\.\.\." : "Open and fill with extension"\}\s*\n\s*<\/Button>\s*\n\s*\)\}/,
     );
     assert.ok(buttons, "Open and fill with extension must render immediately after Try again, gated on captchaBlockedLastAttempt");
   });

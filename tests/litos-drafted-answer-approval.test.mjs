@@ -123,7 +123,9 @@ describe("a drafted answer is routed to that screen in the first place", () => {
        itself out of the answer the save had just written. The contract this file is about is
        unchanged - Litos drafts it, she is told so, and the press approves it - and it is now stated
        only about the answers Litos actually drafted. */
-    assert.match(checklist, /answer_source === "litos_draft"\s*\n\s*\? "Drafted answer ready for review"/);
+    assert.match(checklist, /essayIsUnapprovedDraft = essayDraftAwaitsApproval\(question\);/);
+    assert.match(checklist, /&& answer && essayIsUnapprovedDraft\) \{/);
+    assert.match(checklist, /detail: "Drafted answer ready for review",/);
     assert.match(checklist, /actionKind: "review"/);
   });
 
@@ -133,8 +135,19 @@ describe("a drafted answer is routed to that screen in the first place", () => {
        asking: the backend reads an absent source as a machine answer and counts the row
        unacknowledged, and a row settled here would be one the server is still holding open with
        nothing left in the queue to press. */
-    assert.match(checklist, /function applicantApprovedAnswer\(/);
-    assert.match(checklist, /answer_source === "applicant_review"\s*\n\s*\|\| question\.answer_source === "consent_permission"/);
-    assert.match(checklist, /if \(!applicantApprovedAnswer\(question\)\) \{/);
+    assert.match(checklist, /function essayDraftAwaitsApproval\(/);
+    assert.match(
+      checklist,
+      /answer_source === "litos_draft" \|\| question\.answer_source === undefined;/,
+      "an absent source is a draft too: the backend classes it machineAuthored, because the essay "
+      + "drafter used to push its paragraph with no flag at all",
+    );
+    /* And the other half, which is not the same claim: an approved essay stops asking WITHOUT
+       disappearing. It keeps a settled row so it stays on the record with the way back, and both
+       Done-column builders admit it, because the packet viewer drops server-settled rows and would
+       otherwise show her approved paragraph nowhere at all. */
+    assert.match(checklist, /&& !serverNamesForConfirmation\n\s*&& !questionReportedEmpty/);
+    assert.match(checklist, /detail: question\.answer_source === "applicant_review"\s*\n\s*\? "Reviewed by you"/);
+    assert.match(checklist, /review\.status !== "submitted" && essayDraftAwaitsApproval\(question\)\) continue;/);
   });
 });

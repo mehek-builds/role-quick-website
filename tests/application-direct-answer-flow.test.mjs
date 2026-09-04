@@ -201,15 +201,25 @@ test("direct answer passes always expire on a real review version", () => {
   assert.match(passKey, /Older review payloads have no explicit question-pass identity[\s\S]*?return true;/);
 });
 
-test("question navigation re-resolves stored history against the current review", () => {
-  const navigation = sourceSection("function directAnswerNavigationTasks(", "function directAnswerPassKey(");
-
-  assert.match(navigation, /outstandingTasks\.map\(\(task\) => \[directQuestionPromptFingerprint\(task\), task\]\)/);
-  assert.match(navigation, /answeredTasks\.map\(\(task\) => \[directQuestionPromptFingerprint\(task\), task\]\)/);
-  assert.match(navigation, /questionReviewPresentation\(\s*review\.questions \?\? \[\],\s*review\.question_metadata_blockers \?\? \[\],\s*\)\.editableQuestions/);
-  assert.match(navigation, /const promptFingerprint = directQuestionPromptFingerprint\(\{ question \}\)/);
-  assert.match(navigation, /outstandingByPrompt\.get\(promptFingerprint\) \?\? answeredByPrompt\.get\(promptFingerprint\)/);
-  assert.match(navigation, /return task \? \[\{ \.\.\.task, question \}\] : \[\]/);
+test("question navigation is the domain module's export, not a page-local reimplementation", () => {
+  /* directAnswerNavigationTasks used to be defined here and was verified by pinning its body
+     against this same source text - a check that could only ever prove the text existed, never
+     that the union it builds behaves correctly. It now lives in
+     features/applications/domain/submission-checklist.ts, imported like directInputTaskPlan beside
+     it, and features/applications/domain/submission-checklist.test.mts exercises its behaviour
+     directly: the plan and the navigator the page actually calls, not a copy of either. This test
+     keeps only what a source read can honestly promise - that the page imports the real function
+     and has not grown a second, page-local one that could quietly drift from it. */
+  assert.match(
+    page,
+    /import \{[^}]*\bdirectAnswerNavigationTasks\b[^}]*\} from "@\/features\/applications";/,
+    "page.tsx must import directAnswerNavigationTasks rather than redefine it",
+  );
+  assert.doesNotMatch(
+    page,
+    /\nfunction directAnswerNavigationTasks\(/,
+    "a page-local redefinition would silently stop using the tested domain function",
+  );
 });
 
 test("direct answer saves revalidate the latest server question and exact choices", () => {

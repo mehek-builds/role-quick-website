@@ -145,7 +145,7 @@ export function submissionRetrySafetyAllowsRetry(value: unknown): boolean {
 
 export type SubmissionSnapshot = {
   application_id: string;
-  review: { updated_at: string };
+  review: { updated_at: string; status?: string };
   submission_authority?: unknown;
   submission_projection?: unknown;
   retry_safety?: unknown;
@@ -159,6 +159,12 @@ export type SubmissionSnapshot = {
   documents?: Readonly<Record<string, AttachedDocumentLike>>;
   handoff_url?: string;
   configured?: boolean;
+  /**
+   * THE SERVER'S OWN LIST of employer questions it will refuse to send without a confirmation, off
+   * GET /applications/:id/submission. Lives outside `review`, exactly like `documents`, and is
+   * versioned by nothing: see the comparison this type's sibling fields already needed below.
+   */
+  sensitive_questions_requiring_confirmation?: readonly string[];
   /**
    * True only on the snapshot selectPacket seeds from a board row. It is a statement about
    * PROVENANCE, not about content: a seed is not a server answer, so the first real answer always
@@ -174,8 +180,7 @@ export function submissionSnapshotIsOlder<T extends SubmissionSnapshot>(
   incoming: T,
 ): boolean {
   if (!current || current.application_id !== incoming.application_id || current.partial) return false;
-  if ((current.review as { status?: string }).status === "submitted"
-    && (incoming.review as { status?: string }).status !== "submitted") return true;
+  if (current.review.status === "submitted" && incoming.review.status !== "submitted") return true;
   const currentTime = Date.parse(current.review.updated_at);
   const incomingTime = Date.parse(incoming.review.updated_at);
   return Number.isFinite(currentTime) && Number.isFinite(incomingTime) && incomingTime < currentTime;
@@ -278,6 +283,30 @@ export function documentsIdentity(documents: Readonly<Record<string, AttachedDoc
 }
 
 /**
+ * THE SENSITIVE-QUESTION LIST AS A SET, because a reorder is not a change.
+ *
+ * `documentsIdentity` above sorts its keys for exactly this reason and the comment on the comparison
+ * below claims this field is handled "the same way". A raw JSON.stringify is not the same way: two
+ * polls of an unchanged packet whose list comes back in a different element order would compare
+ * unequal, and this function's whole contract is to answer "is this response NEW". Reporting new on
+ * every poll is the forever-re-render this module's own header exists to prevent, and it costs a
+ * send: the screen rebuilds under her every 2.5 seconds.
+ *
+ * Realistic rather than theoretical. The dashboard's own comment names the EEO and US
+ * work-authorization families as questions that co-occur on one packet, so a multi-entry list is the
+ * expected shape, and nothing in this repo pins the server's ordering of it.
+ *
+ * Length is carried separately so that a list which sorts to the same string by coincidence, or one
+ * carrying a duplicate label, still reads as a different list.
+ */
+export function sensitiveConfirmationIdentity(
+  labels: readonly string[] | null | undefined,
+): string {
+  if (!labels) return "";
+  return `${labels.length}|${[...labels].sort().join("|")}`;
+}
+
+/**
  * A stored mark as the SEED reads it, which is a wider read than the comparison above needs.
  *
  * `AttachedDocumentLike` names the four fields that can tell two marks apart, because that is all
@@ -375,6 +404,17 @@ export function nextSubmissionState<T extends SubmissionSnapshot>(current: T | n
   // Never let a board seed outrank the server.
   if (current.partial) return nextIncoming;
   if (current.review.updated_at !== nextIncoming.review.updated_at) return nextIncoming;
+  /* `status` DRIVES WHICH SCREEN RENDERS and is not provably a function of `updated_at`: this file's
+     own header warns that a packet can sit with a frozen `updated_at` while the fields outside
+     `review` keep moving, and status is not exempt just because it lives inside `review`. Measured
+     against the Hudson River Trading packet 4a79eec1-5c65-4dd4-8e72-e119fbfbd733, 2026-09-04:
+     GET /applications/:id/submission answered `review.status: "failed"`, and the live dashboard, on
+     a hard reload of the same packet, still rendered the needs_attention one-question queue asking
+     her to confirm a question the server had already cleared. Nothing here compared `status` on its
+     own, so a poll that changed only it, while `updated_at` and the packet identity below happened
+     to still agree with the installed snapshot, was silently kept instead of installed - freezing
+     the dashboard's idea of needs_attention past the point the server had left it. */
+  if (current.review.status !== nextIncoming.review.status) return nextIncoming;
   if (coverLetterIdentity(current.cover_letter) !== coverLetterIdentity(nextIncoming.cover_letter)) return nextIncoming;
   if (submissionReviewPacketIdentity(current.review) !== submissionReviewPacketIdentity(nextIncoming.review)) return nextIncoming;
   if (JSON.stringify(current.submission_authority) !== JSON.stringify(nextIncoming.submission_authority)) return nextIncoming;
@@ -394,6 +434,14 @@ export function nextSubmissionState<T extends SubmissionSnapshot>(current: T | n
   if (documentsIdentity(current.documents) !== documentsIdentity(nextIncoming.documents)) return nextIncoming;
   if ((current.handoff_url ?? null) !== (nextIncoming.handoff_url ?? null)) return nextIncoming;
   if ((current.configured ?? null) !== (nextIncoming.configured ?? null)) return nextIncoming;
+  /* THE SERVER'S SENSITIVE-QUESTION LIST, one more field outside `review` and versioned by nothing,
+     exactly like `documents` above. Left uncompared, a poll that dropped a question from this list -
+     the server having decided it no longer needs a confirmation - matched on every other term here
+     and was thrown away, so `directInputTaskPlan` went on reading the STALE list handed to it from
+     `current` and kept building a queue entry for a question the server had already cleared. Same
+     defect class as the cover-letter and documents fixes above, one field later. */
+  if (sensitiveConfirmationIdentity(current.sensitive_questions_requiring_confirmation)
+    !== sensitiveConfirmationIdentity(nextIncoming.sensitive_questions_requiring_confirmation)) return nextIncoming;
   return current;
 }
 

@@ -894,27 +894,27 @@ function applicantConfirmedAnswer(
 }
 
 /**
- * THE SERVER SAYS THIS ANSWER STANDS, as opposed to being a paragraph Litos wrote and nobody has
- * approved. Read by the essay row below and by BOTH Done-column builders, in one definition,
- * because the row list and the group count saying different things about one essay is the same
- * class of defect as the two columns disagreeing about a file.
+ * A PARAGRAPH NOBODY HAS APPROVED, which is the state the Review row above is about.
  *
- * ABSENT IS NOT APPROVED, and that is the whole point of naming the approving sources rather than
- * excluding the drafting one. The backend reads a missing `answer_source` as a machine answer and
- * counts the row unacknowledged (see the Akuna measurement at app/dashboard/applications/page.tsx,
- * where that is exactly what parked the packet), so a client that settled on "not a draft" would
- * call a row done that the server is still holding open, with nothing left in the queue to press.
- * Testing the two approving values fails closed instead: an answer the server named no source for
- * goes on asking, and her save is what names it.
+ * ONE DEFINITION, and that is why this is a function rather than the inline const it started as.
+ * Three places test it: the row that asks, and BOTH Done-column builders, which had to stop
+ * excluding an approved essay once one could settle. The row list and the group count disagreeing
+ * about a single essay is the same class of defect as the two columns disagreeing about a file, and
+ * they were one edit away from it.
  *
- * NOT the same question as applicantConfirmedAnswer below. That one asks whether she pressed
- * Confirm on a SENSITIVE question, which mints answer_confirmed_of and nothing else does. This one
- * asks who the answer belongs to. An essay is a plain drafted answer that no gate asks her to
- * confirm, so reading the confirmation field for it would never come true.
+ * The terms are the send gate's, not this screen's guess at them. See the Review row's own comment
+ * for why an ABSENT source counts as a draft here: the backend classes `undefined || 'litos_draft'`
+ * as machineAuthored together, because the essay drafter used to push its paragraph with no flag at
+ * all, and this row is the only surface that puts such a paragraph in front of her before it goes
+ * out in her name.
+ *
+ * NOT the same question as applicantConfirmedAnswer above. That one asks whether she pressed
+ * Confirm on a SENSITIVE question, which mints answer_confirmed_of and nothing else does. An essay
+ * is a plain drafted answer no gate asks her to confirm, so reading that field for one would never
+ * come true.
  */
-function applicantApprovedAnswer(question: Pick<ApplicationQuestion, "answer_source">): boolean {
-  return question.answer_source === "applicant_review"
-    || question.answer_source === "consent_permission";
+function essayDraftAwaitsApproval(question: Pick<ApplicationQuestion, "answer_source">): boolean {
+  return question.answer_source === "litos_draft" || question.answer_source === undefined;
 }
 
 export function humanInputItems(
@@ -999,6 +999,16 @@ export function humanInputItems(
     const question = presentedQuestions.get(storedQuestion.id) ?? storedQuestion;
     if (review.cover_letter_supported === false && isCoverLetterFieldLabel(question.question)) continue;
     const answer = (question.answer ?? "").trim();
+    /* HOISTED ABOVE THE ESSAY ROWS, because the settled one has to yield to it.
+       The server's own list is the authority on what it will refuse to send, and settling a row the
+       backend still NAMES would be the client saying done while the server says not done, with
+       nothing on the screen to press: the dead end recorded on applicantConfirmedAnswer, reached by
+       a new door. The local label guess deliberately does NOT hold the settled row back, for the
+       reason the fallback below bars it from essays outright: a guess plus a row that cannot settle
+       is how the loop comes back. */
+    const serverList = context.sensitiveConfirmations;
+    const serverNamesForConfirmation = serverList !== undefined
+      && serverList.some((label) => label.trim().toLowerCase() === question.question.trim().toLowerCase());
     if (question.required && !answer) {
       addUnique(items, {
         id: `missing-${question.id}`,
@@ -1031,91 +1041,83 @@ export function humanInputItems(
       });
       continue;
     }
-    /* AN ESSAY SHE HAS ALREADY APPROVED IS NOT WORK, and nothing here used to test that.
+    /* A DRAFT IS WHAT NEEDS READING, and this row had no way to tell a draft from an answer she had
+     * already read and confirmed.
      *
-     * This branch asked on the KIND and on the presence of an answer alone, "it is an essay and it
-     * has words in it", so it re-raised its own row out of the answer the previous pass had just
-     * saved. The sentence it prints is a claim about PROVENANCE (Litos wrote this, you have not
-     * approved it) and the condition never checked provenance.
+     * The condition was `kind === "essay" && answer`, which is true of every answered essay
+     * forever. The row says "Drafted answer ready for review" and offers Review; pressing it, saving,
+     * and coming back produced the identical row, because nothing in the test could observe that
+     * anything had happened. Measured live 2026-09-04 on Exa packet 73768339 (ashby): its four
+     * essays all carry answer_source "applicant_review" - she has confirmed every one - and the
+     * screen still walks them as "1 of 4", indefinitely.
      *
-     * Measured live 2026-09-04, Exa "Software Engineer, Intern" packet
-     * 73768339-7fef-4493-aa75-1d47c61ae51f (ashby): four required essays, all four answered, four
-     * confirming saves all returning 200, and a reload that opened on "1 of 4 / Save and next"
-     * again. directInputTaskPlan turns every row emitted here into a question task unless the row
-     * is settled, so four rows that could not settle were four steps that could not be walked off.
+     * `litos_draft` is precisely the provenance the sentence describes: a paragraph LITOS WROTE that
+     * she has not approved. It is also what the backend's own send gate reads - a litos_draft answer
+     * counts as an unanswered required question there (unapprovedLitosDraftQuestionLabels) - so
+     * gating on it makes this row mean the same thing the send gate means, which is the only reading
+     * under which clearing the row can ever clear the send.
      *
-     * answer_source IS THE FIELD, and it is the same one the backend's own send gate reads
-     * (unapprovedLitosDraftQuestionLabels in src/lib/submissionSafety.ts), so what this screen asks
-     * for and what the gate refuses to send are now one test rather than two guesses about one
-     * thing. `litos_draft` is a paragraph Litos wrote that she has not approved; her save mints
-     * `applicant_review` over it. That mint is the backend half of this fix (volley-backend
-     * fix/answered-essay-stops-being-asked, 6440c5b): before it a confirming save moved nothing at
-     * all, because the stored label carried the employer's required marker while every read path
-     * served normalizeReviewQuestionLabel's output and the merge's confirmation gate compared the
-     * two byte for byte.
+     * AN ABSENT answer_source COUNTS AS A DRAFT HERE, and reading it as "machine-resolved, not our
+     * problem" was wrong. The backend classifies `source === undefined || source === 'litos_draft'`
+     * as machineAuthored (submissionRunner.ts machineAuthored), and submissionSafety's own comment
+     * records why: "the essay drafter used to push its paragraph with no flag at all". So a packet
+     * built before the marker existed carries Litos-composed prose with no provenance, and the send
+     * gate does not stop it either - unapprovedLitosDraftQuestionLabels matches the literal only.
+     * This row is the sole surface that puts such a paragraph in front of her, so it has to keep
+     * catching them or an AI-written answer reaches an employer in her name unread. */
+    const essayIsUnapprovedDraft = essayDraftAwaitsApproval(question);
+    if (review.status !== "submitted" && question.kind === "essay" && answer && essayIsUnapprovedDraft) {
+      addUnique(items, {
+        id: `review-${question.id}`,
+        label: displayQuestionLabel(question.question),
+        detail: "Drafted answer ready for review",
+        action: "Review",
+        actionKind: "review",
+        questionId: question.id,
+      });
+      continue;
+    }
+
+    /* AND AN APPROVED ONE IS NOT INVISIBLE, which is what dropping its row quietly made it.
      *
-     * NOT answer_confirmed_of, which belongs to the branch below and would be the wrong field here:
-     * that one is minted only by a per-question `confirmed: true` on a SENSITIVE question, and an
-     * essay is a plain drafted answer no gate asks her to confirm. Reading it here would put this
-     * row straight back into the loop it is leaving, because approving an essay never mints it.
+     * The gate above is right and this does not touch it: an approved essay is not work, so it must
+     * not be asked about. But falling out of this loop with no row put her approved essay on NO
+     * LIST AT ALL. The packet viewer renders three lists and it was on none of them: it drops
+     * server-settled rows deliberately (read-only, prints no action words), it had no row here to
+     * drop anyway, and completedSubmissionItems excluded every unsubmitted essay. The one paragraph
+     * she wrote or approved herself was the only thing about the application that the record of the
+     * application did not mention.
      *
-     * THE APPROVED ROW SETTLES RATHER THAN DISAPPEARING, for the reason every settled row in this
-     * file exists: a control that vanishes the moment its job is done takes the way back with it.
-     * Settling alone did not put her approved essay on the record, though, and the first cut of this
-     * believed it had: the packet viewer DROPS server-settled rows (it is read-only and prints no
-     * action words), so an approved essay landed on none of that screen's lists until both
-     * Done-column builders were taught to admit one. The two changes are halves of the same fact and
-     * have to move together, which is why they read one shared predicate.
+     * A settled row is the shape this file already has for "handled, and here is the way back", and
+     * it is half the fix: the other half is the two Done-column builders below, which had to stop
+     * excluding an approved essay. They were excluding it for a reason that expired - while
+     * unsubmitted an essay was ALWAYS an outstanding review row, so listing it as complete would
+     * have contradicted the panel beside it - and that stopped being true the moment an essay could
+     * settle.
      *
-     * THE TEST IS applicantApprovedAnswer, NOT `!== "litos_draft"`, and the difference is a packet
-     * that cannot converge. See that predicate: an absent source is not an approval, and settling on
-     * one would take the row out of the queue that carries the only press which names it. */
-    if (review.status !== "submitted" && question.kind === "essay" && answer) {
-      const label = displayQuestionLabel(question.question);
-      if (!applicantApprovedAnswer(question)) {
-        addUnique(items, {
-          id: `review-${question.id}`,
-          label,
-          /* Two sentences, because only one of them is a claim this screen is entitled to make.
-             `litos_draft` is the server saying Litos composed the paragraph, so the row may say so.
-             An absent source is an answer with nobody named, and printing "Drafted answer" over it
-             would be attributing words to Litos the server never attributed. Both still ASK: see
-             applicantApprovedAnswer for why absent fails closed. */
-          detail: question.answer_source === "litos_draft"
-            ? "Drafted answer ready for review"
-            : "Ready for your review",
-          action: "Review",
-          actionKind: "review",
-          questionId: question.id,
-        });
-        continue;
-      }
-      /* SETTLED, UNLESS THE RUN SAYS THE BOX IS STILL EMPTY, and the exception is the whole reason
-         this is not one unconditional addUnique.
-       *
-       * The blocker naming this field is already suppressed by blockerDuplicatesQuestion, on the
-       * reasoning that a question record covers it, and the `continue` below the essay branch keeps
-       * the `empty-` row from ever being built for an essay. So a settled row here was the ONLY
-       * thing on screen for an approved essay whose box the run measured empty: a confirmation, out
-       * of the amber panel and out of the count, standing in for a required answer the employer
-       * never received. Falling through hands the field to the `empty-` branch, which states the
-       * one true thing about it and gives her a control that fills it. */
-      if (!questionReportedEmpty(question.question, emptySubjects)) {
-        addUnique(items, {
-          id: `review-${question.id}`,
-          label,
-          /* Her own hand is worth naming back to her; a standing permission is Litos acting for her
-             and must not be printed as her review. */
-          detail: question.answer_source === "applicant_review"
-            ? "Reviewed by you"
-            : "Accepted under your standing permission",
-          action: "Change",
-          actionKind: "review",
-          questionId: question.id,
-          settled: true,
-        });
-        continue;
-      }
+     * NOT WHEN THE RUN SAYS THE BOX IS STILL EMPTY. The employer's own blocker for this field is
+     * already dropped by blockerDuplicatesQuestion, on the reasoning that a question record covers
+     * it, so a settled row here would be the only thing on screen for a required answer the
+     * employer never received: a confirmation standing in for an empty box. Falling through hands
+     * the field to the `empty-` branch, which states the one true thing about it and carries a
+     * control that fills it. */
+    if (review.status !== "submitted" && question.kind === "essay" && answer
+      && !serverNamesForConfirmation
+      && !questionReportedEmpty(question.question, emptySubjects)) {
+      addUnique(items, {
+        id: `review-${question.id}`,
+        label: displayQuestionLabel(question.question),
+        /* Her own hand is worth naming back to her; a standing permission is Litos acting for her
+           under a rule she set, and must not be printed as her review. */
+        detail: question.answer_source === "applicant_review"
+          ? "Reviewed by you"
+          : "Accepted under your standing permission",
+        action: "Change",
+        actionKind: "review",
+        questionId: question.id,
+        settled: true,
+      });
+      continue;
     }
     /* WHEN THE SERVER SENDS ITS LIST, THE LIST IS THE WHOLE ANSWER - not one input to it.
      *
@@ -1136,10 +1138,24 @@ export function humanInputItems(
      *
      * Case- and space-insensitive, because the two sides carry the same label through different
      * transports and only the TEXT is its identity. */
-    const serverList = context.sensitiveConfirmations;
+    /* THE LABEL FALLBACK NEVER CLAIMS AN ESSAY, and the essay branch above is why.
+     *
+     * That branch now passes an essay through once she has approved it, which newly exposed this one
+     * to a class it never used to see: an answered essay whose LABEL happens to read human-only -
+     * salary, consent/recording/privacy, non-US sponsorship. Measured on the fallback path (a payload
+     * with no sensitive_questions_requiring_confirmation): it produced "Needs your confirmation" on a
+     * free-prose paragraph, and the row could never settle, because settling reads
+     * answer_confirmed_of and this file's own measurement records that the field never reaches this
+     * client. directInputTaskPlan still reported remaining: 1 after a save - the same never-ending
+     * ask this change exists to remove, wearing a different word.
+     *
+     * The server's list is exempt from this, deliberately. When the backend NAMES a question it will
+     * refuse to send unconfirmed, that is authoritative and an essay among them is a real ask with a
+     * real exit. Only the local label guess is barred from claiming essays, because a guess plus an
+     * unsettleable row is how the loop comes back. */
     const needsConfirmation = serverList
-      ? serverList.some((label) => label.trim().toLowerCase() === question.question.trim().toLowerCase())
-      : isHumanOnlyChecklistLabel(question.question);
+      ? serverNamesForConfirmation
+      : isHumanOnlyChecklistLabel(question.question) && question.kind !== "essay";
     if (review.status !== "submitted" && answer && needsConfirmation) {
       /* Confirmed once is confirmed, and the row has to say so or the ask never ends. The settled
          shape keeps the control - she can still change the answer - while taking the row out of the
@@ -1341,6 +1357,56 @@ export function directInputTaskPlan(
 }
 
 /**
+ * The one-question-at-a-time navigator's own list, which is not simply `plan.questionTasks`.
+ *
+ * A UNION of two sources, by prompt fingerprint: `outstandingTasks` (the current plan's remaining
+ * work) OR `answeredTasks` (what `directAnswerProgress` remembers she saved through this exact
+ * navigator in the CURRENT pass). The second half exists so a question does not vanish from the "N
+ * of M" strip and lose its Previous control the instant her own save settles it and the fresh plan
+ * stops calling it outstanding - see `DirectQuestionTask.context` for the sibling case, a parent
+ * re-admitted for its dependent, which this same union also has to keep visible.
+ *
+ * THIS DOES NOT RESURRECT A QUESTION THE SERVER HAS DROPPED FOR AN UNRELATED REASON, and that
+ * safety is not in this function - it is upstream, in `directAnswerProgress`'s own key. The caller
+ * discards `answeredTasks` and starts a fresh empty list whenever `directAnswerPassKey(review)`
+ * (questions_reviewed_at, falling back to submission_run_id, falling back to updated_at) no longer
+ * matches the progress that was stored. So `answeredTasks` can only ever hold prompts from the SAME
+ * review round this call is being made against, and every entry in it is one the server itself
+ * accepted a save for in that round (`onSaveQuestion` only reaches the code that writes into
+ * `directAnswerProgress` on `result.saved === true`, never on a refusal). A question the server
+ * clears without her having answered it in this round is simply never in `answeredTasks`, and drops
+ * out here exactly as `outstandingTasks` says it should - see
+ * "the direct plan drops a question the server's own list has already cleared" for the case that
+ * matters: the measured Hudson River Trading packet, where `answeredTasks` is empty because no save
+ * for that question was ever accepted in the round that cleared it, and the union is therefore
+ * exactly `outstandingTasks`, which is exactly empty.
+ *
+ * `question` on the returned task is always the CURRENT review's copy, not the stale one the task
+ * carried when it was recorded as outstanding or answered: a follow-up question, a relabelled
+ * control or a changed option list must render from what the employer's form says now.
+ */
+export function directAnswerNavigationTasks(
+  review: Pick<ApplicationReview, "questions" | "question_metadata_blockers">,
+  outstandingTasks: readonly DirectQuestionTask[],
+  answeredTasks: readonly DirectQuestionTask[],
+): DirectQuestionTask[] {
+  const outstandingByPrompt = new Map(
+    outstandingTasks.map((task) => [directQuestionPromptFingerprint(task), task]),
+  );
+  const answeredByPrompt = new Map(
+    answeredTasks.map((task) => [directQuestionPromptFingerprint(task), task]),
+  );
+  return questionReviewPresentation(
+    review.questions ?? [],
+    review.question_metadata_blockers ?? [],
+  ).editableQuestions.flatMap((question) => {
+    const promptFingerprint = directQuestionPromptFingerprint({ question });
+    const task = outstandingByPrompt.get(promptFingerprint) ?? answeredByPrompt.get(promptFingerprint);
+    return task ? [{ ...task, question }] : [];
+  });
+}
+
+/**
  * Whether the metadata-refresh launch may lead the attention screen while a non-question attention
  * task still stands.
  *
@@ -1497,13 +1563,13 @@ export function completedSubmissionItems(review: Pick<ApplicationReview, "attent
   for (const question of review.questions ?? []) {
     const answer = (question.answer ?? "").trim();
     if (!answer) continue;
-    /* An essay was excluded here for one reason: while unsubmitted it was ALWAYS an outstanding
-       review row, so listing it as complete would have contradicted the panel beside it. An essay
-       she has approved is no longer outstanding anywhere, and the row list drops server-settled
-       rows on the packet viewer, so leaving the exclusion whole is what made an approved essay
-       render on none of that screen's lists at all. Still the run's own empty report below outranks
-       this, exactly as it does for every other answer. */
-    if (question.kind === "essay" && review.status !== "submitted" && !applicantApprovedAnswer(question)) continue;
+    /* An essay was excluded here for ONE reason, and it expired. While unsubmitted an essay was
+       ALWAYS an outstanding review row, so listing it as complete would have contradicted the panel
+       beside it. An essay she has approved is not outstanding anywhere now, and the packet viewer
+       drops server-settled rows, so keeping the exclusion whole is what left an approved essay on
+       none of that screen's lists. The run's own empty report below still outranks this, exactly as
+       it does for every other answer: an approval is not the employer receiving it. */
+    if (question.kind === "essay" && review.status !== "submitted" && essayDraftAwaitsApproval(question)) continue;
     if (isHumanOnlyChecklistLabel(question.question)) continue;
     // The run says this box is still empty. A stored answer is not the employer having received it,
     // and Done is a claim about the employer's form.
@@ -1515,7 +1581,7 @@ export function completedSubmissionItems(review: Pick<ApplicationReview, "attent
          a paragraph nobody has approved. Same words the checklist row uses, so the two surfaces
          describe one answer the same way. */
       detail: question.kind === "essay"
-        ? (applicantApprovedAnswer(question) ? "Reviewed by you" : "Answer drafted")
+        ? (essayDraftAwaitsApproval(question) ? "Answer drafted" : "Reviewed by you")
         : "Answer filled",
     });
   }
@@ -1773,13 +1839,13 @@ export function completedSubmissionGroups(
   }
   for (const question of review.questions ?? []) {
     if (!(question.answer ?? "").trim()) continue;
-    /* An essay was excluded here for one reason: while unsubmitted it was ALWAYS an outstanding
-       review row, so listing it as complete would have contradicted the panel beside it. An essay
-       she has approved is no longer outstanding anywhere, and the row list drops server-settled
-       rows on the packet viewer, so leaving the exclusion whole is what made an approved essay
-       render on none of that screen's lists at all. Still the run's own empty report below outranks
-       this, exactly as it does for every other answer. */
-    if (question.kind === "essay" && review.status !== "submitted" && !applicantApprovedAnswer(question)) continue;
+    /* An essay was excluded here for ONE reason, and it expired. While unsubmitted an essay was
+       ALWAYS an outstanding review row, so listing it as complete would have contradicted the panel
+       beside it. An essay she has approved is not outstanding anywhere now, and the packet viewer
+       drops server-settled rows, so keeping the exclusion whole is what left an approved essay on
+       none of that screen's lists. The run's own empty report below still outranks this, exactly as
+       it does for every other answer: an approval is not the employer receiving it. */
+    if (question.kind === "essay" && review.status !== "submitted" && essayDraftAwaitsApproval(question)) continue;
     if (isHumanOnlyChecklistLabel(question.question)) continue;
     if (review.status !== "submitted" && questionReportedEmpty(question.question, emptySubjects)) continue;
     add("questions", question.id || normalizedChecklistText(question.question));

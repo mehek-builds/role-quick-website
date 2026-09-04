@@ -11,6 +11,7 @@ import {
   REVIEW_ANSWERS_SAVED_NOTICE,
   REVIEW_ANSWERS_SAVE_RACED,
   auditAnswerWrite,
+  reviewAnswerEditRoute,
   reviewAnswersNeedSave,
   reviewAnswersPath,
   saveReviewAnswers,
@@ -470,4 +471,56 @@ describe("persisting reviewed answers before an exact-packet audit", () => {
       assert.deepEqual(server.paths, []);
     });
   }
+});
+
+/* WHERE A TYPED ANSWER CAN LAND, ASKED BEFORE THE CONTROL THAT TYPES IT IS DRAWN.
+ *
+ * Measured live 2026-09-04: Flow Traders packet 8dc65cd0 at `ready_for_final_approval` drew
+ * "Answer 1 question", opened an editor with the essay in it, and every Save came back
+ * 409 REVIEW_ANSWERS_NOT_EDITABLE. The server is right - the filled form and its preview screenshot
+ * would be describing different answers - so this predicate does not argue with it. It says which of
+ * three things the screen should do, and `reopen` is the one that was missing.
+ */
+
+test("a packet waiting on the applicant to look at a filled form is reopened, not saved in place", () => {
+  assert.equal(reviewAnswerEditRoute({ status: "ready_for_final_approval" }), "reopen");
+});
+
+test("every other status keeps the ordinary save, and the server keeps the gate", () => {
+  for (const status of ["needs_attention", "questions_ready", "ready_to_submit", "resume_ready", "failed"]) {
+    assert.equal(reviewAnswerEditRoute({ status }), "save", status);
+  }
+});
+
+/* NARROWER THAN preparedRunCanRestart ON PURPOSE. That predicate asks only about the claim. A row
+ * carrying a receipt, an open unverified submission or a claim id may already be at the employer,
+ * and a refill would be a second application - so no reopen may be offered for it, and the client
+ * must not be the thing that discovers that from a 409. */
+test("a filled packet that may already be at the employer has no route at all", () => {
+  assert.equal(reviewAnswerEditRoute({
+    status: "ready_for_final_approval",
+    submission_claimed_at: "2026-09-04T11:00:00.000Z",
+  }), "frozen");
+  assert.equal(reviewAnswerEditRoute({
+    status: "ready_for_final_approval",
+    submission_claim_id: "claim-1",
+  }), "frozen");
+  assert.equal(reviewAnswerEditRoute({
+    status: "ready_for_final_approval",
+    receipt: { confirmation_text: "Thanks for applying." },
+  }), "frozen");
+  assert.equal(reviewAnswerEditRoute({
+    status: "ready_for_final_approval",
+    unverified_submission: {},
+  }), "frozen");
+});
+
+/* An unverified submission she has ANSWERED "not there" is the one shape that reopens again: the
+ * question the record existed to ask has been answered, so it is no longer evidence of a send. Same
+ * distinction submissionProvablyNotSent draws on the other side. */
+test("an unverified submission the applicant closed with \"not sent\" reopens again", () => {
+  assert.equal(reviewAnswerEditRoute({
+    status: "ready_for_final_approval",
+    unverified_submission: { resolution: "not_sent" },
+  }), "reopen");
 });

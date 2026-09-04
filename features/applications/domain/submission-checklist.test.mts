@@ -4,6 +4,7 @@ import {
   checklistRowControl,
   completedSubmissionGroups,
   completedSubmissionItems,
+  directAnswerNavigationTasks,
   directInputTaskPlan,
   directQuestionPromptFingerprint,
   directQuestionTaskFingerprint,
@@ -37,10 +38,7 @@ const review: Pick<ApplicationReview, "attention_reason" | "questions" | "status
       answer: "I like infrastructure products that hide complex workflows behind simple APIs.",
       kind: "essay",
       required: true,
-      /* The server's word that Litos wrote this and she has not approved it, which is what makes
-         the Review row below hers to act on. Written out on every essay fixture that means an
-         unapproved draft, because that provenance is now the row's condition rather than a
-         background assumption. */
+      // A paragraph Litos wrote and she has not approved - which is what a Review row is FOR.
       answer_source: "litos_draft",
     },
     {
@@ -1118,7 +1116,10 @@ test("an essay the server names no source for keeps asking, without attributing 
 
   const row = humanInputItems(unnamed).find((item) => item.questionId === "why-us");
   assert.equal(row?.settled, undefined, "nobody has approved it, so it is still work");
-  assert.equal(row?.detail, "Ready for your review");
+  /* The drafted sentence, not a neutral one. An absent source is not "provenance we cannot claim":
+     the backend classes `undefined || litos_draft` as machineAuthored precisely because the essay
+     drafter used to push its paragraph with no flag, so the honest reading is that Litos wrote it. */
+  assert.equal(row?.detail, "Drafted answer ready for review");
   assert.equal(row?.action, "Review");
   assert.equal(row?.actionKind, "review");
 
@@ -2055,9 +2056,14 @@ test("the screen keeps the document step alive in the unverified-submission mode
     /\{awaitingUnverifiedSubmission && unverifiedDocumentSteps\.length > 0 && \(\s*<BlockerList\s+items=\{unverifiedDocumentSteps\}\s+onAddDocument=\{onAddDocument\}/,
     "the unverified-submission mode must still draw the document steps, with the control that resolves them",
   );
+  /* The third conjunct arrived with the stalled-fill fix (Palantir packet f1cfb841, 2026-09-04) and
+     is a SECOND independent suppression, not a replacement for this one: a quarantined authority
+     rewrites a live `filling` row into "needs_attention", so this button used to render on a packet
+     whose handler returns before its fetch. Pinned together so neither can be dropped by an edit
+     aimed at the other - this test still owns `!awaitingUnverifiedSubmission`. */
   assert.match(
     page,
-    /\{needsAttention && !awaitingUnverifiedSubmission && <Button onClick=\{onRetry\}/,
+    /\{needsAttention && !awaitingUnverifiedSubmission && !employerActionRefusal && <Button onClick=\{onRetry\}/,
     "Try again must stay suppressed while Litos does not know whether the first application landed",
   );
 });
@@ -2414,4 +2420,234 @@ test("the direct plan's server list clears one label without silencing a genuine
   assert.ok(!ids.includes("sponsorship"), "the server dropped this one, so the queue must not invent it back");
   assert.ok(ids.includes("gender"), "the server still names this one, so the queue must still ask");
   assert.equal(plan.remaining, 1);
+});
+
+/* THE FULL QUEUE, BUILT THE WAY THE PAGE ACTUALLY BUILDS IT - not `directInputTaskPlan` alone.
+ *
+ * rqw PR #536's own test above (see "the direct plan drops a question the server's own list has
+ * already cleared") proves `directInputTaskPlan` is correct in isolation. That was never disputed
+ * and is not what left the live screen broken. `SubmissionScreen` never reads `plan.questionTasks`
+ * directly - it filters that plan by `answeredQuestionFingerprints`, then feeds the result AND
+ * `directAnswerProgress.answeredTasks` through `directAnswerNavigationTasks`, and THAT result is
+ * what decides whether `currentDirectQuestion` is null. Two hypotheses were on the table for why
+ * the live queue stayed non-empty even after #536: either `context.sensitiveConfirmations` was not
+ * really `[]` at that call site (a stale `submission` object built by something upstream), or
+ * `directAnswerProgress.answeredTasks` was resurrecting a question the fresh plan had dropped.
+ *
+ * Built end to end against the measured Hudson River Trading packet, with `answeredTasks` empty -
+ * which is what it provably is here: `directAnswerProgresses` is page-local `useState(() => new
+ * Map())` with no restore-from-storage path, so it starts empty on every reload, and the one write
+ * path into it (in `saveReviewedAnswers`) runs only after `result.saved === true` - a 409 from
+ * `employerMayHoldApplication` returns `{ saved: false }` with no `review`, hits the function's
+ * early return, and never reaches that write. Neither hypothesis reduces to a domain-logic gap:
+ * every term below the plan is provably empty, so the plan itself is the only place left for a
+ * stale value to hide, which is what features/applications/domain/submission-state.test.mts's
+ * "a status change is not thrown away" and "a question dropping off the server's confirmation list
+ * is not thrown away" tests were written to close. */
+test("the full navigator is empty for the measured packet when nothing was answered this pass", () => {
+  const SPONSORSHIP =
+    "Will you now, or in the future, require visa sponsorship to legally work in the country specified for this position?";
+  const ROUND = "2026-09-01T21:28:12.934Z";
+  const review: Pick<ApplicationReview, "attention_reason" | "questions" | "question_metadata_blockers" | "questions_reviewed_at" | "status"> = {
+    status: "needs_attention",
+    attention_reason: "",
+    questions_reviewed_at: ROUND,
+    questions: [{
+      id: "sponsorship",
+      question: SPONSORSHIP,
+      answer: "Yes",
+      kind: "required",
+      required: true,
+      portal_input_type: "select-one",
+      options: ["Yes", "No"],
+      answer_source: "applicant_review",
+      answer_reviewed_at: ROUND,
+    }],
+  };
+  const answeredQuestionFingerprints: ReadonlySet<string> = new Set();
+  const directProgressAnsweredTasks: ReturnType<typeof directAnswerNavigationTasks> = [];
+
+  const directTaskPlan = directInputTaskPlan(review, { sensitiveConfirmations: [] });
+  assert.deepEqual(directTaskPlan.questionTasks, [], "directTaskPlan.questionTasks");
+
+  const remainingDirectQuestions = directTaskPlan.questionTasks.filter((task) => (
+    !answeredQuestionFingerprints.has(directQuestionPromptFingerprint(task))
+  ));
+  assert.deepEqual(remainingDirectQuestions, [], "remainingDirectQuestions");
+
+  assert.deepEqual(directProgressAnsweredTasks, [], "directProgress.answeredTasks");
+
+  const directQuestionTasks = directAnswerNavigationTasks(review, remainingDirectQuestions, directProgressAnsweredTasks);
+  assert.deepEqual(directQuestionTasks, [], "directQuestionTasks");
+  // currentDirectQuestion = directQuestionTasks[currentDirectQuestionIndex] ?? null is therefore
+  // null, and directAnswerActive (needsAttention && !awaitingUnverifiedSubmission &&
+  // currentDirectQuestion !== null) is false regardless of needsAttention or
+  // awaitingUnverifiedSubmission - there is no question left for either of them to gate.
+});
+
+/* THE UNION'S OTHER HALF, PROVEN RATHER THAN ASSUMED: `answeredTasks` genuinely can keep a question
+ * in the navigator after the fresh plan drops it - that is what lets her page back to "1 of 3" with
+ * Previous after saving "3 of 3". The reason this is not the H2 defect the caller worried about is
+ * `directAnswerProgress`'s OWN key, not this function: `SubmissionScreen` resets `answeredTasks` to
+ * `[]` the instant `directAnswerPassKey(review)` no longer matches the stored progress, so an entry
+ * only ever survives into this call from the SAME review round, and only for a question the server
+ * itself accepted a save for in that round. This function has no way to tell "she answered it and
+ * the plan retired it" from "the server retired it out from under her", and does not need to: within
+ * one round, both are her own accepted answer standing. */
+test("answeredTasks keeps a question the fresh plan no longer lists navigable within the same pass", () => {
+  const SPONSORSHIP = "Will you now or in the future require sponsorship for employment visa status?";
+  const review: Pick<ApplicationReview, "questions" | "question_metadata_blockers"> = {
+    questions: [{
+      id: "sponsorship", question: SPONSORSHIP, answer: "Yes", kind: "required", required: true,
+      portal_input_type: "select-one", options: ["Yes", "No"], answer_source: "applicant_review",
+    }],
+  };
+  const answeredTask = directAnswerNavigationTasks(
+    review,
+    [{ kind: "question", id: "confirm-sponsorship", item: { id: "confirm-sponsorship", label: SPONSORSHIP, action: "Confirm", actionKind: "confirm" }, question: review.questions[0], intent: "confirm" }],
+    [],
+  )[0];
+  assert.ok(answeredTask, "setup: the question must be outstanding before it can be recorded as answered");
+
+  // The fresh plan has nothing left outstanding - her save settled it - but the navigator still
+  // carries it forward from directAnswerProgress.answeredTasks, which is exactly the point.
+  const navigatorAfterHerSave = directAnswerNavigationTasks(review, [], [answeredTask]);
+  assert.equal(navigatorAfterHerSave.length, 1, "her own accepted answer stays navigable this pass");
+  assert.equal(navigatorAfterHerSave[0]?.question.id, "sponsorship");
+
+  // A question that was never in either list - never outstanding, never answered by her - does not
+  // appear just because the review still lists it: editableQuestions alone is not enough to draw it.
+  const untouchedReview: Pick<ApplicationReview, "questions" | "question_metadata_blockers"> = {
+    questions: [...review.questions, {
+      id: "other", question: "What is your favourite colour?", answer: "", kind: "required", required: false,
+    }],
+  };
+  const navigatorWithUntouchedQuestion = directAnswerNavigationTasks(untouchedReview, [], [answeredTask]);
+  assert.equal(navigatorWithUntouchedQuestion.length, 1, "an untouched question is not drawn into the navigator");
+});
+
+/* A CONFIRMED ESSAY IS NOT A DRAFT, and while this row could not tell the two apart it asked forever.
+ *
+ * The condition was `kind === "essay" && answer`, true of every answered essay for the life of the
+ * packet. The row says "Drafted answer ready for review"; pressing Review, saving, and returning
+ * rebuilt the identical row, because nothing in the test could observe that anything had happened.
+ *
+ * Measured live 2026-09-04 on Exa "Software Engineer, Intern", packet 73768339 (ashby): all four of
+ * its essays carry answer_source "applicant_review" - every one confirmed - and the screen still
+ * walked them as "1 of 4", indefinitely, with no exit.
+ *
+ * litos_draft is exactly the provenance the row's own sentence describes, and it is what the
+ * backend's send gate reads (unapprovedLitosDraftQuestionLabels), so gating on it makes the row mean
+ * what the send means.
+ */
+test("a confirmed essay is not a draft, so it stops asking", () => {
+  const review: Pick<ApplicationReview, "attention_reason" | "questions" | "questions_reviewed_at" | "status"> = {
+    status: "needs_attention",
+    attention_reason: "",
+    questions_reviewed_at: "2026-09-04T00:00:00.000Z",
+    questions: [
+      {
+        id: "confirmed-essay",
+        question: "Why are you interested in working at exa?",
+        answer: "Exa's work on retrieval connects directly to the systems I have been building.",
+        kind: "essay",
+        required: true,
+        answer_source: "applicant_review",
+      },
+      {
+        id: "drafted-essay",
+        question: "What motivates you?",
+        answer: "A paragraph Litos wrote that she has not read yet.",
+        kind: "essay",
+        required: true,
+        answer_source: "litos_draft",
+      },
+    ],
+  };
+
+  const items = humanInputItems(review);
+  /* IT STOPS ASKING, AND IT DOES NOT VANISH, which are two different things and this used to test
+     the second as a proxy for the first. A settled row asks nothing: it is out of the amber panel,
+     out of "N to check", and out of the queue below, which is the whole property. Absence was a
+     stronger claim than the loop needed and a defect of its own, since the packet viewer drops
+     server-settled rows and the Done column excluded an unsubmitted essay, so the one paragraph she
+     approved herself appeared on no list anywhere. */
+  const confirmed = items.find((item) => item.questionId === "confirmed-essay");
+  assert.ok(confirmed, "her approved answer stays on the record, with the way back to change it");
+  assert.equal(confirmed.settled, true, "she confirmed it; asking again is the loop this test exists to stop");
+  assert.equal(confirmed.detail, "Reviewed by you");
+  assert.equal(confirmed.action, "Change");
+  const plan = directInputTaskPlan(review);
+  assert.deepEqual(plan.questionTasks.map((task) => task.question.id), ["drafted-essay"], "only the draft is walked");
+  assert.equal(plan.remaining, 1);
+  const drafted = items.find((item) => item.questionId === "drafted-essay");
+  assert.ok(drafted, "an unapproved Litos draft still needs her eyes");
+  assert.equal(drafted.detail, "Drafted answer ready for review");
+  assert.equal(drafted.actionKind, "review");
+});
+
+test("an essay with NO provenance is still an unapproved draft and keeps its Review row", () => {
+  /* Corrected after review measured the backend: machineAuthored is `source === undefined ||
+     source === 'litos_draft'`, and submissionSafety records that "the essay drafter used to push its
+     paragraph with no flag at all". So an absent provenance is a Litos-written paragraph on an older
+     packet, not a machine-resolved field - and unapprovedLitosDraftQuestionLabels matches the literal
+     only, so the send gate does not stop it either. This row is the only thing that shows it to her. */
+  const review: Pick<ApplicationReview, "attention_reason" | "questions" | "questions_reviewed_at" | "status"> = {
+    status: "needs_attention",
+    attention_reason: "",
+    questions_reviewed_at: "2026-09-04T00:00:00.000Z",
+    questions: [
+      { id: "machine", question: "Why here?", answer: "Because the work matches.", kind: "essay", required: true },
+    ],
+  };
+  const row = humanInputItems(review).find((item) => item.id === "review-machine");
+  assert.ok(row, "an AI-written paragraph nobody flagged must still be shown before it is sent");
+  assert.equal(row.detail, "Drafted answer ready for review");
+});
+
+/* THE LOOP MUST NOT COME BACK WEARING A DIFFERENT WORD.
+ *
+ * Letting a confirmed essay through the Review branch newly exposed it to the confirm branch below,
+ * whose label guess matches salary, consent/recording and non-US sponsorship wording. Measured before
+ * the guard: an answered essay labelled "What are your compensation expectations?" produced
+ * "Needs your confirmation" on the fallback path, and it could never settle - settling reads
+ * answer_confirmed_of, which does not reach this client - so directInputTaskPlan still reported
+ * remaining: 1 after a save. The local guess is therefore barred from claiming essays; the SERVER's
+ * list is not, because a question the backend names has a real exit. */
+test("a confirmed essay whose label reads human-only does not fall into an unsettleable confirm row", () => {
+  const SALARY_ESSAY = "What are your compensation expectations?";
+  const review: Pick<ApplicationReview, "attention_reason" | "questions" | "questions_reviewed_at" | "status"> = {
+    status: "needs_attention",
+    attention_reason: "",
+    questions_reviewed_at: "2026-09-04T00:00:00.000Z",
+    questions: [
+      {
+        id: "salary-essay",
+        question: SALARY_ESSAY,
+        answer: "I am flexible and would defer to the band for the role.",
+        kind: "essay",
+        required: true,
+        answer_source: "applicant_review",
+      },
+    ],
+  };
+
+  /* Fallback path: no server list, so only the local label guess is available - and it must not
+     fire. The property is that no CONFIRM row appears, not that no row appears: her approved essay
+     keeps a settled row so it stays on the record with the way back, which asks nothing. */
+  const guessed = humanInputItems(review).find((item) => item.questionId === "salary-essay");
+  assert.ok(guessed, "her approved answer stays on the record");
+  assert.equal(guessed.settled, true, "she confirmed it; a label guess must not re-ask it");
+  assert.equal(
+    guessed.actionKind,
+    "review",
+    "and above all not as a confirmation it can never settle, which reads answer_confirmed_of",
+  );
+  assert.equal(directInputTaskPlan(review).remaining, 0, "nothing is left to walk through");
+
+  // But when the SERVER names it, the ask is real and the row appears.
+  const named = humanInputItems(review, { sensitiveConfirmations: [SALARY_ESSAY] })
+    .find((item) => item.questionId === "salary-essay");
+  assert.ok(named, "the backend naming a question outranks the local guess");
+  assert.equal(named.actionKind, "confirm");
 });

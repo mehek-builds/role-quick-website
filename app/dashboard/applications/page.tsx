@@ -34,7 +34,7 @@ import { ThinkingOrb } from "thinking-orbs";
 import { canonicalApplicationFromPacket, canRemoveFromTracker, canonicalEnvelopeLegacyHydrationId, canonicalEnvelopeWithMissingLegacyHydration, canonicalTrackerPacket, explicitTerms, sendableLinkedPacketFromCanonicalEnvelope, withRestoredLinkedPackets, linkedLegacyPacketFromCanonicalTrackerPacket, mergeCanonicalApplicationHistory, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, reviewWithLists, screenForStatus, sectionHeading, selectedPacketForRequest, startsNewSection, statusLabel, stripMetadata, upsertCanonicalApplicationHistory } from "@/features/applications";
 import { applicationFilterFromSearch, applicationFilterHeading, cleanJdCapture, ledgerRendersOnLanding, pipelineCounts, reviewCanBeSent, sentSince, startOfLocalDay, statusMatchesApplicationFilter, unansweredRequiredQuestionCount, type ApplicationFilter } from "@/features/applications";
 import { nextPreferredReadyPacket, packetMatchesJob } from "@/features/applications";
-import { auditAnswerWrite, reviewAnswersNeedSave, saveReviewAnswers, type ReviewAnswerSaveResponse } from "@/features/applications";
+import { REVIEW_ANSWERS_FROZEN_NOTICE, REVIEW_ANSWERS_REOPEN_NOTICE, REVIEW_ANSWERS_REOPEN_REFUSED, auditAnswerWrite, reviewAnswerEditRoute, reviewAnswersNeedSave, saveReviewAnswers, type ReviewAnswerSaveResponse } from "@/features/applications";
 import { saveAttentionAcknowledgement, type AttentionAcknowledgementResponse } from "@/features/applications";
 import { duplicateBadge, duplicatePostingMarks, duplicatePostingNote } from "@/features/applications";
 import { isHttpsJobUrl, missingApplicationFields, type ApplicationDraftField } from "@/features/applications";
@@ -64,7 +64,7 @@ import { applyBankVariant, type ApplyOutcome } from "@/features/applications";
 import { RequirementProvider, RequirementText, MatchLegend } from "@/components/app/RequirementText";
 import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX, exactPacketAuditClauses, exactPacketAuditRanges } from "@/features/applications";
 import { educationDrift, educationDriftMessage, type EducationProfile } from "@/features/applications";
-import { checklistRowControl, completedSubmissionGroups, directInputTaskPlan, directQuestionPromptFingerprint, directQuestionTaskFingerprint, displayQuestionLabel, documentAsksByKind, documentControls, documentStepsInPlan, humanInputItems, metadataRefreshOutranksStandingAttention, QUESTION_CHOICE_LIST_LIMIT, reviewedAnswersSaveLanding, unconfirmedDocumentItems, type ChecklistResumeRecord, type DirectQuestionTask, type DirectQuestionTaskIntent, type SubmissionChecklistAction, type SubmissionChecklistItem } from "@/features/applications";
+import { checklistRowControl, completedSubmissionGroups, directAnswerNavigationTasks, directInputTaskPlan, directQuestionPromptFingerprint, directQuestionTaskFingerprint, displayQuestionLabel, documentAsksByKind, documentControls, documentStepsInPlan, humanInputItems, metadataRefreshOutranksStandingAttention, QUESTION_CHOICE_LIST_LIMIT, reviewedAnswersSaveLanding, unconfirmedDocumentItems, type ChecklistResumeRecord, type DirectQuestionTask, type DirectQuestionTaskIntent, type SubmissionChecklistAction, type SubmissionChecklistItem } from "@/features/applications";
 import { prescriptBlocksProgress, prescriptEditableQuestions, prescriptMetadataBlockers, prescriptNeedsHer, prescriptSummary } from "@/features/applications";
 import { answerWithExactOptionToggled, exactQuestionOption, exactSelectedQuestionOptions, optionalQuestionNeedsDecision, questionAcceptsMultipleOptions, questionOptionsAreComplete, questionReadsAsAnswered, questionReviewPresentation, requiredQuestionReviewRoute } from "@/features/applications";
 import type { JdMatchResponse, JobMatch } from "@/features/applications";
@@ -81,7 +81,7 @@ import { acknowledgePacketAudit, acknowledgePacketEvidence, packetQuestionsSnaps
 import { useBilling } from "@/components/billing/BillingProvider";
 import { isStructuredUpgradeDenial } from "@/features/billing";
 import { completeOperationId, operationIdFor } from "@/lib/operation-id";
-import { applicationPacketAuthorityState, confirmedProjectionForPacket, managedPrepareAuthorityEnvelopeFromUnknown, managedPrepareAuthorityMatchesPacket, quarantinedSubmissionAuthority, reviewClaimsSubmissionSent, reviewForSubmissionProjection, submissionAuthorityEnvelopeFromUnknown, submissionMutationResponseMatchesApplication, submissionProjectionIsConfirmed } from "@/features/applications";
+import { applicationPacketAuthorityState, employerActionRefusalMessage, confirmedProjectionForPacket, managedPrepareAuthorityEnvelopeFromUnknown, managedPrepareAuthorityMatchesPacket, quarantinedSubmissionAuthority, reviewClaimsSubmissionSent, reviewForSubmissionProjection, submissionAuthorityEnvelopeFromUnknown, submissionMutationResponseMatchesApplication, submissionProjectionIsConfirmed } from "@/features/applications";
 import { useSidebarCollapse } from "@/app/dashboard/dashboard-shell";
 
 type Screen = "review" | "questions" | "submitting" | "portal" | "submitted";
@@ -101,7 +101,10 @@ type PrepareApplicationOptions = {
   allowServerAnswerRefresh?: boolean;
   restart?: boolean;
   failureScreen?: "questions" | "portal" | "review";
-  source?: "metadata_refresh";
+  /* Named so the analytics event says which press started this run. "answer_correction" is the
+     reopen route in saveReviewedAnswers: a restart the applicant asked for by editing an answer on
+     an already-filled form, which is a different thing to measure from a stale-build restart. */
+  source?: "metadata_refresh" | "answer_correction";
 };
 
 type DirectAnswerSaveResult = {
@@ -140,27 +143,6 @@ type DirectAnswerProgress = {
 };
 
 const EMPTY_DIRECT_ANSWER_DRAFTS: ReadonlyMap<string, DirectAnswerDraft> = new Map();
-
-function directAnswerNavigationTasks(
-  review: Pick<ApplicationReview, "questions" | "question_metadata_blockers">,
-  outstandingTasks: readonly DirectQuestionTask[],
-  answeredTasks: readonly DirectQuestionTask[],
-): DirectQuestionTask[] {
-  const outstandingByPrompt = new Map(
-    outstandingTasks.map((task) => [directQuestionPromptFingerprint(task), task]),
-  );
-  const answeredByPrompt = new Map(
-    answeredTasks.map((task) => [directQuestionPromptFingerprint(task), task]),
-  );
-  return questionReviewPresentation(
-    review.questions ?? [],
-    review.question_metadata_blockers ?? [],
-  ).editableQuestions.flatMap((question) => {
-    const promptFingerprint = directQuestionPromptFingerprint({ question });
-    const task = outstandingByPrompt.get(promptFingerprint) ?? answeredByPrompt.get(promptFingerprint);
-    return task ? [{ ...task, question }] : [];
-  });
-}
 
 function directAnswerPassKey(review: ApplicationReview): string {
   return review.questions_reviewed_at ?? review.submission_run_id ?? review.updated_at;
@@ -240,6 +222,21 @@ export type SubmissionResponse = {
   submission_projection?: AuthoritativeSubmissionProjection;
   rejected_submission_projection?: unknown;
   submission_authority_quarantined?: true;
+  /* THE STATUS THE SERVER ACTUALLY SENT, kept because the display rewrite destroys it.
+   *
+   * reviewForSubmissionProjection overwrites `review.status` with "needs_attention" whenever the
+   * authority is quarantined, and an ABSENT envelope is one of the things that quarantines. So a
+   * packet the server says is mid-run is displayed as though a run had stopped and left it to the
+   * applicant, and nothing downstream could tell the two apart - which is how a control that
+   * cannot act came to be rendered on a live fill. Measured 2026-09-04 on Palantir packet
+   * f1cfb841: server status `filling`, no envelope on /applications/:id/submission (the route
+   * attaches one only for FIRST_SEND_REVIEW_STATUSES, and `filling` is not one), quarantined,
+   * displayed as needs_attention, "Try again" rendered, and pressing it fired no request.
+   *
+   * Recorded, never acted on as authority. The rewrite is still the display rule and is still
+   * fail-closed; this is the raw fact beside it, read only to say true things about WHY an action
+   * is refused. */
+  server_review_status?: ApplicationReview["status"];
   retry_safety?: SubmissionRetrySafety | null;
   cover_letter?: CoverLetter | null;
   documents?: Record<string, AttachedDocument>;
@@ -330,6 +327,8 @@ function submissionResponseForDisplay(
     )),
     submission_projection: projectionForReview,
     retry_safety: retrySafety as SubmissionRetrySafety | null,
+    /* Captured from the WIRE review, above the rewrite, so it survives being overwritten. */
+    server_review_status: response.review.status,
     ...(rejectedProjection === undefined
       ? {}
       : { rejected_submission_projection: rejectedProjection }),
@@ -490,6 +489,30 @@ function packetAuthorityForEmployerAction(
     exactSubmission?.retry_safety ?? exactPacket.retry_safety,
     exactSubmission?.submission_authority_quarantined === true
       || exactPacket.submission_authority_quarantined === true,
+  );
+}
+
+/**
+ * The page's binding of the shared refusal rule to a packet in hand.
+ *
+ * The RULE - which refusal, and when there is none - lives in
+ * features/applications/domain/employer-action-refusal.ts so it can be asserted directly; this
+ * only supplies its two inputs. `qaMode` mirrors prepareApplication's own bypass, so the control
+ * and the handler cannot disagree about it either.
+ *
+ * `server_review_status` and not `submission.review.status`: the display rewrite overwrites the
+ * latter with "needs_attention" on a quarantined packet, which is precisely the case this has to
+ * recognise. See employer-action-refusal.ts for the measured defect.
+ */
+function employerActionRefusal(
+  packet: GeneratedResume,
+  submission: SubmissionResponse | null | undefined,
+  qaMode: boolean,
+): string | null {
+  if (qaMode) return null;
+  return employerActionRefusalMessage(
+    packetAuthorityForEmployerAction(packet, submission).state,
+    submission?.server_review_status,
   );
 }
 
@@ -4292,8 +4315,11 @@ function Applications() {
     if (!selected) return;
     const applicationId = selected.id;
     if (!options.allowServerAnswerRefresh && routeMissingRequiredAnswers(finalQuestions)) return;
-    if (!qaMode && packetAuthorityForEmployerAction(selected, submission).state !== "safe_not_sent") {
-      setError("Litos cannot start another employer attempt until the exact prior submission evidence is verified.");
+    /* The SAME value the retry control's presence is derived from, so a button that renders can
+       never reach a handler that refuses. See employerActionRefusal for the measured defect. */
+    const refusal = employerActionRefusal(selected, submission, qaMode === true);
+    if (refusal) {
+      setError(refusal);
       moveToScreen("review");
       return;
     }
@@ -4692,6 +4718,57 @@ function Applications() {
       const message = "Litos could not match this answer to the employer's question. Review the packet and try again.";
       rememberDirectFailure(message);
       return { saved: false, message };
+    }
+    /* THE SAVE THAT COULD NEVER LAND, AND THE ROUTE THAT MAKES THE SAME CORRECTION.
+     *
+     * Measured live 2026-09-04 on Flow Traders packet 8dc65cd0 at `ready_for_final_approval`: this
+     * function posted to PUT /review/answers and got 409 REVIEW_ANSWERS_NOT_EDITABLE, every time,
+     * with the editor open and the applicant's corrected essay in the box. The server is right -
+     * see reviewAnswerEditRoute for the invariant it is holding - so the fix is not a wider gate,
+     * it is the request this correction should have been all along.
+     *
+     * `reopen` posts the SAME answers to submit-request with `restart: true`, which is the door
+     * preparedRunCanRestart opens for exactly this status: the stale filled form is discarded, the
+     * employer's page is filled again FROM these answers, and a fresh preview is taken. The picture
+     * the applicant approves and the answers underneath it therefore move in one request and cannot
+     * diverge, which is the property the 409 exists to protect rather than one it gives up.
+     *
+     * answerDraftQuestions, not `questions`: this is the stored list with her one correction merged
+     * in, so the refill carries every other answer the run already resolved unchanged.
+     *
+     * `mayAdvance: false` because prepareApplication moves the screen to "submitting" itself. There
+     * is no next question to step to on a packet that is being filled again; the pass is over. */
+    const editRoute = reviewAnswerEditRoute(activeSubmission.review);
+    if (editRoute === "frozen") {
+      rememberDirectFailure(REVIEW_ANSWERS_FROZEN_NOTICE);
+      /* AND ON THE PAGE TOO WHEN NO CARD IS LISTENING. rememberDirectFailure addresses the
+         per-question card, which is the only caller that reads the returned message; the questions
+         screen calls this as `void saveReviewedAnswers()` and discards the result. Without this, a
+         packet whose answers are genuinely closed answered a press with nothing on screen at all -
+         which is the same silence the local Apply carry used to give it, only quieter. */
+      if (!direct) setError(REVIEW_ANSWERS_FROZEN_NOTICE);
+      return { saved: false, message: REVIEW_ANSWERS_FROZEN_NOTICE };
+    }
+    if (editRoute === "reopen") {
+      /* The previous screen's banner goes before the request, not after it. prepareApplication
+         clears the error and the send refusal and does not touch this one, so a stale "Saved."
+         from an earlier press would otherwise sit above the refusal this one may return. */
+      setNotice(null);
+      await prepareApplication(answerDraftQuestions, { allowServerAnswerRefresh: true, restart: true, source: "answer_correction" });
+      const reopened = submissionSnapshotsRef.current.get(applicationId)
+        ?? (submissionRef.current?.application_id === applicationId ? submissionRef.current : activeSubmission);
+      /* THE BANNER IS BUILT FROM THE OUTCOME, WHICH IS THIS MODULE'S OWN LAW AND NOT A STYLE NOTE.
+         See review-answer-save.ts: "A success message rendered before the write is a message about
+         nothing, and that is the exact shape of the defect." A restart the server refuses - a
+         duplicate verdict, a claim taken between the read and the press - leaves the packet exactly
+         where it was and prepareApplication has already put the reason on screen. Announcing a
+         refill over that would be the 202 lie again, in a new place. The status having moved off
+         ready_for_final_approval is what the restart landing looks like from here. */
+      if (reopened.review.status === "ready_for_final_approval") {
+        return { saved: false, message: REVIEW_ANSWERS_REOPEN_REFUSED, review: reopened.review };
+      }
+      setNotice(REVIEW_ANSWERS_REOPEN_NOTICE);
+      return { saved: true, review: reopened.review, mayAdvance: false };
     }
     const completedDirectPromptFingerprints = new Set(
       activeDirectPassKey && activeDirectPass?.key === activeDirectPassKey
@@ -5903,7 +5980,21 @@ function Applications() {
              the metadata-refresh launch needs (the Mytos loop, application 55de7c9e). Until the
              response lands, packetEvidenceReady already fails closed on the local edit. */
           onSubmit={() => {
-            if (selectedSubmission?.review.status === "needs_attention") {
+            /* THE APPLY CARRY'S PREMISE IS FALSE ON A FILLED PACKET, WHICH IS WHY THIS IS NOT ONE
+               STATUS ANY MORE.
+               saveApplyAnswers keeps the answers in local state and says "Saved." because, from
+               Apply, the very next press IS the submit-request that carries them - the comment above
+               says so. On `ready_for_final_approval` the next press is Send, which posts no
+               questions at all, so a correction typed here was announced as saved and then silently
+               dropped on the way to the employer. Measured 2026-09-04 on Flow Traders packet
+               8dc65cd0, the same packet whose Tracker card drew "Answer 1 question".
+               reviewAnswerEditRoute is what tells those two apart, and it sends the filled packet
+               through the one route that can land its correction: saveReviewedAnswers reopens it,
+               refills the company's form from the corrected answer and retakes the preview. A packet
+               whose answers are genuinely frozen ("frozen") comes here too, and gets the reason
+               rather than a "Saved." that is not true of it either. */
+            if (selectedSubmission?.review.status === "needs_attention"
+              || (selectedSubmission && reviewAnswerEditRoute(selectedSubmission.review) !== "save")) {
               void saveReviewedAnswers();
             } else {
               setPacketEvidence(null);
@@ -5922,6 +6013,7 @@ function Applications() {
           lookaheadError={activePrescriptLookaheadIssue?.message ?? null}
           blockContinuation={Boolean(activePrescriptLookaheadIssue)}
           reviewDiscovered={selectedSubmission?.review.status === "needs_attention"}
+          refillsFormOnSave={Boolean(selectedSubmission) && reviewAnswerEditRoute(selectedSubmission!.review) === "reopen"}
           focusQuestion={focusQuestion}
           prescriptNote={prescriptNote}
         />
@@ -5963,6 +6055,10 @@ function Applications() {
           onRestart={() => void restartPreparedRun()}
           restarting={restartingId === selected.id}
           onRetry={retryPreparation}
+          /* The one value that decides BOTH whether Try again renders and what
+             prepareApplication says when it refuses, so the control and its handler can
+             never disagree. See employerActionRefusal. */
+          employerActionRefusal={employerActionRefusal(selected, selectedSubmission, qaMode === true)}
           onReviewPacket={reviewPacketAgain}
           onReviewQuestions={() => reviewPortalQuestions()}
           onOpenQuestion={(questionId, intent) => reviewPortalQuestions(questionId, intent)}
@@ -7078,7 +7174,7 @@ function EditableHighlight({ value, terms, onChange, className = "" }: { value: 
   );
 }
 
-function QuestionsScreen({ applicationRole, applicationCompany, questions, metadataBlockers = [], actionableQuestionIds = [], onChange, onBack, onSubmit, onRefreshMetadata, saving = false, refreshingMetadata = false, metadataRefreshDisabled = false, metadataRefreshNeedsPacketReview = false, metadataRefreshError = null, lookaheadError = null, blockContinuation = false, reviewDiscovered = false, focusQuestion = null, prescriptNote = "" }: {
+function QuestionsScreen({ applicationRole, applicationCompany, questions, metadataBlockers = [], actionableQuestionIds = [], onChange, onBack, onSubmit, onRefreshMetadata, saving = false, refreshingMetadata = false, metadataRefreshDisabled = false, metadataRefreshNeedsPacketReview = false, metadataRefreshError = null, lookaheadError = null, blockContinuation = false, reviewDiscovered = false, refillsFormOnSave = false, focusQuestion = null, prescriptNote = "" }: {
   applicationRole: string;
   applicationCompany: string;
   questions: ApplicationQuestion[];
@@ -7096,6 +7192,14 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, metad
   lookaheadError?: string | null;
   blockContinuation?: boolean;
   reviewDiscovered?: boolean;
+  /* TRUE WHEN THIS PACKET'S FORM IS ALREADY FILLED AND THE SAVE WILL FILL IT AGAIN.
+     On `ready_for_final_approval` the answers cannot be rewritten under the preview screenshot the
+     applicant is about to approve, so the press reopens the packet instead: the filled form is
+     discarded and refilled from these answers, and a new preview is taken. That is a real thing to
+     do to a company's page and the button has to say so BEFORE it is pressed - this screen's own
+     comment two lines below already holds itself to that rule for the other save it carries.
+     Defaulted, so every Apply-time and stopped-run packet keeps the wording it has. */
+  refillsFormOnSave?: boolean;
   focusQuestion?: { id: string; token: number } | null;
   prescriptNote?: string;
 }) {
@@ -7435,7 +7539,9 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, metad
                 ? "Answer required questions"
                 : optionalDecisionMissing
                   ? "Answer or skip optional questions"
-              : "Save and continue"}
+              : refillsFormOnSave
+                ? "Save and fill the form again"
+                : "Save and continue"}
         </Button>
       </TerminalActionBar>
     </div>
@@ -7956,7 +8062,7 @@ export function DirectApplicationQuestion({ task, position, total, saving, saved
   );
 }
 
-function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceReviewed, manualTrialPacket, approving, securityCodeSubmitting, securityCodeError, onSubmitSecurityCode, unverifiedSubmissionSubmitting, unverifiedSubmissionError, onSubmitUnverifiedOutcome, educationProfile, educationProfileStatus, onCheckResume, onReloadCoverLetter, onWriteCoverLetter, coverLetterReloading, onHandoffComplete, onApprove, sendRefusal, onRestart, restarting, onRetry, onReviewPacket, onReviewQuestions, onOpenQuestion, onChooseOption, onSaveQuestion, onSkipQuestion, savingAnswer, answeredQuestionFingerprints, directAnswerProgress, directAnswerDrafts, directAnswerFailure, onDirectAnswerDraftChange, onClearDirectAnswerDraft, onNavigateDirectQuestion, onClearDirectAnswerFailure, onRefreshQuestionMetadata, questionMetadataRefreshing, questionMetadataRefreshDisabled, questionMetadataNeedsPacketReview, questionMetadataRefreshError, onQuestionsFinished, onAddDocument, onToggleAcknowledged, attentionTicking, onSelfSubmitted, onPacketAuditRefusal, onOpenWithExtension, extensionFillBusy, extensionFillError }: { packet: GeneratedResume; resumeRecord?: ChecklistResumeRecord; submission: SubmissionResponse; packetEvidenceReviewed: boolean; manualTrialPacket: PacketAuditResponse | null; approving: boolean; securityCodeSubmitting: boolean; securityCodeError: string | null; onSubmitSecurityCode: (code: string) => void; unverifiedSubmissionSubmitting: boolean; unverifiedSubmissionError: string | null; onSubmitUnverifiedOutcome: (found: boolean) => void; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onReloadCoverLetter: () => void; onWriteCoverLetter: () => void; coverLetterReloading: boolean; onHandoffComplete: (outcome?: "cleared" | "submitted") => void; onApprove: () => void; sendRefusal: { message: string; issues: string[] } | null; onRestart: () => void; restarting: boolean; onRetry: () => void; onReviewPacket: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string, intent?: SubmissionChecklistAction) => void; onChooseOption: (questionId: string, option: string) => void; onSaveQuestion: (questionId: string, answer: string, intent: DirectQuestionTaskIntent, promptFingerprint: string, taskFingerprint: string, task: DirectQuestionTask) => Promise<DirectAnswerSaveResult>; onSkipQuestion: (questionId: string, intent: DirectQuestionTaskIntent, promptFingerprint: string, taskFingerprint: string, task: DirectQuestionTask) => Promise<DirectAnswerSaveResult>; savingAnswer: boolean; answeredQuestionFingerprints: ReadonlySet<string>; directAnswerProgress: DirectAnswerProgress | null; directAnswerDrafts: ReadonlyMap<string, DirectAnswerDraft>; directAnswerFailure: DirectAnswerFailure | null; onDirectAnswerDraftChange: (questionId: string, promptFingerprint: string, taskFingerprint: string, answer: string) => void; onClearDirectAnswerDraft: (promptFingerprint: string) => void; onNavigateDirectQuestion: (promptFingerprint: string) => void; onClearDirectAnswerFailure: (promptFingerprint: string) => void; onRefreshQuestionMetadata: () => void; questionMetadataRefreshing: boolean; questionMetadataRefreshDisabled: boolean; questionMetadataNeedsPacketReview: boolean; questionMetadataRefreshError: string | null; onQuestionsFinished: () => void; onAddDocument: (kind: string) => void; onToggleAcknowledged: (item: SubmissionChecklistItem, acknowledged: boolean) => void; attentionTicking: ReadonlySet<string>; onSelfSubmitted: () => void; onPacketAuditRefusal: (reason: unknown) => Promise<boolean>; onOpenWithExtension: () => void; extensionFillBusy: boolean; extensionFillError: string | null }) {
+function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceReviewed, manualTrialPacket, approving, securityCodeSubmitting, securityCodeError, onSubmitSecurityCode, unverifiedSubmissionSubmitting, unverifiedSubmissionError, onSubmitUnverifiedOutcome, educationProfile, educationProfileStatus, onCheckResume, onReloadCoverLetter, onWriteCoverLetter, coverLetterReloading, onHandoffComplete, onApprove, sendRefusal, onRestart, restarting, onRetry, employerActionRefusal, onReviewPacket, onReviewQuestions, onOpenQuestion, onChooseOption, onSaveQuestion, onSkipQuestion, savingAnswer, answeredQuestionFingerprints, directAnswerProgress, directAnswerDrafts, directAnswerFailure, onDirectAnswerDraftChange, onClearDirectAnswerDraft, onNavigateDirectQuestion, onClearDirectAnswerFailure, onRefreshQuestionMetadata, questionMetadataRefreshing, questionMetadataRefreshDisabled, questionMetadataNeedsPacketReview, questionMetadataRefreshError, onQuestionsFinished, onAddDocument, onToggleAcknowledged, attentionTicking, onSelfSubmitted, onPacketAuditRefusal, onOpenWithExtension, extensionFillBusy, extensionFillError }: { packet: GeneratedResume; resumeRecord?: ChecklistResumeRecord; submission: SubmissionResponse; packetEvidenceReviewed: boolean; manualTrialPacket: PacketAuditResponse | null; approving: boolean; securityCodeSubmitting: boolean; securityCodeError: string | null; onSubmitSecurityCode: (code: string) => void; unverifiedSubmissionSubmitting: boolean; unverifiedSubmissionError: string | null; onSubmitUnverifiedOutcome: (found: boolean) => void; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onReloadCoverLetter: () => void; onWriteCoverLetter: () => void; coverLetterReloading: boolean; onHandoffComplete: (outcome?: "cleared" | "submitted") => void; onApprove: () => void; sendRefusal: { message: string; issues: string[] } | null; onRestart: () => void; restarting: boolean; onRetry: () => void; employerActionRefusal: string | null; onReviewPacket: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string, intent?: SubmissionChecklistAction) => void; onChooseOption: (questionId: string, option: string) => void; onSaveQuestion: (questionId: string, answer: string, intent: DirectQuestionTaskIntent, promptFingerprint: string, taskFingerprint: string, task: DirectQuestionTask) => Promise<DirectAnswerSaveResult>; onSkipQuestion: (questionId: string, intent: DirectQuestionTaskIntent, promptFingerprint: string, taskFingerprint: string, task: DirectQuestionTask) => Promise<DirectAnswerSaveResult>; savingAnswer: boolean; answeredQuestionFingerprints: ReadonlySet<string>; directAnswerProgress: DirectAnswerProgress | null; directAnswerDrafts: ReadonlyMap<string, DirectAnswerDraft>; directAnswerFailure: DirectAnswerFailure | null; onDirectAnswerDraftChange: (questionId: string, promptFingerprint: string, taskFingerprint: string, answer: string) => void; onClearDirectAnswerDraft: (promptFingerprint: string) => void; onNavigateDirectQuestion: (promptFingerprint: string) => void; onClearDirectAnswerFailure: (promptFingerprint: string) => void; onRefreshQuestionMetadata: () => void; questionMetadataRefreshing: boolean; questionMetadataRefreshDisabled: boolean; questionMetadataNeedsPacketReview: boolean; questionMetadataRefreshError: string | null; onQuestionsFinished: () => void; onAddDocument: (kind: string) => void; onToggleAcknowledged: (item: SubmissionChecklistItem, acknowledged: boolean) => void; attentionTicking: ReadonlySet<string>; onSelfSubmitted: () => void; onPacketAuditRefusal: (reason: unknown) => Promise<boolean>; onOpenWithExtension: () => void; extensionFillBusy: boolean; extensionFillError: string | null }) {
   const { review } = submission;
   const awaitingSecurityCode = review.status === "awaiting_security_code";
   const needsAttention = review.status === "needs_attention";
@@ -8834,7 +8940,14 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
               an unverified send - submit-request would just answer the same 409 again - so they wait
               for UnverifiedSubmissionCard's yes/no to release it first. */}
           {needsAttention && !awaitingUnverifiedSubmission && <Button onClick={onReviewPacket} variant={!rowExternalPrimary && (!hasQuestionsToReview || currentNonQuestionTask) ? "primary" : "secondary"}>Open packet review</Button>}
-          {needsAttention && !awaitingUnverifiedSubmission && <Button onClick={onRetry} variant="secondary">Try again</Button>}
+          {/* A CONTROL THAT CANNOT ACT IS NOT SHOWN. `needsAttention` here is the DISPLAYED
+              status, and a quarantined authority rewrites a live `filling` row into exactly
+              that (reviewForSubmissionProjection) - so this button used to render on the
+              measured Palantir packet, be pressable, and fire nothing at all, because the
+              same missing envelope that rendered it also made prepareApplication return
+              before its fetch. Gating on the handler's own refusal is what forecloses that
+              class: this exists only where the press would reach the network. */}
+          {needsAttention && !awaitingUnverifiedSubmission && !employerActionRefusal && <Button onClick={onRetry} variant="secondary">Try again</Button>}
           {/* The synced-fill recovery: the extension reads the SAME reviewed answers this managed
               run already produced (handoff-packet.ts on the extension side), so nothing here
               regenerates or re-syncs anything - it opens the employer's page with those answers
@@ -8851,7 +8964,10 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
           )}
           {needsAttention && !awaitingUnverifiedSubmission && submission.handoff_url && <Button onClick={() => onHandoffComplete("cleared")} variant="secondary">I cleared the check</Button>}
           {needsAttention && !awaitingUnverifiedSubmission && submission.handoff_url && <Button onClick={() => onHandoffComplete("submitted")} variant="secondary">I submitted it myself</Button>}
-          {review.status === "failed" && (failedPacketAuditStale
+          {/* Same rule on the failed-run exit: a stale audit already routes to packet review,
+              and a refused employer action now routes there too rather than offering a
+              retry that returns before it fetches. */}
+          {review.status === "failed" && (failedPacketAuditStale || employerActionRefusal
             ? <Button onClick={onReviewPacket}>Open packet review</Button>
             : <Button onClick={onRetry}>Try again</Button>)}
           {review.status === "ready_for_final_approval" && educationDriftWarning && <Button onClick={onCheckResume} variant="secondary">Check resume</Button>}
@@ -8872,6 +8988,19 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
           {review.status === "ready_for_final_approval" && outstandingDocumentAsks.map((ask) => (
             <Button key={ask.kind} onClick={() => onAddDocument(ask.kind)} variant="secondary">Add {ask.kind}</Button>
           ))}
+          {/* THE SAME RULE, FOR THE REASON THAT STILL HAD NO CONTROL. "Required answer missing." has
+              been printed under the greyed Send on this status for as long as the paragraph has
+              existed, and `hasQuestionsToReview` - which draws "Check the answers" - is gated on
+              needs_attention, so on THIS status nothing on screen ever opened the question it means.
+              The one route in was the Tracker card's "Answer 1 question", two screens away, and
+              until reviewAnswerEditRoute it led to an editor whose Save returned 409.
+
+              Named for what it does rather than "Check the answers": the editor reached from here
+              refills the company's form from the corrected answer, and a control that hides that is
+              the same broken promise in the other direction. */}
+          {review.status === "ready_for_final_approval" && requiredAnswerMissing && (
+            <Button onClick={onReviewQuestions} variant="secondary">Fix an answer</Button>
+          )}
           {/* An ask she has answered with "I have ordered it" keeps a control, because plenty of
               employers write "official" and take the downloaded PDF, and the modal's own second door
               is the one this opens. It is worded differently from the row above so the two buttons
@@ -8966,9 +9095,13 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
             No cover letter to show you.
           </p>
         )}
+        {/* NAMES THE BUTTON, like the document ask above it. A blocker sentence on this status that
+            points at no control is the shape this screen has been fixed for repeatedly, and this was
+            the last one still doing it. */}
         {review.status === "ready_for_final_approval" && requiredAnswerMissing && (
           <p className="mt-3 text-xs leading-5 text-warn">
             {optionalAnswerDecisionMissing ? "Answer or skip every optional question before sending." : "Required answer missing."}
+            {" "}Press Fix an answer, next to Send application. Litos will fill the company&rsquo;s form again with your correction and show you a fresh preview.
           </p>
         )}
         {review.status === "ready_for_final_approval" && sensitiveQuestionPresent && (
