@@ -10,7 +10,7 @@ const question = { id: "gender", question: "Which programming language?", answer
   options: ["Python", "TypeScript"], options_complete: true, portal_input_type: "select", kind: "required" as const };
 
 test("Akuna and every other employer enter correction for off-list required answers", () => {
-  for (const status of ["ready_for_final_approval", "needs_attention", "questions_ready"] as const) {
+  for (const status of ["ready_for_final_approval", "ready_to_submit", "questions_ready"] as const) {
     assert.equal(packetEntryScreen(packet({ status, questions: [question] })), "questions");
   }
 });
@@ -23,4 +23,8 @@ test("a held or unresolved attempt cannot enter editable questions", () => {
   assert.equal(packetEntryScreen(packet({ status: "needs_attention", questions: [question],
     unverified_submission: { at: "2026-09-05T10:00:00.000Z", cause: "no_confirmation_state" } })), "portal");
   assert.equal(packetEntryScreen(packet({ status: "submitted", questions: [question], submitted_at: "2026-09-05T10:00:00.000Z" })), "submitted");
+});
+
+test("needs-attention packets retain the guided inline question flow", () => {
+  assert.equal(packetEntryScreen(packet({ status: "needs_attention", questions: [question] })), "portal");
 });
