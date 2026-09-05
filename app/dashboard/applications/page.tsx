@@ -3127,7 +3127,7 @@ function Applications() {
           ? "Checking saved packet"
       : review?.status === "ready_for_final_approval"
         ? "Review filled form"
-        : "Approve packet and fill form";
+        : "Approve resume and fill form";
   const reviewPrimaryAction = packetEvidenceReady
     ? canRefreshRequiredMetadataFromReview
       ? () => void continueFromVerifiedPacket({
