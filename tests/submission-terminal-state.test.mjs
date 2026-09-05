@@ -43,7 +43,7 @@ test("every path that receives a review routes the screen from it", async () => 
     /\/submission\/approve`[\s\S]{0,3000}moveToScreen\(screenForStatus\(result\.review\.status, "portal"\)\)/,
   );
   // Selecting a packet, which falls back to the review screen rather than the progress screen.
-  assert.match(dashboard, /moveToScreen\(historicalPacketAuditStale \|\| status === "ready_for_final_approval" \? "review" : screenForStatus\(status, "review"\)\)/);
+  assert.match(dashboard, /moveToScreen\(packetEntryScreen\(selectedReview\)\)/);
 
   // A run result must never be routed by an inline status list again. That longhand is how the
   // three copies drifted apart until one quietly lost its terminal branch.

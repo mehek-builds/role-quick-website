@@ -201,7 +201,7 @@ describe("send eligibility discovered by hydration is offered, never forced", ()
   test("the chip and the copy agree with the button instead of contradicting it", () => {
     /* The measured contradiction: a "Needs you" chip over "Litos can send this application for
        you" over a button that led to a questionnaire. All three now read one state. */
-    assert.match(applications, /label=\{submitted \? "Sent" : sendable \? "Ready" : "Needs you"\}/);
+    assert.match(applications, /label=\{submitted \? "Sent" : onCheckUnverifiedSubmission \? "Unverified" : sendable \? "Ready" : "Needs you"\}/);
     assert.match(applications, /\? `\$\{questionsPhrase\} before Litos can send this\.`/);
   });
 
@@ -243,6 +243,6 @@ describe("CanonicalApplicationDetail says it is checking, not that this applicat
   test("the extension handoff button is held back while eligibility is still being checked, and once it is known ready", () => {
     // Pressing it opens a real Chrome tab. A row that is about to offer the managed send screens
     // must not also offer starting an extension handoff for the same application.
-    assert.match(applications, /!submitted && !checkingSendPath && !readyToSend && application\.portal_url/);
+    assert.match(applications, /!submitted && !checkingSendPath && !readyToSend && !onCheckUnverifiedSubmission && application\.portal_url/);
   });
 });

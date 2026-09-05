@@ -2220,8 +2220,8 @@ test("the unverified-submission card's gate and copy both delegate to the tested
   );
   assert.match(
     page,
-    /legacyNotice=\{legacyUnverifiedSubmissionNotice\(review\.unverified_submission\)\}/,
-    "the card must be able to show honest legacy copy instead of always falling through to attention_reason",
+    /<UnverifiedSubmissionCard review=\{review\} \/>/,
+    "the automatic recovery card reads structured state instead of old manual-attestation instructions",
   );
 });
 
