@@ -4128,8 +4128,17 @@ function Applications() {
        bounce was indistinguishable from an ordinary first pass and repeated forever. A genuine first
        pass through this screen needs no such sentence; it is not bouncing off anything, and
        auditPacketAgain's own re-audit clears this same evidence before it re-enters here for
-       exactly that reason. */
-    setPrescriptNote(activePacketEvidence
+       exactly that reason.
+
+       READ THE REF, NOT THE RENDER'S COPY. auditPacketAgain nulls packetEvidenceRef and then calls
+       continueFromResume synchronously, inside the same render's closure, so activePacketEvidence
+       here would still be the pre-clear evidence: the "Audit again" press would print a sentence
+       telling her to press Approve again, and after the re-audit the button reads "Review and
+       fill", not "Approve packet and fill form" (review round 1, PR #550). The ref is what that
+       press actually cleared, so it is the honest signal. */
+    const bouncedOffVerifiedPacket = packetEvidenceRef.current !== null
+      && packetEvidenceRef.current?.applicationId === selectedIdRef.current;
+    setPrescriptNote(bouncedOffVerifiedPacket
       ? "Litos sent you back here: approving this packet found a question that still needs you. Finish it below, then press Approve again."
       : "");
     if (selectedSubmission?.review.status === "needs_attention") {
