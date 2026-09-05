@@ -2783,10 +2783,15 @@ test("a sole optional question's already-recorded skip closes the queue instead 
  * directDecisionAlreadyRecorded generalises the predicate rather than replacing it: a Skip request
  * still delegates to directSkipAlreadyRecorded, UNCHANGED, and every one of its own tests above
  * still describes exactly what a Skip press gets. */
-test("directDecisionAlreadyRecorded names a Save whose stored answer already matches, byte for byte", () => {
+test("directDecisionAlreadyRecorded names a Save whose stored answer already matches, byte for byte, ONLY once applicant provenance is on the row", () => {
   const CITY = "What city are you based in?";
+  /* Provenance recorded elsewhere - the bulk "Answer these" screen's own save, exactly the shape
+     directSkipAlreadyRecorded's own measured Pony.ai dead end (and this predicate's generalisation
+     of it) describes: the stale card mounts on a question some OTHER save path has already
+     settled. */
   const question: ApplicationQuestion = {
     id: "city", question: CITY, answer: "Los Angeles", kind: "required", required: true,
+    answer_source: "applicant_review",
   };
   const request = {
     questionId: "city",
@@ -2794,7 +2799,7 @@ test("directDecisionAlreadyRecorded names a Save whose stored answer already mat
     answer: "Los Angeles",
     intent: "answer" as const,
   };
-  assert.equal(directDecisionAlreadyRecorded(question, request), true, "the review already holds exactly this answer");
+  assert.equal(directDecisionAlreadyRecorded(question, request), true, "the review already holds exactly this answer, with applicant provenance already on it");
 
   assert.equal(
     directDecisionAlreadyRecorded(question, { ...request, answer: "  Los Angeles  " }),
@@ -2824,6 +2829,34 @@ test("directDecisionAlreadyRecorded names a Save whose stored answer already mat
     directDecisionAlreadyRecorded({ ...question, id: "other" }, request),
     false,
     "a different question id is never the decision this press is about",
+  );
+
+  assert.equal(
+    directDecisionAlreadyRecorded({ ...question, answer_source: "litos_draft" }, request),
+    false,
+    "byte-equal text authored by the machine, never reviewed by the applicant, is not a decision either",
+  );
+
+  assert.equal(
+    directDecisionAlreadyRecorded({ ...question, answer_source: undefined }, request),
+    false,
+    /* THE AKUNA SHAPE, measured live 2026-08-27 on the Akuna Python SWE packet: a resolver-default
+       pre-fill ("Yes" on the sponsorship disclaimer) with NO answer_source at all, asked of the
+       applicant on its own direct card for the first time. Byte equality alone used to call this
+       decided and resolve the Save locally, so the confirmed:true flag directlyConfirmed exists to
+       set (app/dashboard/applications/page.tsx) never reached the server, answer_source stayed
+       absent, and the backend's own questionsMatch never turned true. This is a live, undecided
+       first press and must still reach the network so it can mint one. */
+    "a resolver-default pre-fill with no provenance at all is undecided on its very first live Save, exactly the Akuna shape",
+  );
+
+  assert.equal(
+    directDecisionAlreadyRecorded(
+      { ...question, answer_source: undefined, answer_confirmed_of: CITY },
+      request,
+    ),
+    true,
+    "a per-question Confirm elsewhere already minted answer_confirmed_of for this exact question - provenance enough for any intent",
   );
 });
 

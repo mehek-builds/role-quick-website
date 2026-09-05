@@ -1560,15 +1560,35 @@ export function directSkipAlreadyRecorded(
  *   Trading loop this field was added to close; byte equality alone would call that first press
  *   decided and never mint answer_confirmed_of at all.
  *
- * Plain `"answer"` questions have no such intermediate, machine-authored-but-unreviewed state - see
- * humanInputItems' missing-/optional-/empty- branches, none of which read answer_source or
- * answer_confirmed_of - so byte equality plus the prompt-fingerprint check below is already the
- * exact condition under which the ordinary lookup would itself call the row settled.
+ * Plain `"answer"` questions ALSO ask for one thing more than byte equality, for the identical
+ * reason as `"confirm"` and `"review"` above: a resolver-default pre-fill is a third
+ * machine-authored-but-unclaimed shape byte equality cannot tell apart from an applicant's own
+ * settled decision. Measured live on the Akuna Python SWE packet, 2026-08-27 (see
+ * app/dashboard/applications/page.tsx's own comment on `directlyConfirmed`, added the same day):
+ * the sponsorship disclaimer arrived pre-filled "Yes" with no answer_source at all, and a LIVE,
+ * first-ever, unedited Save press on that card is byte-equal to the stored answer before the press
+ * ever reaches the network. Without this check, that byte equality alone would call the row decided
+ * and let saveReviewedAnswers resolve the request locally - the one branch that also carries the
+ * `confirmed: true` flag `directlyConfirmed` exists to set - so the flag this predicate was
+ * generalised to deliver never reaches the server, answer_source stays absent, and the backend's
+ * own questionsMatch (which reads exactly the two fields below) stays false forever. So `"answer"`
+ * is decided only once the stored question ALREADY carries applicant provenance: answer_source
+ * `"applicant_review"`, or answer_confirmed_of naming this exact question - the same two fields
+ * applicantConfirmedAnswer already reads for `"confirm"`, reused rather than re-derived, because a
+ * per-question Confirm mints answer_confirmed_of, which is provenance enough for ANY intent, not
+ * only the sensitive-question gate that field was named for. A resolver default with neither field
+ * set is exactly the Akuna shape and must still reach the network so a first Save can mint one.
  *
  * Every branch still requires the question's prompt fingerprint to match the card's mount-time
  * reading: a changed employer prompt is a real change and must still refuse, for a Save or a
  * Confirm exactly as it does for a Skip.
  */
+function applicantProvenanceAlreadyRecorded(
+  question: Pick<ApplicationQuestion, "answer" | "question" | "answer_source" | "answer_confirmed_of">,
+): boolean {
+  return question.answer_source === "applicant_review" || applicantConfirmedAnswer(question);
+}
+
 export function directDecisionAlreadyRecorded(
   question: ApplicationQuestion,
   request: {
@@ -1592,7 +1612,7 @@ export function directDecisionAlreadyRecorded(
   if (!typed || question.answer.trim() !== typed) return false;
   if (request.intent === "confirm") return applicantConfirmedAnswer(question);
   if (request.intent === "review") return !essayDraftAwaitsApproval(question);
-  return true;
+  return applicantProvenanceAlreadyRecorded(question);
 }
 
 /**

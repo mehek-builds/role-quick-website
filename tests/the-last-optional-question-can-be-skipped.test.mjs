@@ -77,7 +77,12 @@ describe("a Skip whose decision is already recorded advances instead of refusing
   test("a missing outstanding/answered lookup falls back to the already-decided task instead of staying null", () => {
     assert.match(
       save,
-      /\)\.find\(\(task\) => \(\s*\n\s*task\.question\.id === direct\.questionId\s*\n\s*&& directQuestionPromptFingerprint\(task\) === direct\.promptFingerprint\s*\n\s*\)\)\s*\n\s*\?\? \(decisionAlreadyRecorded && activeCurrentQuestion\s*\n\s*\? alreadyDecidedDirectTask\(activeCurrentQuestion, direct\.intent\)\s*\n\s*: null\)/,
+      /const liveDirectTask = direct\s*\n\s*\? directAnswerNavigationTasks\(/,
+      "the ordinary lookup must be its own named binding, not inlined straight into safeDirectTask",
+    );
+    assert.match(
+      save,
+      /\)\.find\(\(task\) => \(\s*\n\s*task\.question\.id === direct\.questionId\s*\n\s*&& directQuestionPromptFingerprint\(task\) === direct\.promptFingerprint\s*\n\s*\)\) \?\? null\s*\n\s*: null;\s*\n\s*const safeDirectTask = liveDirectTask\s*\n\s*\?\? \(direct && decisionAlreadyRecorded && activeCurrentQuestion\s*\n\s*\? alreadyDecidedDirectTask\(activeCurrentQuestion, direct\.intent\)\s*\n\s*: null\);/,
       "safeDirectTask must fall back to the synthesized already-decided task, or the accepted-answer bookkeeping below it never runs",
     );
   });
@@ -90,10 +95,15 @@ describe("a Skip whose decision is already recorded advances instead of refusing
     );
   });
 
-  test("an already-recorded decision resolves locally instead of calling the API", () => {
+  test("an already-recorded decision resolves locally instead of calling the API, but only in the fallback shape - never when safeDirectTask was found live", () => {
     assert.match(
       save,
-      /send: \(path, init\) => decisionAlreadyRecorded\s*\n(?:[^\n]*\n)*?\s*\? Promise\.resolve\(\{ application_id: applicationId, review: activeSubmission\.review \}\)\s*\n\s*: api<ReviewAnswerSaveResponse<SubmissionResponse\["review"\]>>\(path, init\),/,
+      /const decisionBypassesSend = decisionAlreadyRecorded && !liveDirectTask;/,
+      "the network shortcut must additionally require that the ordinary lookup found nothing live - a Skip resolved through a LIVE safeDirectTask still needs the request",
+    );
+    assert.match(
+      save,
+      /send: \(path, init\) => decisionBypassesSend\s*\n(?:[^\n]*\n)*?\s*\? Promise\.resolve\(\{ application_id: applicationId, review: activeSubmission\.review \}\)\s*\n\s*: api<ReviewAnswerSaveResponse<SubmissionResponse\["review"\]>>\(path, init\),/,
       "'advance without a request' means the fetch itself must not run, not merely that its result is discarded",
     );
   });

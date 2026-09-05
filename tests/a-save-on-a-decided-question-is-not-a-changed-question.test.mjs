@@ -61,7 +61,7 @@ describe("a Save or Confirm whose decision is already recorded advances instead 
     );
     assert.match(
       save,
-      /\?\? \(decisionAlreadyRecorded && activeCurrentQuestion\s*\n\s*\? alreadyDecidedDirectTask\(activeCurrentQuestion, direct\.intent\)\s*\n\s*: null\)/,
+      /const safeDirectTask = liveDirectTask\s*\n\s*\?\? \(direct && decisionAlreadyRecorded && activeCurrentQuestion\s*\n\s*\? alreadyDecidedDirectTask\(activeCurrentQuestion, direct\.intent\)\s*\n\s*: null\);/,
       "safeDirectTask's fallback must not be gated on a Skip-only flag - a Save or Confirm needs the same door",
     );
     assert.match(
@@ -69,10 +69,25 @@ describe("a Save or Confirm whose decision is already recorded advances instead 
       /if \(direct && !decisionAlreadyRecorded && \(\s*\n\s*!safeDirectTask/,
       "the employer-prompt-changed guard must be gated on the generalised predicate for every intent, not just Skip",
     );
+    // The network shortcut is NARROWER than the refusal guard above: it must additionally require
+    // that the ordinary lookup found nothing live (liveDirectTask is null), the exact
+    // alreadyDecidedDirectTask-fallback shape this predicate was built for - never the case where
+    // safeDirectTask was found live, which must still reach the server (see decisionBypassesSend's
+    // own doc comment in page.tsx).
     assert.match(
       save,
-      /send: \(path, init\) => decisionAlreadyRecorded\s*\n(?:[^\n]*\n)*?\s*\? Promise\.resolve\(\{ application_id: applicationId, review: activeSubmission\.review \}\)\s*\n\s*: api<ReviewAnswerSaveResponse<SubmissionResponse\["review"\]>>\(path, init\),/,
-      "a Save or Confirm resolved as already-decided must skip the network call, exactly as a Skip does",
+      /const decisionBypassesSend = decisionAlreadyRecorded && !liveDirectTask;/,
+      "the network shortcut must be its own, narrower boolean - not decisionAlreadyRecorded itself",
+    );
+    assert.match(
+      save,
+      /send: \(path, init\) => decisionBypassesSend\s*\n(?:[^\n]*\n)*?\s*\? Promise\.resolve\(\{ application_id: applicationId, review: activeSubmission\.review \}\)\s*\n\s*: api<ReviewAnswerSaveResponse<SubmissionResponse\["review"\]>>\(path, init\),/,
+      "a Save or Confirm resolved as already-decided, with nothing live found to point at, must skip the network call, exactly as a Skip does",
+    );
+    assert.doesNotMatch(
+      save,
+      /send: \(path, init\) => decisionAlreadyRecorded\s*\n/,
+      "the send callback must key off the narrower decisionBypassesSend, never decisionAlreadyRecorded directly",
     );
   });
 
@@ -89,13 +104,15 @@ describe("a Save or Confirm whose decision is already recorded advances instead 
     // The exact scenario this file exists for: the card mounted on this question while it was
     // still blank (answer_state "unanswered", taskFingerprint minted from THAT reading), and by the
     // time this press reaches saveReviewedAnswers the review-answers screen's bulk save has already
-    // written the identical text through a different, working save path.
+    // written the identical text through a different, working save path - which is what actually
+    // left applicant provenance (answer_source "applicant_review") on the row.
     const city = {
       id: "city",
       question: "What city are you based in?",
       answer: "Los Angeles, CA",
       kind: "required",
       required: true,
+      answer_source: "applicant_review",
     };
     const promptFingerprint = JSON.stringify(["city", "What city are you based in?", "required", true, null, null, null, null]);
     const direct = {
@@ -108,7 +125,7 @@ describe("a Save or Confirm whose decision is already recorded advances instead 
     assert.equal(
       directDecisionAlreadyRecorded(city, direct),
       true,
-      "the stored answer already reads exactly what this Save press is about to submit",
+      "the stored answer already reads exactly what this Save press is about to submit, with applicant provenance already recorded",
     );
     const task = alreadyDecidedDirectTask(city, direct.intent);
     assert.equal(task.question.answer, "Los Angeles, CA");
@@ -126,6 +143,58 @@ describe("a Save or Confirm whose decision is already recorded advances instead 
       directDecisionAlreadyRecorded({ ...city, question: "What city and state are you based in?" }, direct),
       false,
       "a genuinely changed employer prompt must still refuse, for a Save exactly as for a Skip",
+    );
+  });
+
+  test("the behaviour, run rather than read back: the Akuna shape - a resolver-default pre-fill with no provenance is undecided on its first live Save", () => {
+    // MEASURED live, Akuna "Software Engineer Intern - Python, Summer 2027" (packet 767d9e42),
+    // 2026-08-27. The sponsorship disclaimer arrived pre-filled "Yes" - a resolver default, never
+    // reviewed by the applicant - with answer_source absent entirely (see
+    // tests/direct-save-confirms-an-unchanged-answer.test.mjs for the directlyConfirmed half of
+    // this fix). Pressing Save, live, for the first time, on that unedited card is byte-equal to
+    // the stored answer. Before this fix, byte equality alone called that decided and
+    // saveReviewedAnswers resolved the request locally through decisionBypassesSend, so the
+    // confirmed:true flag directlyConfirmed sets never reached the server, answer_source stayed
+    // absent, and the backend's own questionsMatch stayed false forever - the approve->fill loop
+    // never settled.
+    const sponsorship = {
+      id: "sponsorship",
+      question: "Will you now or in the future require sponsorship for employment visa status?",
+      answer: "Yes",
+      kind: "required",
+      required: true,
+      // No answer_source at all - the exact Akuna shape. Never set answer_confirmed_of either.
+    };
+    const promptFingerprint = JSON.stringify([
+      "sponsorship",
+      "Will you now or in the future require sponsorship for employment visa status?",
+      "required",
+      true,
+      null,
+      null,
+      null,
+      null,
+    ]);
+    const direct = {
+      questionId: "sponsorship",
+      answer: "Yes",
+      intent: "answer",
+      promptFingerprint,
+    };
+
+    assert.equal(
+      directDecisionAlreadyRecorded(sponsorship, direct),
+      false,
+      "a live, first-ever, unedited Save on a resolver-default pre-fill must still reach the network so it can mint applicant provenance",
+    );
+
+    // Once some other save path (most often the bulk review-answers screen) has actually minted
+    // provenance for this same question, an unedited re-press of the identical card IS decided -
+    // this is the stale-card case the fallback exists for.
+    assert.equal(
+      directDecisionAlreadyRecorded({ ...sponsorship, answer_source: "applicant_review" }, direct),
+      true,
+      "once applicant provenance is actually on the row, byte equality is again a settled decision",
     );
   });
 
