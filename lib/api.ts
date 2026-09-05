@@ -1216,6 +1216,15 @@ export type ApplicationReview = {
     /** Mirrors applicationReview.ts on the backend: the runner saw a rendered CAPTCHA still standing
      *  after the press. Selects the extension-recovery offer once she has answered the yes/no card. */
     challenge_on_screen?: true;
+    /** This claim did not exist as a structured field when the run that made it happened - it is
+     *  reconstructed from a plain attention_reason sentence an older run wrote, backfilled onto
+     *  legacy `needs_attention` rows by litos-api PR #966/#968 (2026-09-05) so THIS field, not a raw
+     *  paragraph, is what tells the dashboard a press was recorded. It carries no `network`/`page`
+     *  evidence of its own - only what every unverified_submission already has (`at`, `cause`,
+     *  `portal_url`). Read only for copy (see legacyUnverifiedSubmissionNotice): nothing gates
+     *  rendering the card on it, on purpose, because a legacy claim answers the exact same yes/no
+     *  question a fresh one does. */
+    legacy_prose?: true;
   };
   filled_fields?: string[];
   progress_screenshot_url?: string;

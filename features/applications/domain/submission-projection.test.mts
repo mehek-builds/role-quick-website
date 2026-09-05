@@ -3,8 +3,10 @@ import test from "node:test";
 import type { ApplicationReview, AuthoritativeSubmissionProjection } from "../../../lib/api.ts";
 import {
   authoritativeSubmissionProjectionFromUnknown,
+  awaitingUnverifiedSubmissionResolution,
   confirmedProjectionForCanonical,
   confirmedProjectionForPacket,
+  legacyUnverifiedSubmissionNotice,
   reviewForSubmissionProjection,
   sameConfirmedSubmissionProjection,
   submissionProjectionIdentity,
@@ -366,4 +368,95 @@ test("nonterminal operational review state is preserved", () => {
     receipt: undefined,
   };
   assert.equal(reviewForSubmissionProjection(original, { state: "none" }, { packetId: PACKET_ID }), original);
+});
+
+/* Haize Labs packet 093fddb4-1c02-42b5-9bf7-bf4099fe4fba, measured 2026-09-05 09:55Z against
+   mehekmandal05@gmail.com: GET /applications/:id/submission returned exactly this shape once
+   litos-api PR #966/#968 started backfilling `unverified_submission` onto legacy needs_attention
+   rows that previously carried only a plain attention_reason sentence. `attention_categories` on
+   the row was `["unknown"]`, not `["unverified_submission"]` - the fact that ruled out a
+   category-gated predicate as this screen's render condition. */
+const HAIZE_LABS_LEGACY_UNVERIFIED_SUBMISSION = {
+  at: "2026-08-11T10:09:56.797Z",
+  cause: "no_confirmation_state" as const,
+  portal_url: "https://job-boards.greenhouse.io/haizelabs/example",
+  submission_run_id: "65c86a0b-0000-4000-8000-000000000000",
+  legacy_prose: true as const,
+};
+
+test("a legacy claim awaits resolution exactly like a fresh one", () => {
+  const legacyReview = {
+    ...review("needs_attention"),
+    submitted_at: undefined,
+    receipt: undefined,
+    attention_categories: ["unknown"] as const,
+    unverified_submission: HAIZE_LABS_LEGACY_UNVERIFIED_SUBMISSION,
+  };
+  assert.equal(awaitingUnverifiedSubmissionResolution(legacyReview), true);
+});
+
+test("a fresh claim still awaits resolution - the legacy backfill changed nothing about it", () => {
+  const freshReview = {
+    ...review("needs_attention"),
+    submitted_at: undefined,
+    receipt: undefined,
+    unverified_submission: { at: "2026-08-16T23:51:29.629Z", cause: "run_timed_out" as const },
+  };
+  assert.equal(awaitingUnverifiedSubmissionResolution(freshReview), true);
+});
+
+test("an unverified-submission claim never awaits resolution once it has one", () => {
+  const resolved = {
+    ...review("needs_attention"),
+    submitted_at: undefined,
+    receipt: undefined,
+    unverified_submission: { ...HAIZE_LABS_LEGACY_UNVERIFIED_SUBMISSION, resolution: "not_sent" as const },
+  };
+  assert.equal(awaitingUnverifiedSubmissionResolution(resolved), false);
+});
+
+test("no claim, no status match: nothing to await", () => {
+  assert.equal(
+    awaitingUnverifiedSubmissionResolution({ ...review("needs_attention"), unverified_submission: undefined }),
+    false,
+  );
+  assert.equal(
+    awaitingUnverifiedSubmissionResolution({
+      ...review("ready_for_final_approval"),
+      unverified_submission: HAIZE_LABS_LEGACY_UNVERIFIED_SUBMISSION,
+    }),
+    false,
+    "a claim sitting on a status other than needs_attention must not reopen the card",
+  );
+});
+
+test("legacy copy names the recorded date and states only what the record proves", () => {
+  const notice = legacyUnverifiedSubmissionNotice(HAIZE_LABS_LEGACY_UNVERIFIED_SUBMISSION);
+  assert.ok(notice, "a legacy claim must produce a notice");
+  assert.match(notice!, /pressing Send/);
+  /* The UTC calendar day the record names (2026-08-11T10:09:56.797Z), not a locale-formatted
+     restatement of the implementation and not a day shifted by the viewer's own timezone - see
+     lib/captcha-consent.test.mts's identical reasoning for captchaConsentGrantedOn. Run this file
+     under TZ=Pacific/Honolulu and an un-zoned date would slide this back to the 10th. */
+  assert.ok(notice!.includes("11"), `expected the 11th, printed ${notice}`);
+  assert.match(notice!, /No confirmation/i);
+  assert.match(notice!, /your own look/i);
+});
+
+test("a fresh claim keeps its own attention_reason - legacyUnverifiedSubmissionNotice is null for it", () => {
+  assert.equal(
+    legacyUnverifiedSubmissionNotice({ at: "2026-08-16T23:51:29.629Z" }),
+    null,
+  );
+  assert.equal(legacyUnverifiedSubmissionNotice(undefined), null);
+});
+
+test("an unparseable recorded date drops the date clause instead of printing garbage", () => {
+  const notice = legacyUnverifiedSubmissionNotice({
+    at: "not-a-real-date",
+    legacy_prose: true,
+  });
+  assert.ok(notice, "the sentence must still be produced without a date");
+  assert.doesNotMatch(notice!, /Invalid Date/);
+  assert.match(notice!, /pressing Send/);
 });

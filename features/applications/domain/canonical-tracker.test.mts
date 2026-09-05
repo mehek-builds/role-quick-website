@@ -7,6 +7,7 @@ import {
   canonicalEnvelopeWithMissingLegacyHydration,
   linkedLegacyPacketFromCanonicalTrackerPacket,
   sendableLinkedPacketFromCanonicalEnvelope,
+  unverifiedSubmissionLinkedPacketFromCanonicalEnvelope,
   withRestoredLinkedPackets,
   mergeCanonicalApplicationHistory,
   upsertCanonicalApplicationHistory,
@@ -273,6 +274,122 @@ test("a READY envelope on an unsupported portal is still refused", () => {
     review_state: "ready_to_submit",
   })]);
   assert.equal(sendableLinkedPacketFromCanonicalEnvelope(merged[0]), null);
+});
+
+/* DEEPGRAM 4bfd5827 AND NOTION a4b7295c, measured 2026-09-05: both canonical rows matched their
+ * linked packet by job id rather than an explicit `legacy_generated_resume_id` link, and both
+ * packets carried an unresolved `unverified_submission` on their review. `sendableLinkedPacketFrom
+ * CanonicalEnvelope` correctly refuses a weak match like this - that refusal is what keeps a
+ * duplicate posting from being offered Litos's own Send button - but CanonicalApplicationDetail
+ * never fetches `/submission`, so the refusal also left the claim with no reachable resolution
+ * anywhere in the dashboard. unverifiedSubmissionLinkedPacketFromCanonicalEnvelope is the narrower
+ * admission: the same weak match, but only for a packet whose own claim needs looking at, and only
+ * because that path can never reach a Send control either way. */
+test("an unresolved unverified submission is reachable even on a weakly matched packet", () => {
+  const packet = legacy({
+    job_context: { company: "Deepgram", role: "Machine Learning Intern", job_id: "deepgram-req-9" },
+  });
+  packet.spec._review = {
+    ...packet.spec._review!,
+    status: "needs_attention",
+    unverified_submission: {
+      at: "2026-08-11T10:09:56.797Z",
+      cause: "no_confirmation_state",
+      portal_url: "https://job-boards.greenhouse.io/deepgram/example",
+      submission_run_id: "65c86a0b-0000-4000-8000-000000000000",
+      legacy_prose: true,
+    },
+  };
+  const application = canonical({
+    id: "canonical-deepgram",
+    // No explicit link - this is exactly the measured shape. Matched below by shared job_id only.
+    legacy_generated_resume_id: null,
+    job_id: "deepgram-req-9",
+    company: "Deepgram",
+    role: "Machine Learning Intern",
+  });
+  const merged = mergeCanonicalApplicationHistory([packet], [application]);
+  assert.equal(merged.length, 1, "the weak match must still attach the one packet");
+
+  // The send-capable gate refuses it, exactly as it should - nothing about this test loosens that.
+  assert.equal(sendableLinkedPacketFromCanonicalEnvelope(merged[0]), null);
+
+  const restored = unverifiedSubmissionLinkedPacketFromCanonicalEnvelope(merged[0]);
+  assert.equal(restored?.id, packet.id, "the restored packet must carry the LEGACY id, not the canonical one");
+  assert.equal(canonicalApplicationFromPacket(restored), null, "the envelope marker must be gone, like the send-capable restore");
+  assert.equal(restored?.spec._review?.unverified_submission?.legacy_prose, true);
+});
+
+/* CONFIRMED AGAINST THE PR HEAD, 2026-09-05: an EXPLICITLY linked packet (legacy_generated_resume_id
+ * matches, not merely job id or portal URL) can reach `needs_attention` through
+ * `reviewReachesManagedScreens` while its review still carries an unresolved `unverified_submission`.
+ * Before this test's fix, `sendableLinkedPacketFromCanonicalEnvelope` had no idea that claim existed
+ * and happily returned the packet as sendable - the card then showed a "Ready" chip and "Litos can
+ * send this application for you... Continue to Litos's managed review and send screen" directly
+ * above the "Waiting on you to look... Litos has a record of pressing Send" alert, two contradictory
+ * claims about the same packet on the same card. The unresolved press must win: no sendable packet
+ * until she resolves it, even though the strong link would otherwise clear every other gate. */
+test("an explicitly linked packet with an unresolved unverified submission is never offered as sendable", () => {
+  const packet = legacy();
+  packet.spec._review = {
+    ...packet.spec._review!,
+    status: "needs_attention",
+    unverified_submission: {
+      at: "2026-08-11T10:09:56.797Z",
+      cause: "no_confirmation_state",
+      portal_url: "https://job-boards.greenhouse.io/haize/example",
+      submission_run_id: "65c86a0b-0000-4000-8000-000000000000",
+      legacy_prose: true,
+    },
+  };
+  const merged = mergeCanonicalApplicationHistory([packet], [canonical({
+    legacy_generated_resume_id: packet.id,
+  })]);
+  assert.equal(merged.length, 1, "the explicit link must still attach the one packet");
+
+  // The strong link would otherwise clear reviewReachesManagedScreens for needs_attention - the
+  // unresolved press must suppress it anyway.
+  assert.equal(sendableLinkedPacketFromCanonicalEnvelope(merged[0]), null);
+
+  // The "Check and confirm" route stays open - that is the one true thing the card can still say.
+  const restored = unverifiedSubmissionLinkedPacketFromCanonicalEnvelope(merged[0]);
+  assert.equal(restored?.id, packet.id);
+});
+
+test("a resolved claim is not offered again, even on the same weak match", () => {
+  const packet = legacy();
+  packet.spec._review = {
+    ...packet.spec._review!,
+    status: "needs_attention",
+    unverified_submission: {
+      at: "2026-08-11T10:09:56.797Z",
+      cause: "no_confirmation_state",
+      resolution: "not_sent",
+      resolved_at: "2026-08-20T00:00:00.000Z",
+    },
+  };
+  const merged = mergeCanonicalApplicationHistory([packet], [canonical({ job_id: null, legacy_generated_resume_id: null })]);
+  // No shared identity at all here, so nothing attaches - confirms the negative case needs a real match.
+  assert.equal(unverifiedSubmissionLinkedPacketFromCanonicalEnvelope(merged[0]), null);
+
+  const matched = mergeCanonicalApplicationHistory([packet], [canonical({
+    legacy_generated_resume_id: packet.id,
+  })]);
+  assert.equal(unverifiedSubmissionLinkedPacketFromCanonicalEnvelope(matched[0]), null, "a resolved claim has nothing left to check");
+});
+
+test("no linked packet, no unverified submission, no ordinary legacy packet: nothing to restore", () => {
+  // Tracker-only row: canonicalTrackerPacket's placeholder never stamps canonical_legacy_packet_id.
+  const noPacket = mergeCanonicalApplicationHistory([], [canonical()]);
+  assert.equal(unverifiedSubmissionLinkedPacketFromCanonicalEnvelope(noPacket[0]), null);
+
+  // A genuinely linked packet with nothing unresolved on it.
+  const packet = legacy();
+  const settled = mergeCanonicalApplicationHistory([packet], [canonical({ legacy_generated_resume_id: packet.id })]);
+  assert.equal(unverifiedSubmissionLinkedPacketFromCanonicalEnvelope(settled[0]), null);
+
+  // An ordinary legacy packet is not an envelope at all.
+  assert.equal(unverifiedSubmissionLinkedPacketFromCanonicalEnvelope(packet), null);
 });
 
 /* CANONICAL DETAIL SHOWED THE EXTENSION-ONLY COPY FOR A PORTAL-SUPPORTED, READY-TO-SUBMIT PACKET.

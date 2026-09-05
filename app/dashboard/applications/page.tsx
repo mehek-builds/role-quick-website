@@ -32,7 +32,7 @@ import {
 import { Card, Chip, EmptyState, ErrorNote, ExtensionStoreLink, PendingLabel, ScrollableRow, ShimmerRows, TerminalActionBar, formatRelativeDate } from "@/components/app/ui";
 import { CompanyLogo } from "@/components/app/CompanyLogo";
 import { ThinkingOrb } from "thinking-orbs";
-import { canonicalApplicationFromPacket, canRemoveFromTracker, canonicalEnvelopeLegacyHydrationId, canonicalEnvelopeWithMissingLegacyHydration, canonicalTrackerPacket, explicitTerms, sendableLinkedPacketFromCanonicalEnvelope, withRestoredLinkedPackets, linkedLegacyPacketFromCanonicalTrackerPacket, mergeCanonicalApplicationHistory, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, reviewWithLists, screenForStatus, sectionHeading, selectedPacketForRequest, startsNewSection, statusLabel, stripMetadata, upsertCanonicalApplicationHistory } from "@/features/applications";
+import { canonicalApplicationFromPacket, canRemoveFromTracker, canonicalEnvelopeLegacyHydrationId, canonicalEnvelopeWithMissingLegacyHydration, canonicalTrackerPacket, explicitTerms, sendableLinkedPacketFromCanonicalEnvelope, unverifiedSubmissionLinkedPacketFromCanonicalEnvelope, withRestoredLinkedPackets, linkedLegacyPacketFromCanonicalTrackerPacket, mergeCanonicalApplicationHistory, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, reviewWithLists, screenForStatus, sectionHeading, selectedPacketForRequest, startsNewSection, statusLabel, stripMetadata, upsertCanonicalApplicationHistory } from "@/features/applications";
 import { applicationFilterFromSearch, applicationFilterHeading, cleanJdCapture, ledgerRendersOnLanding, pipelineCounts, postingStatusBadge, postingStatusBlocksSend, reviewCanBeSent, sentSince, startOfLocalDay, statusMatchesApplicationFilter, unansweredRequiredQuestionCount, type ApplicationFilter } from "@/features/applications";
 import { nextPreferredReadyPacket, packetMatchesJob } from "@/features/applications";
 import { REVIEW_ANSWERS_FROZEN_NOTICE, REVIEW_ANSWERS_REOPEN_NOTICE, REVIEW_ANSWERS_REOPEN_REFUSED, auditAnswerWrite, reviewAnswerEditRoute, reviewAnswersNeedSave, saveReviewAnswers, type ReviewAnswerSaveResponse } from "@/features/applications";
@@ -88,7 +88,7 @@ import { acknowledgePacketAudit, acknowledgePacketEvidence, packetQuestionsSnaps
 import { useBilling } from "@/components/billing/BillingProvider";
 import { isStructuredUpgradeDenial } from "@/features/billing";
 import { completeOperationId, operationIdFor } from "@/lib/operation-id";
-import { applicationPacketAuthorityState, employerActionRefusalMessage, confirmedProjectionForPacket, managedPrepareAuthorityEnvelopeFromUnknown, managedPrepareAuthorityMatchesPacket, quarantinedSubmissionAuthority, reviewClaimsSubmissionSent, reviewForSubmissionProjection, submissionAuthorityEnvelopeFromUnknown, submissionMutationResponseMatchesApplication, submissionProjectionIsConfirmed } from "@/features/applications";
+import { applicationPacketAuthorityState, awaitingUnverifiedSubmissionResolution, employerActionRefusalMessage, confirmedProjectionForPacket, legacyUnverifiedSubmissionNotice, managedPrepareAuthorityEnvelopeFromUnknown, managedPrepareAuthorityMatchesPacket, quarantinedSubmissionAuthority, reviewClaimsSubmissionSent, reviewForSubmissionProjection, submissionAuthorityEnvelopeFromUnknown, submissionMutationResponseMatchesApplication, submissionProjectionIsConfirmed } from "@/features/applications";
 import { useSidebarCollapse } from "@/app/dashboard/dashboard-shell";
 
 type Screen = "review" | "questions" | "submitting" | "portal" | "submitted";
@@ -2497,6 +2497,18 @@ function Applications() {
    * extension-only copy. */
   const canonicalReadyToSend = useMemo(
     () => sendableLinkedPacketFromCanonicalEnvelope(canonicalEnvelopePacket),
+    [canonicalEnvelopePacket],
+  );
+  /* THE OTHER REASON A CANONICAL ROW'S LINKED PACKET IS WORTH OPENING, and independent of whether
+   * canonicalReadyToSend accepts it: a row can carry an unresolved unverified-submission claim
+   * while being matched only by job id or portal URL, which canonicalReadyToSend's stricter
+   * (send-capable) gate refuses on purpose. See unverifiedSubmissionLinkedPacketFromCanonicalEnvelope
+   * for why that refusal does not apply here - this can only ever route into
+   * SubmissionScreen's unverified-submission mode, which sends nothing. Non-null exactly when
+   * CanonicalApplicationDetail should offer "Check and confirm" instead of leaving the claim with
+   * no reachable resolution at all (Deepgram 4bfd5827, Notion a4b7295c, measured 2026-09-05). */
+  const canonicalUnverifiedSubmissionPacket = useMemo(
+    () => unverifiedSubmissionLinkedPacketFromCanonicalEnvelope(canonicalEnvelopePacket),
     [canonicalEnvelopePacket],
   );
   /* WHAT "READY" IS NOT. canonicalReadyToSend answers "is there a sendable packet on a portal Litos
@@ -6045,6 +6057,13 @@ function Applications() {
                no-op. */
             openApplication(canonicalReadyToSend, { history: "replace" });
           }}
+          onCheckUnverifiedSubmission={canonicalUnverifiedSubmissionPacket ? () => {
+            /* Same explicit-click transition as onContinueToSend just above, for the same reason:
+               this is a real user gesture, so it reaches selectPacket (via openApplication) exactly
+               the way every other row-open does, landing on SubmissionScreen with
+               awaitingUnverifiedSubmission already true off this exact packet's review. */
+            openApplication(canonicalUnverifiedSubmissionPacket, { history: "replace" });
+          } : null}
           fillBusy={creating === "fill"}
           tailorBusy={creating === "tailor"}
           coverLetterBusy={coverLetterBusy}
@@ -6723,6 +6742,7 @@ function CanonicalApplicationDetail({
   readyToSend,
   requiredQuestionsRemaining,
   onContinueToSend,
+  onCheckUnverifiedSubmission,
   fillBusy,
   tailorBusy,
   coverLetterBusy,
@@ -6766,6 +6786,12 @@ function CanonicalApplicationDetail({
   /** Explicit, user-pressed handoff to the managed review and send screen. Never called except from
       a click in this component. */
   onContinueToSend: () => void;
+  /** Explicit, user-pressed handoff to SubmissionScreen's unverified-submission mode, or null when
+   *  this row carries no unresolved claim to resolve. Null is what keeps the control this backs
+   *  entirely off screen (see unverifiedSubmissionLinkedPacketFromCanonicalEnvelope) rather than
+   *  rendered and disabled - "a control that cannot act is not shown" applies here exactly the way
+   *  it already does to onOpenPacket below. */
+  onCheckUnverifiedSubmission: (() => void) | null;
   fillBusy: boolean;
   tailorBusy: boolean;
   coverLetterBusy: boolean;
@@ -6854,6 +6880,25 @@ function CanonicalApplicationDetail({
                     : "Litos will verify the extension account, bind this exact application, and open the employer page. Click Fill in the extension card, review every field, then press the employer's submit control yourself."}
           </p>
         </div>
+        {/* A CLAIM THE FREE-FILL CARD HAS NO WAY TO SHOW, let alone resolve.
+         *
+         * `application` never carries `unverified_submission` - it is a field on the linked
+         * PACKET's review, and this card is built from the lighter canonical record alone (see
+         * CanonicalApplicationDetail's own history: it never fetches /submission). Rendered only
+         * when the page has already found that packet AND its own unresolved claim (see
+         * unverifiedSubmissionLinkedPacketFromCanonicalEnvelope), so this box and the ordinary
+         * copy above never disagree about whether one exists. The press below reaches
+         * SubmissionScreen's UnverifiedSubmissionCard, which is where the yes/no actually lives -
+         * this box only gets her there. */}
+        {onCheckUnverifiedSubmission && (
+          <div role="alert" className="mt-4 rounded-inner border border-warn/40 bg-warn-soft px-4 py-3">
+            <p className="font-mono text-label uppercase tracking-[0.08em] text-warn">Waiting on you to look</p>
+            <p className="mt-1 text-small leading-6 text-muted">
+              Litos has a record of pressing Send on this application and never saw the employer confirm it landed. Only your own check can settle it - open the packet to say what you found.
+            </p>
+            <Button onClick={onCheckUnverifiedSubmission} size="sm" className="mt-3">Check and confirm</Button>
+          </div>
+        )}
         <div className="mt-4 rounded-inner border border-brand/30 bg-brand-soft/35 p-4">
           <p className="font-mono text-label uppercase tracking-[0.08em] text-brand-ink">Application packet</p>
           <p className="mt-2 text-small leading-6 text-muted">
@@ -8040,9 +8085,17 @@ function SecurityCodeCard({ review, submitting, error, onSubmitCode }: {
  * screen), and `unverified_submission.cause` includes `provider_error` - exactly the case a raw
  * exception message could land in this field. Taking the sanitized string as the prop, instead of
  * the whole review, makes reading the unsanitized field a type error rather than a habit to remember.
+ *
+ * `legacyNotice` OUTRANKS `attentionReason` when both are present, and is the one exception to
+ * "rendered verbatim" above. It is non-null only for a LEGACY claim (see
+ * legacyUnverifiedSubmissionNotice), whose `attention_reason` was written for a screen that could
+ * not yet act on it - "Check the portal or your email before trying again", copy aimed at a retry
+ * this screen does not offer. A fresh claim's `attentionReason` is unaffected: `legacyNotice` is
+ * null for it, and the verbatim sentence prints exactly as it always has.
  */
-function UnverifiedSubmissionCard({ attentionReason, submitting, error, onSubmitOutcome }: {
+function UnverifiedSubmissionCard({ attentionReason, legacyNotice, submitting, error, onSubmitOutcome }: {
   attentionReason: string | undefined;
+  legacyNotice: string | null;
   submitting: boolean;
   error: string | null;
   onSubmitOutcome: (found: boolean) => void;
@@ -8051,7 +8104,8 @@ function UnverifiedSubmissionCard({ attentionReason, submitting, error, onSubmit
     <div className="mt-4 rounded-inner border border-border bg-surface-alt p-4">
       <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Waiting on you to look</p>
       <p className="mt-2 whitespace-pre-line text-sm leading-6 text-ink">
-        {attentionReason
+        {legacyNotice
+          ?? attentionReason
           ?? "Litos pressed Send and could not confirm what came back. Check the filled-form proof shown in this dashboard, then choose what it shows."}
       </p>
       <div className="mt-4 flex flex-wrap gap-2">
@@ -8454,11 +8508,12 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
   const awaitingSecurityCode = review.status === "awaiting_security_code";
   const needsAttention = review.status === "needs_attention";
   const failedPacketAuditStale = review.status === "failed" && historicalPacketAuditStaleMessage(review);
-  /* A run may have reached the employer and stopped before it could say so. Gated on the resolution
-     being absent, not just the field's presence: once she has answered, the record stays on the
-     review as history (the same reason `stall` is closed with `resolved_at` rather than deleted),
-     and a resolved one must not reopen this card on every later visit. */
-  const awaitingUnverifiedSubmission = needsAttention && Boolean(review.unverified_submission) && !review.unverified_submission?.resolution;
+  /* A run may have reached the employer and stopped before it could say so, including a LEGACY
+     claim litos-api backfilled from an older run's plain attention_reason prose (`legacy_prose:
+     true`, PR #966/#968, 2026-09-05) - see awaitingUnverifiedSubmissionResolution's own comment for
+     why nothing here treats that shape differently. Extracted to the domain layer so this exact
+     predicate is what the tests pin, not a copy of it. */
+  const awaitingUnverifiedSubmission = awaitingUnverifiedSubmissionResolution(review);
   /* Every control below that can replay, resolve, or open a live/exact form for this application is
      gated HERE, at the one place they all read from, rather than at each button individually. That
      is not a style preference: the four buttons this feature explicitly gated (Review and fill, Try
@@ -9102,6 +9157,7 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
         {awaitingUnverifiedSubmission && (
           <UnverifiedSubmissionCard
             attentionReason={safeAttentionReason}
+            legacyNotice={legacyUnverifiedSubmissionNotice(review.unverified_submission)}
             submitting={unverifiedSubmissionSubmitting}
             error={unverifiedSubmissionError}
             onSubmitOutcome={onSubmitUnverifiedOutcome}
