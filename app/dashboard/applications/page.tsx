@@ -65,7 +65,7 @@ import { applyBankVariant, type ApplyOutcome } from "@/features/applications";
 import { RequirementProvider, RequirementText, MatchLegend } from "@/components/app/RequirementText";
 import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX, exactPacketAuditClauses, exactPacketAuditRanges } from "@/features/applications";
 import { educationDrift, educationDriftMessage, type EducationProfile } from "@/features/applications";
-import { alreadyDecidedDirectTask, checklistRowControl, completedSubmissionGroups, directAnswerNavigationTasks, directInputTaskPlan, directQuestionPromptFingerprint, directQuestionTaskFingerprint, directSkipAlreadyRecorded, displayQuestionLabel, documentAsksByKind, documentControls, documentStepsInPlan, fillAgainFromReviewControl, humanInputItems, metadataRefreshOutranksStandingAttention, QUESTION_CHOICE_LIST_LIMIT, reviewedAnswersSaveLanding, unconfirmedDocumentItems, type ChecklistResumeRecord, type DirectQuestionTask, type DirectQuestionTaskIntent, type SubmissionChecklistAction, type SubmissionChecklistItem } from "@/features/applications";
+import { alreadyDecidedDirectTask, checklistRowControl, completedSubmissionGroups, directAnswerNavigationTasks, directDecisionAlreadyRecorded, directInputTaskPlan, directQuestionPromptFingerprint, directQuestionTaskFingerprint, displayQuestionLabel, documentAsksByKind, documentControls, documentStepsInPlan, fillAgainFromReviewControl, humanInputItems, metadataRefreshOutranksStandingAttention, QUESTION_CHOICE_LIST_LIMIT, reviewedAnswersSaveLanding, unconfirmedDocumentItems, type ChecklistResumeRecord, type DirectQuestionTask, type DirectQuestionTaskIntent, type SubmissionChecklistAction, type SubmissionChecklistItem } from "@/features/applications";
 import { prescriptBlocksProgress, prescriptEditableQuestions, prescriptMetadataBlockers, prescriptNeedsHer, prescriptSummary } from "@/features/applications";
 import { answerWithExactOptionToggled, exactQuestionOption, exactSelectedQuestionOptions, nextStickyNeeding, optionalQuestionNeedsDecision, questionAcceptsMultipleOptions, questionOptionsAreComplete, questionReadsAsAnswered, questionReviewPresentation, questionsNeedingApplicant, requiredQuestionReviewRoute, type StickyNeeding } from "@/features/applications";
 import type { JdMatchResponse, JobMatch } from "@/features/applications";
@@ -4838,15 +4838,16 @@ function Applications() {
       ? activeDirectProgress.answeredTasks
       : [];
     /* A DECIDED QUESTION IS DONE, NOT MISSING, and the ordinary outstanding/answered lookup below
-       has no way to say so - see directSkipAlreadyRecorded's own comment for the measured Pony.ai
-       "1 of 1" dead end this exists to close. Read directly off the current stored question, never
-       off the (possibly stale, "N of N") task the card was built from, because the whole point is
-       to notice when those two have already diverged. */
+       has no way to say so - see directDecisionAlreadyRecorded's own comment for the measured
+       Pony.ai "1 of 1" dead end this exists to close, and the Save/Confirm presses generalised
+       alongside it. Read directly off the current stored question, never off the (possibly stale,
+       "N of N") task the card was built from, because the whole point is to notice when those two
+       have already diverged. */
     const activeCurrentQuestion = direct
       ? activeSubmission.review.questions.find((question) => question.id === direct.questionId) ?? null
       : null;
-    const skipAlreadyRecorded = Boolean(
-      direct && activeCurrentQuestion && directSkipAlreadyRecorded(activeCurrentQuestion, direct),
+    const decisionAlreadyRecorded = Boolean(
+      direct && activeCurrentQuestion && directDecisionAlreadyRecorded(activeCurrentQuestion, direct),
     );
     const safeDirectTask = direct
       ? directAnswerNavigationTasks(
@@ -4857,7 +4858,7 @@ function Applications() {
         task.question.id === direct.questionId
         && directQuestionPromptFingerprint(task) === direct.promptFingerprint
       ))
-        ?? (skipAlreadyRecorded && activeCurrentQuestion
+        ?? (decisionAlreadyRecorded && activeCurrentQuestion
           ? alreadyDecidedDirectTask(activeCurrentQuestion, direct.intent)
           : null)
       : null;
@@ -4865,12 +4866,12 @@ function Applications() {
       ? directQuestionPromptFingerprint(safeDirectTask)
       : null;
     const directIsSkip = direct?.answerState === "skipped";
-    /* A SKIP THIS DECISIVE NEVER REFUSES. Every other clause below exists to catch the employer's
-       OWN question changing under the applicant; skipAlreadyRecorded has already proven, off the
-       freshest read available, that this exact question, unchanged, already carries the exact
-       decision this press is making. Refusing it here would refuse a press that has nothing left
-       to get right. */
-    if (direct && !skipAlreadyRecorded && (
+    /* A PRESS THIS DECISIVE NEVER REFUSES. Every other clause below exists to catch the employer's
+       OWN question changing under the applicant; decisionAlreadyRecorded has already proven, off
+       the freshest read available, that this exact question, unchanged, already carries the exact
+       decision this press is making - whether that press is a Skip, a Save, an Approve, or a
+       Confirm. Refusing it here would refuse a press that has nothing left to get right. */
+    if (direct && !decisionAlreadyRecorded && (
       !safeDirectTask
       || safeDirectTask.intent !== direct.intent
       || safeDirectPromptFingerprint !== direct.promptFingerprint
@@ -5021,9 +5022,9 @@ function Applications() {
         /* `saved` is the 202's own word for "a run wrote to this packet and your answers did not
            land". api() resolves on any res.ok and hands back the body with the status gone, so this
            key is the only thing that survives the transport to distinguish it from a 200. */
-        send: (path, init) => skipAlreadyRecorded
+        send: (path, init) => decisionAlreadyRecorded
           /* NOTHING TO WRITE. activeCurrentQuestion already reads exactly what this request would
-             ask the server to store (directSkipAlreadyRecorded proved it), so resolving locally
+             ask the server to store (directDecisionAlreadyRecorded proved it), so resolving locally
              with the same shape api() returns on a real 200 IS "advance immediately without a
              request" - not a fetch this repo merely declines to await. */
           ? Promise.resolve({ application_id: applicationId, review: activeSubmission.review })

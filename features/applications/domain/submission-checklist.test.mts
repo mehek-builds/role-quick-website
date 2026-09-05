@@ -6,6 +6,7 @@ import {
   completedSubmissionGroups,
   completedSubmissionItems,
   directAnswerNavigationTasks,
+  directDecisionAlreadyRecorded,
   directInputTaskPlan,
   directQuestionPromptFingerprint,
   directQuestionTaskFingerprint,
@@ -2764,6 +2765,178 @@ test("a sole optional question's already-recorded skip closes the queue instead 
   assert.equal(navigatorTasks.length, 1);
   assert.equal(navigatorTasks[0]?.question.id, "summary");
   assert.equal(navigatorTasks[0]?.question.answer_state, "skipped");
+});
+
+/* THE SYMMETRIC HALF OF THE PONY.AI FIX: A SAVE OR A CONFIRM ON A DECIDED QUESTION IS ALSO NOT A
+ * CHANGED QUESTION.
+ *
+ * directSkipAlreadyRecorded, proved above, is scoped to Skip alone by its own doc comment - "an
+ * unedited textual answer still has to match its own bytes to count as unchanged". Review finding,
+ * PLAUSIBLE from that same Skip precedent rather than separately measured live: a text question's
+ * card mounts unanswered, the same question is then answered through the bulk "Answer these"
+ * screen (a different, working save path), and pressing "Save answer" on the stale card - whose
+ * request never sets answerState - hits the exact same dead end directSkipAlreadyRecorded's own
+ * measured Pony.ai comment describes, because the ordinary outstanding/answered lookup has nothing
+ * to show for a question that already settled elsewhere. Same class for a Confirm press on a
+ * sensitive question already confirmed elsewhere.
+ *
+ * directDecisionAlreadyRecorded generalises the predicate rather than replacing it: a Skip request
+ * still delegates to directSkipAlreadyRecorded, UNCHANGED, and every one of its own tests above
+ * still describes exactly what a Skip press gets. */
+test("directDecisionAlreadyRecorded names a Save whose stored answer already matches, byte for byte", () => {
+  const CITY = "What city are you based in?";
+  const question: ApplicationQuestion = {
+    id: "city", question: CITY, answer: "Los Angeles", kind: "required", required: true,
+  };
+  const request = {
+    questionId: "city",
+    promptFingerprint: directQuestionPromptFingerprint({ question }),
+    answer: "Los Angeles",
+    intent: "answer" as const,
+  };
+  assert.equal(directDecisionAlreadyRecorded(question, request), true, "the review already holds exactly this answer");
+
+  assert.equal(
+    directDecisionAlreadyRecorded(question, { ...request, answer: "  Los Angeles  " }),
+    true,
+    "trimmed equality, the same comparison the save guard already made for a genuine change",
+  );
+
+  assert.equal(
+    directDecisionAlreadyRecorded({ ...question, answer: "New York" }, request),
+    false,
+    "a stored answer that differs from what she typed is a real edit, not a decided one",
+  );
+
+  assert.equal(
+    directDecisionAlreadyRecorded(question, { ...request, answer: "" }),
+    false,
+    "an empty typed answer is Save's own separate refusal - never read as a decided match",
+  );
+
+  assert.equal(
+    directDecisionAlreadyRecorded({ ...question, question: "A genuinely reworded prompt" }, request),
+    false,
+    "a changed employer prompt is a real change and must still refuse, for a Save exactly as for a Skip",
+  );
+
+  assert.equal(
+    directDecisionAlreadyRecorded({ ...question, id: "other" }, request),
+    false,
+    "a different question id is never the decision this press is about",
+  );
+});
+
+test("directDecisionAlreadyRecorded still defers a Skip request to directSkipAlreadyRecorded, unchanged", () => {
+  const SUMMARY = "Summary";
+  const skipped: ApplicationQuestion = {
+    id: "summary", question: SUMMARY, answer: "", kind: "essay", required: false,
+    answer_state: "skipped",
+  };
+  const request = {
+    questionId: "summary",
+    promptFingerprint: directQuestionPromptFingerprint({ question: skipped }),
+    answer: "",
+    answerState: "skipped" as const,
+    intent: "answer" as const,
+  };
+  assert.equal(directDecisionAlreadyRecorded(skipped, request), true);
+  assert.equal(
+    directDecisionAlreadyRecorded({ ...skipped, required: true }, request),
+    false,
+    "directSkipAlreadyRecorded's own clauses still hold - a required question is never skippable",
+  );
+});
+
+/* CONFIRM ASKS FOR MORE THAN MATCHING BYTES: A MATCHING BYTE IS NOT ALWAYS A MATCHING DECISION.
+ *
+ * A sensitive question's machine-suggested answer is commonly correct and unedited on its very
+ * first Confirm press - which is exactly the DV Trading loop applicantConfirmedAnswer (and
+ * answer_confirmed_of beneath it) was built to close. Byte equality alone would call that first,
+ * genuinely undecided press "already decided" and skip the request that mints the confirmation,
+ * so this branch additionally requires applicantConfirmedAnswer to already read true. */
+test("directDecisionAlreadyRecorded for a Confirm press requires the confirmation itself, not just matching text", () => {
+  const LABEL = "Do you require visa sponsorship?";
+  const unconfirmed: ApplicationQuestion = {
+    id: "visa", question: LABEL, answer: "No", kind: "required", required: true,
+  };
+  const request = {
+    questionId: "visa",
+    promptFingerprint: directQuestionPromptFingerprint({ question: unconfirmed }),
+    answer: "No",
+    intent: "confirm" as const,
+  };
+  assert.equal(
+    directDecisionAlreadyRecorded(unconfirmed, request),
+    false,
+    "a pre-filled, unconfirmed suggestion is exactly the DV Trading loop - matching text is not yet a confirmation",
+  );
+
+  const confirmed: ApplicationQuestion = { ...unconfirmed, answer_confirmed_of: LABEL };
+  assert.equal(
+    directDecisionAlreadyRecorded(confirmed, request),
+    true,
+    "already confirmed elsewhere, with the same answer: nothing is left for this press to write",
+  );
+
+  assert.equal(
+    directDecisionAlreadyRecorded({ ...confirmed, answer: "Yes" }, request),
+    false,
+    "the stored answer no longer matches what this Confirm press would submit - a real edit",
+  );
+});
+
+/* REVIEW ASKS FOR THE SAME EXTRA THING, FOR THE SAME REASON, ON THE ESSAY'S OWN FIELD.
+ *
+ * essayDraftAwaitsApproval is the exact field the essay row itself reads to decide whether an
+ * essay is still outstanding (see humanInputItems above). A freshly-drafted, never-yet-approved
+ * essay is still fully outstanding and findable by the ordinary lookup, unedited - so without this
+ * check, its own unread draft text would satisfy byte equality on the very first Approve press and
+ * skip the request that mints applicant_review, resurrecting the exact loop measured on the DGA
+ * Organizing Resume Bank packet (2026-08-26) that a prior fix closed. */
+test("directDecisionAlreadyRecorded for a Review press requires the essay to have left the draft, not just matching text", () => {
+  const PROMPT = "Why Stripe?";
+  const draft: ApplicationQuestion = {
+    id: "essay-1", question: PROMPT, answer: "I like simple APIs.", kind: "essay", required: true,
+    answer_source: "litos_draft",
+  };
+  const request = {
+    questionId: "essay-1",
+    promptFingerprint: directQuestionPromptFingerprint({ question: draft }),
+    answer: "I like simple APIs.",
+    intent: "review" as const,
+  };
+  assert.equal(
+    directDecisionAlreadyRecorded(draft, request),
+    false,
+    "a fresh, never-approved draft is still fully outstanding - approving it the first time must still mint applicant_review",
+  );
+
+  const approved: ApplicationQuestion = { ...draft, answer_source: "applicant_review" };
+  assert.equal(
+    directDecisionAlreadyRecorded(approved, request),
+    true,
+    "already approved elsewhere, with the same drafted text: nothing is left for this press to write",
+  );
+});
+
+test("alreadyDecidedDirectTask's item reflects the intent it synthesises, never a hardcoded Skip", () => {
+  const question: ApplicationQuestion = {
+    id: "city", question: "What city are you based in?", answer: "Los Angeles", kind: "required", required: true,
+  };
+
+  const answerTask = alreadyDecidedDirectTask(question, "answer");
+  assert.equal(answerTask.item.action, "Answer");
+  assert.equal(answerTask.item.actionKind, "answer");
+
+  const reviewTask = alreadyDecidedDirectTask(question, "review");
+  assert.equal(reviewTask.item.action, "Review");
+  assert.equal(reviewTask.item.actionKind, "review");
+
+  const confirmTask = alreadyDecidedDirectTask(question, "confirm");
+  assert.equal(confirmTask.item.action, "Confirm");
+  assert.equal(confirmTask.item.actionKind, "confirm");
+  assert.notEqual(confirmTask.item.action, "Skip", "a confirmed sensitive question must not be mislabeled as an unanswered Skip");
 });
 
 /* A CONFIRMED ESSAY IS NOT A DRAFT, and while this row could not tell the two apart it asked forever.

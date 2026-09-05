@@ -64,32 +64,36 @@ describe("a Skip whose decision is already recorded advances instead of refusing
       save,
       /const activeCurrentQuestion = direct\s*\n\s*\? activeSubmission\.review\.questions\.find\(\(question\) => question\.id === direct\.questionId\) \?\? null\s*\n\s*: null;/,
     );
+    // Renamed from skipAlreadyRecorded/directSkipAlreadyRecorded when the predicate generalised
+    // from Skip alone to a matching Save or Confirm too - see
+    // a-save-on-a-decided-question-is-not-a-changed-question.test.mjs, the sibling that exercises
+    // the generalised names.
     assert.match(
       save,
-      /const skipAlreadyRecorded = Boolean\(\s*\n\s*direct && activeCurrentQuestion && directSkipAlreadyRecorded\(activeCurrentQuestion, direct\),\s*\n\s*\);/,
+      /const decisionAlreadyRecorded = Boolean\(\s*\n\s*direct && activeCurrentQuestion && directDecisionAlreadyRecorded\(activeCurrentQuestion, direct\),\s*\n\s*\);/,
     );
   });
 
   test("a missing outstanding/answered lookup falls back to the already-decided task instead of staying null", () => {
     assert.match(
       save,
-      /\)\.find\(\(task\) => \(\s*\n\s*task\.question\.id === direct\.questionId\s*\n\s*&& directQuestionPromptFingerprint\(task\) === direct\.promptFingerprint\s*\n\s*\)\)\s*\n\s*\?\? \(skipAlreadyRecorded && activeCurrentQuestion\s*\n\s*\? alreadyDecidedDirectTask\(activeCurrentQuestion, direct\.intent\)\s*\n\s*: null\)/,
+      /\)\.find\(\(task\) => \(\s*\n\s*task\.question\.id === direct\.questionId\s*\n\s*&& directQuestionPromptFingerprint\(task\) === direct\.promptFingerprint\s*\n\s*\)\)\s*\n\s*\?\? \(decisionAlreadyRecorded && activeCurrentQuestion\s*\n\s*\? alreadyDecidedDirectTask\(activeCurrentQuestion, direct\.intent\)\s*\n\s*: null\)/,
       "safeDirectTask must fall back to the synthesized already-decided task, or the accepted-answer bookkeeping below it never runs",
     );
   });
 
-  test("the employer-prompt-changed guard excludes an already-recorded skip rather than merely tolerating it", () => {
+  test("the employer-prompt-changed guard excludes an already-recorded decision rather than merely tolerating it", () => {
     assert.match(
       save,
-      /if \(direct && !skipAlreadyRecorded && \(\s*\n\s*!safeDirectTask/,
-      "skipAlreadyRecorded must gate the whole guard, not satisfy one of its OR clauses",
+      /if \(direct && !decisionAlreadyRecorded && \(\s*\n\s*!safeDirectTask/,
+      "decisionAlreadyRecorded must gate the whole guard, not satisfy one of its OR clauses",
     );
   });
 
   test("an already-recorded decision resolves locally instead of calling the API", () => {
     assert.match(
       save,
-      /send: \(path, init\) => skipAlreadyRecorded\s*\n(?:[^\n]*\n)*?\s*\? Promise\.resolve\(\{ application_id: applicationId, review: activeSubmission\.review \}\)\s*\n\s*: api<ReviewAnswerSaveResponse<SubmissionResponse\["review"\]>>\(path, init\),/,
+      /send: \(path, init\) => decisionAlreadyRecorded\s*\n(?:[^\n]*\n)*?\s*\? Promise\.resolve\(\{ application_id: applicationId, review: activeSubmission\.review \}\)\s*\n\s*: api<ReviewAnswerSaveResponse<SubmissionResponse\["review"\]>>\(path, init\),/,
       "'advance without a request' means the fetch itself must not run, not merely that its result is discarded",
     );
   });
@@ -102,10 +106,10 @@ describe("a Skip whose decision is already recorded advances instead of refusing
     );
     assert.match(
       page,
-      /import \{[^}]*\bdirectSkipAlreadyRecorded\b[^}]*\} from "@\/features\/applications";/,
-      "page.tsx must import directSkipAlreadyRecorded rather than redefine it",
+      /import \{[^}]*\bdirectDecisionAlreadyRecorded\b[^}]*\} from "@\/features\/applications";/,
+      "page.tsx must import directDecisionAlreadyRecorded rather than redefine it",
     );
-    assert.doesNotMatch(page, /\nfunction directSkipAlreadyRecorded\(/, "a page-local redefinition could silently drift from the tested domain function");
+    assert.doesNotMatch(page, /\nfunction directDecisionAlreadyRecorded\(/, "a page-local redefinition could silently drift from the tested domain function");
     assert.doesNotMatch(page, /\nfunction alreadyDecidedDirectTask\(/, "a page-local redefinition could silently drift from the tested domain function");
   });
 
