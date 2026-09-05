@@ -691,3 +691,36 @@ test("nextStickyNeeding unions in a genuinely new id under the same reviewDiscov
     "the new id joins the memory, the old one is kept, and the flag carries through unchanged",
   );
 });
+
+/* A MEASURED REVIEW IS NOT RE-SYNTHESISED. Measured on franklin-electric.pinpointhq.com
+ * (2026-09-05, packet 404ed568): the server's review stood at ready_for_final_approval with an
+ * empty measured `question_metadata_blockers` - the run had committed the applicant's own answers
+ * on two react-selects and the consent box and read them back - while this presentation rebuilt
+ * "exact choices not read" from the rows' empty option lists and held "Waiting for a complete form
+ * read" over a form that had just been read. The pre-scan synthesis is for the unmeasured case. */
+test("a measured server review does not re-synthesise unread-option blockers from closed rows", () => {
+  const rows = [
+    question({ id: "onsite", question: "Are you able to commit to working on-site?", answer: "Yes", portal_input_type: "combobox", portal_selector: "#onsite", options: null }),
+    question({ id: "country", question: "Country", answer: "United States", portal_input_type: "combobox", portal_selector: "#country", options: null }),
+    question({ id: "consent", question: "Allow us to process your personal information.", answer: "Yes", portal_input_type: "checkbox", portal_selector: "#consent", options: null }),
+  ];
+  const unmeasured = questionReviewPresentation(rows, []);
+  assert.equal(unmeasured.metadataBlockers.length, 3, "the pre-scan still synthesises for an unmeasured form");
+  assert.deepEqual(unmeasured.editableQuestions, []);
+
+  const measured = questionReviewPresentation(rows, [], { measured: true });
+  assert.deepEqual(measured.metadataBlockers, []);
+  assert.deepEqual(measured.editableQuestions.map((row) => row.id), ["onsite", "country", "consent"]);
+  assert.equal(unansweredRequiredQuestionCount(rows, [], { measured: true }), 0);
+  assert.deepEqual(requiredQuestionReviewRoute(rows, [], { measured: true }), { kind: "continue" });
+
+  // The server's own measured blockers still stand, whatever the rows say.
+  const serverSaid = questionReviewPresentation(rows, [
+    { kind: "missing_exact_options", required: true, portal_input_type: "combobox", portal_selector: "#country", question: "Country" },
+  ], { measured: true });
+  assert.equal(serverSaid.metadataBlockers.length, 1);
+  assert.deepEqual(serverSaid.editableQuestions.map((row) => row.id), ["onsite", "consent"]);
+  // And structural gaps are not option lists: a row with no readable question text stays blocked.
+  const nameless = questionReviewPresentation([question({ id: "x", question: "", portal_input_type: "combobox", options: null })], [], { measured: true });
+  assert.equal(nameless.metadataBlockers[0]?.kind, "missing_question_text");
+});

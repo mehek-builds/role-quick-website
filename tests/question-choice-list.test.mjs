@@ -61,7 +61,7 @@ test("a whole-paragraph question stays fully readable instead of rendering as a 
 test("an unread employer choice list stays visible without becoming a free-text answer", () => {
   const screen = functionBody(PAGE, "function QuestionsScreen(");
   assert.match(PAGE, /metadataBlockers=\{activeQuestionMetadataBlockers\}/);
-  assert.match(screen, /questionReviewPresentation\(questions, metadataBlockers\)/);
+  assert.match(screen, /questionReviewPresentation\(questions, metadataBlockers, \{ measured: metadataMeasured \}\)/);
   assert.match(screen, /effectiveMetadataBlockers\.length > 0/);
   assert.match(screen, /Exact choices not read/);
   assert.match(screen, /The employer's current options were not readable, so Litos did not guess or fill this field\./);
@@ -75,7 +75,7 @@ test("an unread employer choice list stays visible without becoming a free-text 
 
 test("historical closed controls are partitioned before the textarea branch", () => {
   const screen = functionBody(PAGE, "function QuestionsScreen(");
-  assert.match(screen, /const presentation = questionReviewPresentation\(questions, metadataBlockers\)/);
+  assert.match(screen, /const presentation = questionReviewPresentation\(questions, metadataBlockers, \{ measured: metadataMeasured \}\)/);
   assert.match(screen, /const editableQuestions = presentation\.editableQuestions/);
   assert.match(screen, /focusedReview \? shownQuestions : editableQuestions/);
   assert.match(screen, /effectiveMetadataBlockers\.map/);

@@ -9,7 +9,7 @@ export function packetEntryScreen(review: ApplicationReview | undefined): Review
   const held = Boolean(review.submission_claimed_at || review.submission_claim_id || review.receipt || review.submitted_at);
   if (unresolved || held) return review.status === "ready_for_final_approval" ? "portal" : screenForStatus(review.status, "portal");
   if (["resume_ready", "questions_ready", "ready_to_submit", "ready_for_final_approval"].includes(review.status)
-    && unansweredRequiredQuestionCount(review.questions ?? [], review.question_metadata_blockers ?? []) > 0) {
+    && unansweredRequiredQuestionCount(review.questions ?? [], review.question_metadata_blockers ?? [], { measured: review.question_metadata_blockers !== undefined }) > 0) {
     return "questions";
   }
   return review.status === "ready_for_final_approval" ? "review" : screenForStatus(review.status, "review");
