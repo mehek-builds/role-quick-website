@@ -407,10 +407,25 @@ function syntheticMetadataBlocker(
  * the textarea branch. The same applies to generic browser furniture such as "Type your response":
  * it is evidence that the employer's label was not read, not a question the applicant can answer.
  */
+/* WHETHER A RUN HAS MEASURED THIS FORM. The backend writes `question_metadata_blockers` onto a
+ * review only when a run's discovery metadata measurement is complete, and since 2026-09-05 that
+ * list is the run's post-fill reading: a closed control whose option list discovery could not read
+ * is dropped from it once the run has committed the applicant's own answer there and read the
+ * control back (volley-backend, closedControlBlockersLandedByApplicant). Re-synthesising
+ * "exact choices not read" here from the row's empty option list then contradicts the run that
+ * read the form - measured on franklin-electric.pinpointhq.com (2026-09-05, packet 404ed568): the
+ * server review stood at ready_for_final_approval with no blockers while this screen still showed
+ * four "employer fields stayed untouched" and "Waiting for a complete form read" over a form the
+ * run had just filled and verified. When the server has measured, its list is the whole truth
+ * about unread option lists; the pre-scan synthesis below is for the unmeasured case only. */
+export type QuestionReviewPresentationOptions = { measured?: boolean };
+
 export function questionReviewPresentation(
   questions: readonly ApplicationQuestion[],
   serverBlockers: readonly ApplicationQuestionMetadataBlocker[] = [],
+  options: QuestionReviewPresentationOptions = {},
 ): QuestionReviewPresentation {
+  const measured = options.measured === true;
   const metadataBlockers: ApplicationQuestionMetadataBlocker[] = [];
   const blockerIdentities = new Set<string>();
   const addBlocker = (blocker: ApplicationQuestionMetadataBlocker) => {
@@ -459,13 +474,14 @@ export function questionReviewPresentation(
     const controlType = normalizedControlType(question.portal_input_type);
     const options = usableQuestionOptions(question.options);
     if (questionAcceptsMultipleOptions(question)) {
-      if (options.length === 0 || !questionOptionsAreComplete(question)) {
+      if (!measured && (options.length === 0 || !questionOptionsAreComplete(question))) {
         blockedQuestionIds.add(question.id);
         addBlocker(syntheticMetadataBlocker(question, "missing_exact_options"));
       }
       continue;
     }
-    if (CLOSED_QUESTION_CONTROL.test(controlType)
+    if (!measured
+      && CLOSED_QUESTION_CONTROL.test(controlType)
       && (options.length === 0 || !questionOptionsAreComplete(question))) {
       blockedQuestionIds.add(question.id);
       addBlocker(syntheticMetadataBlocker(question, "missing_exact_options"));
@@ -520,8 +536,9 @@ export function questionReviewPresentation(
 export function unansweredRequiredQuestionCount(
   questions: readonly ApplicationQuestion[],
   serverBlockers: readonly ApplicationQuestionMetadataBlocker[] = [],
+  options: QuestionReviewPresentationOptions = {},
 ): number {
-  const presentation = questionReviewPresentation(questions, serverBlockers);
+  const presentation = questionReviewPresentation(questions, serverBlockers, options);
   const blank = presentation.editableQuestions.filter(
     (question) => question.required && (!question.answer.trim() || answerNamesNoOfferedOption(question)),
   ).length;
@@ -532,8 +549,9 @@ export function unansweredRequiredQuestionCount(
 export function requiredQuestionReviewRoute(
   questions: readonly ApplicationQuestion[],
   serverBlockers: readonly ApplicationQuestionMetadataBlocker[] = [],
+  options: QuestionReviewPresentationOptions = {},
 ): RequiredQuestionReviewRoute {
-  const presentation = questionReviewPresentation(questions, serverBlockers);
+  const presentation = questionReviewPresentation(questions, serverBlockers, options);
   /* An off-list answer is routed to exactly like a blank one, and it has to be: the send gate
      counts it as missing, so a route that stepped over it would print "required answer missing"
      over a screen with no way to reach the question it means. */

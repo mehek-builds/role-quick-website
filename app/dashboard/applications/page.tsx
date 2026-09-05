@@ -2531,7 +2531,7 @@ function Applications() {
   const canonicalRequiredQuestionsRemaining = useMemo(() => {
     const review = canonicalReadyToSend?.spec._review;
     if (!review) return 0;
-    return unansweredRequiredQuestionCount(review.questions ?? [], review.question_metadata_blockers ?? []);
+    return unansweredRequiredQuestionCount(review.questions ?? [], review.question_metadata_blockers ?? [], { measured: review.question_metadata_blockers !== undefined });
   }, [canonicalReadyToSend]);
   /* Old deployments stored PACKET_AUDIT_STALE as an attention item. Opening one of those rows is
      itself enough to begin the safe compatibility path: clear any old browser proof, request a
@@ -3006,9 +3006,11 @@ function Applications() {
   const activePrescriptLookaheadIssue = measuredQuestionMetadataBlockers !== undefined
     ? null
     : prescriptLookaheadIssue;
+  const metadataMeasured = measuredQuestionMetadataBlockers !== undefined;
   const canRefreshRequiredMetadataFromReview = requiredQuestionReviewRoute(
     questions,
     activeQuestionMetadataBlockers,
+    { measured: metadataMeasured },
   ).kind === "metadata_refresh";
   const activePacketEvidence = selected && packetEvidence?.applicationId === selected.id ? packetEvidence : null;
   const exactPacketPdfReady = Boolean(activePacketEvidence?.pdfVerified);
@@ -4124,6 +4126,7 @@ function Applications() {
     const nextRoute = requiredQuestionReviewRoute(
       candidateQuestions,
       activeQuestionMetadataBlockers,
+      { measured: metadataMeasured },
     );
     const firstMissingId = nextRoute.kind === "answer" ? nextRoute.questionId : null;
     /* A metadata-blocked question cannot be decided by the applicant: the presentation refuses to
@@ -4136,6 +4139,7 @@ function Applications() {
     const decisionEligibleQuestions = questionReviewPresentation(
       candidateQuestions,
       activeQuestionMetadataBlockers,
+      { measured: metadataMeasured },
     ).editableQuestions;
     const optionalDecisionId = decisionEligibleQuestions.find(optionalQuestionNeedsDecision)?.id ?? null;
     const requiredMetadataMissing = nextRoute.kind === "metadata_refresh";
@@ -4199,6 +4203,7 @@ function Applications() {
     const nextQuestionRoute = requiredQuestionReviewRoute(
       questions,
       activeQuestionMetadataBlockers,
+      { measured: metadataMeasured },
     );
     if (nextQuestionRoute.kind !== "metadata_refresh" && routeMissingRequiredAnswers(questions)) return;
     if (qaMode) {
@@ -5198,6 +5203,7 @@ function Applications() {
         ? questionReviewPresentation(
           latestSubmission.review.questions ?? [],
           latestSubmission.review.question_metadata_blockers ?? [],
+          { measured: latestSubmission.review.question_metadata_blockers !== undefined },
         ).editableQuestions.find((question) => (
           question.id === direct.questionId
           && directQuestionPromptFingerprint({ question }) === direct.promptFingerprint
@@ -6242,6 +6248,7 @@ function Applications() {
           applicationCompany={selected.job_context.company ?? "Company"}
           questions={questions}
           metadataBlockers={activeQuestionMetadataBlockers}
+          metadataMeasured={metadataMeasured}
           actionableQuestionIds={actionableQuestionIds}
           onChange={setQuestions}
           onSaveDraft={selectedSubmission && reviewAnswerEditRoute(selectedSubmission.review) !== "frozen"
@@ -7598,11 +7605,12 @@ function EditableHighlight({ value, terms, onChange, className = "" }: { value: 
   );
 }
 
-function QuestionsScreen({ applicationRole, applicationCompany, questions, metadataBlockers = [], actionableQuestionIds = [], onChange, onBack, onSubmit, onSaveDraft, draftChanged = false, onRefreshMetadata, saving = false, refreshingMetadata = false, metadataRefreshDisabled = false, metadataRefreshNeedsPacketReview = false, metadataRefreshError = null, lookaheadError = null, blockContinuation = false, reviewDiscovered = false, refillsFormOnSave = false, focusQuestion = null, prescriptNote = "" }: {
+function QuestionsScreen({ applicationRole, applicationCompany, questions, metadataBlockers = [], metadataMeasured = false, actionableQuestionIds = [], onChange, onBack, onSubmit, onSaveDraft, draftChanged = false, onRefreshMetadata, saving = false, refreshingMetadata = false, metadataRefreshDisabled = false, metadataRefreshNeedsPacketReview = false, metadataRefreshError = null, lookaheadError = null, blockContinuation = false, reviewDiscovered = false, refillsFormOnSave = false, focusQuestion = null, prescriptNote = "" }: {
   applicationRole: string;
   applicationCompany: string;
   questions: ApplicationQuestion[];
   metadataBlockers?: ApplicationQuestionMetadataBlocker[];
+  metadataMeasured?: boolean;
   actionableQuestionIds?: string[];
   onChange: (questions: ApplicationQuestion[]) => void;
   onBack: () => void;
@@ -7631,7 +7639,7 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, metad
 }) {
   const [showAllAnswers, setShowAllAnswers] = useState(false);
   const screenHeadingRef = useRef<HTMLHeadingElement>(null);
-  const presentation = questionReviewPresentation(questions, metadataBlockers);
+  const presentation = questionReviewPresentation(questions, metadataBlockers, { measured: metadataMeasured });
   const editableQuestions = presentation.editableQuestions;
   const effectiveMetadataBlockers = presentation.metadataBlockers;
   const metadataBlocked = effectiveMetadataBlockers.length > 0;
@@ -8687,6 +8695,7 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
   const optionalAnswerDecisionMissing = questionReviewPresentation(
     review.questions,
     review.question_metadata_blockers ?? [],
+    { measured: review.question_metadata_blockers !== undefined },
   ).editableQuestions.some(optionalQuestionNeedsDecision);
   /* THE LAST GATE BEFORE THE EMPLOYER, and emptiness alone was not enough of one. A required closed
      control carrying a value none of its options offer is not empty, so it read as answered and
