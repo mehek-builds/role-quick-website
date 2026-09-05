@@ -231,13 +231,14 @@ export const REVIEW_ANSWERS_REOPEN_REFUSED =
 export const REVIEW_ANSWERS_FROZEN_NOTICE =
   "Litos has already started sending this application, so its answers are now the record of what the company was given and cannot be edited.";
 
-export function reviewAnswersRequest(questions: readonly ReviewAnswerSaveQuestion[]): {
+export function reviewAnswersRequest(questions: readonly ReviewAnswerSaveQuestion[], discardPreparedForm = false): {
   method: string;
   body: string;
 } {
   return {
     method: "PUT",
     body: JSON.stringify({
+      ...(discardPreparedForm ? { discard_prepared_form: true } : {}),
       // Only the fields the route accepts. Employer options and explanations remain display-only,
       // while answer_state records the applicant's reversible choice to skip an optional row.
       questions: questions.map((question) => ({
@@ -276,12 +277,13 @@ export function reviewAnswersNeedSave(
 export async function saveReviewAnswers<Review>(options: {
   applicationId: string;
   questions: readonly ReviewAnswerSaveQuestion[];
+  discardPreparedForm?: boolean;
   send: (path: string, init: { method: string; body: string }) => Promise<ReviewAnswerSaveResponse<Review>>;
 }): Promise<ReviewAnswerSaveResult<Review>> {
   try {
     const response = await options.send(
       reviewAnswersPath(options.applicationId),
-      reviewAnswersRequest(options.questions),
+      reviewAnswersRequest(options.questions, options.discardPreparedForm),
     );
     /* A 202 IS NOT A SAVE, AND IT ARRIVES LOOKING EXACTLY LIKE ONE.
      *

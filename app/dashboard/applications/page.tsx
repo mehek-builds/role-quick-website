@@ -4839,7 +4839,7 @@ function Applications() {
     promptFingerprint: string;
     taskFingerprint: string;
     task: DirectQuestionTask;
-  }): Promise<DirectAnswerSaveResult> {
+  }, options: { saveOnly?: boolean } = {}): Promise<DirectAnswerSaveResult> {
     if (!selected || !submission || submission.application_id !== selected.id) {
       return { saved: false, message: "This application is no longer open." };
     }
@@ -5002,7 +5002,7 @@ function Applications() {
       if (!direct) setError(REVIEW_ANSWERS_FROZEN_NOTICE);
       return { saved: false, message: REVIEW_ANSWERS_FROZEN_NOTICE };
     }
-    if (editRoute === "reopen") {
+    if (editRoute === "reopen" && !options.saveOnly) {
       /* The previous screen's banner goes before the request, not after it. prepareApplication
          clears the error and the send refusal and does not touch this one, so a stale "Saved."
          from an earlier press would otherwise sit above the refusal this one may return. */
@@ -5055,6 +5055,7 @@ function Applications() {
       const confirmedIds = confirmIntentsRef.current.get(applicationId) ?? null;
       const result = await saveReviewAnswers<SubmissionResponse["review"]>({
         applicationId,
+        discardPreparedForm: options.saveOnly && editRoute === "reopen",
         questions: answerDraftQuestions.map((question) => {
           /* "review" mints exactly as "confirm" does, because a direct-task save IS the per-question
              deliberate act the flag exists to capture: she was shown this one question on its own
@@ -5364,14 +5365,14 @@ function Applications() {
            a still-blank required answer keeps the answers screen instead of bouncing into the
            one-question flow, and a launch-ready packet (metadata_refresh route, acknowledged audit
            preserved above) lands on the attention screen where the panel provably leads. */
-        moveToScreen(direct
+        moveToScreen(options.saveOnly ? "questions" : direct
           ? screenForStatus(published.review.status, "portal")
           : reviewedAnswersSaveLanding(published.review, Boolean(nextEvidence?.acknowledged), {
             company: selected.job_context.company,
             role: selected.job_context.role,
             documents: published.documents,
           }).screen);
-        if (!direct) setNotice(result.notice);
+        if (!direct) setNotice(options.saveOnly ? "Answers saved. Review the packet before Litos reads the form again." : result.notice);
       };
       if (direct) runDashboardTransition(publishSavedAnswer);
       else publishSavedAnswer();
@@ -6240,6 +6241,10 @@ function Applications() {
           metadataBlockers={activeQuestionMetadataBlockers}
           actionableQuestionIds={actionableQuestionIds}
           onChange={setQuestions}
+          onSaveDraft={selectedSubmission && reviewAnswerEditRoute(selectedSubmission.review) !== "frozen"
+            ? () => { void saveReviewedAnswers(undefined, { saveOnly: true }); }
+            : undefined}
+          draftChanged={questionEditsUnsaved}
           onBack={() => {
             /* Back abandons the confirm presses that led here. Left standing, a CONFIRM pressed and
                then walked away from would ride the next save she makes from this packet, hours
@@ -7590,7 +7595,7 @@ function EditableHighlight({ value, terms, onChange, className = "" }: { value: 
   );
 }
 
-function QuestionsScreen({ applicationRole, applicationCompany, questions, metadataBlockers = [], actionableQuestionIds = [], onChange, onBack, onSubmit, onRefreshMetadata, saving = false, refreshingMetadata = false, metadataRefreshDisabled = false, metadataRefreshNeedsPacketReview = false, metadataRefreshError = null, lookaheadError = null, blockContinuation = false, reviewDiscovered = false, refillsFormOnSave = false, focusQuestion = null, prescriptNote = "" }: {
+function QuestionsScreen({ applicationRole, applicationCompany, questions, metadataBlockers = [], actionableQuestionIds = [], onChange, onBack, onSubmit, onSaveDraft, draftChanged = false, onRefreshMetadata, saving = false, refreshingMetadata = false, metadataRefreshDisabled = false, metadataRefreshNeedsPacketReview = false, metadataRefreshError = null, lookaheadError = null, blockContinuation = false, reviewDiscovered = false, refillsFormOnSave = false, focusQuestion = null, prescriptNote = "" }: {
   applicationRole: string;
   applicationCompany: string;
   questions: ApplicationQuestion[];
@@ -7599,6 +7604,8 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, metad
   onChange: (questions: ApplicationQuestion[]) => void;
   onBack: () => void;
   onSubmit: () => void;
+  onSaveDraft?: () => void;
+  draftChanged?: boolean;
   onRefreshMetadata: () => void;
   saving?: boolean;
   refreshingMetadata?: boolean;
@@ -7997,6 +8004,11 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, metad
           screen this is a request to the server, and a button that reads "Save" throughout a write
           it does not acknowledge is how the old handler got away with saving nothing. */}
       <TerminalActionBar className="justify-end">
+        {onSaveDraft && continuationBlocked && draftChanged && (
+          <Button variant="secondary" onClick={onSaveDraft} disabled={saving || refreshingMetadata || !draftChanged}>
+            {saving ? "Saving..." : "Save answers"}
+          </Button>
+        )}
         <Button variant={continuationBlocked ? "secondary" : "primary"} onClick={onSubmit} disabled={saving || refreshingMetadata || continuationBlocked}>
           {saving
             ? "Saving..."

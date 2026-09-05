@@ -475,6 +475,7 @@ await context.route("**/*", async (route) => {
       const submittedQuestions = request.postDataJSON()?.questions ?? [];
       const review = {
         ...currentReview,
+        ...(request.postDataJSON()?.discard_prepared_form ? { status: "questions_ready", preview_screenshot_url: undefined } : {}),
         questions: (currentReview?.questions ?? []).map((storedQuestion) => {
           const submitted = submittedQuestions.find((question) => question?.id === storedQuestion.id);
           return submitted ? { ...storedQuestion, ...submitted } : storedQuestion;
@@ -524,7 +525,7 @@ await context.route("**/*", async (route) => {
          gap would let the poll paper over the very defect under test. */
       const id = pathname.split("/")[2];
       const packet = [...(resumeHistoryOverride ?? RESUMES), delayedExactHistory?.packet].find((item) => item?.id === id) ?? NEEDS_YOU;
-      await json({ application_id: id, review: submissionReviewOverrides.get(id) ?? packet.spec._review, cover_letter: null });
+      await json({ ...(id === READY.id ? noSubmissionAuthority("ready") : {}), application_id: id, review: submissionReviewOverrides.get(id) ?? packet.spec._review, cover_letter: null });
       return;
     }
     await json(STUB[pathname] ?? {});
@@ -1103,4 +1104,31 @@ browserTest("the switcher still moves between the rows after each has been opene
   }
   assert.deepEqual(pageErrors, [], "switching between rows threw on the page");
   assert.deepEqual(blockedExternal, []);
+});
+
+
+browserTest("unread employer choices do not prevent saving an exact answer correction", async () => {
+  const pending = { ...READY, spec: { ...READY.spec, _review: { ...READY.spec._review,
+    questions: [{ id: "expiry", kind: "required", required: true,
+      question: "When does your current work authorization expire?", answer: "", portal_input_type: "text" }],
+    question_metadata_blockers: [{ kind: "missing_exact_options", required: true,
+      question: "University", portal_input_type: "select-one" }],
+  } } };
+  resumeHistoryOverride = [pending];
+  applicationMutationRequests = [];
+  try {
+    await page.goto(`${ORIGIN}/dashboard/applications?application=${READY.id}&intent=apply`);
+    const answer = page.locator("#question-expiry");
+    await answer.waitFor({ state: "visible", timeout: 15_000 });
+    await answer.fill("May 2031");
+    assert.equal(await page.getByRole("button", { name: "Waiting for a complete form read", exact: true }).isEnabled(), false);
+    const write = page.waitForRequest((request) => request.method() === "PUT" && request.url().endsWith(`/applications/${READY.id}/review/answers`));
+    await page.getByRole("button", { name: "Save answers", exact: true }).click();
+    assert.equal((await write).postDataJSON().discard_prepared_form, true);
+    await page.getByText("Answers saved. Review the packet before Litos reads the form again.", { exact: true }).waitFor();
+    await page.reload();
+    await answer.waitFor({ state: "visible", timeout: 15_000 });
+    assert.equal(await answer.inputValue(), "May 2031", "the answer survives a full reload");
+    assert.deepEqual(applicationMutationRequests, [{ method: "PUT", pathname: `/applications/${READY.id}/review/answers` }], "saving does not audit, prepare or send");
+  } finally { resumeHistoryOverride = null; }
 });
