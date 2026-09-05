@@ -2088,8 +2088,9 @@ test("a required document is still answerable while Litos is waiting to hear whe
       waitUntil: "domcontentloaded",
     });
 
-    /* The mode's own question is still the lead, and still first. Nothing here demotes it. */
-    await page.getByRole("button", { name: "It is not there", exact: true }).waitFor({ state: "visible" });
+    await page.getByText("Litos will not send this application again while its result is uncertain.", { exact: true }).waitFor({ state: "visible" });
+    assert.equal(await page.getByRole("button", { name: "It is not there", exact: true }).count(), 0);
+    assert.equal(await page.getByRole("button", { name: "I found it there", exact: true }).count(), 0);
 
     const transcriptTrigger = page.getByRole("button", {
       name: /Add the file this employer asks for: .*needs your transcript/i,
