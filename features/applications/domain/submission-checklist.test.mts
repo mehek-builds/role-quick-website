@@ -2086,7 +2086,7 @@ test("the answers screen's save routes through the landing with the reconciled a
   assert.ok(landing > reconcile, "the bulk save must land through the domain decision, fed the surviving acknowledgement");
   assert.match(
     page.slice(reconcile, landing),
-    /moveToScreen\(direct\s*\?\s*screenForStatus\(published\.review\.status, "portal"\)/,
+    /moveToScreen\(options.saveOnly \? "questions" : direct\s*\?\s*screenForStatus\(published\.review\.status, "portal"\)/,
     "the direct flow keeps its own status routing",
   );
 });

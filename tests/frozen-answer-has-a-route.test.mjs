@@ -58,13 +58,13 @@ test("a frozen-but-unclaimed packet's correction rides the restart, which retake
   const code = shippedCode(await readFile(PAGE, "utf8"));
   assert.match(
     code,
-    /if \(editRoute === "reopen"\)[\s\S]{0,600}?prepareApplication\(answerDraftQuestions, \{[^}]*restart: true/,
+    /if \(editRoute === "reopen" && !options.saveOnly\)[\s\S]{0,600}?prepareApplication\(answerDraftQuestions, \{[^}]*restart: true/,
     "the reopen posts submit-request with restart:true - the one route that discards the filled form,"
     + " refills it from these answers and takes a fresh preview, so the two cannot diverge",
   );
   assert.match(
     code,
-    /if \(editRoute === "reopen"\)[\s\S]{0,600}?prepareApplication\(answerDraftQuestions/,
+    /if \(editRoute === "reopen" && !options.saveOnly\)[\s\S]{0,600}?prepareApplication\(answerDraftQuestions/,
     "and it carries answerDraftQuestions - the stored list with HER correction merged in. Posting the"
     + " stored questions instead would refill the form with the same wrong answer, which is a restart"
     + " and not a correction",
@@ -172,7 +172,7 @@ test("the questions screen's own button says the save will refill the company's 
  * over that would be the same lie in a new place. */
 test("the reopen announces itself only after the packet actually moved", async () => {
   const code = shippedCode(await readFile(PAGE, "utf8"));
-  const branch = code.slice(code.indexOf('if (editRoute === "reopen")'));
+  const branch = code.slice(code.indexOf('if (editRoute === "reopen" && !options.saveOnly)'));
   const notice = branch.indexOf("setNotice(REVIEW_ANSWERS_REOPEN_NOTICE)");
   const request = branch.indexOf("await prepareApplication(answerDraftQuestions");
   assert.ok(request >= 0 && notice > request,
