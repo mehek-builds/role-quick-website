@@ -198,6 +198,47 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   assert.doesNotMatch(dashboard, /Continue to \$\{questions\.length\} question/);
 });
 
+/* THE BOUNCE THAT LOOKED LIKE A FIRST VISIT, FOREVER. Measured live 2026-09-04, account
+   mehekmandal05@gmail.com, Pony.ai packet fdcf4ccb-eca9-44dc-b0cb-d400805ebdeb: "Approve packet and
+   fill form" returned to the questions screen with the cover letter's Skip erased, and nothing on
+   screen said an approval had just failed - the per-question badge and this screen's own button
+   read exactly as they would on a screen she had never touched, so the bounce was indistinguishable
+   from an ordinary first pass and repeated forever. auditAnswerWrite (see
+   features/applications/domain/review-answer-save.ts) is the fix for that one erasure; this is the
+   fix for every OTHER status a future gap leaves unwritten - the applicant is told, rather than
+   silently returned. packetEvidenceRef is the signal: it holds evidence only once this exact packet
+   has passed its server audit, which is exactly the state the approve press is reached from, and it
+   is empty on an ordinary first pass through this screen, which needs no such sentence because it
+   is not bouncing off anything. The REF, not the render-scoped activePacketEvidence: auditPacketAgain
+   nulls the ref and then calls continueFromResume synchronously inside the same render's closure,
+   so the render's copy would still hold the pre-clear evidence and the "Audit again" press would
+   tell her to press an Approve button that is not on screen after the re-audit. */
+test("a bounce off an already-verified packet says so, and a first pass through the screen stays quiet", async () => {
+  const dashboard = await readFile(
+    new URL("../app/dashboard/applications/page.tsx", import.meta.url),
+    "utf8",
+  );
+  const start = dashboard.indexOf("function routeMissingRequiredAnswers(");
+  const end = dashboard.indexOf("async function continueFromResume(", start);
+  const route = dashboard.slice(start, end);
+  assert.ok(start >= 0 && end > start, "required-answer routing must remain discoverable");
+  assert.match(
+    route,
+    /const bouncedOffVerifiedPacket = packetEvidenceRef\.current !== null\s*&&\s*packetEvidenceRef\.current\?\.applicationId === selectedIdRef\.current;/,
+    "the bounce signal must be read from the evidence ref that auditPacketAgain clears, never from the render-scoped copy",
+  );
+  assert.match(
+    route,
+    /setPrescriptNote\(bouncedOffVerifiedPacket\s*\?\s*"Litos sent you back here[\s\S]{0,220}"\s*:\s*""\)/,
+    "a bounce with a verified packet already in hand must say so; a first visit must stay silent",
+  );
+  assert.doesNotMatch(
+    route,
+    /setPrescriptNote\(activePacketEvidence/,
+    "the render-scoped evidence copy is stale inside auditPacketAgain's synchronous re-entry",
+  );
+});
+
 test("a zero-question server packet retires stale local questions without overwriting later question edits", async () => {
   const dashboard = await readFile(
     new URL("../app/dashboard/applications/page.tsx", import.meta.url),

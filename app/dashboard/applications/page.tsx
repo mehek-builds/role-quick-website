@@ -4118,7 +4118,29 @@ function Applications() {
     const requiredMetadataMissing = nextRoute.kind === "metadata_refresh";
     if (!firstMissingId && !optionalDecisionId && !requiredMetadataMissing) return false;
     setError(null);
-    setPrescriptNote("");
+    /* A PRESS THAT ALREADY HELD A VERIFIED PACKET IS NOT A FIRST VISIT, AND MUST NOT LOOK LIKE ONE.
+       activePacketEvidence is set only once this exact packet has passed its server audit, which is
+       exactly the state "Approve packet and fill form" is pressed from. Measured live 2026-09-04,
+       Pony.ai packet fdcf4ccb-eca9-44dc-b0cb-d400805ebdeb: that press returned here with the cover
+       letter's Skip erased (see auditAnswerWrite for the write that now stops that specific
+       erasure) and nothing on screen said an approval had just failed - the per-question badge and
+       this screen's own button read exactly as they would on a screen she had never touched, so the
+       bounce was indistinguishable from an ordinary first pass and repeated forever. A genuine first
+       pass through this screen needs no such sentence; it is not bouncing off anything, and
+       auditPacketAgain's own re-audit clears this same evidence before it re-enters here for
+       exactly that reason.
+
+       READ THE REF, NOT THE RENDER'S COPY. auditPacketAgain nulls packetEvidenceRef and then calls
+       continueFromResume synchronously, inside the same render's closure, so activePacketEvidence
+       here would still be the pre-clear evidence: the "Audit again" press would print a sentence
+       telling her to press Approve again, and after the re-audit the button reads "Review and
+       fill", not "Approve packet and fill form" (review round 1, PR #550). The ref is what that
+       press actually cleared, so it is the honest signal. */
+    const bouncedOffVerifiedPacket = packetEvidenceRef.current !== null
+      && packetEvidenceRef.current?.applicationId === selectedIdRef.current;
+    setPrescriptNote(bouncedOffVerifiedPacket
+      ? "Litos sent you back here: approving this packet found a question that still needs you. Finish it below, then press Approve again."
+      : "");
     if (selectedSubmission?.review.status === "needs_attention") {
       if (firstMissingId) reviewPortalQuestions(firstMissingId ?? undefined, "answer");
       else reviewPortalQuestions(optionalDecisionId ?? undefined, "answer");

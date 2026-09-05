@@ -459,8 +459,55 @@ describe("persisting reviewed answers before an exact-packet audit", () => {
     assert.equal(server.state.review.questions[0].answer, "", "and nothing was stored");
   });
 
+  /* THE SECOND STOPPED STATUS. Measured live 2026-09-04, Pony.ai packet
+     fdcf4ccb-eca9-44dc-b0cb-d400805ebdeb: a Skip typed on a `failed` packet's optional cover-letter
+     question rode in local state only, `auditAnswerWrite("failed")` answered "none", the audit that
+     followed handed back the server's still-unanswered copy, and "Approve packet and fill form"
+     bounced back to the questions screen with the skip erased - forever. Same fix, same shape as
+     needs_attention above: the answer is stored, and the packet is still the failed run it was. */
+  test("a failed run stores its answers and stays a failed run", async () => {
+    const server = backend(stalledPacket({ status: "failed", attention_reason: undefined }));
+
+    const outcome = await persistBeforeAudit(server, "failed");
+
+    assert.equal(outcome.persisted, true, "a failed run's answers must survive the audit that follows it");
+    assert.equal(server.state.review.questions[0].answer, "No", "and the answer she typed is on the packet");
+    assert.equal(server.state.review.status, "failed", "the run that failed is still recorded as failed");
+  });
+
+  test("and a failed run's answers never travel the route that would relabel it", async () => {
+    const server = backend(stalledPacket({ status: "failed", attention_reason: undefined }));
+
+    await persistBeforeAudit(server, "failed");
+
+    assert.deepEqual(server.paths, [reviewAnswersPath(APPLICATION_ID)],
+      "a failed packet must not be persisted through the route that writes over its status");
+    assert.equal(server.paths.some((path) => path.endsWith("/review")), false);
+  });
+
+  /* THE SAME SEND-EVIDENCE GUARD, ASKED OF THE SAME ROW. reviewAnswerSaveDisposition refuses a
+     failed row exactly as it refuses a needs_attention one - by reading employerMayHoldApplication
+     off the row, never off the status word - so this fake's refusal (submission_attempted_at set)
+     must refuse a `failed` status precisely as it refuses `needs_attention` above. See
+     student-outreach-backend src/routes/reviewAnswerSave.test.ts, "a failed run carrying a recorded
+     submit attempt refuses the save with the honest code, and is left untouched". */
+  test("a failed run that may already be at the employer reports the refusal, not a save", async () => {
+    const server = backend(stalledPacket({
+      status: "failed",
+      attention_reason: undefined,
+      submission_attempted_at: "2026-08-13T11:00:00.000Z",
+    }));
+
+    const outcome = await persistBeforeAudit(server, "failed");
+
+    assert.equal(outcome.persisted, false, "a refused write is not a write, and the audit must not proceed over it");
+    assert.equal(outcome.message, REFUSAL, "the applicant gets the reason, not a generic apology");
+    assert.equal(server.state.review.questions[0].answer, "", "and nothing was stored");
+  });
+
   /* Mid-run, at the employer, or waiting on approval of a form already filled. No answer is written
-     ahead of the audit for any of them, which is the behaviour that predates #319. */
+     ahead of the audit for any of them, which is the behaviour that predates #319. `failed` is
+     deliberately absent from this list now - see the tests above. */
   for (const status of ["preparing", "filling", "submitting", "submitted", "ready_for_final_approval"]) {
     test(`a ${status} packet writes nothing before the audit`, async () => {
       const server = backend(stalledPacket({ status }));

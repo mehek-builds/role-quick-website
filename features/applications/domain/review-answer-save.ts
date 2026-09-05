@@ -112,6 +112,33 @@ export function reviewAnswersPath(applicationId: string): string {
  * KEPT OUT OF THE COMPONENT so the decision has a name and a test. The list below is the one #319
  * edited; putting needs_attention back into it is a one-word change that this module's tests, and
  * the source assertion in tests/application-submission-gate.test.mjs, both fail on.
+ *
+ * A SECOND STOPPED STATUS, FOUND THE SAME WAY #319 FOUND THE FIRST. Measured live 2026-09-04,
+ * account mehekmandal05@gmail.com: Pony.ai packet fdcf4ccb-eca9-44dc-b0cb-d400805ebdeb (workable)
+ * sat at `failed` after run f3aab6c5 failed, with its optional cover-letter question still
+ * `answer_state: "unanswered"`. Pressing Skip on that question and "Save and continue" kept the
+ * skip in local state only - correct, because the write for a stopped run belongs here, at the
+ * audit, not at that earlier press - but `failed` matched neither REVIEW_EDIT_STATUSES nor the
+ * needs_attention check below, so this function answered "none", continueFromResume wrote nothing,
+ * and the packet-audit that followed handed back the server's still-unanswered copy.
+ * continueFromVerifiedPacket adopted it (see the long comment on that adoption in
+ * app/dashboard/applications/page.tsx), "Approve packet and fill form" found the skip gone and
+ * bounced back to the questions screen, and the loop repeated forever - the same defect #319 fixed
+ * for needs_attention, on a status #319 never saw.
+ *
+ * `failed` IS THE SAME SHAPE AS needs_attention FOR THIS DECISION: a run that already stopped, with
+ * nothing further along the path to carry the answer, so a local-only save is not a save at all.
+ * The same argument against `review_edit` applies without adjustment - it would relabel a `failed`
+ * packet to questions_ready/ready_to_submit, erasing the fact its run failed as a side effect of
+ * saving an answer, for the same reason it must not erase needs_attention's attention_reason.
+ *
+ * THE BACKEND NEEDS NO MATCHING CHANGE. reviewAnswerSaveDisposition (student-outreach-backend
+ * src/lib/submissionSafety.ts) already reads the row rather than a status allowlist: `failed` falls
+ * through its explicit refusals straight to employerMayHoldApplication, so a failed row with no send
+ * evidence already saves through PUT /review/answers, and one carrying send evidence is already
+ * refused by the same check needs_attention answers to. See src/routes/reviewAnswerSave.test.ts,
+ * "a failed run carrying no send evidence still accepts the save" and the four
+ * "a failed run carrying ... refuses the save" cases beside it - both already live on origin/main.
  */
 export type AuditAnswerWrite = "review_edit" | "answers_only" | "none";
 
@@ -122,9 +149,10 @@ const REVIEW_EDIT_STATUSES = ["resume_ready", "questions_ready", "ready_to_submi
 
 export function auditAnswerWrite(status: string): AuditAnswerWrite {
   if (REVIEW_EDIT_STATUSES.includes(status)) return "review_edit";
-  /* The stalled packet. Its answers are persisted like any other, through the one route that leaves
-     the stall and the reason for it standing. */
-  if (status === "needs_attention") return "answers_only";
+  /* The stalled packet and the failed run beside it: both are stopped, and both persist their
+     answers through the one route that leaves the stop - and the reason for it - standing, rather
+     than relabelling the packet as though it were still waiting to be prepared. */
+  if (status === "needs_attention" || status === "failed") return "answers_only";
   /* Everything else is mid-run, at the employer, or awaiting an approval of a form already filled.
      Nothing is written ahead of the audit, exactly as before #319. */
   return "none";
