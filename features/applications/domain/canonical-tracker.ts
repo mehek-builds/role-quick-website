@@ -1,5 +1,6 @@
 import type { CanonicalApplication, GeneratedResume } from "../../../lib/api.ts";
 import { reviewCanBeSent } from "./application-filter.ts";
+import { awaitingUnverifiedSubmissionResolution } from "./submission-projection.ts";
 
 /** A canonical Tracker row may carry a linked generated packet. These markers are local
  * presentation state, never sent back to either API. The public id and lifecycle always belong to
@@ -119,6 +120,45 @@ export function sendableLinkedPacketFromCanonicalEnvelope(
   if (!canonicalApplicationFromPacket(packet)) return null;
   if (!reviewCanBeSent(packet?.spec._review) && !reviewReachesManagedScreens(packet?.spec._review)) return null;
   return linkedLegacyPacketFromCanonicalTrackerPacket(packet);
+}
+
+/**
+ * The linked packet behind a canonical row's OWN unresolved unverified-submission claim, or null.
+ *
+ * DELIBERATELY NOT `linkedLegacyPacketFromCanonicalTrackerPacket`'s gate, which refuses a packet the
+ * canonical row's own `legacy_generated_resume_id` does not name explicitly - the safeguard that
+ * keeps a weakly-matched duplicate (same portal URL, same company+role) from being offered Litos's
+ * own Send button. That guard has nothing to protect here: SubmissionScreen's unverified-submission
+ * mode never draws a Send, Try again, or Review-and-fill control - answering "found" or "not found"
+ * on UnverifiedSubmissionCard is the only thing it can do (`awaitingUnverifiedSubmissionResolution`
+ * in submission-projection.ts is what puts the screen in that mode) - so a row matched only by job
+ * id or portal URL can still be answered honestly instead of being hidden behind the tracker-only
+ * "Free application fill" card, which has no yes/no anywhere on it.
+ *
+ * Requires `canonical_legacy_packet_id` (canonicalTrackerPacket's own stamp for "a packet merged
+ * onto this row this page load"), because there is nothing to open otherwise - a row whose real
+ * packet never loaded this session is the separate, already-tracked hydration gap
+ * (canonicalEnvelopeLegacyHydrationId), not this one.
+ *
+ * Measured live 2026-09-05: Deepgram 4bfd5827 and Notion a4b7295c both carry an unresolved
+ * unverified_submission on their linked packet's review, both matched by job id/portal URL rather
+ * than an explicit `legacy_generated_resume_id` link, so `sendableLinkedPacketFromCanonicalEnvelope`
+ * returned null for both and CanonicalApplicationDetail - which never fetches `/submission` and so
+ * has no way to learn a press was ever attempted - was the only screen either row could reach.
+ */
+export function unverifiedSubmissionLinkedPacketFromCanonicalEnvelope(
+  packet: GeneratedResume | null | undefined,
+): GeneratedResume | null {
+  const candidate = packet as Partial<CanonicalTrackerPacket> | null | undefined;
+  const review = packet?.spec._review;
+  if (!canonicalApplicationFromPacket(packet) || !candidate?.canonical_legacy_packet_id) return null;
+  if (!review || !awaitingUnverifiedSubmissionResolution(review)) return null;
+
+  const legacyId = candidate.canonical_legacy_packet_id;
+  const restored = { ...packet } as Partial<CanonicalTrackerPacket>;
+  delete restored.canonical_application;
+  delete restored.canonical_legacy_packet_id;
+  return { ...(restored as GeneratedResume), id: legacyId };
 }
 
 /**

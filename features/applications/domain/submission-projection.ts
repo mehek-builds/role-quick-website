@@ -322,6 +322,63 @@ export function reviewClaimsSubmissionSent(
 }
 
 /**
+ * Whether a run may have reached the employer and stopped before it could say so, still waiting on
+ * the applicant's own look - the one question UnverifiedSubmissionCard exists to ask.
+ *
+ * Gated on the resolution being ABSENT, not just `unverified_submission` being present: once she has
+ * answered, the record stays on the review as history (the same reason `stall` is closed with
+ * `resolved_at` rather than deleted), and a resolved one must not reopen this card on every later
+ * visit.
+ *
+ * TRUE FOR A LEGACY RECORD EXACTLY LIKE A FRESH ONE, and that is load-bearing, not an oversight.
+ * `legacy_prose: true` marks a claim the backend reconstructed from an older run that only ever
+ * wrote a plain `attention_reason` sentence (litos-api PR #966/#968, 2026-09-05) - it carries no
+ * `network`/`page` evidence of its own, only the `at`, `cause` and `portal_url` every
+ * unverified_submission already has. Measured live on Haize Labs packet 093fddb4, 2026-09-05:
+ * `attention_categories` on that row was `["unknown"]`, not `["unverified_submission"]`, which is
+ * exactly the shape a category-gated version of this predicate would have refused. Nothing here
+ * reads `attention_categories` or `legacy_prose` for that reason - a legacy claim answers the same
+ * yes/no question a fresh one does, through the same card, not a second screen with its own rules.
+ */
+export function awaitingUnverifiedSubmissionResolution(
+  review: Pick<ApplicationReview, "status" | "unverified_submission">,
+): boolean {
+  return review.status === "needs_attention"
+    && Boolean(review.unverified_submission)
+    && !review.unverified_submission?.resolution;
+}
+
+/**
+ * The one honest sentence UnverifiedSubmissionCard shows for a LEGACY claim, or null for a fresh
+ * one (which keeps its own `attention_reason` verbatim - see the card's own comment for why).
+ *
+ * A legacy claim's `attention_reason` was written for a screen that could not yet act on it: it
+ * says things like "Check the portal or your email before trying again", copy aimed at a retry
+ * rather than at the yes/no this card actually offers. Restating it here says only what the record
+ * actually proves - a press was recorded, on the date the run made it, with no confirmation ever
+ * captured - and leaves the decision where it belongs, with her own look.
+ *
+ * The date is rendered in UTC deliberately, the same reason captchaConsentGrantedOn does: this is
+ * an audit statement about when Litos pressed Send, so it has to name the day the record names, not
+ * shift a day earlier for anyone viewing from west of UTC. An unparseable `at` (never observed, but
+ * `at` arrives as a plain string over the wire) drops the date clause rather than printing "Invalid
+ * Date" - the sentence is still true without it.
+ */
+export function legacyUnverifiedSubmissionNotice(
+  unverifiedSubmission: Pick<
+    NonNullable<ApplicationReview["unverified_submission"]>,
+    "at" | "legacy_prose"
+  > | undefined,
+): string | null {
+  if (!unverifiedSubmission?.legacy_prose) return null;
+  const when = new Date(unverifiedSubmission.at);
+  const dateClause = Number.isNaN(when.getTime())
+    ? ""
+    : ` on ${when.toLocaleDateString(undefined, { timeZone: "UTC" })}`;
+  return `Litos has a record of pressing Send on this application${dateClause}, from before this exact screen existed to ask you about it. No confirmation that the employer received it was ever captured, then or since. Only your own look can settle it: check the portal or the inbox you applied with, then tell Litos which you found.`;
+}
+
+/**
  * Keep every packet view on the same public truth as the server-owned projection.
  *
  * The backend already applies this fence. Repeating it at the display boundary protects cached

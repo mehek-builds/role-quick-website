@@ -1958,6 +1958,25 @@ test("an unresolved stall or an open unverified submission always keeps the scre
     unverified_submission: { at: "2026-08-28T09:00:00.000Z", cause: "run_timed_out" as const },
   };
   assert.equal(metadataRefreshOutranksStandingAttention(unverified, true), false);
+  /* A LEGACY claim keeps the screen exactly the same way a fresh one does.
+   *
+   * `legacy_prose: true` marks an unverified_submission litos-api backfilled from an older run's
+   * plain attention_reason sentence (PR #966/#968, 2026-09-05) onto rows whose attention_categories
+   * still reads as it always did - `["unknown"]`, never `["unverified_submission"]`. Measured live
+   * on Haize Labs packet 093fddb4. Included here because this function's own category branch just
+   * above ("only unknown-category attention is supersedable") would happily admit a legacy row on
+   * categories alone if its earlier `unverified_submission` guard were ever narrowed to check
+   * `legacy_prose` or the category instead of presence-without-resolution. */
+  const legacyUnverified = {
+    ...mytosReview(),
+    attention_categories: ["unknown" as const],
+    unverified_submission: {
+      at: "2026-08-11T10:09:56.797Z",
+      cause: "no_confirmation_state" as const,
+      legacy_prose: true as const,
+    },
+  };
+  assert.equal(metadataRefreshOutranksStandingAttention(legacyUnverified, true), false);
 });
 
 test("a document ask or a captcha sentence is never superseded", () => {
@@ -2175,6 +2194,31 @@ test("the screen keeps the document step alive in the unverified-submission mode
     page,
     /\{needsAttention && !awaitingUnverifiedSubmission && !employerActionRefusal && <Button onClick=\{onRetry\}/,
     "Try again must stay suppressed while Litos does not know whether the first application landed",
+  );
+});
+
+/* A LEGACY CLAIM GETS THE SAME CARD, AND THE SAME GATE, AS A FRESH ONE.
+ *
+ * Haize Labs packet 093fddb4-1c02-42b5-9bf7-bf4099fe4fba, measured 2026-09-05 09:55Z: `review.
+ * unverified_submission` carried `legacy_prose: true` (litos-api PR #966/#968's backfill for a
+ * needs_attention row that previously had only a plain attention_reason sentence), and
+ * `attention_categories` was `["unknown"]`, not `["unverified_submission"]`. A source pin, not a
+ * domain test, because the render condition itself lives in this component, not in a function this
+ * file can import - awaitingUnverifiedSubmissionResolution and legacyUnverifiedSubmissionNotice
+ * (both in submission-projection.ts, tested there against this exact measured shape) are what it
+ * must delegate to rather than reimplementing either inline. */
+test("the unverified-submission card's gate and copy both delegate to the tested domain functions", () => {
+  const page = readFileSync("app/dashboard/applications/page.tsx", "utf8");
+  assert.match(
+    page,
+    /const awaitingUnverifiedSubmission = awaitingUnverifiedSubmissionResolution\(review\);/,
+    "the render gate must be the same predicate the legacy_prose tests pin, not a reimplementation " +
+    "that could silently start reading attention_categories or legacy_prose",
+  );
+  assert.match(
+    page,
+    /legacyNotice=\{legacyUnverifiedSubmissionNotice\(review\.unverified_submission\)\}/,
+    "the card must be able to show honest legacy copy instead of always falling through to attention_reason",
   );
 });
 
