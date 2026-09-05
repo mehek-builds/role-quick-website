@@ -193,7 +193,7 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   assert.match(dashboard, /Litos will never pretend to be you/);
   assert.match(dashboard, /will not get past the puzzle that checks you are human, a code on your phone, a login/);
   assert.match(dashboard, /submission\.cover_letter && review\.cover_letter_supported !== false/);
-  assert.match(dashboard, /Check the filled-form proof shown in this dashboard/);
+  assert.match(dashboard, /Litos checks the original application attempt/);
   assert.doesNotMatch(dashboard, /Review the answers that need your voice/);
   assert.doesNotMatch(dashboard, /Continue to \$\{questions\.length\} question/);
 });
@@ -272,7 +272,7 @@ test("a zero-question server packet retires stale local questions without overwr
   const refreshEnd = dashboard.indexOf("/* The applicant's own escape hatch", refreshStart);
   assert.ok(refreshStart > 0 && refreshEnd > refreshStart);
   const refresh = dashboard.slice(refreshStart, refreshEnd);
-  assert.match(refresh, /setQuestions\(\(current\) => submissionPollMayReplaceQuestions\(screenRef\.current\)[\s\S]{0,100}\? result\.review\.questions[\s\S]{0,40}: current\);/);
+  assert.match(refresh, /setQuestions\(\(current\) => submissionPollMayReplaceQuestions\(screenRef\.current\)[\s\S]{0,100}\? result\.review\.questions[\s\S]{0,180}: current\);/);
   assert.doesNotMatch(refresh, /setQuestions\(\(current\) => mergeDiscoveredQuestions\(current, result\.review\.questions\)\)/);
 
   /* The ref is written before the state update, so a fetch already past its await observes the
@@ -618,7 +618,7 @@ test("the review screen gates and performs the submission", async () => {
   // A ready packet cannot jump directly from the Tracker row to Send it. It must render the exact
   // PDF, posting and requirement evidence first, and that per-packet proof becomes a term in the
   // final employer-send gate rather than a decorative warning.
-  assert.match(review, /status === "ready_for_final_approval" \? "review" : screenForStatus\(status, "review"\)/);
+  assert.match(review, /packetEntryScreen\(selectedReview\)/);
   assert.match(review, /const packetEvidenceReady = Boolean\([\s\S]{0,600}exactPacketPdfReady[\s\S]{0,600}auditedDisplayReady[\s\S]{0,600}activePacketEvidence\.specJson === JSON\.stringify\(spec\)[\s\S]{0,300}activePacketEvidence\.questionsSnapshot === currentQuestionsSnapshot/);
   assert.match(review, /reconcilePacketPdfVerification\(current, verified\)/);
   assert.match(evidenceSession, /verified\.auditDigest === expected\.packet_audit\.audit_digest/);

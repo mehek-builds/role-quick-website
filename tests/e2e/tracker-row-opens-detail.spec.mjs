@@ -733,6 +733,43 @@ for (const item of CASES) {
   });
 }
 
+browserTest("a prepared packet with required answers opens editable questions without an audit or employer action", async () => {
+  const pending = {
+    ...READY,
+    spec: { ...READY.spec, _review: { ...READY.spec._review, questions: [{
+      id: "expiry", kind: "required", required: true,
+      question: "When does your current work authorization expire?", answer: "",
+      portal_input_type: "text",
+    }] } },
+  };
+  resumeHistoryOverride = [pending];
+  applicationMutationRequests = [];
+  try {
+    await page.goto(`${ORIGIN}/dashboard/applications?application=${READY.id}&intent=apply`);
+    const answer = page.locator("#question-expiry");
+    await answer.waitFor({ state: "visible", timeout: 15_000 });
+    await answer.fill("May 2031");
+    assert.equal(await answer.inputValue(), "May 2031");
+    assert.equal(await page.getByRole("button", { name: "Send application", exact: true }).count(), 0);
+    assert.equal(applicationMutationRequests.length, 0, "opening and editing must not audit, refill or send");
+  } finally {
+    resumeHistoryOverride = null;
+  }
+});
+
+browserTest("automatic recovery shows status without asking for an employer-page attestation", async () => {
+  resumeHistoryOverride = [UNVERIFIED];
+  applicationMutationRequests = [];
+  try {
+    await page.goto(`${ORIGIN}/dashboard/applications?application=${UNVERIFIED.id}&intent=apply`);
+    await page.getByText("Litos will not send this application again while its result is uncertain.", { exact: true }).waitFor({ timeout: 15_000 });
+    assert.equal(await page.getByRole("button", { name: "I found it there", exact: true }).count(), 0);
+    assert.equal(await page.getByRole("button", { name: "It is not there", exact: true }).count(), 0);
+    assert.equal(await page.getByRole("button", { name: "Send application", exact: true }).count(), 0);
+    assert.equal(applicationMutationRequests.length, 0);
+  } finally { resumeHistoryOverride = null; }
+});
+
 browserTest("the focused workspace keeps its identity and primary action above the fold on desktop", async () => {
   await page.setViewportSize({ width: 1512, height: 684 });
   try {
@@ -765,19 +802,16 @@ browserTest("the focused workspace keeps its identity and primary action above t
   }
 });
 
-browserTest("mobile unverified-send choices appear only after the filled-form proof", async () => {
+browserTest("mobile unverified submissions need no external-page attestation", async () => {
   await page.setViewportSize({ width: 375, height: 812 });
   resumeHistoryOverride = [UNVERIFIED];
   try {
     await openTracker();
     await page.locator(`${LEDGER} button[aria-pressed]:visible`).filter({ hasText: UNVERIFIED.job_context.role }).click();
-    const proofHeading = page.getByText("What the form looked like after we filled it in", { exact: true });
-    const decision = page.getByRole("button", { name: "I found it there", exact: true });
-    await proofHeading.waitFor({ state: "visible", timeout: 10_000 });
-    await decision.waitFor({ state: "visible", timeout: 10_000 });
-    const proofBox = await proofHeading.boundingBox();
-    const decisionBox = await decision.boundingBox();
-    assert.ok(proofBox && decisionBox && proofBox.y < decisionBox.y, "the outcome controls appeared before the proof they ask the applicant to inspect");
+    const status = page.getByText("Litos will not send this application again while its result is uncertain.", { exact: true });
+    await status.waitFor({ state: "visible", timeout: 10_000 });
+    assert.equal(await page.getByRole("button", { name: "I found it there", exact: true }).count(), 0);
+    assert.equal(await page.getByRole("button", { name: "It is not there", exact: true }).count(), 0);
   } finally {
     resumeHistoryOverride = null;
     await page.setViewportSize({ width: 1280, height: 900 });

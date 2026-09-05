@@ -37,14 +37,14 @@ test("application task screens use one keyed peer-panel transition", () => {
   );
   const packetReset = selectPacket.indexOf("packetRevalidationRefusal.current = null;");
   const transitionStart = selectPacket.indexOf("runDashboardTransition(() => {", packetReset);
-  const routeUpdate = selectPacket.indexOf("moveToScreen(historicalPacketAuditStale", transitionStart);
+  const routeUpdate = selectPacket.indexOf("moveToScreen(packetEntryScreen", transitionStart);
   const transitionEnd = selectPacket.indexOf("\n    });", routeUpdate);
   assert.ok(packetReset > 0 && transitionStart > packetReset && routeUpdate > transitionStart && transitionEnd > routeUpdate);
   const atomicPacketUpdate = selectPacket.slice(transitionStart, transitionEnd);
   assert.match(atomicPacketUpdate, /setSelectedId\(packet\.id\);/);
   assert.match(atomicPacketUpdate, /setSpec\(stripMetadata\(packet\.spec\)\);/);
   assert.match(atomicPacketUpdate, /setSubmission\(rememberedSubmission \?\? \(status/);
-  assert.match(atomicPacketUpdate, /moveToScreen\(historicalPacketAuditStale \|\| status === "ready_for_final_approval" \? "review" : screenForStatus\(status, "review"\)\);/);
+  assert.match(atomicPacketUpdate, /moveToScreen\(packetEntryScreen\(selectedReview\)\);/);
   assert.match(
     applications,
     /resetApplicationWorkflow\(\{[\s\S]{0,120}afterReset: \(\) => setOpeningApplicationId\(requestedApplicationId\),[\s\S]{0,80}animate: false/,

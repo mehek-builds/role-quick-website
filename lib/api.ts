@@ -1201,12 +1201,21 @@ export type ApplicationReview = {
   };
   submission_claim_id?: string;
   submission_claimed_at?: string;
-  /** Set when a run may have reached the employer and stopped before it could confirm it, e.g. a
-   *  managed session that timed out or errored at the submit step. `resolution` is the applicant's
-   *  own answer after she has looked, in her own portal or mailbox - undefined means the question is
-   *  still open. Nothing here is ever decided by guessing on her behalf: `POST
-   *  /applications/:id/submission/unverified` is the only thing that can move it. */
+  /** Bounded recovery of the original held browser attempt, driven by the verification sweep. */
+  outcome_recovery?: {
+    attempt_id: string;
+    state: "pending" | "checking" | "unresolved";
+    checks: number;
+    next_check_at: string;
+  };
   unverified_submission?: {
+    employer_page_checks?: Array<{
+      checked_at: string;
+      url: string;
+      outcome: "receipt_visible" | "applied_marker" | "posting_closed" | "form_open_no_record" | "unreadable";
+      page_text_excerpt?: string;
+      screenshot_url?: string;
+    }>;
     at: string;
     cause: "run_timed_out" | "no_confirmation_state" | "provider_error";
     portal_url?: string;

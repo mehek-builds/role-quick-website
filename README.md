@@ -54,6 +54,18 @@ scripts/
   render-film.mjs     no-credits local fallback for the base film
 ```
 
+## Application correction and recovery
+
+Required answers open directly in the shared question editor, including prepared forms whose saved
+answer does not match the employer's options. Editing still invalidates the prior packet evidence;
+the corrected form must be reviewed and audited before sending. Initial question hydration preserves
+local typing while loading the server's confirmation requirements.
+
+An uncertain send displays automatic recovery status. The backend checks the original attempt;
+the dashboard does not ask applicants to open an employer page or declare whether it was sent.
+Deploy the backend automatic-outcome-recovery change before this UI. Missing employer evidence
+remains unverified and never enables a duplicate send.
+
 ## Develop
 
 ```bash
