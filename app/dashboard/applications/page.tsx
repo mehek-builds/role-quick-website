@@ -4349,10 +4349,13 @@ function Applications() {
          proof that was just accepted. The state write follows so the UI renders the same snapshot. */
       packetEvidenceRef.current = acknowledgedEvidence;
       setPacketEvidence(acknowledgedEvidence);
-      if (review?.status === "ready_for_final_approval") {
+      const refreshPreparedForm = options.source === "metadata_refresh"
+        && review && reviewAnswerEditRoute(review) === "reopen";
+      if (review?.status === "ready_for_final_approval" && !refreshPreparedForm) {
         moveToScreen("portal");
         return;
       }
+      if (refreshPreparedForm) options = { ...options, restart: true };
       await prepareApplication(questions, options);
     } catch (reason) {
       if (!(await recoverPacketAuditReview(applicationId, reason))) {
