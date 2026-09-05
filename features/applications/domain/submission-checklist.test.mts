@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  alreadyDecidedDirectTask,
   checklistRowControl,
   completedSubmissionGroups,
   completedSubmissionItems,
@@ -8,6 +9,7 @@ import {
   directInputTaskPlan,
   directQuestionPromptFingerprint,
   directQuestionTaskFingerprint,
+  directSkipAlreadyRecorded,
   displayQuestionLabel,
   documentAsksByKind,
   documentControls,
@@ -22,7 +24,7 @@ test("displayQuestionLabel restores sentence case and common application acronym
   assert.equal(displayQuestionLabel("provide your best result on act"), "Provide your best result on ACT");
   assert.equal(displayQuestionLabel("What is your GPA?"), "What is your GPA?");
 });
-import type { ApplicationReview } from "@/lib/api";
+import type { ApplicationQuestion, ApplicationReview } from "@/lib/api";
 
 const review: Pick<ApplicationReview, "attention_reason" | "questions" | "status" | "filled_fields"> = {
   status: "needs_attention",
@@ -2634,6 +2636,134 @@ test("answeredTasks keeps a question the fresh plan no longer lists navigable wi
   };
   const navigatorWithUntouchedQuestion = directAnswerNavigationTasks(untouchedReview, [], [answeredTask]);
   assert.equal(navigatorWithUntouchedQuestion.length, 1, "an untouched question is not drawn into the navigator");
+});
+
+/* THE LAST OPTIONAL QUESTION CAN BE SKIPPED, EVEN WHEN THE DECISION ALREADY LANDED BY SOME OTHER
+ * MEANS.
+ *
+ * MEASURED live 2026-09-04, Pony.ai packet fdcf4ccb-eca9-44dc-b0cb-d400805ebdeb (production
+ * dashboard, account mehekmandal05@gmail.com): a "1 of 1" direct-question queue asking "Summary",
+ * optional. Skip fired no request, the card did not advance, and no Review application control
+ * ever appeared - on repeated presses, by accessibility ref and by coordinates alike. The packet's
+ * other five optional questions (Headline, Cover letter, City, Country, Postcode) had already been
+ * decided through the review-answers screen; Summary's own skip had too, and this queue was
+ * re-presenting a decision the review already stored.
+ *
+ * The three tests below prove each layer separately. The first confirms the selection logic this
+ * defect blamed - directInputTaskPlan / directAnswerNavigationTasks, the layer that actually
+ * decides what the direct-question flow shows - already honours a recorded skip correctly (it
+ * does; see also "optional questions stay actionable until the applicant answers or skips them"
+ * above, which proves the same for humanInputItems). The second and third exercise the two new
+ * exports the save handler's dead end needed: directSkipAlreadyRecorded, which recognises a Skip
+ * press that has nothing left to write, and alreadyDecidedDirectTask, which lets the ordinary
+ * accepted-answer bookkeeping close the queue instead of refusing with no request and no way
+ * through. See app/dashboard/applications/page.tsx's saveReviewedAnswers, where both are wired in
+ * ahead of the "employer's question changed" guard. */
+test("an already-skipped optional question is not rebuilt into the direct queue", () => {
+  const SUMMARY = "Summary";
+  const undecided: Pick<ApplicationReview, "attention_reason" | "questions" | "questions_reviewed_at" | "status"> = {
+    status: "needs_attention",
+    attention_reason: "",
+    questions_reviewed_at: "2026-09-04T23:00:00.000Z",
+    questions: [{
+      id: "summary", question: SUMMARY, answer: "", kind: "essay", required: false,
+      answer_state: "unanswered",
+    }],
+  };
+  // Reproduces the measured queue: a sole undecided optional question is outstanding - "1 of 1".
+  const undecidedPlan = directInputTaskPlan(undecided);
+  assert.equal(undecidedPlan.questionTasks.length, 1, "setup: the sole optional question starts outstanding");
+  assert.equal(undecidedPlan.questionTasks[0]?.question.id, "summary");
+
+  // The same question, recorded skipped - what the review-answers screen's bulk save is supposed
+  // to leave standing.
+  const decided: typeof undecided = {
+    ...undecided,
+    questions: [{ ...undecided.questions[0], answer_state: "skipped" }],
+  };
+  const decidedPlan = directInputTaskPlan(decided);
+  assert.deepEqual(decidedPlan.questionTasks, [], "a recorded skip must not reopen the queue");
+  assert.equal(decidedPlan.current, null, "no dead end is left to route the applicant to");
+  assert.equal(decidedPlan.remaining, 0);
+
+  // The one-question-at-a-time navigator - what SubmissionScreen actually renders from, not
+  // directInputTaskPlan alone (see "the full navigator is empty..." above) - agrees: with nothing
+  // outstanding and nothing answered this pass, the queue is empty, not "1 of 1" again.
+  const navigatorTasks = directAnswerNavigationTasks(decided, decidedPlan.questionTasks, []);
+  assert.deepEqual(navigatorTasks, [], "the navigator must not re-present a decision already on record");
+});
+
+test("directSkipAlreadyRecorded names exactly a stored, unedited, matching skip", () => {
+  const SUMMARY = "Summary";
+  const skipped: ApplicationQuestion = {
+    id: "summary", question: SUMMARY, answer: "", kind: "essay", required: false,
+    answer_state: "skipped",
+  };
+  const request = {
+    questionId: "summary",
+    promptFingerprint: directQuestionPromptFingerprint({ question: skipped }),
+    answerState: "skipped" as const,
+  };
+  assert.equal(directSkipAlreadyRecorded(skipped, request), true, "a matching stored skip is already recorded");
+
+  assert.equal(
+    directSkipAlreadyRecorded(skipped, { ...request, answerState: undefined }),
+    false,
+    "scoped to skip alone - an answer must still match its own bytes to count as unchanged",
+  );
+  assert.equal(
+    directSkipAlreadyRecorded({ ...skipped, required: true }, request),
+    false,
+    "a required question is never skippable, recorded or not",
+  );
+  assert.equal(
+    directSkipAlreadyRecorded({ ...skipped, answer: "typed after all" }, request),
+    false,
+    "a non-blank answer is not a skip, whatever a stale flag says",
+  );
+  assert.equal(
+    directSkipAlreadyRecorded({ ...skipped, answer_state: "unanswered" }, request),
+    false,
+    "the measured shape itself: a card's own undecided reading must still refuse until the flag lands",
+  );
+  assert.equal(
+    directSkipAlreadyRecorded({ ...skipped, id: "other" }, request),
+    false,
+    "a different question id is never the decision this press is about",
+  );
+  assert.equal(
+    directSkipAlreadyRecorded({ ...skipped, question: "A genuinely reworded prompt" }, request),
+    false,
+    "a changed employer prompt is a real change and must still refuse",
+  );
+});
+
+test("a sole optional question's already-recorded skip closes the queue instead of reopening it", () => {
+  const SUMMARY = "Summary";
+  const skipped: ApplicationQuestion = {
+    id: "summary", question: SUMMARY, answer: "", kind: "essay", required: false,
+    answer_state: "skipped",
+  };
+  const review: Pick<ApplicationReview, "status" | "questions" | "question_metadata_blockers"> = {
+    status: "needs_attention",
+    questions: [skipped],
+  };
+  // directInputTaskPlan already proves nothing is outstanding for this review (previous test).
+  assert.deepEqual(directInputTaskPlan(review).questionTasks, []);
+
+  const task = alreadyDecidedDirectTask(skipped, "answer");
+  assert.equal(task.question.id, "summary");
+  assert.equal(task.intent, "answer");
+  assert.notEqual(task.context, true, "a synthesized already-decided task is not the parent-context shape");
+
+  // Fed through the exact union the save handler and the render both read: with nothing
+  // outstanding and this one synthesized task recorded as answered this pass, the navigator holds
+  // exactly the one question, resolved - "1 of 1", saved, Review application - not the endless
+  // "1 of 1, undecided" the measured defect left on screen.
+  const navigatorTasks = directAnswerNavigationTasks(review, [], [task]);
+  assert.equal(navigatorTasks.length, 1);
+  assert.equal(navigatorTasks[0]?.question.id, "summary");
+  assert.equal(navigatorTasks[0]?.question.answer_state, "skipped");
 });
 
 /* A CONFIRMED ESSAY IS NOT A DRAFT, and while this row could not tell the two apart it asked forever.

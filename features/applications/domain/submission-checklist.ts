@@ -1427,6 +1427,78 @@ export function directAnswerNavigationTasks(
 }
 
 /**
+ * A synthetic direct-flow task for a question whose decision the review already stores.
+ *
+ * Built ONLY as the last-resort fallback in saveReviewedAnswers (page.tsx) when the ordinary
+ * outstanding/answered lookup - directAnswerNavigationTasks, unioning the current plan's
+ * remaining work with what THIS pass has itself recorded answering - finds nothing for the
+ * prompt a Skip press names. That is not a hole in the union, it is the union working as
+ * designed: a decided question is not outstanding (humanInputItems drops a question once
+ * `answer_state` reads "skipped"), and a pass that never itself recorded finishing it has
+ * nothing to remember it by either. The card on screen can still be showing it as "N of N" from
+ * an earlier read of the same review, and pressing Skip on that card must not read as "the
+ * employer's question changed" - it did not; the decision already landed by some other means
+ * (the review-answers screen's own bulk save, most often). This task lets the save handler's
+ * ordinary accepted-answer bookkeeping - marking the prompt done, moving the cursor - run over
+ * the CURRENT stored question instead of refusing with no request and no way through.
+ */
+export function alreadyDecidedDirectTask(
+  question: ApplicationQuestion,
+  intent: DirectQuestionTaskIntent,
+): DirectQuestionTask {
+  return {
+    kind: "question",
+    id: `already-decided-${question.id}`,
+    item: {
+      id: `already-decided-${question.id}`,
+      label: displayQuestionLabel(question.question),
+      action: "Skip",
+      actionKind: "answer",
+      questionId: question.id,
+    },
+    question,
+    intent,
+  };
+}
+
+/**
+ * Whether a Skip press for this exact employer question asks for a decision the review already
+ * stores, so the press has nothing left to write.
+ *
+ * MEASURED live 2026-09-04, Pony.ai packet fdcf4ccb-eca9-44dc-b0cb-d400805ebdeb: "Summary", the
+ * sole remaining task in a "1 of 1" queue, already carried `answer_state: "skipped"` on the read
+ * saveReviewedAnswers took at the press. The card's own captured taskFingerprint - minted at
+ * mount from the OLDER, undecided reading - could never match this one again on any retry, and
+ * the guard built for a genuinely changed employer prompt refused every press with no request and
+ * no way through. A Skip is not a claim about the employer's exact wording the way a typed answer
+ * is; its whole claim is "no answer", which the stored row either already says or does not. This
+ * predicate is scoped to skip alone for exactly that reason - an unedited textual answer still has
+ * to match its own bytes to count as unchanged, and this does not relax that.
+ *
+ * Every clause matters: `!required` mirrors optionalQuestionNeedsDecision's own gate (a required
+ * question is never skippable, recorded or not); `!answer.trim()` keeps a stored answer that
+ * merely carries a stale `answer_state` flag from reading as decided; and the prompt-fingerprint
+ * check confirms this is still the SAME employer question, not a same-id row whose wording,
+ * control or options changed underneath the applicant - a genuine "the employer's question
+ * changed" still refuses.
+ */
+export function directSkipAlreadyRecorded(
+  question: ApplicationQuestion,
+  request: {
+    questionId: string;
+    promptFingerprint: string;
+    answerState?: ApplicationQuestion["answer_state"];
+  },
+): boolean {
+  return request.answerState === "skipped"
+    && question.id === request.questionId
+    && !question.required
+    && !question.answer.trim()
+    && question.answer_state === "skipped"
+    && directQuestionPromptFingerprint({ question }) === request.promptFingerprint;
+}
+
+/**
  * Whether the metadata-refresh launch may lead the attention screen while a non-question attention
  * task still stands.
  *
