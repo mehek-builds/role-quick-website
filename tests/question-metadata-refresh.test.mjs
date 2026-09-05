@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { reviewAnswerEditRoute } from "../features/applications/domain/review-answer-save.ts";
 
 const PAGE = readFileSync("app/dashboard/applications/page.tsx", "utf8");
 
@@ -126,4 +127,42 @@ test("audit again clears stale evidence before using the same guarded continuati
   assert.match(audit, /packetEvidenceRef\.current = null/);
   assert.match(audit, /setPacketEvidence\(null\)/);
   assert.match(audit, /await continueFromResume\(\)/);
+});
+
+
+test("an explicit prepared metadata reread reaches guarded preparation after acknowledgement", async () => {
+  const source = functionBody(PAGE, "async function continueFromVerifiedPacket(")
+    .replace("options: PrepareApplicationOptions", "options");
+  for (const scenario of [
+    { requested: true, held: false, expected: ["ack", "prepare"] },
+    { requested: false, held: false, expected: ["ack", "portal"] },
+    { requested: true, held: true, expected: ["ack", "portal"] },
+  ]) {
+    const calls = [];
+    const review = { status: "ready_for_final_approval", submission_claim_id: scenario.held ? "held" : undefined };
+    const evidence = { applicationId: "packet", response: {} };
+    const env = {
+      packetEvidenceReady: true, activePacketEvidence: evidence,
+      packetEvidenceBlocker: null, selected: { id: "packet" },
+      routeMissingRequiredAnswers: () => false,
+      questions: [{ id: "expiry", answer: "May 2031" }], review,
+      packetAuditInFlight: { current: null }, selectedIdRef: { current: "packet" },
+      packetEvidenceRef: { current: evidence },
+      setPacketAuditBusy: () => {}, setError: () => {}, setMetadataRefreshError: () => {},
+      acknowledgePacketAudit: async () => { calls.push("ack"); },
+      acknowledgePacketEvidence: () => evidence, setPacketEvidence: () => {},
+      reviewAnswerEditRoute,
+      moveToScreen: (screen) => calls.push(screen),
+      prepareApplication: async (questions, options) => {
+        assert.equal(options.restart, true);
+        assert.equal(options.source, "metadata_refresh");
+        assert.equal(questions[0].answer, "May 2031");
+        calls.push("prepare");
+      },
+      recoverPacketAuditReview: async () => false,
+    };
+    const run = new Function(...Object.keys(env), `return ${source}\n`)(...Object.values(env));
+    await run(scenario.requested ? { source: "metadata_refresh", allowServerAnswerRefresh: true } : {});
+    assert.deepEqual(calls, scenario.expected);
+  }
 });
