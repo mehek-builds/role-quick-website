@@ -1427,33 +1427,52 @@ export function directAnswerNavigationTasks(
 }
 
 /**
+ * The caption and control kind `alreadyDecidedDirectTask` prints for each intent it can
+ * synthesize. Kept as one small table rather than three inline literals so the mapping from
+ * `DirectQuestionTaskIntent` (the union it exhaustively covers) to a checklist caption cannot
+ * drift out of sync one arm at a time.
+ */
+const DIRECT_DECISION_ITEM_CONTROL: Record<DirectQuestionTaskIntent, { action: string; actionKind: DirectQuestionTaskIntent }> = {
+  answer: { action: "Answer", actionKind: "answer" },
+  review: { action: "Review", actionKind: "review" },
+  confirm: { action: "Confirm", actionKind: "confirm" },
+};
+
+/**
  * A synthetic direct-flow task for a question whose decision the review already stores.
  *
  * Built ONLY as the last-resort fallback in saveReviewedAnswers (page.tsx) when the ordinary
  * outstanding/answered lookup - directAnswerNavigationTasks, unioning the current plan's
  * remaining work with what THIS pass has itself recorded answering - finds nothing for the
- * prompt a Skip press names. That is not a hole in the union, it is the union working as
- * designed: a decided question is not outstanding (humanInputItems drops a question once
- * `answer_state` reads "skipped"), and a pass that never itself recorded finishing it has
+ * prompt a press names. That is not a hole in the union, it is the union working as designed: a
+ * decided question is not outstanding (humanInputItems drops a question once it is skipped,
+ * answered, reviewed, or confirmed), and a pass that never itself recorded finishing it has
  * nothing to remember it by either. The card on screen can still be showing it as "N of N" from
- * an earlier read of the same review, and pressing Skip on that card must not read as "the
+ * an earlier read of the same review, and pressing this card's own control must not read as "the
  * employer's question changed" - it did not; the decision already landed by some other means
  * (the review-answers screen's own bulk save, most often). This task lets the save handler's
  * ordinary accepted-answer bookkeeping - marking the prompt done, moving the cursor - run over
  * the CURRENT stored question instead of refusing with no request and no way through.
+ *
+ * `intent` is the ONLY thing that decides the synthesized item's `action`/`actionKind` - it used
+ * to hardcode `action: "Skip"` / `actionKind: "answer"` from when Skip was this fallback's only
+ * caller, which would have printed a lie the moment a Save or Confirm press could reach here too:
+ * a confirmed sensitive question, resolved locally, claiming to be an unanswered plain field. No
+ * reader consumes `.item` off this synthetic task today, but the shape must still say what it is.
  */
 export function alreadyDecidedDirectTask(
   question: ApplicationQuestion,
   intent: DirectQuestionTaskIntent,
 ): DirectQuestionTask {
+  const { action, actionKind } = DIRECT_DECISION_ITEM_CONTROL[intent];
   return {
     kind: "question",
     id: `already-decided-${question.id}`,
     item: {
       id: `already-decided-${question.id}`,
       label: displayQuestionLabel(question.question),
-      action: "Skip",
-      actionKind: "answer",
+      action,
+      actionKind,
       questionId: question.id,
     },
     question,
@@ -1496,6 +1515,104 @@ export function directSkipAlreadyRecorded(
     && !question.answer.trim()
     && question.answer_state === "skipped"
     && directQuestionPromptFingerprint({ question }) === request.promptFingerprint;
+}
+
+/**
+ * Whether ANY direct-flow press - Save or Approve (`intent` "answer"/"review"), Confirm, or Skip -
+ * asks for a decision the review already stores, so the press has nothing left to write.
+ *
+ * GENERALISES directSkipAlreadyRecorded, above, from Skip to the two presses the Pony.ai dead end
+ * never covered. The shape of the bug is identical for all three: the Stopped screen's per-question
+ * editor captures its taskFingerprint/promptFingerprint at MOUNT, some other save path (most often
+ * the review-answers screen's own bulk save) then records, for that same employer question, the
+ * exact decision the applicant is about to make on the stale card, and
+ * directAnswerNavigationTasks' outstanding/answered-this-pass union correctly has nothing left to
+ * show for it - a decided question is not outstanding, and a pass that never itself recorded
+ * finishing it has nothing to remember it by either. Review finding, PLAUSIBLE from the Skip
+ * precedent rather than separately measured live: a text question's card mounts unanswered, the
+ * same question is then answered through the bulk "Answer these" screen, and pressing "Save
+ * answer" on the stale card refuses with the pre-fix sentence and no request; same class for a
+ * Confirm press on a question already confirmed elsewhere.
+ *
+ * A Skip request (`answerState === "skipped"`) delegates to directSkipAlreadyRecorded UNCHANGED -
+ * every one of its clauses, including the ones that do not obviously generalise (required, blank),
+ * still has to hold exactly as measured. Every other request instead asks whether the CURRENT
+ * stored answer already reads, byte for byte after trimming, what this press is about to submit:
+ * that equality is the whole claim a Save or a Confirm press makes, so a match is nothing left to
+ * write and a mismatch is a real edit that must still reach the ordinary save path - "do not widen
+ * the guard exclusion beyond the exact already-decided case" holds here exactly as it does for
+ * Skip, which is why an empty typed answer (Save's own "nothing typed" refusal, unrelated to this
+ * predicate) never counts as decided either.
+ *
+ * Two intents ask one thing more than byte equality, because for them a matching BYTE is not the
+ * same as a matching DECISION:
+ * - `"review"` (an essay) is decided only once it has left essayDraftAwaitsApproval - the same
+ *   field the essay row itself reads. Skipping this would resurrect the exact loop
+ *   alreadyDecidedDirectTask's own history warns about (the DGA Organizing Resume Bank packet,
+ *   2026-08-26): a freshly-drafted, never-yet-approved essay is still fully outstanding and
+ *   findable by the ordinary lookup, unedited, so its stored text already equals what a first,
+ *   genuinely deliberate Approve press is about to submit - byte equality alone would call that
+ *   decided and skip the request that mints applicant_review, and the same draft would be asked
+ *   about forever.
+ * - `"confirm"` is decided only once applicantConfirmedAnswer already reads true - the same field
+ *   the backend's sensitive-question send gate reads. A sensitive question's suggested answer is
+ *   commonly pre-filled and unedited on its very first Confirm press too, which is exactly the DV
+ *   Trading loop this field was added to close; byte equality alone would call that first press
+ *   decided and never mint answer_confirmed_of at all.
+ *
+ * Plain `"answer"` questions ALSO ask for one thing more than byte equality, for the identical
+ * reason as `"confirm"` and `"review"` above: a resolver-default pre-fill is a third
+ * machine-authored-but-unclaimed shape byte equality cannot tell apart from an applicant's own
+ * settled decision. Measured live on the Akuna Python SWE packet, 2026-08-27 (see
+ * app/dashboard/applications/page.tsx's own comment on `directlyConfirmed`, added the same day):
+ * the sponsorship disclaimer arrived pre-filled "Yes" with no answer_source at all, and a LIVE,
+ * first-ever, unedited Save press on that card is byte-equal to the stored answer before the press
+ * ever reaches the network. Without this check, that byte equality alone would call the row decided
+ * and let saveReviewedAnswers resolve the request locally - the one branch that also carries the
+ * `confirmed: true` flag `directlyConfirmed` exists to set - so the flag this predicate was
+ * generalised to deliver never reaches the server, answer_source stays absent, and the backend's
+ * own questionsMatch (which reads exactly the two fields below) stays false forever. So `"answer"`
+ * is decided only once the stored question ALREADY carries applicant provenance: answer_source
+ * `"applicant_review"`, or answer_confirmed_of naming this exact question - the same two fields
+ * applicantConfirmedAnswer already reads for `"confirm"`, reused rather than re-derived, because a
+ * per-question Confirm mints answer_confirmed_of, which is provenance enough for ANY intent, not
+ * only the sensitive-question gate that field was named for. A resolver default with neither field
+ * set is exactly the Akuna shape and must still reach the network so a first Save can mint one.
+ *
+ * Every branch still requires the question's prompt fingerprint to match the card's mount-time
+ * reading: a changed employer prompt is a real change and must still refuse, for a Save or a
+ * Confirm exactly as it does for a Skip.
+ */
+function applicantProvenanceAlreadyRecorded(
+  question: Pick<ApplicationQuestion, "answer" | "question" | "answer_source" | "answer_confirmed_of">,
+): boolean {
+  return question.answer_source === "applicant_review" || applicantConfirmedAnswer(question);
+}
+
+export function directDecisionAlreadyRecorded(
+  question: ApplicationQuestion,
+  request: {
+    questionId: string;
+    promptFingerprint: string;
+    answer: string;
+    answerState?: ApplicationQuestion["answer_state"];
+    intent: DirectQuestionTaskIntent;
+  },
+): boolean {
+  if (request.answerState === "skipped") {
+    return directSkipAlreadyRecorded(question, request);
+  }
+  if (
+    question.id !== request.questionId
+    || directQuestionPromptFingerprint({ question }) !== request.promptFingerprint
+  ) {
+    return false;
+  }
+  const typed = request.answer.trim();
+  if (!typed || question.answer.trim() !== typed) return false;
+  if (request.intent === "confirm") return applicantConfirmedAnswer(question);
+  if (request.intent === "review") return !essayDraftAwaitsApproval(question);
+  return applicantProvenanceAlreadyRecorded(question);
 }
 
 /**

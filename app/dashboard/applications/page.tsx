@@ -65,7 +65,7 @@ import { applyBankVariant, type ApplyOutcome } from "@/features/applications";
 import { RequirementProvider, RequirementText, MatchLegend } from "@/components/app/RequirementText";
 import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX, exactPacketAuditClauses, exactPacketAuditRanges } from "@/features/applications";
 import { educationDrift, educationDriftMessage, type EducationProfile } from "@/features/applications";
-import { alreadyDecidedDirectTask, checklistRowControl, completedSubmissionGroups, directAnswerNavigationTasks, directInputTaskPlan, directQuestionPromptFingerprint, directQuestionTaskFingerprint, directSkipAlreadyRecorded, displayQuestionLabel, documentAsksByKind, documentControls, documentStepsInPlan, fillAgainFromReviewControl, humanInputItems, metadataRefreshOutranksStandingAttention, QUESTION_CHOICE_LIST_LIMIT, reviewedAnswersSaveLanding, unconfirmedDocumentItems, type ChecklistResumeRecord, type DirectQuestionTask, type DirectQuestionTaskIntent, type SubmissionChecklistAction, type SubmissionChecklistItem } from "@/features/applications";
+import { alreadyDecidedDirectTask, checklistRowControl, completedSubmissionGroups, directAnswerNavigationTasks, directDecisionAlreadyRecorded, directInputTaskPlan, directQuestionPromptFingerprint, directQuestionTaskFingerprint, displayQuestionLabel, documentAsksByKind, documentControls, documentStepsInPlan, fillAgainFromReviewControl, humanInputItems, metadataRefreshOutranksStandingAttention, QUESTION_CHOICE_LIST_LIMIT, reviewedAnswersSaveLanding, unconfirmedDocumentItems, type ChecklistResumeRecord, type DirectQuestionTask, type DirectQuestionTaskIntent, type SubmissionChecklistAction, type SubmissionChecklistItem } from "@/features/applications";
 import { prescriptBlocksProgress, prescriptEditableQuestions, prescriptMetadataBlockers, prescriptNeedsHer, prescriptSummary } from "@/features/applications";
 import { answerWithExactOptionToggled, exactQuestionOption, exactSelectedQuestionOptions, nextStickyNeeding, optionalQuestionNeedsDecision, questionAcceptsMultipleOptions, questionOptionsAreComplete, questionReadsAsAnswered, questionReviewPresentation, questionsNeedingApplicant, requiredQuestionReviewRoute, type StickyNeeding } from "@/features/applications";
 import type { JdMatchResponse, JobMatch } from "@/features/applications";
@@ -4872,17 +4872,26 @@ function Applications() {
       ? activeDirectProgress.answeredTasks
       : [];
     /* A DECIDED QUESTION IS DONE, NOT MISSING, and the ordinary outstanding/answered lookup below
-       has no way to say so - see directSkipAlreadyRecorded's own comment for the measured Pony.ai
-       "1 of 1" dead end this exists to close. Read directly off the current stored question, never
-       off the (possibly stale, "N of N") task the card was built from, because the whole point is
-       to notice when those two have already diverged. */
+       has no way to say so - see directDecisionAlreadyRecorded's own comment for the measured
+       Pony.ai "1 of 1" dead end this exists to close, and the Save/Confirm presses generalised
+       alongside it. Read directly off the current stored question, never off the (possibly stale,
+       "N of N") task the card was built from, because the whole point is to notice when those two
+       have already diverged. */
     const activeCurrentQuestion = direct
       ? activeSubmission.review.questions.find((question) => question.id === direct.questionId) ?? null
       : null;
-    const skipAlreadyRecorded = Boolean(
-      direct && activeCurrentQuestion && directSkipAlreadyRecorded(activeCurrentQuestion, direct),
+    const decisionAlreadyRecorded = Boolean(
+      direct && activeCurrentQuestion && directDecisionAlreadyRecorded(activeCurrentQuestion, direct),
     );
-    const safeDirectTask = direct
+    /* THE ORDINARY LOOKUP, kept apart from its alreadyDecidedDirectTask fallback below. The
+       distinction matters for exactly one thing: decisionBypassesSend, further down. A live match
+       here means the question is still findable by the outstanding/answered-this-pass union on its
+       own - nothing has diverged - so this press is the ordinary way that union settles it, and it
+       must still reach the network like any other. The fallback exists for the opposite case: the
+       union has NOTHING to show because some other save path already recorded the decision, which
+       is the only shape alreadyDecidedDirectTask's own doc comment (and directDecisionAlreadyRecorded's)
+       describes. */
+    const liveDirectTask = direct
       ? directAnswerNavigationTasks(
         activeSubmission.review,
         activeDirectTaskPlan?.questionTasks ?? [],
@@ -4890,21 +4899,37 @@ function Applications() {
       ).find((task) => (
         task.question.id === direct.questionId
         && directQuestionPromptFingerprint(task) === direct.promptFingerprint
-      ))
-        ?? (skipAlreadyRecorded && activeCurrentQuestion
-          ? alreadyDecidedDirectTask(activeCurrentQuestion, direct.intent)
-          : null)
+      )) ?? null
       : null;
+    const safeDirectTask = liveDirectTask
+      ?? (direct && decisionAlreadyRecorded && activeCurrentQuestion
+        ? alreadyDecidedDirectTask(activeCurrentQuestion, direct.intent)
+        : null);
     const safeDirectPromptFingerprint = safeDirectTask
       ? directQuestionPromptFingerprint(safeDirectTask)
       : null;
+    /* THE NETWORK SHORTCUT IS NARROWER THAN THE REFUSAL GUARD BELOW. decisionAlreadyRecorded alone
+       says a Skip/Save/Confirm press asks for nothing the stored question doesn't already hold -
+       true whether safeDirectTask came from the live lookup or its fallback - and that is exactly
+       right for the guard: a press this decided never refuses, however it was found. But standing
+       the REQUEST down entirely is a stronger claim, that no run needs to reach the server at all,
+       and that is only ever true in the fallback shape: the stale-card dead end where the ordinary
+       lookup found nothing because some OTHER save already wrote the decision through a working
+       path. When the ordinary lookup itself still finds this task live, the union has not settled
+       it yet - the safeDirectTask presence is the union working normally, not evidence of a
+       redundant press - so the request must still be made whether or not the stored answer happens
+       to already read the same bytes back (the Akuna sponsorship-disclaimer shape: a fresh,
+       resolver-default pre-fill can be byte-identical to what the applicant is about to press
+       Save/Confirm on, live, for the first time, and that first press is exactly the one that must
+       still mint the applicant's own claim). */
+    const decisionBypassesSend = decisionAlreadyRecorded && !liveDirectTask;
     const directIsSkip = direct?.answerState === "skipped";
-    /* A SKIP THIS DECISIVE NEVER REFUSES. Every other clause below exists to catch the employer's
-       OWN question changing under the applicant; skipAlreadyRecorded has already proven, off the
-       freshest read available, that this exact question, unchanged, already carries the exact
-       decision this press is making. Refusing it here would refuse a press that has nothing left
-       to get right. */
-    if (direct && !skipAlreadyRecorded && (
+    /* A PRESS THIS DECISIVE NEVER REFUSES. Every other clause below exists to catch the employer's
+       OWN question changing under the applicant; decisionAlreadyRecorded has already proven, off
+       the freshest read available, that this exact question, unchanged, already carries the exact
+       decision this press is making - whether that press is a Skip, a Save, an Approve, or a
+       Confirm. Refusing it here would refuse a press that has nothing left to get right. */
+    if (direct && !decisionAlreadyRecorded && (
       !safeDirectTask
       || safeDirectTask.intent !== direct.intent
       || safeDirectPromptFingerprint !== direct.promptFingerprint
@@ -5055,11 +5080,14 @@ function Applications() {
         /* `saved` is the 202's own word for "a run wrote to this packet and your answers did not
            land". api() resolves on any res.ok and hands back the body with the status gone, so this
            key is the only thing that survives the transport to distinguish it from a 200. */
-        send: (path, init) => skipAlreadyRecorded
+        send: (path, init) => decisionBypassesSend
           /* NOTHING TO WRITE. activeCurrentQuestion already reads exactly what this request would
-             ask the server to store (directSkipAlreadyRecorded proved it), so resolving locally
-             with the same shape api() returns on a real 200 IS "advance immediately without a
-             request" - not a fetch this repo merely declines to await. */
+             ask the server to store (directDecisionAlreadyRecorded proved it), the ordinary lookup
+             found nothing live to point at (liveDirectTask is null, so this is the
+             alreadyDecidedDirectTask fallback and no other), so resolving locally with the same
+             shape api() returns on a real 200 IS "advance immediately without a request" - not a
+             fetch this repo merely declines to await. A live safeDirectTask always falls through to
+             the real request below, whatever decisionAlreadyRecorded reads. */
           ? Promise.resolve({ application_id: applicationId, review: activeSubmission.review })
           : api<ReviewAnswerSaveResponse<SubmissionResponse["review"]>>(path, init),
       });

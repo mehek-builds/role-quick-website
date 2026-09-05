@@ -941,12 +941,17 @@ browserTest("a failed canonical Back load never leaves the prior application's c
     await page.goBack();
     await page.waitForURL((url) => url.searchParams.get("application") === CANONICAL_A.id, { timeout: 10_000, waitUntil: "domcontentloaded" });
     await page.getByRole("button", { name: "Open and fill application", exact: true }).waitFor({ state: "hidden", timeout: 10_000 });
-    assert.equal(await page.getByRole("button", { name: "Tailor resume", exact: true }).count(), 0, "the previous canonical application kept an active Tailor control after the route changed");
-    /* waitFor hidden, not an instant count. The defect this case exists to catch is B's identity
-     * SURVIVING under A's URL, and waitFor still fails on that. An instant count also fails when
-     * B's teardown lags one render behind the button above, which is a timing artifact of the
-     * runner, not the defect: this exact line was the suite's one CI-only failure on 2026-08-31,
-     * green twice locally on the same commit. */
+    /* waitFor hidden, not an instant count, and this is the second time that has had to be said
+     * here. The defect this case exists to catch is B's identity SURVIVING under A's URL, and
+     * waitFor still fails on that just as well as an instant count would. But an instant count
+     * ALSO fails when B's teardown lags one render behind the button above, which is a timing
+     * artifact of the runner, not the defect - this exact assertion was the suite's one CI-only
+     * failure on 2026-08-31 (green twice locally on that commit), was rewritten as an instant
+     * count anyway, and then reproduced the identical CI-only failure again on 2026-09-05 (green
+     * across 5 branch runs and 3 main runs locally on that head) - so both assertions on this line
+     * are now waitFor, matching the heading check below that already got this treatment the first
+     * time. */
+    await page.getByRole("button", { name: "Tailor resume", exact: true }).waitFor({ state: "hidden", timeout: 10_000 });
     await page.getByRole("heading", { name: CANONICAL_B.role, exact: true }).first().waitFor({ state: "hidden", timeout: 10_000 });
 
     failApplicationHistory = false;
