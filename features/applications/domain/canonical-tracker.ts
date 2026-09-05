@@ -118,7 +118,17 @@ export function sendableLinkedPacketFromCanonicalEnvelope(
   packet: GeneratedResume | null | undefined,
 ): GeneratedResume | null {
   if (!canonicalApplicationFromPacket(packet)) return null;
-  if (!reviewCanBeSent(packet?.spec._review) && !reviewReachesManagedScreens(packet?.spec._review)) return null;
+  const review = packet?.spec._review;
+  if (!reviewCanBeSent(review) && !reviewReachesManagedScreens(review)) return null;
+  /* An explicitly linked packet still reaches `needs_attention` through
+   * `reviewReachesManagedScreens` while it carries an unresolved unverified-submission claim (Litos
+   * has a record of pressing Send on it with no confirmation ever captured). That claim is not one
+   * of the "answer a blocking question" reasons `needs_attention` otherwise means, and offering the
+   * Ready chip and the managed-send call to action here directly contradicts the "Check and confirm"
+   * card `unverifiedSubmissionLinkedPacketFromCanonicalEnvelope` renders for the exact same packet -
+   * a legacy row can't be both "ready to send" and "wait, did this already send?" on the same card.
+   * The unresolved press takes precedence: no sendable packet until she resolves it. */
+  if (review && awaitingUnverifiedSubmissionResolution(review)) return null;
   return linkedLegacyPacketFromCanonicalTrackerPacket(packet);
 }
 

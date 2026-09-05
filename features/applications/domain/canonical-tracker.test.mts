@@ -320,6 +320,42 @@ test("an unresolved unverified submission is reachable even on a weakly matched 
   assert.equal(restored?.spec._review?.unverified_submission?.legacy_prose, true);
 });
 
+/* CONFIRMED AGAINST THE PR HEAD, 2026-09-05: an EXPLICITLY linked packet (legacy_generated_resume_id
+ * matches, not merely job id or portal URL) can reach `needs_attention` through
+ * `reviewReachesManagedScreens` while its review still carries an unresolved `unverified_submission`.
+ * Before this test's fix, `sendableLinkedPacketFromCanonicalEnvelope` had no idea that claim existed
+ * and happily returned the packet as sendable - the card then showed a "Ready" chip and "Litos can
+ * send this application for you... Continue to Litos's managed review and send screen" directly
+ * above the "Waiting on you to look... Litos has a record of pressing Send" alert, two contradictory
+ * claims about the same packet on the same card. The unresolved press must win: no sendable packet
+ * until she resolves it, even though the strong link would otherwise clear every other gate. */
+test("an explicitly linked packet with an unresolved unverified submission is never offered as sendable", () => {
+  const packet = legacy();
+  packet.spec._review = {
+    ...packet.spec._review!,
+    status: "needs_attention",
+    unverified_submission: {
+      at: "2026-08-11T10:09:56.797Z",
+      cause: "no_confirmation_state",
+      portal_url: "https://job-boards.greenhouse.io/haize/example",
+      submission_run_id: "65c86a0b-0000-4000-8000-000000000000",
+      legacy_prose: true,
+    },
+  };
+  const merged = mergeCanonicalApplicationHistory([packet], [canonical({
+    legacy_generated_resume_id: packet.id,
+  })]);
+  assert.equal(merged.length, 1, "the explicit link must still attach the one packet");
+
+  // The strong link would otherwise clear reviewReachesManagedScreens for needs_attention - the
+  // unresolved press must suppress it anyway.
+  assert.equal(sendableLinkedPacketFromCanonicalEnvelope(merged[0]), null);
+
+  // The "Check and confirm" route stays open - that is the one true thing the card can still say.
+  const restored = unverifiedSubmissionLinkedPacketFromCanonicalEnvelope(merged[0]);
+  assert.equal(restored?.id, packet.id);
+});
+
 test("a resolved claim is not offered again, even on the same weak match", () => {
   const packet = legacy();
   packet.spec._review = {
