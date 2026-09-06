@@ -32,6 +32,34 @@ test("slow acknowledgments serialize down, coalesced moves and up without replay
   q.close();
 });
 
+test("moves arriving between acknowledgments remain ordered before the release", async () => {
+  const calls: VerificationCommand[] = [];
+  const acknowledgments: Array<() => void> = [];
+  const q = createVerificationInputQueue({ now: () => 1000, onError: assert.fail,
+    send: command => { calls.push(command); return new Promise(resolve => {
+      acknowledgments.push(() => resolve({ ok: true, nextSequence: command.sequence + 1 }));
+    }); } });
+  const acknowledge = async () => {
+    assert.equal(acknowledgments.length, 1, "only one command may await acknowledgment");
+    acknowledgments.shift()!();
+    await tick();
+  };
+  q.observe(frame);
+  q.push({ type: "pointer", phase: "down", x: 1, y: 2 }, frame);
+  for (let x = 2; x <= 9; x++) {
+    q.push({ type: "pointer", phase: "move", x, y: 2 }, frame);
+    await acknowledge();
+  }
+  q.push({ type: "pointer", phase: "up", x: 10, y: 2 }, frame);
+  await acknowledge();
+  await acknowledge();
+  assert.deepEqual(calls.map(c => c.type === "pointer" ? [c.phase, c.sequence, c.x] : c.type), [
+    ["down", 1, 1], ["move", 2, 2], ["move", 3, 3], ["move", 4, 4], ["move", 5, 5],
+    ["move", 6, 6], ["move", 7, 7], ["move", 8, 8], ["move", 9, 9], ["up", 10, 10],
+  ]);
+  q.close();
+});
+
 test("a lost acknowledgment drops pending gestures and requires settled refresh", async () => {
   const calls: VerificationCommand[] = [], errors: string[] = [];
   const q = createVerificationInputQueue({ now: () => 1000, onError: message => errors.push(message),
