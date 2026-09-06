@@ -154,9 +154,19 @@ export function exactQuestionOption(
  * off-list.
  */
 export function answerNamesNoOfferedOption(
-  question: Pick<ApplicationQuestion, "answer" | "options" | "options_complete" | "optionsComplete" | "portal_input_type">,
+  question: Pick<ApplicationQuestion, "answer" | "options" | "options_complete" | "optionsComplete" | "portal_input_type" | "answer_source">,
 ): boolean {
   if (!question.answer.trim()) return false;
+  /* A LICENSED CONSENT TICK IS NOT AN OFF-LIST ANSWER. The server writes answer_source
+     'consent_permission' when it accepts an employer's routine privacy consent under her standing
+     permission; the control is a checkbox whose ONE option is the consent sentence itself, and the
+     acceptance is the tick, which the send's guarded consent-tick action performs. Measured live on
+     ChapsVision US (Teamtailor, application dca5bb9c, 2026-09-06): the backend had the packet at
+     ready_for_final_approval, and this screen showed the consent row as REQUIRED and kept the
+     button disabled because "Yes" is not the sentence. Only that provenance is exempt - it is the
+     server's own record of an acceptance it licensed, never something the applicant typed - so an
+     applicant's off-list value still reads as unanswered exactly as before. */
+  if (question.answer_source === "consent_permission") return false;
   if (!questionOptionsAreComplete(question)) return false;
   const options = usableQuestionOptions(question.options);
   if (options.length === 0) return false;
@@ -192,7 +202,7 @@ export function answerNamesNoOfferedOption(
  * real application and this predicate is not the place to invent doubt.
  */
 export function questionReadsAsAnswered(
-  question: Pick<ApplicationQuestion, "answer" | "options" | "options_complete" | "optionsComplete" | "portal_input_type">,
+  question: Pick<ApplicationQuestion, "answer" | "options" | "options_complete" | "optionsComplete" | "portal_input_type" | "answer_source">,
 ): boolean {
   return Boolean(question.answer?.trim()) && !answerNamesNoOfferedOption(question);
 }
