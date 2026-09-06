@@ -223,6 +223,9 @@ jobs:
       - name: Approve resolves spec
         run: npm run test:approve
 
+      - name: Dashboard human verification stays in the original application
+        run: npm run test:human-verification
+
       # Same gap: every case walks a packet to its audited control and through an accepted or
       # refused send, so all six went red the moment a response had to carry submission authority
       # rather than just claim a status, and CI saw none of it.
