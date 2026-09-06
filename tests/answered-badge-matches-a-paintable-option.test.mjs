@@ -56,6 +56,20 @@ describe("questionReadsAsAnswered, on the values measured live", () => {
     assert.equal(questionReadsAsAnswered(radio("  gpa 3.5-3.8 ", ["GPA 3.9+", "GPA 3.5-3.8", "Other"])), true);
   });
 
+  test("a consent the server accepted under her permission reads as answered on its one-sentence checkbox", () => {
+    /* Measured on ChapsVision US (Teamtailor), 2026-09-06: the checkbox's one option is the French
+       consent sentence, the server's answer is "Yes" with answer_source consent_permission, and the
+       screen kept the row REQUIRED and the button disabled while the backend was ready to send. */
+    const sentence = "Required. En envoyant ma candidature, je déclare avoir lu la Privacy Policy et je consens à ce que ChapsVision stocke mes données personnelles pour pouvoir traiter ma candidature.";
+    const consent = { answer: "Yes", options: [sentence], options_complete: true, portal_input_type: "checkbox" };
+    assert.equal(questionReadsAsAnswered({ ...consent, answer_source: "consent_permission" }), true);
+    // The same value typed by the applicant is still off-list: only the server's licence is exempt.
+    assert.equal(questionReadsAsAnswered({ ...consent, answer_source: "applicant_review" }), false);
+    assert.equal(questionReadsAsAnswered(consent), false);
+    // And a blank licensed row is still blank.
+    assert.equal(questionReadsAsAnswered({ ...consent, answer: "", answer_source: "consent_permission" }), false);
+  });
+
   test("a blank answer never reads as answered", () => {
     assert.equal(questionReadsAsAnswered(radio("", ["Woman", "Man"])), false);
     assert.equal(questionReadsAsAnswered(radio("   ", ["Woman", "Man"])), false);
