@@ -3,6 +3,7 @@
 import { packetEntryScreen } from "@/features/applications";
 
 import { Button, ButtonLink } from "@/components/app/Button";
+import { HumanVerificationPanel } from "@/components/app/HumanVerificationPanel";
 import { Suspense, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type SetStateAction } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -10073,6 +10074,9 @@ function PortalProgress({ status, startedAt, sending = false, submission }: { st
         {milestone && <p className="mt-2 text-xs text-muted">{milestone}</p>}
         <p className="mt-5 text-xs leading-5 text-muted">This view refreshes as Litos moves through the company form.</p>
       </Card>
+      {(sending || status === "submitting") && submission?.application_id && (
+        <HumanVerificationPanel key={submission.application_id} packetId={submission.application_id} />
+      )}
       <Card className="overflow-hidden">
         <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-4">
           <p className="text-sm font-medium text-ink">Company form</p>

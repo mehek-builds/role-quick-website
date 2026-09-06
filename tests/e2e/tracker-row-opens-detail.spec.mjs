@@ -449,6 +449,14 @@ const blockedExternal = [];
 /** Every backend path the page asked for, so a case can assert what was NOT asked. */
 let backendPaths = [];
 
+// PUT review/answers persists the packet in production. All fixture read surfaces
+// must return that same saved review, not an empty history row racing a saved poll.
+function historyWithSavedReviews(packets) {
+  return packets.map(packet => submissionReviewOverrides.has(packet.id)
+    ? { ...packet, spec: { ...packet.spec, _review: submissionReviewOverrides.get(packet.id) } }
+    : packet);
+}
+
 await context.route("**/*", async (route) => {
   const request = route.request();
   const url = request.url();
@@ -504,7 +512,7 @@ await context.route("**/*", async (route) => {
         await json({ resumes: delayedExactHistory.reads > delayedExactHistory.emptyReads ? [delayedExactHistory.packet] : [] });
         return;
       }
-      await json({ resumes: resumeHistoryOverride ?? RESUMES });
+      await json({ resumes: historyWithSavedReviews(resumeHistoryOverride ?? RESUMES) });
       return;
     }
     if (pathname === "/applications") {
@@ -516,7 +524,7 @@ await context.route("**/*", async (route) => {
       return;
     }
     if (pathname === "/dashboard/bootstrap") {
-      await json({ ...BOOTSTRAP, resume_history: { resumes: RESUMES } });
+      await json({ ...BOOTSTRAP, resume_history: { resumes: historyWithSavedReviews(RESUMES) } });
       return;
     }
     if (pathname.endsWith("/submission")) {
@@ -1126,8 +1134,10 @@ browserTest("unread employer choices do not prevent saving an exact answer corre
     await page.getByRole("button", { name: "Save answers", exact: true }).click();
     assert.equal((await write).postDataJSON().discard_prepared_form, true);
     await page.getByText("Answers saved. Review the packet before Litos reads the form again.", { exact: true }).waitFor();
+    assert.equal(submissionReviewOverrides.get(READY.id).questions.find(q => q.id === "expiry").answer, "May 2031");
     await page.reload();
     await answer.waitFor({ state: "visible", timeout: 15_000 });
+    await page.waitForFunction(() => document.getElementById("question-expiry")?.value === "May 2031", undefined, { timeout: 15_000 });
     assert.equal(await answer.inputValue(), "May 2031", "the answer survives a full reload");
     assert.deepEqual(applicationMutationRequests, [{ method: "PUT", pathname: `/applications/${READY.id}/review/answers` }], "saving does not audit, prepare or send");
   } finally { resumeHistoryOverride = null; }

@@ -10,6 +10,7 @@ import { clearExtensionSession } from "./extension-bridge";
 import { MAX_COUNTRY_ELIGIBILITY_RECORDS } from "./work-eligibility-limit";
 import { sendTikTokEvent } from "./tiktok-client";
 import { PACKET_AUDIT_VERSION } from "./packet-audit-version";
+import type { VerificationCommand, VerificationView } from "./human-verification";
 import {
   fetchResumeUpload,
   RESUME_UPLOAD_CLIENT_TIMEOUT_MS,
@@ -17,6 +18,18 @@ import {
 } from "./resume-upload-request";
 
 export { PACKET_AUDIT_VERSION } from "./packet-audit-version";
+
+export function getHumanVerificationView(packetId: string): Promise<VerificationView> {
+  return requestApi(`/applications/${encodeURIComponent(packetId)}/human-verification`, {
+    method: "GET", cache: "no-store", signal: AbortSignal.timeout(7000),
+  }, getToken());
+}
+
+export function sendHumanVerificationInput(packetId: string, command: VerificationCommand): Promise<{ ok: true; nextSequence: number }> {
+  return requestApi(`/applications/${encodeURIComponent(packetId)}/human-verification/input`, {
+    method: "POST", body: JSON.stringify(command), cache: "no-store", signal: AbortSignal.timeout(12000),
+  }, getToken());
+}
 
 /* Defined in session-identity, not here, so this module and the instrumentation
  * entry point read the same constant instead of two copies of the string. */
