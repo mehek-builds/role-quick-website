@@ -247,6 +247,29 @@ const SENT = {
   },
   cover_letter: null,
 };
+const CANONICAL_APPROVABLE = {
+  id: SENT_CANONICAL_ID,
+  legacy_generated_resume_id: APPROVABLE.id,
+  job_id: APPROVABLE.job_context.job_id ?? null,
+  company: APPROVABLE.job_context.company,
+  role: APPROVABLE.job_context.role,
+  portal_url: APPROVABLE.spec._review.portal_url,
+  tracker_state: "saved",
+  review_state: "ready_for_final_approval",
+  submission_state: "ready_for_final_approval",
+  created_at: APPROVABLE.created_at,
+  updated_at: APPROVABLE.created_at,
+};
+
+const MISMATCHED_SENT = {
+  ...SENT,
+  submission_authority: {
+    ...SENT_AUTHORITY,
+    packet_id: RESUMES[0].id,
+    projection: { ...SENT_PROJECTION, packet_id: RESUMES[0].id },
+  },
+  submission_projection: { ...SENT_PROJECTION, packet_id: RESUMES[0].id },
+};
 
 /**
  * @param hidden           run the case with the tab backgrounded
@@ -259,13 +282,22 @@ const SENT = {
  */
 async function openApproval(hidden, {
   holdApproveMs = 0,
+  holdPollAfterApproveMs = 0,
   pollAnswer = AWAITING,
   approveRefusal = null,
+  approveAnswer = SENT,
   staleStoredStatus = null,
+  canonicalEnvelope = false,
 } = {}) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const approveCalls = [];
+  const approveReturns = [];
   const submitRequestCalls = [];
+  const latePollReturns = [];
+  let releasePollAfterApprove;
+  const approveFinished = new Promise((resolve) => {
+    releasePollAfterApprove = resolve;
+  });
   const storedResumes = staleStoredStatus
     ? RESUMES.map((resume) => resume.id === APPROVABLE.id
       ? {
@@ -297,10 +329,19 @@ async function openApproval(hidden, {
           });
           return;
         }
-        await json(SENT);
+        await json(approveAnswer);
+        approveReturns.push(Date.now());
+        releasePollAfterApprove();
         return;
       }
       if (p.endsWith("/submission")) {
+        if (approveCalls.length > 0 && holdPollAfterApproveMs > 0) {
+          await approveFinished;
+          await delay(holdPollAfterApproveMs);
+          await json(pollAnswer);
+          latePollReturns.push(Date.now());
+          return;
+        }
         await json(pollAnswer);
         return;
       }
@@ -322,6 +363,10 @@ async function openApproval(hidden, {
       }
       if (p.endsWith("/packet-audit")) {
         await json(PACKET_AUDIT_RESPONSE);
+        return;
+      }
+      if (canonicalEnvelope && p === "/applications") {
+        await json({ applications: [CANONICAL_APPROVABLE] });
         return;
       }
       if (staleStoredStatus && p === "/dashboard/bootstrap") {
@@ -369,7 +414,10 @@ async function openApproval(hidden, {
     await checkPacket.click();
   }
   const reviewAndSend = page.getByRole("button", { name: "Review and send", exact: true });
-  await reviewAndSend.waitFor({ state: "visible", timeout: 25_000 });
+  await reviewAndSend.waitFor({ state: "visible", timeout: 25_000 }).catch(async (reason) => {
+    const main = await page.locator("main").innerText().catch(() => "<main unavailable>");
+    throw new Error(`Review and send did not become visible. Current screen:\n${main.slice(0, 1_500)}`, { cause: reason });
+  });
   await reviewAndSend.click();
   await page.getByText("Exact audited PDF loaded, 1 page.", { exact: true })
     .waitFor({ state: "visible", timeout: 25_000 });
@@ -409,7 +457,7 @@ async function openApproval(hidden, {
      turns a stuck button green, because every caller still has to click it or assert on it. */
   await sendIt.click({ trial: true, timeout: 25_000 }).catch(() => {});
 
-  return { context, page, sendIt, approveCalls, submitRequestCalls };
+  return { context, page, sendIt, approveCalls, approveReturns, submitRequestCalls, latePollReturns };
 }
 
 function browserTest(name, body) {
@@ -463,6 +511,49 @@ browserTest("a visible tab is still rescued by the submission poll", async () =>
   await sendIt.click();
   await page.getByText("Thank you. Your application was received.").waitFor({ state: "visible", timeout: 20_000 });
   assert.equal(await page.evaluate(() => document.visibilityState), "visible");
+  await context.close();
+  return page;
+});
+
+browserTest("a confirmed linked canonical packet stays sent when reopened without reloading", async () => {
+  const { context, page, sendIt, approveReturns, latePollReturns } = await openApproval(false, {
+    canonicalEnvelope: true,
+    holdApproveMs: 3000,
+    holdPollAfterApproveMs: 2000,
+    pollAnswer: AWAITING,
+  });
+  await sendIt.click();
+  await page.getByText("Thank you. Your application was received.").waitFor({ state: "visible", timeout: 20_000 });
+  for (let attempt = 0; attempt < 50 && latePollReturns.length === 0; attempt += 1) await delay(100);
+  assert.ok(latePollReturns.length > 0, "the weaker poll did not finish after the confirmed approval response");
+  assert.ok(latePollReturns[0] >= approveReturns[0], "the weaker poll finished before the confirmed approval response");
+  await page.getByText("Thank you. Your application was received.").waitFor({ state: "visible", timeout: 5_000 });
+
+  await page.getByRole("button", { name: /All applications/, exact: true }).click();
+  const row = page.locator('button[aria-pressed="false"]:visible').filter({ hasText: APPROVABLE.job_context.role });
+  await row.waitFor({ state: "visible", timeout: 10_000 });
+  await row.click();
+  await page.getByRole("heading", { name: "Sent", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+
+  await context.close();
+  return page;
+});
+
+browserTest("a linked canonical packet quarantines confirmed proof for a different packet", async () => {
+  const { context, page, sendIt } = await openApproval(false, {
+    canonicalEnvelope: true,
+    approveAnswer: MISMATCHED_SENT,
+    pollAnswer: AWAITING,
+  });
+  await sendIt.click();
+  await page.getByRole("heading", { name: "One thing to finish", exact: true })
+    .waitFor({ state: "visible", timeout: 20_000 });
+  assert.equal(
+    await page.getByRole("heading", { name: "Sent", exact: true }).isVisible().catch(() => false),
+    false,
+    "proof for a different packet rendered the linked canonical row as sent",
+  );
+
   await context.close();
   return page;
 });

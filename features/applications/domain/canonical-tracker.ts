@@ -277,6 +277,60 @@ export function withRestoredLinkedPackets(packets: readonly GeneratedResume[]): 
 }
 
 /**
+ * Adopt a saved legacy resume on either its ordinary history row or the canonical envelope that
+ * carries it.
+ *
+ * A linked packet is selected under its legacy id, while the stored history array keeps the row
+ * under the canonical application id. Matching only `packet.id` therefore leaves the envelope's
+ * resume stale after a successful save. The next lookup restores that stale copy and makes the
+ * editor report its own saved text as dirty until history is reloaded.
+ *
+ * Replace only the fields returned by the resume-save route. In particular, keep the canonical
+ * application object, route alias, submission authority, and every other envelope field intact.
+ */
+export function packetAfterLinkedResumeSave(
+  packet: GeneratedResume,
+  legacyPacketId: string,
+  saved: Pick<GeneratedResume, "spec" | "download_url">,
+): GeneratedResume {
+  return packetAfterLinkedMutation(packet, legacyPacketId, (linked) => ({
+    ...linked,
+    spec: saved.spec,
+    download_url: saved.download_url,
+  }));
+}
+
+/**
+ * Run a legacy-packet mutation under its real route identity, then put the result back into the
+ * canonical history envelope that carried it.
+ *
+ * Submission mutations validate authority and projections against the packet id they receive.
+ * Passing a canonical wrapper directly would substitute the ledger id for the linked packet id
+ * and could quarantine valid proof. Restoring first keeps that validation exact. Rewrapping keeps
+ * the ledger identity and its local aliases while adopting the mutation's review and proof fields.
+ */
+export function packetAfterLinkedMutation(
+  packet: GeneratedResume,
+  legacyPacketId: string,
+  mutate: (linkedPacket: GeneratedResume) => GeneratedResume,
+): GeneratedResume {
+  const linked = linkedLegacyPacketFromCanonicalTrackerPacket(packet);
+  if (linked?.id === legacyPacketId) {
+    const updated = mutate(linked);
+    if (updated === linked) return packet;
+    const canonical = canonicalApplicationFromPacket(packet)!;
+    return {
+      ...packet,
+      ...updated,
+      id: packet.id,
+      canonical_application: canonical,
+      canonical_legacy_packet_id: legacyPacketId,
+    } as CanonicalTrackerPacket;
+  }
+  return packet.id === legacyPacketId ? mutate(packet) : packet;
+}
+
+/**
  * How strongly a packet identifies as this canonical application. 0 means no match.
  *
  * WHY A STRENGTH AND NOT A BOOLEAN, which is what this was.
