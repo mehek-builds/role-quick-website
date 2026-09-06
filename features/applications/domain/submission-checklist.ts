@@ -1173,9 +1173,19 @@ export function humanInputItems(
      * refuse to send unconfirmed, that is authoritative and an essay among them is a real ask with a
      * real exit. Only the local label guess is barred from claiming essays, because a guess plus an
      * unsettleable row is how the loop comes back. */
+    /* A CONSENT THE SERVER ACCEPTED UNDER HER PERMISSION IS NOT HERS TO CONFIRM. answer_source
+       'consent_permission' is Litos's own record of accepting an employer's routine privacy consent
+       under her standing permission; the send's guarded consent-tick performs it, and the server's
+       own confirmation list never names it. The local label guess matches the sentence's words
+       ("privacy", "consent"), so without this it asked her to Confirm a row whose Confirm rewrites
+       the answer in her name and un-licenses the tick. Measured live on ChapsVision US (Teamtailor,
+       2026-09-06): Send stayed grey behind that one row while the backend was ready to send. The
+       server's list stays authoritative when present. */
     const needsConfirmation = serverList
       ? serverNamesForConfirmation
-      : isHumanOnlyChecklistLabel(question.question) && question.kind !== "essay";
+      : isHumanOnlyChecklistLabel(question.question)
+        && question.kind !== "essay"
+        && question.answer_source !== "consent_permission";
     if (review.status !== "submitted" && answer && needsConfirmation) {
       /* Confirmed once is confirmed, and the row has to say so or the ask never ends. The settled
          shape keeps the control - she can still change the answer - while taking the row out of the
