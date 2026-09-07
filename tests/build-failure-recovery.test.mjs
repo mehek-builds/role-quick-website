@@ -108,7 +108,15 @@ test("a guest is offered the email they cannot add in Account", async () => {
   assert.match(errorBranch, /isGuestSession\(\)/, "the screen no longer distinguishes a guest");
   assert.match(errorBranch, /field === "resume_email"/, "the claim is offered for the wrong precondition");
   assert.match(errorBranch, /Add my email/, "there is no control to add one");
-  assert.match(errorBranch, /login\?intent=claim&next=\/start/, "the claim route is gone or points elsewhere");
+  /* THE ROUTE, NOT ITS SPELLING - and the difference is why this assertion changed.
+   *
+   * It used to match the literal `login?intent=claim&next=/start`, which pinned a URL /login has
+   * never read: claim mode turns on from `params.get("claim") === "1"` only, so `claiming` stayed
+   * false, and the guest - who holds a token - was redirected straight back out to landingRoute().
+   * The control this test guards existed, was green, and did nothing. Both sides now go through
+   * lib/api.ts's GUEST_CLAIM_ROUTE, and guest-claim-route-is-the-one-login-reads.test.mjs pins that
+   * constant against /login's own reader, which is the check this one could not make. */
+  assert.match(errorBranch, /GUEST_CLAIM_ROUTE/, "the claim route is gone or points elsewhere");
   /* A missing NAME is still an Account fix for everyone, so the guest wording must not swallow it. */
   assert.match(errorBranch, /Add it in Account and Litos will build this one again/, "the non-guest wording was lost");
 });
