@@ -604,7 +604,7 @@ export default function Login() {
                   autoComplete={flow === "signup" ? "new-password" : "current-password"}
                   value={password}
                   onChange={(v) => { setPassword(v); setError(null); }}
-                  hint={flow === "signup" ? "Use at least 15 letters. Spaces are fine." : undefined}
+                  hint={flow === "signup" ? "Use at least 15 characters, with a number and a symbol. No spaces." : undefined}
                 />
               )}
               <Button
@@ -757,7 +757,7 @@ export default function Login() {
                 autoComplete="new-password"
                 value={password}
                 onChange={(v) => { setPassword(v); setError(null); }}
-                hint="Use at least 15 letters. Spaces are fine."
+                hint="Use at least 15 characters, with a number and a symbol. No spaces."
               />
             </div>
             <Button
