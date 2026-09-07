@@ -185,6 +185,14 @@ function FocusForm({
      which one a student meant - so this always starts empty, the same as every other empty draft. */
   const [customFieldLabels, setCustomFieldLabels] = useState<Record<string, string>>({});
   const [newField, setNewField] = useState("");
+  /* Closed on arrival, same as the title search box below it (#additional-role, gated on `ready`).
+     A cold first screen is taps only - criterion 3 of the onboarding audit
+     (checklist.design/web-app/onboarding, "delay any fields not genuinely needed to start") reads
+     every visible text input on arrival as a field asked before it is needed, and this one has no
+     `ready`-style gate of its own to hide behind since a custom field can be the FIRST thing typed.
+     A tap to reveal it keeps the same taps-only cold screen while still reaching the input in one
+     click. */
+  const [customFieldOpen, setCustomFieldOpen] = useState(false);
 
   function addCustomField(label: string) {
     const clean = label.trim();
@@ -396,34 +404,52 @@ function FocusForm({
             the title box below (ready gates on `fields.length > 0`, built-in or typed). This writes
             straight into `fields` under a namespaced id (see CUSTOM_FIELD_PREFIX in
             onboarding-role-inference.ts) so it satisfies that gate the same way a built-in field
-            does, and resolves to the "other" category. */}
-        <div className="relative mt-3 max-w-sm">
-          <label htmlFor="custom-field" className="text-xs text-muted">Don&apos;t see your field? Add your own.</label>
-          <div className="mt-1.5 flex gap-2">
-            <input
-              id="custom-field"
-              value={newField}
-              onChange={(event) => setNewField(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key !== "Enter") return;
-                event.preventDefault();
-                addCustomField(newField);
-              }}
-              placeholder="e.g. Supply chain"
-              maxLength={60}
-              autoComplete="off"
-              className="min-h-[44px] min-w-0 flex-1 rounded-inner border border-control-border bg-white px-4 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
-            />
-            <button
-              type="button"
-              onClick={() => addCustomField(newField)}
-              disabled={!newField.trim()}
-              className="min-h-[44px] rounded-inner border border-border px-4 text-sm text-ink hover:border-brand disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Add
-            </button>
+            does, and resolves to the "other" category.
+
+            A TAP OPENS IT rather than the input sitting on screen from the start. Criterion 3 of
+            the onboarding audit (checklist.design/web-app/onboarding) reads a cold first screen as
+            taps only - the title search box below stays off this criterion because `ready` already
+            hides it until a field and a stage are chosen, but a custom field can BE the first
+            thing a student picks, so it has no such gate to hide behind. One tap keeps the same
+            taps-only arrival while still reaching the input immediately. */}
+        {customFieldOpen ? (
+          <div className="relative mt-3 max-w-sm">
+            <label htmlFor="custom-field" className="text-xs text-muted">Your field</label>
+            <div className="mt-1.5 flex gap-2">
+              <input
+                id="custom-field"
+                value={newField}
+                onChange={(event) => setNewField(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter") return;
+                  event.preventDefault();
+                  addCustomField(newField);
+                }}
+                placeholder="e.g. Supply chain"
+                maxLength={60}
+                autoComplete="off"
+                autoFocus
+                className="min-h-[44px] min-w-0 flex-1 rounded-inner border border-control-border bg-white px-4 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
+              />
+              <button
+                type="button"
+                onClick={() => addCustomField(newField)}
+                disabled={!newField.trim()}
+                className="min-h-[44px] rounded-inner border border-border px-4 text-sm text-ink hover:border-brand disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Add
+              </button>
+            </div>
           </div>
-        </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setCustomFieldOpen(true)}
+            className="mt-3 text-xs text-muted underline decoration-dotted hover:text-ink"
+          >
+            Don&apos;t see your field? Add your own.
+          </button>
+        )}
       </div>
 
       <div className="mb-7">
