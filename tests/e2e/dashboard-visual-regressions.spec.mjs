@@ -4526,6 +4526,11 @@ test("delayed resume denials restore focus after the initiating control changes"
     await applicationDenial.settled;
     const applicationUpgrade = applications.page.getByRole("dialog", { name: "Tailor this resume with Litos+" });
     await applicationUpgrade.waitFor({ state: "visible" });
+    await applicationUpgrade.getByText("You can keep editing the application details without upgrading.", { exact: true }).waitFor({ state: "visible" });
+    assert.equal(
+      await applicationUpgrade.getByText("Your main resume can still be used to fill this application.", { exact: true }).count(),
+      0,
+    );
     await finishDashboardAnimations(applications.page);
     await waitForStableGeometry(applicationUpgrade, "Applications delayed-denial upgrade dialog");
     await applications.page.waitForFunction(() => {

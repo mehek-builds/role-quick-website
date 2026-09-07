@@ -3525,6 +3525,9 @@ function Applications() {
         placement: draft.canonicalApplicationId ? "canonical_application_detail" : "application_composer",
         trigger: source === "server_denial" ? "server_entitlement_denial" : "tailor_resume",
         manualLabel: draft.jobId ? "Fill with my main resume" : "Keep editing",
+        ...(draft.jobId
+          ? {}
+          : { explanation: "You can keep editing the application details without upgrading." }),
         applicationId: draft.canonicalApplicationId ?? undefined,
         returnRoute: canonicalReturnRoute,
         onBeforeCheckout: () => rememberCheckoutDraft(draft),

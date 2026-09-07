@@ -140,6 +140,7 @@ test("manual applications stay inside Litos through tailoring", async () => {
   assert.doesNotMatch(fill, /api<[^>]+>\("\/applications"|\/applications\/[^\s]*\/fill/);
   assert.match(tailor, /api<ResumeGenerationResponse>\("\/resume\/generate"/);
   assert.match(tailor, /manualLabel: draft\.jobId \? "Fill with my main resume" : "Keep editing"/);
+  assert.match(tailor, /draft\.jobId[\s\S]*explanation: "You can keep editing the application details without upgrading\."/);
   assert.match(tailor, /\.\.\.\(draft\.jobId[\s\S]*onManual:/);
   assert.match(applications, /variant="secondary"[\s\S]*onClick=\{\(event\) => onTailor\(event\.currentTarget\)\}[\s\S]*"Tailor resume first"/);
   assert.match(applications, /\{managedPrepare && \([\s\S]*onClick=\{onFill\}[\s\S]*"Prepare in Litos"/);
