@@ -1,4 +1,4 @@
-import posthog from "posthog-js/dist/module.slim";
+import posthog from "posthog-js/dist/module.full.no-external";
 import { identifyUser } from "@/lib/analytics";
 import { sanitizePostHogEvent } from "@/lib/posthog-privacy";
 import { SESSION_TOKEN_KEY, userIdFromToken } from "@/lib/session-identity";
@@ -35,7 +35,32 @@ if (token && host) {
        * it does NOT mask rendered page text or images, which is what a resume
        * or an application's personal details look like once parsed and
        * displayed rather than typed. That tradeoff is a deliberate PostHog
-       * project setting, not something to silently work around in code. */
+       * project setting, not something to silently work around in code.
+       *
+       * The import above must stay module.full.no-external, not module.slim:
+       * the slim bundle never contains the recorder engine at all, so no
+       * setting here could turn recording on, and disable_external_dependency_loading
+       * blocks the slim bundle's runtime fallback of fetching that engine from
+       * PostHog's CDN. module.full.no-external bundles the recorder directly,
+       * so recording works with no external fetch. */
+      /* The bundle above ships every PostHog extension, not just the
+       * recorder: heatmaps, dead-click capture, surveys, product tours and
+       * conversations are all live code now, where module.slim physically
+       * couldn't run any of them. Every one of those reads its own
+       * capture_ or disable_ key, and every key left unset falls back to
+       * whatever a PostHog admin has toggled on the project dashboard, with
+       * no code change or review on this end. This site renders parsed
+       * resumes and application data once loaded, so these stay off
+       * explicitly rather than trusting that nobody flips a dashboard
+       * switch: unlike session recording above, there's no product reason
+       * for any of them to be on, and grep confirms nothing in this repo
+       * calls posthog.isFeatureEnabled/getFeatureFlag/surveys either, so
+       * none of this is live functionality being turned off. */
+      capture_heatmaps: false,
+      capture_dead_clicks: false,
+      disable_surveys: true,
+      disable_product_tours: true,
+      disable_conversations: true,
       before_send: sanitizePostHogEvent,
       debug: process.env.NODE_ENV === "development",
     });
