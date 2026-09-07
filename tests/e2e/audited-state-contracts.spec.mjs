@@ -430,6 +430,7 @@ async function routeResume(context, {
 } = {}) {
   let profileUploads = 0;
   let bankReads = 0;
+  let baseResumeReads = 0;
   const unknown = [];
   const parsedEntries = [{
     id: "entry-1",
@@ -473,6 +474,23 @@ async function routeResume(context, {
       return route.fulfill({ json: { entries: bankReads > 1 ? parsedEntries : [] } });
     }
     if (key === "GET /profile/targeting") return route.fulfill({ json: { titles: ["Software Engineer"], categories: ["software"] } });
+    /* THE MAIN-RESUME PROBE, declared because the page really does make it.
+     *
+     * /dashboard/resume asks once, as soon as the parsed profile is known, whether a main resume
+     * already exists - that is what decides between offering "build your main resume" and saying
+     * nothing. A guest who skipped /start has none, so 404 is the state under test in this file:
+     * every fixture here starts from `GET /profile` 404 and only reaches a parsed profile by
+     * uploading one.
+     *
+     * It is a GET and it spends nothing, which is why the page is allowed to make it unprompted.
+     * The reason it landed in `unknown` is that the probe was added after this fixture was written,
+     * and only the two tests whose upload SUCCEEDS ever get far enough to fire it - the profile has
+     * to stop being "missing" first. Stubbed rather than ignored, and counted, so the once-per-
+     * profile guard is a contract this file checks rather than a comment in the component. */
+    if (key === "GET /resume/base") {
+      baseResumeReads += 1;
+      return route.fulfill({ status: 404, json: { error: "no main resume" } });
+    }
     if (key === "POST /profile") {
       profileUploads += 1;
       if (profileUploads === 1) {
@@ -489,6 +507,7 @@ async function routeResume(context, {
   return {
     get profileUploads() { return profileUploads; },
     get bankReads() { return bankReads; },
+    get baseResumeReads() { return baseResumeReads; },
     unknown,
   };
 }
@@ -574,6 +593,11 @@ test("resume upload accepts a PDF filename with empty or generic MIME metadata",
     assert.equal(await organization.inputValue(), "Fixture Labs");
     assert.equal(await page.getByRole("button", { name: "Save changes" }).isDisabled(), true);
     assert.equal(traffic.profileUploads, 1);
+    /* Waited on rather than sampled: the probe fires from an effect keyed on the parsed profile, so
+       reading the counter straight after "Upload complete" would race it. This panel is the probe's
+       own answer rendered - it appears only once the 404 above has come back. */
+    await page.getByText("Finish setting up your resume.", { exact: true }).waitFor();
+    assert.equal(traffic.baseResumeReads, 1, "the main-resume probe must run once per parsed profile");
     assert.deepEqual(traffic.unknown, []);
     await context.close();
   }
@@ -612,6 +636,10 @@ test("resume upload blocks a concurrent selection, then retries a genuine failur
   assert.equal(await page.getByRole("button", { name: "Save changes" }).isDisabled(), true);
   assert.equal(traffic.profileUploads, 2);
   assert.equal(traffic.bankReads, 2);
+  /* Once, even though the upload was attempted twice: the failed attempt never produced a parsed
+     profile, so the probe's effect had nothing to run on until the retry succeeded. */
+  await page.getByText("Finish setting up your resume.", { exact: true }).waitFor();
+  assert.equal(traffic.baseResumeReads, 1, "a retried upload must not probe the main resume twice");
   assert.deepEqual(traffic.unknown, []);
   await context.close();
 });
