@@ -61,6 +61,32 @@ export function loginRedirectPath(reason: LoginRedirectReason): string {
   return `/login?reason=${reason}`;
 }
 
+/* THE SAME RULE AS ABOVE, LEARNED THE HARD WAY ON A SECOND PARAMETER.
+ *
+ * /login turns claim mode on with `params.get("claim") === "1"`, and it is the ONLY spelling that
+ * reader accepts. Both onboarding call sites sent `/login?intent=claim&next=/start` instead - a
+ * parameter nothing reads, alongside a `next` /login has never looked at - so `claiming` was
+ * always false. That matters because of the line immediately after it: a guest HAS a token, and
+ * `getToken() && !claiming` redirects them straight back out to landingRoute(). The claim screen
+ * never rendered, and neither call site could tell, because being bounced to /start is what
+ * success would have looked like too.
+ *
+ * What that cost, measured live 2026-09-07 on a fresh guest:
+ *  - BuildStep's "Add my email" promises "Add your email and Litos will build this one again, with
+ *    the posting saved" and instead returned to the match screen with no email field anywhere. A
+ *    guest whose resume did not yield an address had no way to supply one at all.
+ *  - PlanStep's is worse, and its own comment says why: a guest's checkout is refused with
+ *    `claim_required`, and claiming is "THE ONLY WAY OUT OF THE PAYMENT GATE". The single control
+ *    on the payment screen bounced the student back to setup with nothing changed.
+ *
+ * A constant rather than two more string literals, for the reason the block above exists: the
+ * spelling has now drifted once, silently, in two places at once.
+ *
+ * No `next`: /login already routes a claimed account through landingRoute(), which reads the
+ * onboarding state and returns "/start" while setup is unfinished - which is exactly the promise
+ * both call sites make, made by the code that actually decides where they land. */
+export const GUEST_CLAIM_ROUTE = "/login?claim=1";
+
 export function getStoredEmail(): string | null {
   if (typeof window === "undefined") return null;
   return window.localStorage.getItem(EMAIL_KEY);
