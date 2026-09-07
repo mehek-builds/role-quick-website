@@ -217,10 +217,13 @@ function FocusForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  /* Both answers are required before a title is offered. The stage does not filter the list - it
-     cannot, because titles are stored stage-free and cleanTitle strips "intern" off them - but it
-     is half of what makes the offer specific, so the screen waits for it. */
-  const ready = fields.length > 0 && roleTypes.length > 0;
+  /* Field alone is enough to offer titles: titlesForFields only reads fields, and titles are
+     stored stage-free (cleanTitle strips "intern" off them), so stage cannot filter the list and
+     has no reason to gate it. `ready` is still both answers together - it is what save() and the
+     location section below wait for - but the Jobs that fit reveal uses fieldsReady on its own so
+     it appears right under Field, before Stage is ever touched. */
+  const fieldsReady = fields.length > 0;
+  const ready = fieldsReady && roleTypes.length > 0;
 
   /* WHAT CONTINUE WILL ACTUALLY SAVE, which is not the same as the chips.
      A place still sitting in the entry box is on screen and is plainly meant - dropping it because
@@ -252,10 +255,10 @@ function FocusForm({
      they are not currently showing, and a list that dropped it would leave them unable to see or
      deselect a title Continue is about to commit. */
   const offered = useMemo(() => {
-    const derived = ready ? titlesForFields(fields) : [];
+    const derived = fieldsReady ? titlesForFields(fields) : [];
     const extra = selectedTitles.filter((title) => !derived.some((item) => item.toLowerCase() === title.toLowerCase()));
     return [...derived, ...extra];
-  }, [ready, fields, selectedTitles]);
+  }, [fieldsReady, fields, selectedTitles]);
 
   const customMatches = useMemo(() => {
     const needle = newTitle.trim().toLowerCase();
@@ -357,35 +360,12 @@ function FocusForm({
       </div>
 
       <div className="mb-7">
-        <p className="text-sm text-ink">Stage</p>
-        <div className="mt-2.5 flex flex-wrap gap-2">
-          {ROLE_TYPES.map((r) => {
-            const slug = r.slug as RoleType;
-            const on = roleTypes.includes(slug);
-            return (
-              <Chip
-                key={r.slug}
-                label={r.label}
-                on={on}
-                derived={slug === guess?.roleType}
-                onClick={() => setRoleTypes(on ? [] : [slug])}
-              />
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="mb-7">
         <p className="text-sm text-ink">Jobs that fit</p>
-        {!ready ? (
+        {!fieldsReady ? (
           /* Not a disabled control and not an empty gap: a sentence saying which answer is still
              missing. The screen asks in an order, so it owes the student the reason it is waiting. */
           <p className="mt-2.5 text-sm text-muted">
-            {fields.length === 0 && roleTypes.length === 0
-              ? "Pick a field and a stage and Litos will suggest the titles that fit."
-              : fields.length === 0
-                ? "Pick a field and Litos will suggest the titles that fit."
-                : "Pick a stage and Litos will suggest the titles that fit."}
+            Pick a field and Litos will suggest the titles that fit.
           </p>
         ) : (
         <>
@@ -483,6 +463,25 @@ function FocusForm({
         )}
       </div>
 
+      <div className="mb-7">
+        <p className="text-sm text-ink">Stage</p>
+        <div className="mt-2.5 flex flex-wrap gap-2">
+          {ROLE_TYPES.map((r) => {
+            const slug = r.slug as RoleType;
+            const on = roleTypes.includes(slug);
+            return (
+              <Chip
+                key={r.slug}
+                label={r.label}
+                on={on}
+                derived={slug === guess?.roleType}
+                onClick={() => setRoleTypes(on ? [] : [slug])}
+              />
+            );
+          })}
+        </div>
+      </div>
+
       {/* WHERE IS NOT OPTIONAL, and it sat behind a closed disclosure labelled "Optional" until
           2026-08-19. Location is a hard filter on the board - the matcher tests it against the
           posting's location string - so an unanswered one is not a neutral default, it is a
@@ -493,8 +492,9 @@ function FocusForm({
           The checkbox hides every on-site posting, so a place would have nothing left to narrow,
           and demanding a city from someone who just said they want no city is a dead end with no
           correct way out. */}
-      {/* Held behind the same gate as the titles: the screen asks what before it asks where, and
-          on arrival it is still taps only. */}
+      {/* Held behind `ready` - field AND stage, one step further than the titles' `fieldsReady` -
+          so the screen asks what and which stage before it asks where, and on arrival it is still
+          taps only. */}
       {ready && (
       <div className="mb-7">
         {/* htmlFor + aria-describedby rather than a wrapping label with an aria-label on the input.
