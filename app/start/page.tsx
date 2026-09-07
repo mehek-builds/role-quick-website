@@ -1066,23 +1066,8 @@ export default function Start() {
         );
 
       case "trial":
-        /* Both acks in one motion: the trial screen now carries the staying-in-touch switches, so
-           finishing it answers both ledger entries. Sequential rather than parallel because the
-           ledger is a record of order, and refresh only after the second lands so the server never
-           has a window in which it would derive the folded screen. */
         return (
-          <TrialStep sent={applicationSent} onContinue={() => { stepDone("trial"); void (async () => { await ack("trial"); await ack("notifications"); await refresh(); })().catch(fail); }} />
-        );
-
-      case "notifications":
-        /* 08, between the gift and the price. It needs nothing from the sitting: the two answers
-           are account facts, so unlike `build` and `questions` a reload lands here and simply
-           works rather than having to rejoin the sequence. */
-        return (
-          <NotificationsStep
-            onLater={later}
-            onDone={() => { stepDone("notifications"); void ack("notifications").then(refresh).catch(fail); }}
-          />
+          <TrialStep sent={applicationSent} onContinue={() => { stepDone("trial"); void ack("trial").then(refresh).catch(fail); }} />
         );
 
       case "plan":
@@ -1093,6 +1078,19 @@ export default function Start() {
            gone, and there is no path past this screen without a card. */
         return (
           <PlanStep onSettled={() => { stepDone("plan"); void ack("plan").then(refresh).catch(fail); }} />
+        );
+
+      case "notifications":
+        /* 10, LAST - the server will not accept the 'plan' acknowledgement above without a
+           verified Stripe card on file (onboarding.ts, hasVerifiedPaymentMethod), so reaching
+           this case at all is proof of a paid account. It needs nothing else from the sitting:
+           the two answers are account facts, so unlike `build` and `questions` a reload lands
+           here and simply works rather than having to rejoin the sequence. */
+        return (
+          <NotificationsStep
+            onLater={later}
+            onDone={() => { stepDone("notifications"); void ack("notifications").then(refresh).catch(fail); }}
+          />
         );
 
       case "install":

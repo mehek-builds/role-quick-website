@@ -1472,7 +1472,7 @@ export type OnboardingStep =
   | "focus" | "sponsorship" | "resume" | "impact" | "base" | "install" | "apply" | "gaps" | "targeting"
   /* The application sequence, served by the backend once every profile-derived step is satisfied
      and only for an account that has never completed onboarding. */
-  | "match" | "build" | "questions" | "review" | "trial" | "notifications" | "plan"
+  | "match" | "build" | "questions" | "review" | "trial" | "plan" | "notifications"
   | "done";
 
 export type OnboardingState = {
