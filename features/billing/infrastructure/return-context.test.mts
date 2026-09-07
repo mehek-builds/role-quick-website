@@ -55,3 +55,47 @@ test("the exact provider expiry keeps a late checkout return recoverable", () =>
     Reflect.deleteProperty(globalThis, "window");
   }
 });
+
+test("an onboarding checkout's /start return route survives the round trip", () => {
+  /* Regression for the 2026-09-08 incident: components/start/PlanStep.tsx has always
+     passed returnRoute: "/start", but safeReturnRoute only allowed /dashboard and
+     /billing, so rememberBillingReturnContext silently wrote nothing and every
+     onboarding trial payment came back to the "different account" mismatch page
+     instead of the confirmation screen -- a real, successful charge with nowhere
+     safe to land. */
+  const originalNow = Date.now;
+  installWindowStorage();
+  try {
+    Date.now = () => START_MS;
+    rememberBillingReturnContext(OFFER_ID, {
+      accountId: ACCOUNT_ID,
+      returnRoute: "/start",
+      expiresAt: new Date(PROVIDER_EXPIRY_MS).toISOString(),
+    });
+    assert.deepEqual(billingReturnContext(OFFER_ID), {
+      accountId: ACCOUNT_ID,
+      returnRoute: "/start",
+      expiresAt: new Date(PROVIDER_EXPIRY_MS).toISOString(),
+    });
+  } finally {
+    Date.now = originalNow;
+    Reflect.deleteProperty(globalThis, "window");
+  }
+});
+
+test("an unrecognized return route is still refused", () => {
+  const originalNow = Date.now;
+  installWindowStorage();
+  try {
+    Date.now = () => START_MS;
+    rememberBillingReturnContext(OFFER_ID, {
+      accountId: ACCOUNT_ID,
+      returnRoute: "/settings",
+      expiresAt: new Date(PROVIDER_EXPIRY_MS).toISOString(),
+    });
+    assert.equal(billingReturnContext(OFFER_ID), null);
+  } finally {
+    Date.now = originalNow;
+    Reflect.deleteProperty(globalThis, "window");
+  }
+});
