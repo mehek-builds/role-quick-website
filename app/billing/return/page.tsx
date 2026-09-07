@@ -247,10 +247,23 @@ export default function BillingReturnPage() {
       return () => { stopped = true; };
     }
     void (async () => {
-      if (!context || !storedContext) {
+      if (!context) {
         setResult({ kind: "mismatch" });
         return;
       }
+      /* storedContext missing (sessionStorage cleared, a different tab/device than the
+         one that started checkout, an entry older than its few-hour window, or a route
+         this build of safeReturnRoute did not yet know about -- exactly what happened
+         to every onboarding checkout before 2026-09-08) is NOT proof this is the wrong
+         account. It is only a client-side convenience for the returnRoute and for the
+         one extra accountId cross-check below. getBillingOffer(context) and
+         reconcileBillingCheckout(context) are both scoped server-side to the calling
+         JWT (see routes/billingV2.ts's GET /billing/offers/:id and routes/billing.ts's
+         POST /billing/reconcile) -- a 404 there is real, server-proven "not this
+         account's offer", the only mismatch signal this branch needs when there is no
+         local context to double-check against. Losing the ability to resume the exact
+         prior screen or skip a purchase-event double-count is an acceptable, much
+         smaller cost than showing a paying student a false "wrong account" error. */
       /* ASK STRIPE BEFORE WAITING TO BE TOLD.
          The loop below polls OUR database, which only learns about a purchase when
          the webhook lands. That assumed the webhook would arrive inside seven
@@ -271,7 +284,12 @@ export default function BillingReturnPage() {
         ]);
         if (stopped) return;
         const verdict = billingReturnVerdict({
-          expectedAccountId: storedContext.accountId,
+          /* No storedContext means no independent account to cross-check against --
+             fall back to the server's own answer (state.account_id) so this
+             comparison is vacuously satisfied rather than a false mismatch, while
+             getBillingOffer's 404 check two lines down still catches a genuinely
+             foreign offer. */
+          expectedAccountId: storedContext?.accountId ?? state?.account_id ?? "",
           offerStatus: offerResult instanceof Error ? null : offerResult.status,
           state,
         });
@@ -309,8 +327,14 @@ export default function BillingReturnPage() {
                screen in onboarding that a card-verified account reaches -- rather
                than from this generic return page. Firing here too would double the
                onboarding surface's report of "the purchase event" to a moment
-               earlier than the one Mehek wants counted. */
-            if (storedContext.returnRoute !== "/start") firePurchaseEventOnce(purchaseSentRef, receipt, context);
+               earlier than the one Mehek wants counted.
+
+               storedContext missing means this can't tell whether it was onboarding,
+               so it defaults to firing: the TikTok event id below is deterministic
+               (receipt.reference, or this offer's context id), so a genuine double
+               submission still dedupes on TikTok's side by event_id -- unlike
+               silently under-reporting every conversion this branch cannot place. */
+            if ((storedContext?.returnRoute ?? null) !== "/start") firePurchaseEventOnce(purchaseSentRef, receipt, context);
           }
           return;
         }

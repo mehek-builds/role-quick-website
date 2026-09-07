@@ -260,6 +260,27 @@ test("checkout return restores context only after an explicit consume", async ()
   assert.match(outreach, /checkout_action/);
 });
 
+test("a missing local checkout context does not by itself fail the return as a wrong account", async () => {
+  /* Regression for the 2026-09-08 incident: a real, successful onboarding checkout
+     came back to "This checkout belongs to a different Litos account" because
+     sessionStorage never held a context for it (safeReturnRoute rejected "/start"
+     at write time). Losing that local context can happen for reasons that have
+     nothing to do with which account is signed in -- a different tab or device
+     than the one that started checkout, cleared site data, a stale entry outside
+     its few-hour window, or a future route this build's allowlist does not know
+     about yet -- so the return page must not treat "no local context" as proof of
+     the wrong account. The offer id from Stripe's own redirect is still required:
+     with nothing at all to look up, there is genuinely no checkout to resolve. */
+  const billingReturn = await read("app/billing/return/page.tsx");
+  assert.match(billingReturn, /if \(!context\) \{\s*\n\s*setResult\(\{ kind: "mismatch" \}\);/);
+  assert.doesNotMatch(billingReturn, /if \(!context \|\| !storedContext\)/);
+  // The real ownership proof server-side, not a client-only heuristic: both
+  // reconcileBillingCheckout and getBillingOffer are called with the offer id and
+  // resolve against the caller's own JWT on the backend (routes/billing.ts's
+  // POST /billing/reconcile, routes/billingV2.ts's GET /billing/offers/:id).
+  assert.match(billingReturn, /storedContext\?\.accountId \?\? state\?\.account_id/);
+});
+
 test("premium action handlers fail closed while entitlements are unresolved", async () => {
   const [home, applications, jobs, autopilot] = await Promise.all([
     read("app/dashboard/page.tsx"),
