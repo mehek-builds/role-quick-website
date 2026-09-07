@@ -24,13 +24,37 @@ export function HumanVerificationPanel({ packetId }: { packetId: string }) {
   useEffect(() => {
     active.current = true;
     let cancelled = false;
+    /* HOW SOON THE PICTURE CATCHES UP WITH HER HAND. The view was read on a fixed 750ms timer that
+       only restarted after the previous read finished, and a click never asked for a new picture at
+       all: it waited for the next tick. On the live Belvedere challenge of 2026-09-07 that showed as
+       about ten seconds of lag between moving a piece and seeing it move, which is long enough that
+       a person cannot finish the puzzle her own application is waiting on. So the cadence is
+       quarter-second, and an input asks for the next picture the moment the runner confirms it -
+       which is exactly when a new one exists, because the runner recaptures on every applied input.
+       Coalesced: a wake while a read is in flight schedules the next one immediately instead of
+       stacking a second reader, so this never multiplies requests under a slow API. */
+    const POLL_IDLE_MS = 250;
+    let inFlight = false;
+    let wakeRequested = false;
+    const wake = () => {
+      if (cancelled) return;
+      if (inFlight) { wakeRequested = true; return; }
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => { void poll(); }, 0);
+    };
     const channel = createVerificationInputQueue({
-      send: command => sendHumanVerificationInput(packetId, command),
+      send: async command => {
+        const result = await sendHumanVerificationInput(packetId, command);
+        wake();
+        return result;
+      },
       onError: message => { if (active.current) { gesture.current = null; setError(message); } },
     });
     queue.current = channel;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const poll = async () => {
+      if (cancelled || inFlight) { wakeRequested = true; return; }
+      inFlight = true;
       const pending = read.current ??= getHumanVerificationView(packetId);
       try {
         const next = await pending;
@@ -50,7 +74,10 @@ export function HumanVerificationPanel({ packetId }: { packetId: string }) {
         }
       } finally {
         if (read.current === pending) read.current = null;
-        if (!cancelled) timer = setTimeout(poll, 750);
+        inFlight = false;
+        const immediate = wakeRequested;
+        wakeRequested = false;
+        if (!cancelled) timer = setTimeout(() => { void poll(); }, immediate ? 0 : POLL_IDLE_MS);
       }
     };
     void poll();
