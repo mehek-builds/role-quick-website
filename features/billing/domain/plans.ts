@@ -27,6 +27,15 @@ export type LitosPlusPlan = {
   disclosure: string;
   savings: number | null;
   mostPopular: boolean;
+  // Generations (resume tailoring + application filling + cover letters, one shared pool) per
+  // billing cycle -- one generation is one completed application. Mirrors the backend's
+  // billingCatalog.ts generation_limit -- that is the enforced source of truth; this copy is
+  // for display only.
+  generationLimit: number;
+  // Plain-language applications-per-week/month line shown on the plan card. Derived from
+  // generationLimit; written out per plan rather than computed so the wording (a flat "a week"
+  // vs. an averaged "a week") stays a deliberate choice, not an artifact of the math.
+  applicationsLine: string;
 };
 
 export const DEFAULT_LITOS_PLUS_PLAN_ID: LitosPlusPlanId = "litos_plus_quarter";
@@ -42,6 +51,8 @@ type PlanBase = {
   renewal: string;
   savings: number | null;
   mostPopular: boolean;
+  generationLimit: number;
+  applicationsLine: string;
 };
 
 // FX snapshot 2026-09-07, mirroring student-outreach-backend/src/lib/billingCatalog.ts exactly
@@ -65,6 +76,8 @@ const PLAN_BASE: readonly PlanBase[] = [
     renewal: "every week",
     savings: null,
     mostPopular: false,
+    generationLimit: 25,
+    applicationsLine: "25 applications a week",
   },
   {
     id: "litos_plus_month",
@@ -77,6 +90,8 @@ const PLAN_BASE: readonly PlanBase[] = [
     renewal: "every month",
     savings: 53,
     mostPopular: false,
+    generationLimit: 100,
+    applicationsLine: "100 applications a month",
   },
   {
     id: "litos_plus_quarter",
@@ -89,6 +104,8 @@ const PLAN_BASE: readonly PlanBase[] = [
     renewal: "every 3 months",
     savings: 65,
     mostPopular: true,
+    generationLimit: 750,
+    applicationsLine: "250 applications a month",
   },
 ];
 
@@ -127,6 +144,8 @@ export function litosPlusPlansForCurrency(currency: SupportedCurrency = DEFAULT_
       disclosure: `${total} today. Renews ${base.renewal} until canceled.`,
       savings: base.savings,
       mostPopular: base.mostPopular,
+      generationLimit: base.generationLimit,
+      applicationsLine: base.applicationsLine,
     };
   });
 }
@@ -144,8 +163,7 @@ export const FREE_FEATURES = [
 
 export const PLUS_FEATURES = [
   "Everything in Free",
-  "Unlimited tailored resumes",
-  "Cover letters and application answers",
+  "Full applications built and filled for you: resume, cover letter, and answers (25 a week, 100 a month, or 250 a month on the 3-month plan)",
   "Resume feedback and saved versions",
   "Hover-started tailoring on job cards",
   "Networking and referral paths",
@@ -174,9 +192,9 @@ export const FEATURE_COMPARISON: readonly FeatureComparison[] = [
   { feature: "View, edit, copy, download, or delete existing generated work", free: "Included", trial: "Included", plus: "Included", tone: "documents" },
   { feature: "Email delivery and reply history", free: "Included", trial: "Included", plus: "Included", tone: "outreach" },
   { feature: "Account export, privacy controls, and deletion", free: "Included", trial: "Included", plus: "Included" },
-  { feature: "New tailored resumes", free: "Not included", trial: "5 successful generations", plus: "Included, no user-facing quota", tone: "documents" },
-  { feature: "New cover letters", free: "Not included", trial: "5 successful generations", plus: "Included, no user-facing quota", tone: "documents" },
-  { feature: "New generated application answers", free: "Not included", trial: "For 5 distinct applications", plus: "Included, no user-facing quota", tone: "documents" },
+  { feature: "New tailored resumes", free: "Not included", trial: "5 successful generations", plus: "Shared pool: 25/week, 100/month, or 250/month (3-month plan)", tone: "documents" },
+  { feature: "New cover letters", free: "Not included", trial: "5 successful generations", plus: "Shared pool: 25/week, 100/month, or 250/month (3-month plan)", tone: "documents" },
+  { feature: "New generated application answers", free: "Not included", trial: "For 5 distinct applications", plus: "Shared pool: 25/week, 100/month, or 250/month (3-month plan)", tone: "documents" },
   { feature: "Contact discovery", free: "Not included", trial: "Up to 2 per represented company, up to 5 companies", plus: "Included, no user-facing quota", tone: "outreach" },
   { feature: "Outreach draft generation", free: "Not included", trial: "Up to 2 per represented company, up to 5 companies", plus: "Included, no user-facing quota", tone: "outreach" },
   { feature: "Hover-started tailoring", free: "Not included", trial: "Not included, choose Tailor resume", plus: "Included on active paid plans", tone: "documents" },
