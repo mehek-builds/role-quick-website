@@ -170,6 +170,7 @@ export function PlanStep({ onSettled }: { onSettled: () => void }) {
               <span className="text-[13px] text-ink">{option.label}</span>
               <span className="font-mono text-[17px] tabular-nums text-ink">{option.total}</span>
               <span className="font-mono text-[11px] text-muted">{option.daily}</span>
+              <span className="mt-1 text-[12px] text-ink">{option.applicationsLine}</span>
               {on && <span className="mt-0.5 font-mono text-[10px] uppercase tracking-[0.06em] text-brand-ink">Selected</span>}
             </button>
           );
