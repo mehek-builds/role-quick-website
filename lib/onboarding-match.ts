@@ -167,10 +167,13 @@ export function matchHeadline(match: OnboardingMatch): string {
  * Two requests at most, and the second only happens when the first came back empty:
  *
  *  1. the student's own board, exactly as their preferences describe it;
- *  2. the same board with `relax_targeting=true`, which drops saved locations, remote_only,
- *     role_types and desired title terms and NOTHING else. The portal-family, freshness, active
- *     and sponsor-only constraints all survive, so a widened row is still one Litos can actually
- *     submit to and one the student is eligible for. See the backend's boardConditions.
+ *  2. the same board with `relax_targeting=true`, which drops role_types and desired title terms
+ *     and NOTHING else. Saved locations and remote_only survive relaxing too (2026-09-07): a
+ *     widened row can be the wrong title or role type, but never a posting outside every place the
+ *     student picked, because "closest thing" on a widened row still has to mean a place they
+ *     asked for. The portal-family, freshness, active and sponsor-only constraints all survive as
+ *     well, so a widened row is still one Litos can actually submit to and one the student is
+ *     eligible for. See the backend's boardConditions and its `boardTargeting`.
  *
  * `fetchJobs` is injected rather than imported so this stays a pure decision that can be tested
  * without a network, and so the caller owns auth and error handling.
