@@ -44,7 +44,7 @@ import { isHttpsJobUrl, missingApplicationFields, type ApplicationDraftField } f
 import { COVER_LETTER_WAIT_MS, HANDOFF_CLOCK_TICK_MS, coverLetterBlocks, coverLetterGate, documentsFromSpecMarks, handoffWindowExpired, nextCoverLetterValue, nextSubmissionState, publishSubmissionEnvelope, reconcilePacketEvidenceAfterResumeRegeneration, reconcilePacketEvidenceWithSubmission, resumeContactRefreshBlockedReason, resumeContactStaleNotice, submissionAfterPacketAudit, submissionCoverLetterField, submissionReviewPacketIdentity, submissionSnapshotIsOlder, type ResumeContactStaleLike } from "@/features/applications";
 import { MatchScore, MatchGaps } from "@/components/app/MatchScore";
 import { auditRefusalCode, historicalPacketAuditStaleMessage, nextMatchScoreRequest, packetAuditReviewRecoveryCode } from "@/features/applications";
-import { PRESS_WITHHELD_NOTHING_SENT, pressWithheldHeadline, pressWithheldHumanVerificationCopy, pressWithheldLabels } from "@/lib/press-withheld";
+import { PRESS_WITHHELD_NOTHING_SENT, pressWithheldHeadline, pressWithheldHumanVerificationCopy, pressWithheldLabels, pressWithheldShowsList } from "@/lib/press-withheld";
 import { getBaseResume } from "@/lib/base-resume";
 import { RequirementBreakdown } from "@/components/app/RequirementBreakdown";
 import { ResumeHealth } from "@/components/app/ResumeHealth";
@@ -7241,16 +7241,17 @@ function PostingStatusNotice({ review, busy, error, onConfirmOpen }: {
  * and the next step is hers. Rendered above the task list so it is read before the controls, and
  * only when the backend actually wrote the record - an older row simply keeps the sentence it has.
  */
-function PressWithheldNotice({ review }: { review: Pick<ApplicationReview, "press_withheld"> }) {
+function PressWithheldNotice({ review }: { review: Pick<ApplicationReview, "press_withheld" | "dashboard_human_verification"> }) {
   const withheld = review.press_withheld;
   if (!withheld) return null;
   const labels = pressWithheldLabels(withheld);
-  const verification = pressWithheldHumanVerificationCopy(withheld);
+  const verification = pressWithheldHumanVerificationCopy(review.dashboard_human_verification);
   return (
     <div role="status" className="mb-5 rounded-inner border border-border bg-surface-alt px-4 py-3 text-small leading-6">
       <p className="font-medium text-ink">Litos held this send</p>
       <p className="mt-1 text-ink">{pressWithheldHeadline(labels)}</p>
-      {labels.length > 0 && (
+      {/* Exactly one of the headline and this list names the fields. See pressWithheldShowsList. */}
+      {pressWithheldShowsList(labels) && (
         <ul className="mt-2 list-disc space-y-1 pl-5 text-muted">
           {labels.map((label) => <li key={label}>{label}</li>)}
         </ul>

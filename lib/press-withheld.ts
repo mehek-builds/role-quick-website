@@ -12,8 +12,10 @@
  *      reason went to the server's logs only, so a refused challenge looked exactly like a form
  *      with no challenge on it.
  *
- * Both now ride on `review.press_withheld`. This module turns them into plain language and nothing
- * else: no fetch, no state, so the wording can be pinned by a test without rendering the screen.
+ * The first rides on `review.press_withheld`; the second on `review.dashboard_human_verification`,
+ * which is the backend's ONE home for that datum and is written on every parked send, not only a
+ * withheld one. This module turns both into plain language and nothing else: no fetch, no state, so
+ * the wording can be pinned by a test without rendering the screen.
  *
  * PLAIN LANGUAGE, NOT THE ENUM. `closedReason` is an internal vocabulary shared with the runner
  * ("challenge_not_ready", "capture_failed"). Rendering it raw would put a debug token in front of an
@@ -51,6 +53,8 @@ export const HUMAN_VERIFICATION_REASON_COPY: Readonly<Record<string, string>> = 
     "Litos never reached the company's human check, because the send itself was not cleared to go.",
   continuation_phase:
     "The company's human check belonged to an earlier step of this send, so it was not offered again.",
+  submit_settled:
+    "The company accepted the send before its human check ever appeared, so there was nothing to hand you.",
 });
 
 const NEUTRAL_HUMAN_VERIFICATION_COPY =
@@ -58,8 +62,14 @@ const NEUTRAL_HUMAN_VERIFICATION_COPY =
 
 export type PressWithheld = {
   labels?: string[];
-  human_verification?: string;
   at?: string;
+};
+
+/** The backend's sanitized record of the live challenge gate. `closed_reason` is null when it had none. */
+export type DashboardHumanVerification = {
+  requested?: boolean;
+  offered?: boolean;
+  closed_reason?: string | null;
 };
 
 /** The labels worth showing, trimmed, deduped and bounded. Empty when the run attributed none. */
@@ -75,30 +85,51 @@ export function pressWithheldLabels(withheld: PressWithheld | undefined | null):
 }
 
 /**
+ * WHETHER THE NOTICE RENDERS THE FIELDS AS A LIST UNDER THE HEADLINE.
+ *
+ * The headline and the list are two ways of saying the same thing, so exactly one of them names the
+ * fields. Up to three, the headline names them and there is no list; past three, naming them inline
+ * is a wall, so the headline counts and the list carries every one of them. Exported rather than
+ * left to the component because the first version had both - a headline ending "and 2 more fields"
+ * above a list that already showed all five - which reads as a promise that something is hidden.
+ */
+export function pressWithheldShowsList(labels: readonly string[]): boolean {
+  return labels.length > PRESS_WITHHELD_NAMED_LABELS;
+}
+
+/**
  * The one-line headline: which field the form is still waiting on.
  *
  * Deliberately the same shape as the backend's own sentence, so the card and the attention_reason
  * beneath it say the same thing rather than two things about one event.
  */
 export function pressWithheldHeadline(labels: readonly string[]): string {
-  const named = labels.slice(0, PRESS_WITHHELD_NAMED_LABELS);
-  const rest = labels.length - named.length;
-  if (named.length === 0) {
+  if (labels.length === 0) {
     return "The company's form still marks a required answer as missing, so Litos did not send it.";
   }
+  /* Past the naming threshold the list below does the naming, so this counts and stops. */
+  if (pressWithheldShowsList(labels)) {
+    return `The company's form still marks ${labels.length} required answers as unanswered, so Litos did not send it.`;
+  }
   const list =
-    named.length === 1
-      ? `“${named[0]}”`
-      : `${named.slice(0, -1).map((label) => `“${label}”`).join(", ")} and “${named[named.length - 1]}”`;
-  const more = rest > 0 ? `, and ${rest} more field${rest === 1 ? "" : "s"}` : "";
-  return `The company's form still marks ${list}${more} as required and unanswered, so Litos did not send it.`;
+    labels.length === 1
+      ? `“${labels[0]}”`
+      : `${labels.slice(0, -1).map((label) => `“${label}”`).join(", ")} and “${labels[labels.length - 1]}”`;
+  return `The company's form still marks ${list} as required and unanswered, so Litos did not send it.`;
 }
 
-/** What happened with the company's own human check, in a sentence, or null when it never came up. */
+/**
+ * What happened with the company's own human check, in a sentence, or null when it never came up.
+ *
+ * Reads the backend's own diagnostic rather than a copy of it kept on press_withheld: one datum,
+ * one field, so a card and a query can never show two disagreeing answers. Silent when the channel
+ * was never requested, when it actually offered her the frame, or when it recorded no reason.
+ */
 export function pressWithheldHumanVerificationCopy(
-  withheld: PressWithheld | undefined | null,
+  diagnostic: DashboardHumanVerification | undefined | null,
 ): string | null {
-  const reason = withheld?.human_verification;
+  if (!diagnostic || diagnostic.requested !== true || diagnostic.offered === true) return null;
+  const reason = diagnostic.closed_reason;
   if (typeof reason !== "string" || !reason.trim()) return null;
   return HUMAN_VERIFICATION_REASON_COPY[reason] ?? NEUTRAL_HUMAN_VERIFICATION_COPY;
 }

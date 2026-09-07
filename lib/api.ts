@@ -1210,13 +1210,22 @@ export type ApplicationReview = {
    *
    * `labels` are the employer's own question labels for the controls that stopped it, already
    * resolved on the backend against the controls the run's own proof enumerated - never an answer
-   * she typed. `human_verification` is the dashboard human-verification channel's own reason for
-   * giving her nothing to touch, when it had one; it used to exist only in the server's logs, which
-   * is the whole reason a refused challenge looked exactly like a form with no challenge on it. */
+   * she typed, never an internal token, and never a selector.
+   *
+   * Why the live challenge gate gave her nothing to touch is NOT here: it is on
+   * dashboard_human_verification below, which the backend writes on every parked send. */
   press_withheld?: {
     labels: string[];
-    human_verification?: string;
     at: string;
+  };
+  /* WHY THE LIVE CHALLENGE NEVER OPENED, sanitized by the backend (PR 1050). `closed_reason` is one
+   * of the runner's own reason words or null; an unrecognised one never leaves the backend. Present
+   * only when this run asked for the human-verification channel at all. */
+  dashboard_human_verification?: {
+    requested: true;
+    gate_entered: boolean;
+    offered: boolean;
+    closed_reason: string | null;
   };
   /** THE ONE FACT ABOUT posting_status THAT SURVIVES ACROSS READS rather than being re-derived:
    *  her own word, typed once, that the employer still accepts applications past a stated deadline.
