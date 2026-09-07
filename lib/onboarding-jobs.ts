@@ -27,11 +27,18 @@ function matchesType(title: string, roleTypes: RoleType[]): boolean {
   const internship = /\bintern(ship)?\b/i.test(title);
   const coOp = /\bco-?op\b/i.test(title);
   const newGrad = /\b(new grad|graduate|entry.level)\b/i.test(title);
+  const contract = /\b(contract(or)?|temp(orary)?|freelance)\b/i.test(title);
+  const apprenticeship = /\bapprentice(ship)?\b/i.test(title);
+  const fellowship = /\bfellow(ship)?\b/i.test(title);
   return roleTypes.some((type) => {
     if (type === "internship") return internship;
     if (type === "co-op") return coOp;
     if (type === "new-grad") return newGrad;
-    return !internship && !coOp && !newGrad;
+    if (type === "contract") return contract;
+    if (type === "apprenticeship") return apprenticeship;
+    if (type === "fellowship") return fellowship;
+    // full-time: none of the other stages' own signals are present in the title.
+    return !internship && !coOp && !newGrad && !contract && !apprenticeship && !fellowship;
   });
 }
 

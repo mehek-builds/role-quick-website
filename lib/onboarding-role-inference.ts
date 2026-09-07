@@ -277,7 +277,38 @@ export function titlesForFields(fieldIds: readonly string[]): string[] {
  */
 export function categoriesForFields(fieldIds: readonly string[]): string[] {
   const chosen = new Set(fieldIds);
-  return Array.from(new Set(FIELDS.filter((field) => chosen.has(field.id)).map((field) => field.category)));
+  const known = FIELDS.filter((field) => chosen.has(field.id)).map((field) => field.category);
+  /* A custom field (see CUSTOM_FIELD_PREFIX below) has no row in FIELDS to read a category off, so
+     it cannot be allowed to contribute nothing - that would send focusProblem back to "Choose at
+     least one job category", the exact dead end a custom field exists to route around. "Other" is
+     the correct bucket: it is what the built-in fields with no closer category (marketing, sales)
+     already resolve to. */
+  const hasCustom = fieldIds.some(isCustomFieldId);
+  return Array.from(new Set(hasCustom ? [...known, "other"] : known));
+}
+
+/* A field the student typed rather than one FIELDS offers.
+ *
+ * The picker is a closed list of ten families, and a student whose actual field is not on it -
+ * there are more careers than that - used to have no way past the screen's own gate: `ready`
+ * (components/start/steps.tsx) withholds the title box, built-in or freely typed, until at least
+ * one field is chosen. Rather than widen `fields` state into two shapes, a custom entry is stored
+ * in the SAME `fields: string[]` the built-ins use, under an id namespaced so it can never collide
+ * with a FIELDS id or be mistaken for one. That is what keeps `ready`, categoriesForFields and
+ * titlesForFields all correct with no change to their callers: a custom id contributes no preset
+ * titles (the pre-existing "unknown id contributes nothing" rule on titlesForFields, unchanged) and
+ * now contributes the "other" category via the branch above. The typed label itself has nowhere to
+ * live in an id-only array, so the component keeps a parallel id-to-label map for rendering. */
+export const CUSTOM_FIELD_PREFIX = "custom:";
+
+export function isCustomFieldId(id: string): boolean {
+  return id.startsWith(CUSTOM_FIELD_PREFIX);
+}
+
+/** Same typed label always maps to the same id, so adding one already selected re-selects the
+ *  existing chip instead of creating a second one that reads identically. */
+export function customFieldId(label: string): string {
+  return `${CUSTOM_FIELD_PREFIX}${label.trim().toLowerCase().replace(/\s+/g, "-")}`;
 }
 
 /**
@@ -293,6 +324,38 @@ export function fieldsForCategories(categories: readonly string[] | null | undef
   if (!Array.isArray(categories) || categories.length === 0) return [];
   const wanted = new Set(categories);
   return FIELDS.filter((field) => wanted.has(field.category)).map((field) => field.id);
+}
+
+/**
+ * fieldsForCategories, guarded against "other" now having a second, unrelated cause.
+ *
+ * "other" already meant marketing OR sales - two real built-in fields sharing one category slug,
+ * with nothing saved to say which - and the over-offer above is how this screen has always
+ * handled that: show both, let the student click one off. A custom field (CUSTOM_FIELD_PREFIX)
+ * resolves to the SAME "other" slug (see categoriesForFields) but never round-trips its own
+ * label, so a returning student whose only field was a typed one - "Supply chain," say - would
+ * come back to marketing and sales pre-checked with nothing on screen explaining why, and no
+ * custom chip to compare them against.
+ *
+ * The fix stays inside fieldsForCategories' own evidence rule rather than widening it: for the
+ * "other" slug specifically, only pre-select a field whose own preset titles the student's SAVED
+ * TITLES actually contain - the same "a stated answer outranks a guess" direction focusSeed takes
+ * below. A genuine marketing or sales pick almost always leaves a matching saved title behind (the
+ * student chose it from the offered list, or typed one close enough); a custom field never does,
+ * because it never offered any titles to choose from. Every other category is unambiguous - one
+ * field each - and returns exactly what fieldsForCategories already returned.
+ */
+export function fieldsForSavedFocus(
+  categories: readonly string[] | null | undefined,
+  titles: readonly string[] | null | undefined,
+): string[] {
+  const implied = fieldsForCategories(categories);
+  const savedTitles = titles ?? [];
+  return implied.filter((id) => {
+    const field = FIELDS.find((f) => f.id === id);
+    if (!field || field.category !== "other") return true;
+    return field.titles.some((preset) => savedTitles.some((title) => title.toLowerCase() === preset.toLowerCase()));
+  });
 }
 
 

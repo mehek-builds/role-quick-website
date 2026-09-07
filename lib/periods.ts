@@ -204,4 +204,7 @@ export const ROLE_TYPES: { slug: string; label: string }[] = [
   { slug: "co-op", label: "Co-op" },
   { slug: "new-grad", label: "New grad" },
   { slug: "full-time", label: "Full-time" },
+  { slug: "contract", label: "Contract" },
+  { slug: "apprenticeship", label: "Apprenticeship" },
+  { slug: "fellowship", label: "Fellowship" },
 ];

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { FIELDS, categoriesForFields, categoriesForRoles, experienceYears, fieldsForCategories, focusProblem, inferResumeTargeting, inferRoleType, titlesForFields } from "./onboarding-role-inference.ts";
+import { FIELDS, categoriesForFields, categoriesForRoles, customFieldId, experienceYears, fieldsForCategories, fieldsForSavedFocus, focusProblem, inferResumeTargeting, inferRoleType, isCustomFieldId, titlesForFields } from "./onboarding-role-inference.ts";
 import { REMOTE_LOCATION } from "./locations.ts";
 import type { ParsedProfile } from "./api.ts";
 
@@ -199,6 +199,21 @@ test("saved categories pre-select their fields, and a shared category pre-select
   assert.deepEqual(fieldsForCategories(null), []);
 });
 
+test("fieldsForSavedFocus keeps the marketing/sales over-offer when a saved title backs it up", () => {
+  assert.deepEqual(fieldsForSavedFocus(["other"], ["Marketing Associate"]), ["marketing"]);
+  assert.deepEqual(fieldsForSavedFocus(["other"], ["Account Executive"]), ["sales"]);
+  // A title matching a preset from either field still over-offers both, same as before.
+  assert.deepEqual(fieldsForSavedFocus(["other"], ["Marketing Associate", "Account Executive"]), ["marketing", "sales"]);
+  // Unambiguous categories are untouched - only "other" gets the evidence check.
+  assert.deepEqual(fieldsForSavedFocus(["software-engineering"], []), ["software"]);
+});
+
+test("fieldsForSavedFocus drops the marketing/sales guess for a custom field's 'other', which has no matching preset title", () => {
+  assert.deepEqual(fieldsForSavedFocus(["other"], ["Supply Chain Coordinator"]), []);
+  assert.deepEqual(fieldsForSavedFocus(["other"], []), []);
+  assert.deepEqual(fieldsForSavedFocus(["other"], null), []);
+});
+
 test("the chosen fields answer the category question the screen never asks", () => {
   // Categories used to arrive from the resume inference, and the screen now runs before any upload.
   assert.deepEqual(categoriesForFields(["software"]), ["software-engineering"]);
@@ -214,6 +229,21 @@ test("every field resolves to a category, so no selection can leave targeting un
   for (const field of FIELDS) {
     assert.equal(categoriesForFields([field.id]).length, 1, `${field.id} resolves to no category`);
   }
+});
+
+test("a custom field id resolves to the other category, the same dead end a built-in field avoids", () => {
+  const id = customFieldId("Supply chain");
+  assert.equal(isCustomFieldId(id), true);
+  assert.deepEqual(categoriesForFields([id]), ["other"]);
+  // Alongside a built-in field it widens rather than replaces.
+  assert.deepEqual(categoriesForFields(["software", id]), ["software-engineering", "other"]);
+  // A plain unknown id (not custom-prefixed) still resolves to nothing, unchanged.
+  assert.equal(isCustomFieldId("nonsense"), false);
+  assert.deepEqual(categoriesForFields(["nonsense"]), []);
+});
+
+test("the same typed label always maps to the same id", () => {
+  assert.equal(customFieldId("Supply Chain"), customFieldId("  supply chain  "));
 });
 
 /* focusProblem: the roles screen's save-time validation.

@@ -1564,7 +1564,7 @@ export type OnboardingState = {
   automatic_conduct_acceptance_consent_version?: string | null;
 };
 
-export type RoleType = "internship" | "co-op" | "new-grad" | "full-time";
+export type RoleType = "internship" | "co-op" | "new-grad" | "full-time" | "contract" | "apprenticeship" | "fellowship";
 
 export type Targeting = {
   categories: string[] | null;
