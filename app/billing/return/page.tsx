@@ -229,6 +229,23 @@ export default function BillingReturnPage() {
           if (reply?.ok === true
             && reply.active === true
             && (reply.access_class === "plus_paid" || reply.access_class === "legacy_paid")) {
+            /* Mirrors the website branch below: fire Purchase only once the extension
+               itself has confirmed the account is active/paid, not on the redirect
+               alone. The extension surface has no receipt of its own, so fetch the
+               same /billing/receipt the website branch uses -- it's account-scoped,
+               not surface-scoped. */
+            const purchaseKey = `litos_tiktok_purchase_sent:${context ?? reply.account_id}`;
+            if (!purchaseSentRef.current && window.sessionStorage.getItem(purchaseKey) !== "1") {
+              purchaseSentRef.current = true;
+              window.sessionStorage.setItem(purchaseKey, "1");
+              const receipt = await getBillingReceipt().catch(() => null);
+              const purchaseEventId = `purchase:${receipt?.reference ?? context ?? reply.account_id}`;
+              const purchaseProperties = receipt
+                ? { value: receipt.amount_cents / 100, currency: receipt.currency }
+                : undefined;
+              sendTikTokEvent("Purchase", purchaseEventId, purchaseProperties);
+              trackTikTokPixelEvent("Purchase", purchaseEventId, purchaseProperties);
+            }
             setResult({ kind: "extension_active", actionReady: reply.action_ready === true });
             return;
           }
