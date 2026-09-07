@@ -1,12 +1,22 @@
 "use client";
 
-/* 08 NOTIFICATIONS: permission, asked between the gift and the price.
+/* 10 NOTIFICATIONS: permission, asked LAST - after the card is on file and verified, the final
+ * screen before the dashboard.
+ *
+ * THIS SCREEN AND ITS POSITION WERE BOTH RECONSIDERED (Mehek, 2026-09-07). It used to be folded
+ * into the trial screen, asked between the gift and the price on the theory that permission is
+ * cheapest to give before any money is involved. It is a screen of its own again and now sits
+ * after `plan`: "verified by our platform" is the stronger consent moment here, and its position
+ * is now also the payment gate for the rest of setup. The backend will not accept a `plan`
+ * acknowledgement without a real Stripe card on file (onboarding.ts, `hasVerifiedPaymentMethod`),
+ * and `notifications` is the one step after it in APPLICATION_STEPS - so a student cannot reach
+ * this screen, or the dashboard past it, without having actually paid.
  *
  * TWO QUESTIONS, AND THE SHORTNESS IS THE DESIGN. Auto-apply, send-without-asking, the
  * security-check hand-back and the receipt-trail consent are all deliberately NOT here. They are
  * standing permissions with real consequences and each is asked at the moment its feature is first
  * used, once the student is properly inside the product. Putting them in setup would make this
- * screen a wall of checkboxes immediately before the price, which is both worse consent hygiene
+ * screen a wall of checkboxes immediately before the dashboard, which is both worse consent hygiene
  * and a worse rung on the ladder.
  *
  * WHY IT IS ASKED HERE AT ALL. Screen 03 established that the posting Litos found was four hours
@@ -59,20 +69,14 @@ function Switch({
   );
 }
 
-/* THE SWITCHES, SEPARATED FROM THE SCREEN, because the screen moved and they must not care.
+/* THE SWITCHES, SEPARATED FROM THE SCREEN so the component can be unit-exercised and so a settings
+ * surface elsewhere in the product could reuse the same control without duplicating its logic.
  *
- * These now render on the trial screen (10 -> 9: the gift and the permission were always one
- * moment, and the doc comment above has said so from the start - "asked between the gift and the
- * price"). The standalone screen below still exists for accounts that acked the trial before the
- * fold and are standing on `notifications` in the ledger; it renders this same component, so the
- * two cannot drift.
- *
- * EACH CHANGE SAVES ITSELF, where the old screen saved on Continue. On a screen of its own,
- * save-on-continue was free; as a section of the trial screen it would couple "Start using it" to
- * a second write that can fail after the acks succeed. Every save still sends EVERY key, for the
- * reason the old comment gave: an unticked box left out reads server-side as "not mentioned"
- * rather than as "no". A student who touches nothing writes nothing, and all-off is exactly the
- * state their account is already in. */
+ * EACH CHANGE SAVES ITSELF rather than waiting for a screen-level Continue: a control the student
+ * can leave without losing what they just ticked is the more honest shape for a permission, and it
+ * keeps the button below about one thing. Every save still sends EVERY key: an unticked box left
+ * out reads server-side as "not mentioned" rather than as "no". A student who touches nothing
+ * writes nothing, and all-off is exactly the state their account is already in. */
 export function NotificationChoices() {
   const [choice, setChoice] = useState<Choice>({ strong_match: false, employer_reply: false, activity_digest: false });
   const [deliverable, setDeliverable] = useState(true);
@@ -189,20 +193,20 @@ export function NotificationChoices() {
         {browser.supported && (
           <Switch
             label="Show me a daily summary on this laptop"
-            detail="A browser notification once a day: what Litos applied to for you, what came back needing you, and any employer replies. Only what changed since the last one, so a quiet day is silent."
+            detail="Once a day, only when something changes."
             checked={choice.activity_digest && browser.subscribed}
             onChange={(next) => void toggleDigest(next)}
           />
         )}
         <Switch
           label="Tell me when a strong match opens"
-          detail="One posting, at most once a day, and only when it clears the same match score your board ranks by. Never a list of everything open."
+          detail="One strong match, at most daily."
           checked={choice.strong_match}
           onChange={(strong_match) => change({ ...choice, strong_match })}
         />
         <Switch
           label="Tell me when an employer replies"
-          detail="Once per reply, when it reaches your tracker. Litos tells you mail arrived and where to read it, never what it said."
+          detail="One alert per reply, no message shown."
           checked={choice.employer_reply}
           onChange={(employer_reply) => change({ ...choice, employer_reply })}
         />
@@ -236,16 +240,6 @@ export function NotificationChoices() {
   );
 }
 
-/* THE LEGACY SCREEN. New accounts never reach it: the trial screen carries the switches and its
- * Continue acknowledges both ledger entries in one motion, so the server never derives
- * `notifications` for them. What still lands here is an account that acked `trial` before the fold
- * shipped, whose ledger's next unanswered step is this one. They get the same switches (the same
- * component, so the two cannot drift) and a Continue that writes the one ack they are owed.
- *
- * The shell stands on "trial", NOT "notifications": that key left STEPS when the screens merged,
- * and a rail position STEPS does not contain renders the loading shimmer for the life of the
- * screen (tests/start-rail-knows-every-live-step.regression-1.test.mjs pins the rule). This screen
- * is the trial moment finishing itself, and that is also where the rail honestly stands. */
 export function NotificationsStep({
   onDone,
   onLater,
@@ -255,7 +249,7 @@ export function NotificationsStep({
 }) {
   const [busy, setBusy] = useState(false);
   return (
-    <StartShell step="trial" title="Want to know when the next one opens?">
+    <StartShell step="notifications" title="Want to know when the next one opens?">
       <NotificationChoices />
       <div className="mt-7">
         <PrimaryButton onClick={() => { setBusy(true); onDone(); }} disabled={busy}>
