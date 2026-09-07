@@ -141,6 +141,21 @@ async function seedBillingReturnContext(context) {
   }, { accountId: ACCOUNT_ID, offerId: OFFER_ID });
 }
 
+/* A COUNTER THAT SETTLES, for traffic a page makes on its own schedule.
+ *
+ * The main-resume probe fires from an effect keyed on the parsed profile, so it lands some time
+ * after the upload's own UI has finished changing. Sampling the counter straight afterwards races
+ * it, and waiting on a rendered panel instead couples the assertion to whichever branch that panel
+ * happens to be behind - which is what timed out here. Polling the counter tests the thing under
+ * test: that the request was made, and made once. */
+async function settlesAt(read, expected, label) {
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    if (read() === expected) return;
+    await delay(50);
+  }
+  assert.equal(read(), expected, label);
+}
+
 function isLocal(url) {
   return url.startsWith(ORIGIN) || url.startsWith("data:") || url.startsWith("blob:") || url === "about:blank";
 }
@@ -593,11 +608,7 @@ test("resume upload accepts a PDF filename with empty or generic MIME metadata",
     assert.equal(await organization.inputValue(), "Fixture Labs");
     assert.equal(await page.getByRole("button", { name: "Save changes" }).isDisabled(), true);
     assert.equal(traffic.profileUploads, 1);
-    /* Waited on rather than sampled: the probe fires from an effect keyed on the parsed profile, so
-       reading the counter straight after "Upload complete" would race it. This panel is the probe's
-       own answer rendered - it appears only once the 404 above has come back. */
-    await page.getByText("Finish setting up your resume.", { exact: true }).waitFor();
-    assert.equal(traffic.baseResumeReads, 1, "the main-resume probe must run once per parsed profile");
+    await settlesAt(() => traffic.baseResumeReads, 1, "the main-resume probe must run once per parsed profile");
     assert.deepEqual(traffic.unknown, []);
     await context.close();
   }
@@ -638,8 +649,7 @@ test("resume upload blocks a concurrent selection, then retries a genuine failur
   assert.equal(traffic.bankReads, 2);
   /* Once, even though the upload was attempted twice: the failed attempt never produced a parsed
      profile, so the probe's effect had nothing to run on until the retry succeeded. */
-  await page.getByText("Finish setting up your resume.", { exact: true }).waitFor();
-  assert.equal(traffic.baseResumeReads, 1, "a retried upload must not probe the main resume twice");
+  await settlesAt(() => traffic.baseResumeReads, 1, "a retried upload must not probe the main resume twice");
   assert.deepEqual(traffic.unknown, []);
   await context.close();
 });
