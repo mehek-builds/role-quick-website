@@ -492,10 +492,18 @@ before(async () => {
       return json({
         /* normalizeEntitlementSnapshot refuses anything that is not schema_version 2, which is why
            the first version of this fixture made every meter read "Not recorded". That fallback is
-           the component behaving correctly, so the fixture is what had to change. */
+           the component behaving correctly, so the fixture is what had to change.
+
+           access_class is free_new, NOT trial_plus: this account has not reached checkout yet (the
+           plan screen below is where that would happen), and per entitlements.ts a Stripe subscription
+           in `trialing` is the ONLY thing that produces trial_plus for an account created after the
+           card requirement. trial stays populated because TrialStep reads it directly (holdsTrial),
+           independent of access_class - that is what "counted after the build spent one generation"
+           is testing. Reading trial_plus here (as an earlier version of this fixture did) silently
+           told the plan screen this account already held Litos+ and skipped it entirely. */
         schema_version: 2,
         account_id: "acct-1",
-        access_class: "trial_plus",
+        access_class: "free_new",
         trial: {
           meter_policy: "litos_plus_v2_lifetime",
           starts_at: new Date().toISOString(),
