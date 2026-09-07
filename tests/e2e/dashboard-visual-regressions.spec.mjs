@@ -534,6 +534,34 @@ const STORED_DOCUMENT_FIXTURE = {
   deleted_at: null,
 };
 
+/* A file saved to Litos after a fill stopped does not prove that the employer received it. The
+ * current review still carries the required ask, while the per-application mark keeps the saved
+ * file available for the next fill. */
+const STORED_REQUIRED_TRANSCRIPT_PACKET = {
+  ...TRANSCRIPT_PACKET,
+  id: "fixture-packet-stored-required-transcript",
+  job_context: {
+    ...TRANSCRIPT_PACKET.job_context,
+    company: "Fixture Analytics",
+    role: "Data Science Intern",
+  },
+  spec: {
+    ...TRANSCRIPT_PACKET.spec,
+    _review: {
+      ...TRANSCRIPT_PACKET.spec._review,
+      attention_reason: '"Transcript (PDF)" is required and is still empty\n'
+        + '1 required field has no question you can answer in Litos: "Transcript (PDF)"',
+    },
+    _documents: {
+      transcript: {
+        file_name: STORED_DOCUMENT_FIXTURE.file_name,
+        attached_at: "2026-09-07T15:26:14.370Z",
+        ordered_at: null,
+      },
+    },
+  },
+};
+
 const HOME_JOB_FIXTURE = {
   id: "fixture-home-denial-job",
   company_name: "Focus Labs",
@@ -2224,6 +2252,52 @@ test("an ask can be answered with a file already in the library, and a single-us
       "the attached state still offers the upload action",
     );
     assertNoPageErrors(state, "Stored document reuse");
+  } finally {
+    await context.close();
+  }
+});
+
+test("a stored transcript stays manageable while the employer field still needs a refill", async () => {
+  const attachment = {
+    kind: "transcript",
+    document_id: STORED_DOCUMENT_FIXTURE.id,
+    file_name: STORED_DOCUMENT_FIXTURE.file_name,
+    attached_at: "2026-09-07T15:26:14.370Z",
+    ordered_at: null,
+    employer_label: "Transcript (PDF)",
+    official_requested: false,
+  };
+  const { context, page, state } = await newDashboardPage({
+    viewport: { width: 1280, height: 900 },
+    boardFixture: APPLICATION_PACKET_BOARD_FIXTURE,
+    resumeHistoryFixture: [APPLICATION_PACKET, STORED_REQUIRED_TRANSCRIPT_PACKET],
+    submissionFixtures: {
+      [STORED_REQUIRED_TRANSCRIPT_PACKET.id]: {
+        application_id: STORED_REQUIRED_TRANSCRIPT_PACKET.id,
+        review: STORED_REQUIRED_TRANSCRIPT_PACKET.spec._review,
+        cover_letter: null,
+        documents: { transcript: attachment },
+      },
+    },
+    documentsFixture: { documents: [STORED_DOCUMENT_FIXTURE] },
+  });
+  try {
+    await page.goto(`${ORIGIN}/dashboard/applications?application=${STORED_REQUIRED_TRANSCRIPT_PACKET.id}&intent=apply`, {
+      waitUntil: "domcontentloaded",
+    });
+    const manageTranscript = page.getByRole("button", {
+      name: "Open the transcript attached to this application, where you can remove it",
+      exact: true,
+    });
+    await manageTranscript.waitFor({ state: "visible" });
+    assert.equal(
+      await page.getByText(/1 required field has no question you can answer in Litos/i).count(),
+      0,
+      "the opaque duplicate hid the saved file's dashboard control",
+    );
+    await manageTranscript.click();
+    await page.getByRole("heading", { name: "Transcript attached", exact: true }).waitFor({ state: "visible" });
+    assertNoPageErrors(state, "Stored required transcript");
   } finally {
     await context.close();
   }

@@ -279,7 +279,7 @@ export function checklistRowControl(
        pressing this does. On a settled row the file is already stored and the only thing behind the
        control is the modal state that can remove it, so "Add the file this employer asks for" would
        be a screen reader being told the opposite of what is about to happen. */
-    const name = item.settled
+    const name = item.settled || item.action === "Manage file"
       ? `Open the ${item.documentKind} attached to this application, where you can remove it`
       : `Add the file this employer asks for: ${item.label}`;
     return { element: "attach", label: item.action, name, kind: item.documentKind };
@@ -433,6 +433,17 @@ function attentionBlockerRewrite(blocker: string): { label: string; detail: stri
 function blockerSubject(blocker: string): string {
   const quoted = blocker.match(/[“"]([^”"]{3,})[”"]/);
   return normalizedChecklistText(quoted?.[1] ?? blocker);
+}
+
+function sameMeasuredField(left: string, right: string): boolean {
+  if (left === right) return true;
+  /* The same employer label can reach these two fields through different payload limits. A
+     question-derived document ask may retain more text than the blocker produced by
+     humanFieldLabel, which clips at 120 characters. Accept only a substantial exact prefix so the
+     clip does not hide the stored-file control, while short generic labels cannot merge unrelated
+     employer fields. */
+  const [shorter, longer] = left.length <= right.length ? [left, right] : [right, left];
+  return shorter.length >= 24 && longer.startsWith(shorter);
 }
 
 function dashboardOnlyBlockerLabel(blocker: string): string {
@@ -745,7 +756,7 @@ function attachedDocumentItem(
 function documentAskItems(
   rawAsks: readonly RequiredDocumentAsk[],
   context: { company?: string; role?: string; documents?: ChecklistDocumentMarks },
-  review: Pick<ApplicationReview, "transcript_supported">,
+  review: Pick<ApplicationReview, "attention_reason" | "status" | "transcript_supported">,
 ): SubmissionChecklistItem[] {
   /* The employer is the SUBJECT of the sentence. "Transcript required" is a form validation
      message; a student reading it has to work out who wants it and what happens if she ignores it.
@@ -805,6 +816,34 @@ function documentAskItems(
         subject: `${subject} no litos control`,
       });
       return rows;
+    }
+    const employerStillReportsDocumentEmpty = review.status === "needs_attention"
+      && compactLines(review.attention_reason).some((blocker) => (
+        sameMeasuredField(blockerSubject(blocker), subject)
+        && (blockerReportsEmptyField(blocker) || /required field\b.*no question you can answer/i.test(blocker))
+      ));
+    if (mark?.attached_at && employerStillReportsDocumentEmpty) {
+      /* THE FILE IS STORED, BUT THIS RUN STILL SAYS THE EMPLOYER'S FIELD IS EMPTY.
+
+         `attached_at` records that Litos saved the file to this application. It does not prove the
+         employer received it. This run's required-document measurement and matching empty-field
+         blocker together say the form still needs it. Treating this row as settled removed it from
+         both needs-attention views and left only the opaque empty-field sentence, with no way to
+         inspect or replace the saved file. Keep it outstanding until a later fill clears that
+         evidence. The ordinary carried-file branch below remains settled once it is gone. */
+      const stored = mark.file_name?.trim();
+      return [{
+        id: `document-stored-${ask.kind}`,
+        label: `Your ${ask.kind} is saved in Litos`,
+        detail: stored
+          ? `${stored}. Review and fill again so Litos can attach it to the employer's form.`
+          : "Review and fill again so Litos can attach it to the employer's form.",
+        action: "Manage file",
+        actionKind: "attach" as const,
+        documentKind: ask.kind,
+        badge: "Required",
+        subject,
+      }];
     }
     if (mark?.attached_at) {
       /* ATTACHED IS NOT ABSENT, and this branch returning [] is what made a published privacy

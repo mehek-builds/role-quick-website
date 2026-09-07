@@ -653,7 +653,8 @@ test("the actionable document row survives the generic blocker about the same fi
     {
       status: "needs_attention",
       questions: [],
-      attention_reason: '"Transcript" is required and is still empty',
+      attention_reason: '"Transcript" is required and is still empty\n'
+        + '1 required field has no question you can answer in Litos: "Transcript"',
       required_documents: [transcriptAsk],
     },
     { company: "Databricks" },
@@ -741,12 +742,10 @@ test("a document only ordered, never attached, is not confirmed as stored", () =
   assert.deepEqual(items, []);
 });
 
-test("the stale blocker about the same field loses to the row that says the file is attached", () => {
-  /* The run that stopped emitted `"Transcript" is required and is still empty`, and it was true when
-     it was written. After the upload it is a sentence contradicting the file sitting next to it.
-     addUnique drops on subject collision and the confirmation is added first, so the accurate row is
-     the survivor, which is the same rule that makes the actionable row beat this blocker before the
-     upload. */
+test("the stale blocker about the same field yields to the actionable stored-file row", () => {
+  /* The run stopped on an empty employer field, then Litos saved the file to this application.
+     addUnique drops the duplicate blocker while the surviving row states both facts and keeps the
+     dashboard control. */
   const items = humanInputItems(
     {
       status: "needs_attention",
@@ -757,7 +756,42 @@ test("the stale blocker about the same field loses to the row that says the file
     { company: "Databricks", documents: { transcript: { file_name: "t.pdf", attached_at: "2026-08-11T09:00:00.000Z", ordered_at: null } } },
   );
 
-  assert.deepEqual(items.map((item) => item.label), ["Your transcript is attached"]);
+  assert.deepEqual(items.map((item) => item.label), ["Your transcript is saved in Litos"]);
+  assert.equal(items[0]?.action, "Manage file");
+  assert.equal(items[0]?.settled, undefined);
+});
+
+test("a clipped blocker still reopens the matching stored document without matching a short generic prefix", () => {
+  const longLabel = "Please provide a copy of your most recent transcript from your highest degree level, including every completed term and the institution name";
+  const clippedLabel = longLabel.slice(0, 117);
+  const context = {
+    company: "Databricks",
+    documents: { transcript: { file_name: "t.pdf", attached_at: "2026-08-11T09:00:00.000Z", ordered_at: null } },
+  };
+
+  const matching = humanInputItems(
+    {
+      status: "needs_attention",
+      questions: [],
+      attention_reason: `"${clippedLabel}" is required and is still empty`,
+      required_documents: [{ ...transcriptAsk, label: longLabel }],
+    },
+    context,
+  );
+  assert.equal(matching[0]?.label, "Your transcript is saved in Litos");
+  assert.equal(matching[0]?.settled, undefined);
+
+  const generic = humanInputItems(
+    {
+      status: "needs_attention",
+      questions: [],
+      attention_reason: '"Please provide a copy" is required and is still empty',
+      required_documents: [{ ...transcriptAsk, label: longLabel }],
+    },
+    context,
+  );
+  assert.equal(generic[0]?.label, "Your transcript is attached");
+  assert.equal(generic[0]?.settled, true);
 });
 
 test("ordering an official copy stops the row demanding, and does not pretend the file is attached", () => {
@@ -2142,12 +2176,10 @@ test("only document rows survive: an ordinary blocker is not smuggled through wi
   assert.deepEqual(documentStepsInPlan(plan), []);
 });
 
-test("the attached confirmation stays in the list, because it is the only way back to Remove", () => {
-  /* Settled rows live in `plan.settled`, not in `nonQuestionTasks`. A list built from the outstanding
-     half alone would vanish the instant she attached the file, taking with it the control that opens
-     the modal where "Remove this file" lives, while /privacy publishes "we keep it until you remove
-     it". */
-  const plan = directInputTaskPlan(transcriptAskReview(), {
+test("an attached confirmation stays in the list when no employer-empty evidence remains", () => {
+  /* A required inventory may outlive the specific blocker. Without current employer-empty evidence,
+     the stored file remains a settled confirmation rather than invented outstanding work. */
+  const plan = directInputTaskPlan({ ...transcriptAskReview(), attention_reason: undefined }, {
     ...VERKADA,
     documents: { transcript: { file_name: "USC Transcript.pdf", attached_at: "2026-09-03T12:00:00.000Z" } },
   });
