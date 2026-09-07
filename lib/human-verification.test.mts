@@ -98,6 +98,65 @@ test("replaced frame, expiry, cancellation and unmount stop queued input", async
   }
 });
 
+test("an idle replacement adopts its own identity and sequence", async () => {
+  const calls: VerificationCommand[] = [];
+  const replacement = { ...frame, frameId: "replacement", revision: 2, nextSequence: 17, image: "replacement-image" };
+  const q = createVerificationInputQueue({ now: () => 1000, onError: assert.fail,
+    send: async command => { calls.push(command); return { ok: true, nextSequence: command.sequence + 1 }; } });
+  q.observe(frame);
+  q.observe(replacement);
+  assert.equal(q.push({ type: "focus" }, frame), false, "the retired identity cannot send");
+  assert.equal(q.push({ type: "focus" }, replacement), true);
+  await tick();
+  assert.deepEqual(calls.map(({ frameId, revision, sequence }) => ({ frameId, revision, sequence })), [
+    { frameId: "replacement", revision: 2, sequence: 17 },
+  ]);
+  q.close();
+});
+
+test("a stale refusal stays blocked until explicit refresh adopts the replacement", async () => {
+  const calls: VerificationCommand[] = [], errors: string[] = [];
+  const replacement = { ...frame, frameId: "replacement", revision: 2, nextSequence: 23, image: "replacement-image" };
+  const q = createVerificationInputQueue({ now: () => 1000, onError: message => errors.push(message),
+    send: async command => {
+      calls.push(command);
+      if (calls.length === 1) throw new Error("synthetic 409");
+      return { ok: true, nextSequence: command.sequence + 1 };
+    } });
+  q.observe(frame);
+  q.push({ type: "focus" }, frame);
+  await tick();
+  q.observe(replacement);
+  assert.equal(errors.length, 1);
+  assert.equal(q.push({ type: "key", key: "Enter" }, replacement), false, "polling a new frame is not an implicit retry");
+  assert.equal(q.resume(replacement), true);
+  assert.equal(q.push({ type: "key", key: "Enter" }, replacement), true);
+  await tick();
+  assert.deepEqual(calls.map(command => [command.frameId, command.revision, command.sequence]), [
+    ["frame", 1, 1], ["replacement", 2, 23],
+  ]);
+  q.close();
+});
+
+test("replacement during pending input drops the old queue and requires explicit refresh", async () => {
+  const calls: VerificationCommand[] = [], errors: string[] = [];
+  let settle!: (value: { ok: true; nextSequence: number }) => void;
+  const replacement = { ...frame, frameId: "replacement", revision: 2, nextSequence: 31, image: "replacement-image" };
+  const q = createVerificationInputQueue({ now: () => 1000, onError: message => errors.push(message),
+    send: command => { calls.push(command); return new Promise(resolve => { settle = resolve; }); } });
+  q.observe(frame);
+  q.push({ type: "focus" }, frame);
+  q.push({ type: "key", key: "Enter" }, frame);
+  q.observe(replacement);
+  settle({ ok: true, nextSequence: 2 });
+  await tick();
+  assert.equal(errors.length, 1);
+  assert.equal(calls.length, 1, "the queued command for the old frame was dropped");
+  assert.equal(q.push({ type: "focus" }, replacement), false);
+  assert.equal(q.resume(replacement), true);
+  q.close();
+});
+
 test("an old snapshot cannot reset sequence after a successful input", async () => {
   const calls: VerificationCommand[] = [];
   const q = createVerificationInputQueue({ now: () => 1000, onError: assert.fail,
