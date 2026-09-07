@@ -112,17 +112,18 @@ describe("every message a composer button raises lands beside that button", () =
     assert.deepEqual(setErrorCalls, ["null"], "the generate path must not write to the page banner");
   });
 
-  test("Fill application answers in the composer without starting generation", () => {
+  test("a manual Fill request stays in the composer and points to internal tailoring", () => {
     assert.match(
       fillApplication,
-      /reportFailure\(reason instanceof Error \? reason\.message : "Litos could not prepare this form\. Your job details are still here\."\);/,
+      /choose Tailor resume first to prepare this application in Litos/,
     );
     assert.match(
       fillApplication,
-      /if \(errorSurface === "tracker"\)[\s\S]{0,480}else \{\s*refuseInComposer\("action", message, fields\);/,
-      "a composer retry stays beside its button while a Tracker or captcha-recovery retry stays off the page banner",
+      /if \(errorSurface === "tracker"\)[\s\S]{0,480}else \{\s*refuseInComposer\("action", message, \["jobDescription"\]\);/,
+      "a manual composer request must remain beside its button while tracker requests retain their own surface",
     );
     assert.doesNotMatch(fillApplication, /\/resume\/generate/);
+    assert.doesNotMatch(fillApplication, /window\.open|location\.replace|startFreeFillThroughExtension/);
   });
 
   test("a server failure marks no boxes, and the panel honours that", () => {

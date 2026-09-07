@@ -10,9 +10,6 @@ import {
   api,
   ApiError,
   getPostingQuestions,
-  getToken,
-  isGuestSession,
-  type ApplicationFillHandoff,
   type ApplicationQuestion,
   type ApplicationQuestionMetadataBlocker,
   type ApplicationProfile,
@@ -61,7 +58,6 @@ import { TranscriptModal } from "@/components/app/TranscriptModal";
 import { AutopilotLockNote, NextMatchCard, useAutopilot, type NextMatch } from "@/components/app/Autopilot";
 import { InterviewPrep } from "@/components/app/InterviewPrep";
 import { fetchJdMatch, resumeSpecText } from "@/features/applications";
-import { ensureCurrentExtensionSession, startFreeFillThroughExtension } from "@/lib/extension-bridge";
 import { applyBankVariant, type ApplyOutcome } from "@/features/applications";
 import { RequirementProvider, RequirementText, MatchLegend } from "@/components/app/RequirementText";
 import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX, exactPacketAuditClauses, exactPacketAuditRanges } from "@/features/applications";
@@ -373,19 +369,6 @@ type CoverLetterResponse = {
   cover_letter: CoverLetter;
   download_url: string;
 };
-type ApplicationFillResponse = {
-  application_id: string;
-  status: string;
-  application_fill: true;
-  automatic_submission_allowed: boolean;
-  requires_final_submit: boolean;
-  needs_user: unknown;
-  selected_resume_artifact_id: string | null;
-  handoff?: ApplicationFillHandoff;
-  application?: CanonicalApplication;
-};
-type FillReceipt = ApplicationFillResponse & { company: string; role: string; portalUrl: string };
-
 function sameCoverLetter(left: CoverLetter | undefined, right: CoverLetter): boolean {
   return left?.body === right.body
     && left.word_count === right.word_count
@@ -559,15 +542,16 @@ type NewApplicationDraft = {
   role: string;
   portalUrl: string;
   jobDescription: string;
-  /* Set only when the draft was opened from a posting on the jobs list. It is recorded on the
-     application so that list can later mark this exact posting "Applied" instead of every posting
-     sharing its company and title. Null for a hand-typed link, which points at no posting we
-     watch, and the student can edit the company and role here anyway, so the id must not survive
-     that and claim a row it no longer describes, which is why nothing below carries it over. */
+  /* Set when the draft was opened from the jobs list or Read job returned an exact monitored
+     inventory match. It is recorded on the application so the list can later mark that posting
+     "Applied" instead of every posting sharing its company and title. The id must not survive an
+     identity edit, which is why applyDraftEdit clears it when company, role, or URL changes. */
   jobId: string | null;
   /** Existing Free Tracker row this paid artifact must attach to. Cleared if its identity changes. */
   canonicalApplicationId: string | null;
 };
+
+const MONITORED_JOB_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const EMPTY_APPLICATION_DRAFT: NewApplicationDraft = {
   company: "",
@@ -1158,10 +1142,10 @@ function Applications() {
   const [removingApplicationId, setRemovingApplicationId] = useState<string | null>(null);
   const [removeError, setRemoveError] = useState<string | null>(null);
   const managedPrepareRef = useRef<string | null>(null);
+  const jobReadRevisionRef = useRef(0);
   const [extractingJd, setExtractingJd] = useState(false);
   const [showNewApplication, setShowNewApplication] = useState(false);
   const [newApplication, setNewApplication] = useState(EMPTY_APPLICATION_DRAFT);
-  const [fillReceipt, setFillReceipt] = useState<FillReceipt | null>(null);
   /* ISSUE-040: the composer's own refusal, kept OUT of the page-level `error` on purpose.
      "Fill in all four boxes first." used to render in the banner above the composer, which on a
      723px viewport measured y = -281 while the button that raised it sat at y = 434: announced to a
@@ -3171,14 +3155,19 @@ function Applications() {
   }, []);
 
   /* Every edit the student makes to the draft goes through here so the posting id cannot outlive
-     the posting it describes. Retyping the company or the role means this is no longer the job
+     the posting it describes. Retyping the company, role, or link means this is no longer the job
      that was opened from the list, and an id kept across that edit would mark THAT row "Applied"
-     on the strength of an application to something else: the same false positive the id exists to
-     remove, just arrived at from the other direction. Changing the link or the description is not
-     a change of identity, so those leave it alone. */
+     on the strength of an application to something else. The description can be corrected without
+     changing the posting identity. */
   function applyDraftEdit(next: NewApplicationDraft) {
     // The refusal described the form as it was. Typing is the student answering it.
     setComposerRefusal(null);
+    if (next.company !== newApplication.company
+      || next.role !== newApplication.role
+      || next.portalUrl !== newApplication.portalUrl) {
+      jobReadRevisionRef.current += 1;
+      setExtractingJd(false);
+    }
     setNewApplication((current) => {
       const identityChanged = next.company !== current.company
         || next.role !== current.role
@@ -3202,12 +3191,14 @@ function Applications() {
       refuseInComposer("url", "Enter a complete job URL beginning with https://.", ["portalUrl"]);
       return;
     }
+    const readRevision = jobReadRevisionRef.current + 1;
+    jobReadRevisionRef.current = readRevision;
     setExtractingJd(true);
     setComposerRefusal(null);
     setError(null);
     setNotice(null);
     try {
-      const extracted = await api<{ jd_text: string; page_title?: string; company?: string; role?: string }>("/jobs/extract", {
+      const extracted = await api<{ jd_text: string; page_title?: string; company?: string; role?: string; job_id?: unknown }>("/jobs/extract", {
         method: "POST",
         body: JSON.stringify({ job_url: portalUrl }),
       });
@@ -3217,21 +3208,44 @@ function Applications() {
          link: the description arrived, both boxes stayed empty, and "Tailor resume first" stayed
          disabled until she typed the company and role back in by hand. */
       const fillBlank = (current: string, found: string | undefined) => (current.trim() ? current : (found ?? "").trim());
-      setNewApplication((current) => ({
-        ...current,
-        jobDescription: extracted.jd_text,
-        company: fillBlank(current.company, extracted.company),
-        role: fillBlank(current.role, extracted.role),
-      }));
-      setNotice("Pulled the job description from that URL. Skim it before generating - some boards need a manual paste instead.");
+      if (jobReadRevisionRef.current !== readRevision) return;
+      setNewApplication((current) => {
+        /* A response belongs only to the URL that requested it. Without this equality check, an
+           older Read job response can attach its monitored posting id after the student has typed
+           a different URL, routing that new draft through the wrong managed application. */
+        if (current.portalUrl.trim() !== portalUrl) return current;
+        const sameIdentityField = (typed: string, found: unknown) => {
+          const normalizedFound = typeof found === "string" ? found.trim().toLocaleLowerCase() : "";
+          return normalizedFound.length > 0
+            && (!typed.trim() || typed.trim().toLocaleLowerCase() === normalizedFound);
+        };
+        const extractedJobId = typeof extracted.job_id === "string"
+          && MONITORED_JOB_ID.test(extracted.job_id)
+          && sameIdentityField(current.company, extracted.company)
+          && sameIdentityField(current.role, extracted.role)
+          ? extracted.job_id
+          : null;
+        return {
+          ...current,
+          jobDescription: extracted.jd_text,
+          company: fillBlank(current.company, extracted.company),
+          role: fillBlank(current.role, extracted.role),
+          jobId: extractedJobId ?? current.jobId,
+        };
+      });
+      if (jobReadRevisionRef.current === readRevision) {
+        setNotice("Job description ready. Review it, then prepare the application in Litos.");
+      }
     } catch (err) {
       // A 502 here is expected for some client-rendered boards (see backend jobExtract.ts) - the
       // manual textarea right below stays the fallback, this just saves the copy/paste when it works.
       /* No fields marked: a board that will not give up its text is not the student's URL being
          wrong, and border-danger on the box they typed correctly reads as an accusation. */
-      refuseInComposer("url", err instanceof ApiError ? err.message : "We could not read that page. Paste the job description below instead.", []);
+      if (jobReadRevisionRef.current === readRevision) {
+        refuseInComposer("url", err instanceof ApiError ? err.message : "We could not read that page. Paste the job description below instead.", []);
+      }
     } finally {
-      setExtractingJd(false);
+      if (jobReadRevisionRef.current === readRevision) setExtractingJd(false);
     }
   }
 
@@ -3379,140 +3393,17 @@ function Applications() {
       await prepareMonitoredApplication(draft, errorSurface);
       return;
     }
-    const company = draft.company.trim();
-    const role = draft.role.trim();
-    const portalUrl = draft.portalUrl.trim();
-    const reportFailure = (message: string, fields: ApplicationDraftField[] = []) => {
-      if (errorSurface === "tracker") {
-        setCanonicalFillError(message);
-        setSubmissionFillError(null);
-        setError(null);
-      } else if (errorSurface === "submission") {
-        setSubmissionFillError(message);
-        setCanonicalFillError(null);
-        setError(null);
-      } else {
-        refuseInComposer("action", message, fields);
-      }
-    };
-    const missing = ([
-      ["company", company],
-      ["role", role],
-      ["portalUrl", portalUrl],
-    ] as const).filter(([, value]) => !value).map(([field]) => field as ApplicationDraftField);
-    if (missing.length > 0) {
-      reportFailure("Add the company, role, and job URL first.", missing);
-      return;
-    }
-    if (!isHttpsJobUrl(portalUrl)) {
-      reportFailure("Enter a complete job URL beginning with https://.", ["portalUrl"]);
-      return;
-    }
-    setComposerRefusal(null);
-    setCanonicalFillError(null);
-    setSubmissionFillError(null);
-    setCreating("fill");
-    setError(null);
-    setNotice(null);
-    let companyTab: Window | null = null;
-    try {
-      if (qaMode) {
-        setFillReceipt({
-          application_id: `qa-fill-${Date.now()}`,
-          status: "ready_for_review",
-          application_fill: true,
-          automatic_submission_allowed: false,
-          requires_final_submit: true,
-          needs_user: [],
-          selected_resume_artifact_id: null,
-          company,
-          role,
-          portalUrl,
-        });
-      } else {
-        // Reserve a browser-created tab synchronously while this still belongs to the click. The
-        // exact employer URL is not loaded until the extension has adopted this account and
-        // explicitly acknowledged the canonical fill-only binding.
-        companyTab = window.open("about:blank", "_blank");
-        if (!companyTab) {
-          reportFailure("Chrome blocked the company tab. Allow pop-ups for Litos, then try again.");
-          return;
-        }
-        try {
-          companyTab.opener = null;
-          companyTab.document.body.textContent = "Litos is checking the extension and preparing this application.";
-        } catch {
-          companyTab.close();
-          companyTab = null;
-          reportFailure("Litos could not prepare a safe company tab. Nothing was opened.");
-          return;
-        }
-
-        const extension = await ensureCurrentExtensionSession({ token: getToken(), guest: isGuestSession() });
-        if (!extension.installed || !extension.signedIn || extension.otherAccount || extension.updateRequired) {
-          throw new Error(extension.updateRequired
-            ? "Update the Litos extension from the Chrome Web Store, then try again."
-            : extension.otherAccount
-              ? "The Litos extension is signed in to another account. Sign out there, then try again."
-              : "Install the Litos extension and sign in to this account before filling the company form.");
-        }
-        const created = await api<{ application: CanonicalApplication; created: boolean }>("/applications", {
-          method: "POST",
-          body: JSON.stringify({
-            ...(draft.jobId ? { job_id: draft.jobId } : {}),
-            company,
-            role,
-            portal_url: portalUrl,
-            source: "dashboard",
-            source_surface: "dashboard",
-          }),
-        });
-        setPackets((current) => current
-          ? upsertCanonicalApplicationHistory(current, created.application)
-          : current);
-        const filled = await api<ApplicationFillResponse>(`/applications/${encodeURIComponent(created.application.id)}/fill`, { method: "POST" });
-        const trackedApplication = filled.application ?? created.application;
-        setPackets((current) => current
-          ? upsertCanonicalApplicationHistory(current, trackedApplication)
-          : current);
-        setCanonicalSelected((current) => current?.id === trackedApplication.id ? trackedApplication : current);
-
-        const handoff = filled.handoff;
-        const expectedPortal = created.application.portal_url;
-        const expectedFillDataUrl = `/applications/${created.application.id}/fill-data`;
-        if (
-          !handoff
-          || handoff.mode !== "extension_portal_fill"
-          || handoff.extension_required !== true
-          || handoff.application_id !== created.application.id
-          || handoff.portal_url !== expectedPortal
-          || handoff.fill_data_url !== expectedFillDataUrl
-        ) {
-          throw new Error("Litos could not verify the exact fill handoff. Nothing was opened.");
-        }
-        await startFreeFillThroughExtension({
-          applicationId: handoff.application_id,
-          portalUrl: handoff.portal_url,
-        });
-        if (companyTab.closed) throw new Error("The company tab closed before Litos could open the form. Try again.");
-        companyTab.location.replace(handoff.portal_url);
-        setFillReceipt({ ...filled, company, role, portalUrl: handoff.portal_url });
-        track("application_fill_handoff_armed", {
-          source: draft.jobId ? "monitored_job" : "manual",
-          automatic_submission: false,
-        });
-      }
-      if (errorSurface === "composer") {
-        setNewApplication(EMPTY_APPLICATION_DRAFT);
-        forgetCheckoutDraft();
-        setShowNewApplication(false);
-        replaceClosedComposerUrl(window.location, (data, unused, url) => window.history.replaceState(data, unused, url));
-      }
-    } catch (reason) {
-      companyTab?.close();
-      reportFailure(reason instanceof Error ? reason.message : "Litos could not prepare this form. Your job details are still here.");
-    } finally {
-      setCreating(null);
+    const message = "Add or read the job description, then choose Tailor resume first to prepare this application in Litos.";
+    if (errorSurface === "tracker") {
+      setCanonicalFillError(message);
+      setSubmissionFillError(null);
+      setError(null);
+    } else if (errorSurface === "submission") {
+      setSubmissionFillError(message);
+      setCanonicalFillError(null);
+      setError(null);
+    } else {
+      refuseInComposer("action", message, ["jobDescription"]);
     }
   }
 
@@ -3633,11 +3524,13 @@ function Applications() {
         feature: "ai_resume_tailoring",
         placement: draft.canonicalApplicationId ? "canonical_application_detail" : "application_composer",
         trigger: source === "server_denial" ? "server_entitlement_denial" : "tailor_resume",
-        manualLabel: "Fill with my main resume",
+        manualLabel: draft.jobId ? "Fill with my main resume" : "Keep editing",
         applicationId: draft.canonicalApplicationId ?? undefined,
         returnRoute: canonicalReturnRoute,
         onBeforeCheckout: () => rememberCheckoutDraft(draft),
-        onManual: () => void fillApplication(draft, draft.canonicalApplicationId ? "tracker" : "composer"),
+        ...(draft.jobId
+          ? { onManual: () => void fillApplication(draft, draft.canonicalApplicationId ? "tracker" : "composer") }
+          : {}),
       }, source === "server_denial"
         ? { source: "server_denial", trigger }
         : { trigger });
@@ -5706,7 +5599,6 @@ function Applications() {
         <p role="alert" className="rounded-inner bg-danger-soft px-4 py-3 text-sm text-danger">{educationDriftBanner}</p>
       )}
       {notice && <p role="status" className="rounded-inner bg-positive-soft px-4 py-3 text-sm text-positive">{notice}</p>}
-      {fillReceipt && <ApplicationFillReceipt receipt={fillReceipt} onClose={() => setFillReceipt(null)} />}
       {showNewApplication && (
         <NewApplicationPanel
           value={newApplication}
@@ -6764,8 +6656,7 @@ function CanonicalApplicationDetail({
           coral) and it is decorative everywhere it appears, but a segmented horizontal bar pinned to
           the top of the one card whose entire job is reporting how far an application has got reads
           as a progress meter, and it had no labels, no legend and no relationship to state. It
-          stays on ApplicationFillReceipt below, which reports a completed handoff rather than a
-          position in a pipeline, so nothing there invites the same reading. */}
+          is reserved for decorative contexts, so nothing here invites that reading. */}
       <div className="p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -6940,38 +6831,6 @@ function CanonicalApplicationDetail({
   );
 }
 
-function ApplicationFillReceipt({ receipt, onClose }: { receipt: FillReceipt; onClose: () => void }) {
-  return (
-    <Card className="overflow-hidden border-teal/45" role="status">
-      <div className="grid h-1 grid-cols-3" aria-hidden="true"><span className="bg-teal" /><span className="bg-brand" /><span className="bg-coral" /></div>
-      <div className="p-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="font-mono text-label uppercase tracking-[0.08em] text-teal-ink">Extension handoff</p>
-            <h2 className="mt-2 text-heading font-[450] text-ink">The employer form is ready to fill.</h2>
-            <p className="mt-1 text-small text-muted">{receipt.role} at {receipt.company}</p>
-          </div>
-          <button type="button" onClick={onClose} className="min-h-11 px-3 text-small text-muted hover:text-ink">Dismiss</button>
-        </div>
-        <div className="mt-5 grid gap-3 sm:grid-cols-3">
-          <ReceiptFact label="Extension" value="Handoff armed" tone="teal" />
-          <ReceiptFact label="Fill action" value="Click Fill in the Litos card" tone="brand" />
-          <ReceiptFact label="Final control" value="You review and submit" tone="coral" />
-        </div>
-        <p className="mt-5 text-small text-muted">Chrome opened the exact employer form. Click Fill in the Litos extension card there. Tracker updates only after the extension reports what it actually filled. Litos stops on unknown, sensitive, or human-verification fields, and nothing is submitted from this handoff.</p>
-        <div className="mt-5 flex flex-wrap gap-3">
-          <ButtonLink href="/dashboard/settings#application-details" variant="quiet">Review saved details</ButtonLink>
-        </div>
-      </div>
-    </Card>
-  );
-}
-
-function ReceiptFact({ label, value, tone }: { label: string; value: string; tone: "teal" | "brand" | "coral" }) {
-  const color = tone === "teal" ? "text-teal-ink" : tone === "coral" ? "text-coral-ink" : "text-brand-ink";
-  return <div className="rounded-inner border border-border p-4"><p className={`font-mono text-label uppercase tracking-[0.08em] ${color}`}>{label}</p><p className="mt-2 text-small font-medium text-ink">{value}</p></div>;
-}
-
 function packetTimestamp(packet: GeneratedResume): string {
   return packet.spec._review?.updated_at ?? packet.created_at ?? "";
 }
@@ -7013,7 +6872,11 @@ function NewApplicationPanel({
       <div className="max-w-2xl">
         <p className="text-xs text-muted">New application</p>
         <h2 id="new-application-heading" tabIndex={-1} className="mt-2 text-xl font-medium text-ink outline-none">Fill an application.</h2>
-        <p className="mt-1 text-sm leading-6 text-muted">Factual filling is unlimited. Add the job description only when you want a tailored resume too.</p>
+        <p className="mt-1 text-sm leading-6 text-muted">
+          {managedPrepare
+            ? "Prepare with your main resume, or add the job description to tailor it first."
+            : "Add or read the job description, then tailor your resume and review the packet in Litos."}
+        </p>
       </div>
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
         <ApplicationField label="Company" value={value.company} onChange={(company) => patch({ company })} placeholder="Google" invalid={invalid("company")} />
@@ -7062,16 +6925,16 @@ function NewApplicationPanel({
         <p id={readinessId} className="mr-auto max-w-xl text-small leading-6 text-muted">
           {managedPrepare
             ? "Prepare with your main resume inside Litos. You will review the exact packet here before anything can be sent."
-            : "Company, role, and a complete HTTPS job URL unlock the extension fallback. A job description also unlocks tailoring."}
+            : "Add or read the job description, then tailor the packet in Litos."}
         </p>
         <Button type="button" variant="secondary" aria-describedby={readinessId} onClick={(event) => onTailor(event.currentTarget)} disabled={creating !== null || !tailorReady} className="border-brand text-brand-ink">
           {creating === "tailor" ? <PendingLabel state="composing">Tailoring</PendingLabel> : "Tailor resume first"}
         </Button>
-        <Button type="button" aria-describedby={readinessId} onClick={onFill} disabled={creating !== null || !fillReady}>
-          {creating === "fill"
-            ? <PendingLabel state="composing" onColor>{managedPrepare ? "Preparing in Litos" : "Preparing form"}</PendingLabel>
-            : managedPrepare ? "Prepare in Litos" : "Open and fill employer form"}
-        </Button>
+        {managedPrepare && (
+          <Button type="button" aria-describedby={readinessId} onClick={onFill} disabled={creating !== null || !fillReady}>
+            {creating === "fill" ? <PendingLabel state="composing" onColor>Preparing in Litos</PendingLabel> : "Prepare in Litos"}
+          </Button>
+        )}
       </div>
     </Card>
   );

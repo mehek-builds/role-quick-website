@@ -18,7 +18,7 @@ test("Applications opens the board by default and keeps selected detail first on
   assert.equal(source.match(/← All applications/g)?.length, 1, "selected workspaces render one application escape control");
   const canonicalDetail = source.slice(
     source.indexOf("function CanonicalApplicationDetail"),
-    source.indexOf("function ApplicationFillReceipt"),
+    source.indexOf("function packetTimestamp"),
   );
   assert.doesNotMatch(canonicalDetail, /onBack|← All applications/);
 });
