@@ -11,8 +11,8 @@ import {
   createLitosPlusCheckout,
   getBillingState,
   getPlanCatalog,
+  holdsLitosPlusAccess,
   isLitosPlusPlanId,
-  isPaidAccess,
   rememberBillingReturnContext,
   zeroDue,
   type EntitlementSnapshot,
@@ -72,7 +72,11 @@ export function PlanCards() {
   }, []);
 
   const extensionCheckout = checkoutSource === "extension";
-  const paid = !extensionCheckout && isPaidAccess(access);
+  /* holdsLitosPlusAccess, not isPaidAccess: a trialing account is not "paid" for feature-gating
+     purposes, but the backend refuses a second checkout for it exactly like a paid one
+     (routes/billing.ts's already-has-Litos+ guard), so offering this button to a trial account
+     was a guaranteed 409 with no redirect to catch it. */
+  const paid = !extensionCheckout && holdsLitosPlusAccess(access);
 
   /* Each term now owns its own button, so the term is an argument rather than
      a piece of state read back after a setState that has not flushed. The
@@ -107,11 +111,10 @@ export function PlanCards() {
         });
       } else {
         if (!access?.account_id) throw new Error("Litos could not bind checkout to this account. Refresh and try again.");
-        const trial = access?.access_class === "trial_plus";
         const checkout = await createLitosPlusCheckout(planId, {
           surface: "website",
           placement: "public_pricing",
-          trigger: trial ? "trial_early_purchase" : sourceTrigger,
+          trigger: sourceTrigger,
         });
         if (!checkout.offer_id) throw new Error("Checkout did not return a restorable offer.");
         rememberBillingReturnContext(checkout.offer_id, {

@@ -34,7 +34,7 @@ import {
   createLitosPlusCheckout,
   getBillingState,
   getPlanCatalog,
-  isPaidAccess,
+  holdsLitosPlusAccess,
   rememberBillingReturnContext,
   type LitosPlusPlanId,
   type PlanCatalog,
@@ -73,13 +73,14 @@ export function PlanStep({ onSettled }: { onSettled: () => void }) {
       .then(([access, nextCatalog]) => {
         if (cancelled) return;
         setCatalog(nextCatalog);
-        if (isPaidAccess(access)) {
+        if (holdsLitosPlusAccess(access)) {
           track("onboarding_plan_already_paid", {});
           /* The only way off this screen that is not the checkout button, and it fires for
              exactly one reason: this account already holds Litos+. Paying navigates away to
              Stripe, so this screen never gets to acknowledge itself; the return lands on
              /start with `plan` still outstanding and would render this same sales pitch to
-             somebody who just bought it. */
+             somebody who just bought it. NOT isPaidAccess: a fresh purchase lands on
+             `trial_plus` first, which isPaidAccess alone never counts. */
           onSettled();
           return;
         }
