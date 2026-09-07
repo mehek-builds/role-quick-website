@@ -307,12 +307,9 @@ test("prepare and poll responses hydrate the generated cover letter into review 
   );
 });
 
-test("handoff completion and self-submission publish only to the packet that started them", async () => {
+test("dashboard handoff completion publishes only to the packet that started it", async () => {
   const source = await readFile(dashboardUrl, "utf8");
-  for (const [name, endMarker] of [
-    ["completeHandoff", "recordSelfSubmitted"],
-    ["recordSelfSubmitted", "reviewPortalQuestions"],
-  ]) {
+  for (const [name, endMarker] of [["completeHandoff", "retryPreparation"]]) {
     const start = source.indexOf(`async function ${name}`);
     const end = source.indexOf(`function ${endMarker}`, start);
     const action = source.slice(start, end);
@@ -330,6 +327,8 @@ test("handoff completion and self-submission publish only to the packet that sta
     assert.match(action, /reconcilePacketEvidenceWithSubmission\([\s\S]{0,260}published\.review\.packet_audit/);
     assert.match(action, /packetWithDirectSubmission\(packet, published\)/);
   }
+  assert.doesNotMatch(source, /async function recordSelfSubmitted/);
+  assert.doesNotMatch(source, /\/submission\/self-submitted/);
 });
 
 test("the dashboard renders only exact server-owned JD ranges and clause evidence", async () => {

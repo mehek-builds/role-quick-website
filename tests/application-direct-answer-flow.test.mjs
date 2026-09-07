@@ -433,6 +433,22 @@ test("accepted answer writes stay owned by their application and latest submissi
   );
 });
 
+test("an accepted fill retires only that application's completed answer navigator", () => {
+  const prepare = functionBody("  async function prepareApplication(");
+  const reset = functionBody("  function forgetCompletedDirectAnswerSession(");
+
+  assert.match(reset, /setDirectAnswerPasses\(\(current\) => withoutApplicationEntry\(current, applicationId\)\)/);
+  assert.match(reset, /setDirectAnswerProgresses\(\(current\) => withoutApplicationEntry\(current, applicationId\)\)/);
+  assert.match(reset, /setDirectAnswerFailures\(\(current\) => withoutApplicationEntry\(current, applicationId\)\)/);
+  assert.doesNotMatch(reset, /setDirectAnswerDrafts/);
+  assert.match(prepare, /captureCompletedSubmission\(result,[\s\S]{0,160}forgetCompletedDirectAnswerSession\(applicationId\);[\s\S]{0,160}selectedIdRef\.current !== applicationId/);
+  assert.doesNotMatch(
+    prepare.slice(prepare.indexOf("} catch (reason)")),
+    /forgetCompletedDirectAnswerSession/,
+    "an actual prepare failure keeps the answer session available",
+  );
+});
+
 test("each accepted direct save emits one repeatable polite announcement", () => {
   const prompt = sourceSection("function DirectApplicationQuestion(", "function SubmissionScreen(");
   const save = functionBody("  async function saveReviewedAnswers(");
@@ -571,7 +587,7 @@ test("a landed answer keeps the final question reviewable without starting a sub
   assert.doesNotMatch(saveCurrent, /prepareApplication|submit-request|approveFinalSubmission/);
 });
 
-test("unsafe multi-value fields reuse the managed handoff routes", () => {
+test("unsafe multi-value fields use only dashboard recovery routes", () => {
   const screen = sourceSection("function SubmissionScreen(", "function SubmissionReceipt(");
   const branch = sourceSection(
     'currentMetadataBlocker?.kind === "unsupported_multi_value"',
@@ -580,12 +596,8 @@ test("unsafe multi-value fields reuse the managed handoff routes", () => {
 
   assert.match(branch, /canFinishInDashboard \? \(/);
   assert.match(branch, /<ButtonLink href="#live-company-page" block className="sm:w-auto">/);
-  assert.match(branch, /attendedHandoffUrl \? \(/);
-  assert.match(branch, /openAttendedHandoff\(\)/);
-  assert.match(branch, /!staysInsideLitos && \(handoffUrl \?\? portalUrl\)/);
-  assert.match(branch, /Answer on company page/);
   assert.match(branch, /onClick=\{onReviewPacket\}/);
-  assert.doesNotMatch(branch, /ButtonLink href=\{\(handoffUrl \?\? portalUrl\)!\}[\s\S]*?attendedHandoffUrl \? \(/);
+  assert.doesNotMatch(branch, /target="_blank"|attendedHandoffUrl|Answer on company page/);
   assert.match(screen, /currentNonQuestionTask \? \([\s\S]*?directTaskPlan\.metadataBlockers\.length > 0/);
   assert.equal(
     [...screen.matchAll(/<ButtonLink href="#live-company-page"/g)].length,

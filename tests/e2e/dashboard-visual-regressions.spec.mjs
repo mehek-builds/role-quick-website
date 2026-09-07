@@ -356,6 +356,102 @@ const DIRECT_ANSWER_SUBMISSION = {
   cover_letter: null,
 };
 
+const STALE_ANSWER_QUESTIONS = Array.from({ length: 6 }, (_, index) => ({
+  id: `stale-answer-${index + 1}`,
+  question: `Fixture application fact ${index + 1}?`,
+  answer: "",
+  kind: "required",
+  required: true,
+  portal_input_type: "text",
+  portal_selector: `#fixture_fact_${index + 1}`,
+}));
+
+const STALE_ANSWER_PACKET_ID = "c6693be1-9d1d-4f61-9911-8d95f1ad1b09";
+const STALE_ANSWER_SAFE_AUTHORITY = {
+  submission_projection: { state: "none" },
+  retry_safety: { kind: "no_evidence" },
+  submission_authority: {
+    schema_version: "submission-authority-v1",
+    revision: "4",
+    state: "none",
+    application_id: STALE_ANSWER_PACKET_ID,
+    packet_id: STALE_ANSWER_PACKET_ID,
+    projection: { state: "none" },
+    retry_safety: { kind: "no_evidence" },
+  },
+};
+
+const STALE_ANSWER_PACKET = {
+  ...DIRECT_ANSWER_PACKET,
+  ...STALE_ANSWER_SAFE_AUTHORITY,
+  id: STALE_ANSWER_PACKET_ID,
+  job_context: {
+    ...DIRECT_ANSWER_PACKET.job_context,
+    company: "Fixture Operations",
+    role: "Software Engineering Intern",
+    jd_hash: "fixture-stale-six-answers",
+  },
+  spec: {
+    ...DIRECT_ANSWER_PACKET.spec,
+    _review: {
+      ...DIRECT_ANSWER_PACKET.spec._review,
+      attention_reason: STALE_ANSWER_QUESTIONS.map((question) => `"${question.question}" is required and is still empty`).join("\n"),
+      questions: STALE_ANSWER_QUESTIONS,
+      portal_supported: true,
+    },
+  },
+};
+
+const STALE_ANSWER_SUBMISSION = {
+  ...STALE_ANSWER_SAFE_AUTHORITY,
+  application_id: STALE_ANSWER_PACKET.id,
+  review: STALE_ANSWER_PACKET.spec._review,
+  cover_letter: null,
+};
+
+const EXACT_PACKET_DIGEST = "ddcdd437d12d91b9930134d2cc5eb15437bb4bbcfbf2c166b77a4cf8ad1ff89f";
+const EXACT_PACKET_SIZE_BYTES = 3256;
+const EXACT_PACKET_OBJECT_KEY = "qa/exact-packet-fixture.pdf";
+
+function staleAnswerPacketAudit(submission) {
+  const jd = STALE_ANSWER_PACKET.spec._review.jd_text;
+  return {
+    packet_audit: {
+      version: "packet_audit_v2",
+      status: "passed",
+      complete: true,
+      degraded: false,
+      rejectedCount: 0,
+      packet_version: EXACT_PACKET_DIGEST,
+      audit_digest: EXACT_PACKET_DIGEST,
+      bindings: {
+        ownerSha256: EXACT_PACKET_DIGEST,
+        applicationId: STALE_ANSWER_PACKET.id,
+        jdSha256: EXACT_PACKET_DIGEST,
+        specSha256: EXACT_PACKET_DIGEST,
+        jobContextSha256: EXACT_PACKET_DIGEST,
+        questionsSha256: EXACT_PACKET_DIGEST,
+        applicantSnapshotSha256: EXACT_PACKET_DIGEST,
+        resumeContactEmailSha256: EXACT_PACKET_DIGEST,
+        applicantEmailSha256: EXACT_PACKET_DIGEST,
+        pdf: { objectKey: EXACT_PACKET_OBJECT_KEY, sha256: EXACT_PACKET_DIGEST, sizeBytes: EXACT_PACKET_SIZE_BYTES },
+        employerDelivery: { version: "employer_delivery_v1", mode: "browser", sha256: EXACT_PACKET_DIGEST },
+      },
+      identities: { resume_email: "fixture@example.invalid", applicant_email: "fixture-route@apply.litos.invalid" },
+      clauses: [{ text: jd, start: 0, end: jd.length, verdict: "missing", highlight_terms: [] }],
+      editedTerms: [],
+      terms: { covered: [], missing: [], edited: [] },
+    },
+    pdf: {
+      object_key: EXACT_PACKET_OBJECT_KEY,
+      sha256: EXACT_PACKET_DIGEST,
+      size_bytes: EXACT_PACKET_SIZE_BYTES,
+      download_url: `${ORIGIN}/qa/exact-packet-fixture.pdf`,
+    },
+    questions: submission.review.questions,
+  };
+}
+
 const CONTEXT_QUESTION_REVIEW = {
   ...DIRECT_ANSWER_PACKET.spec._review,
   attention_reason: '"If you selected a response to the prior question, explain." is required and is still empty',
@@ -589,6 +685,8 @@ async function dashboardContext({
   },
   resumeHistoryFixture = null,
   submissionFixtures = {},
+  packetAuditFixtures = {},
+  submitRequestFixtures = {},
   bootstrapFixture = null,
   jobFixture = null,
   profileFixture = STUB["/profile"],
@@ -831,8 +929,45 @@ async function dashboardContext({
         state.applicationMutationRequests.push({ method, pathname });
       }
 
+      const packetAuditMatch = method === "POST"
+        ? pathname.match(/^\/applications\/([^/]+)\/packet-audit$/)
+        : null;
+      if (packetAuditMatch && packetAuditFixtures[packetAuditMatch[1]]) {
+        const applicationId = packetAuditMatch[1];
+        const fixture = packetAuditFixtures[applicationId];
+        const response = typeof fixture === "function"
+          ? fixture(liveSubmissionFixtures[applicationId])
+          : fixture;
+        await fulfillJson(route, response);
+        return;
+      }
+      const packetAuditAcknowledgeMatch = method === "POST"
+        ? pathname.match(/^\/applications\/([^/]+)\/packet-audit\/acknowledge$/)
+        : null;
+      if (packetAuditAcknowledgeMatch && packetAuditFixtures[packetAuditAcknowledgeMatch[1]]) {
+        await fulfillJson(route, { acknowledged: true });
+        return;
+      }
+      const submitRequestMatch = method === "POST"
+        ? pathname.match(/^\/applications\/([^/]+)\/submit-request$/)
+        : null;
+      if (submitRequestMatch && submitRequestFixtures[submitRequestMatch[1]]) {
+        const applicationId = submitRequestMatch[1];
+        const fixture = submitRequestFixtures[applicationId];
+        const response = typeof fixture === "function"
+          ? fixture(liveSubmissionFixtures[applicationId])
+          : fixture;
+        liveSubmissionFixtures = { ...liveSubmissionFixtures, [applicationId]: response };
+        await fulfillJson(route, response);
+        return;
+      }
+
       if (method === "POST" && pathname === "/billing/events") {
         await fulfillJson(route, {});
+        return;
+      }
+      if (method === "POST" && (pathname === "/jd-match" || pathname === "/resume/health")) {
+        await fulfillJson(route, STUB[pathname]);
         return;
       }
       const reviewAnswerMatch = method === "PUT"
@@ -2964,6 +3099,63 @@ test("Application answers preserve drafts while moving backward and forward", as
     await page.locator('main section[aria-labelledby^="direct-application-question-"]').waitFor({ state: "detached", timeout: 10_000 });
     assert.equal(state.applicationMutationRequests.length, mutationsBeforePacketReview, "opening packet review issued an application mutation");
     assertNoPageErrors(state, "Application direct answers");
+  } finally {
+    await context.close();
+  }
+});
+
+test("A completed six-answer session yields to a new operational blocker after fill", async () => {
+  const { context, page, state } = await newDashboardPage({
+    viewport: { width: 1280, height: 900 },
+    resumeHistoryFixture: [STALE_ANSWER_PACKET],
+    submissionFixtures: { [STALE_ANSWER_PACKET.id]: STALE_ANSWER_SUBMISSION },
+    packetAuditFixtures: { [STALE_ANSWER_PACKET.id]: staleAnswerPacketAudit },
+    submitRequestFixtures: {
+      [STALE_ANSWER_PACKET.id]: (current) => {
+        const audit = staleAnswerPacketAudit(current);
+        return {
+          ...current,
+          review: {
+            ...current.review,
+            status: "needs_attention",
+            attention_reason: '"Transcript" is required and is still empty',
+            attention_categories: ["required_document"],
+            required_documents: [{ kind: "transcript", label: "Transcript", official_requested: false }],
+            transcript_supported: false,
+            packet_audit: audit.packet_audit,
+          },
+        };
+      },
+    },
+  });
+  try {
+    await page.goto(`${ORIGIN}/dashboard/applications?application=${STALE_ANSWER_PACKET.id}&intent=apply`, { waitUntil: "domcontentloaded" });
+    for (let index = 0; index < STALE_ANSWER_QUESTIONS.length; index += 1) {
+      const question = STALE_ANSWER_QUESTIONS[index];
+      const prompt = page.locator('main section[aria-labelledby^="direct-application-question-"]');
+      const textbox = page.getByRole("textbox", { name: question.question, exact: true });
+      await textbox.waitFor({ state: "visible", timeout: 15_000 });
+      await textbox.fill(`Saved fixture fact ${index + 1}`);
+      const saveLabel = index === STALE_ANSWER_QUESTIONS.length - 1 ? "Save answer" : "Save and next";
+      await prompt.getByRole("button", { name: saveLabel, exact: true }).click();
+    }
+
+    const reviewApplication = page.getByRole("button", { name: "Review application", exact: true });
+    await reviewApplication.waitFor({ state: "visible", timeout: 10_000 });
+    assert.equal(await page.getByText("6 of 6", { exact: true }).count(), 1);
+    await reviewApplication.click();
+    await page.getByRole("button", { name: "Review and fill", exact: true }).click();
+    await page.getByText("Exact audited PDF loaded, 1 page.", { exact: true }).waitFor({ state: "visible", timeout: 25_000 });
+    await page.getByRole("button", { name: "Approve packet and fill form", exact: true }).click();
+
+    const blocker = page.getByText("Litos could not locate Fixture Operations's transcript upload control", { exact: true });
+    await blocker.waitFor({ state: "visible", timeout: 15_000 });
+    assert.equal(await page.locator('main section[aria-labelledby^="direct-application-question-"]').count(), 0, "the completed answer navigator masked the new operational blocker");
+    const blockerRow = blocker.locator("xpath=ancestor::li[1]");
+    assert.equal(await blockerRow.locator("a").count(), 0, "the unsupported upload blocker offered an employer-page link");
+    assert.equal(await blockerRow.locator("button").count(), 0, "the unsupported upload blocker offered a control that cannot attach the file");
+    assert.match(await blockerRow.innerText(), /REQUIRED/);
+    assertNoPageErrors(state, "Six-answer operational blocker transition");
   } finally {
     await context.close();
   }

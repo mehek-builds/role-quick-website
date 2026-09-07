@@ -54,7 +54,7 @@ async function loadDashboardRaceGuards(source) {
   return import(`data:text/javascript;base64,${Buffer.from(javascript).toString("base64")}`);
 }
 
-test("saved answers honor standing consent while retaining a manual fallback", async () => {
+test("saved answers honor standing consent while recovery remains in the dashboard", async () => {
   const dashboard = await readFile(
     new URL("../app/dashboard/applications/page.tsx", import.meta.url),
     "utf8",
@@ -153,40 +153,26 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   // and lost the confirmation must not offer a live company-page handoff while that claim is still
   // open, for the same reason a Stratus preview-only stop must not (see the comment two lines up).
   assert.match(dashboard, /const handoffUrl = needsAttention && !awaitingUnverifiedSubmission \? submission\.handoff_url : undefined/);
-  assert.match(dashboard, /const canFinishInDashboard = Boolean\(handoffUrl\) && !attendedHandoffUrl/);
+  assert.match(dashboard, /const canFinishInDashboard = Boolean\(handoffUrl\)/);
   assert.match(dashboard, /const staysInsideLitos = review\.portal_supported === true/);
   assert.match(dashboard, /<iframe[\s\S]{0,300}src=\{handoffUrl\}[\s\S]{0,300}Live company application page/);
-  assert.match(dashboard, /No live browser to reopen/);
+  assert.match(dashboard, /Complete it in the browser panel here when it is available\. Otherwise, this application stays paused\./);
   assert.match(dashboard, /Restart inside Litos/);
   assert.match(dashboard, /You do not need the company site/);
   assert.match(dashboard, /function reviewPacketAgain\(\) \{[\s\S]{0,700}setQuestions\(selectedSubmission\.review\.questions\);[\s\S]{0,120}packetEvidenceRef\.current = null;[\s\S]{0,120}setPacketEvidence\(null\);[\s\S]{0,120}moveToScreen\("review"\);/);
   assert.match(dashboard, /onReviewPacket=\{reviewPacketAgain\}/);
-  assert.match(dashboard, /Open company page/);
-  assert.match(dashboard, /const attendedHandoffUrl = awaitingUnverifiedSubmission \? null : exactAttendedHandoffUrl\(review\)/);
-  assert.match(dashboard, /ensureCurrentExtensionSession\([\s\S]{0,160}minimumAttendedHandoffExtensionVersion\(review\.ats_name\)/);
-  assert.match(dashboard, /await armHandoffs\(\[\{ id: submission\.application_id, portalUrl: attendedHandoffUrl \}\]\)/);
-  assert.match(dashboard, /!staysInsideLitos && !handoffUrl && !attendedHandoffUrl && portalUrl/);
-  assert.match(dashboard, /Open exact company form/);
-  assert.match(dashboard, /Manual dashboard trial/);
-  assert.match(dashboard, /Use this exact frozen resume and the separate Litos routing email/);
-  assert.match(dashboard, /Portal routing email:/);
-  assert.match(dashboard, /manualTrialPacket\.packet_audit\.identities\.applicant_email/);
-  assert.doesNotMatch(dashboard, /Portal routing email:[\s\S]{0,120}review\.applicant_email\?\.address/);
-  assert.match(dashboard, /openManualAttendedHandoff\(\)[\s\S]{0,1800}\/submission\/manual-handoff/);
-  assert.match(dashboard, /manualHandoffMatchesPacket\(current, attendedHandoffUrl, manualTrialPacket\)/);
-  assert.match(dashboard, /companyTab\.location\.replace\(handoff\.url\)/);
-  const manualHandoff = dashboard.slice(
-    dashboard.indexOf("async function openManualAttendedHandoff()"),
-    dashboard.indexOf("/* A wait that ends.", dashboard.indexOf("async function openManualAttendedHandoff()")),
-  );
-  assert.doesNotMatch(manualHandoff, /companyTab\.location\.replace\(attendedHandoffUrl\)/);
+  assert.match(dashboard, /Finish in this dashboard/);
+  assert.match(dashboard, /Paused in Litos/);
+  assert.doesNotMatch(shippedCode(dashboard), /Open exact company form/);
+  assert.doesNotMatch(shippedCode(dashboard), /Manual dashboard trial/);
+  assert.doesNotMatch(shippedCode(dashboard), /\/submission\/manual-handoff/);
+  assert.doesNotMatch(shippedCode(dashboard), /companyTab\.location\.replace\(handoff\.url\)/);
   assert.match(dashboard, /\/submit-request/);
   assert.match(dashboard, /\/submission\/approve/);
   assert.match(dashboard, /I cleared the check/);
-  assert.match(dashboard, /I submitted it myself/);
-  assert.match(dashboard, /JSON\.stringify\(\{ outcome \}\)/);
-  assert.match(dashboard, /source: "attended_handoff"/);
-  assert.match(dashboard, /Open the company page/);
+  assert.match(dashboard, /JSON\.stringify\(\{ outcome: "cleared" \}\)/);
+  assert.doesNotMatch(shippedCode(dashboard), /I submitted it myself/);
+  assert.doesNotMatch(shippedCode(dashboard), /\/submission\/self-submitted/);
   assert.match(dashboard, /TerminalActionBar className="justify-end sm:justify-between lg:!sticky/);
   assert.doesNotMatch(dashboard, /TerminalActionBar className="justify-end sm:justify-between lg:hidden"/);
   assert.match(dashboard, /packetEvidenceNeedsFreshAudit \? auditPacketAgain : continueFromResume/);
@@ -194,8 +180,7 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   assert.match(dashboard, /packetEvidenceNeedsFreshAudit[\s\S]{0,500}\? "Audit again"[\s\S]{0,160}!exactPacketPdfReady[\s\S]{0,80}\? "Loading exact PDF"/);
   assert.match(dashboard, /Open packet review/);
   assert.match(dashboard, /if \(options\.scrollToTop !== false\) window\.scrollTo/);
-  assert.match(dashboard, /Litos will never pretend to be you/);
-  assert.match(dashboard, /will not get past the puzzle that checks you are human, a code on your phone, a login/);
+  assert.match(dashboard, /dashboardHandoffAvailable: canFinishInDashboard/);
   assert.match(dashboard, /submission\.cover_letter && review\.cover_letter_supported !== false/);
   assert.match(dashboard, /const recoveryStatus = unverifiedRecoveryStatus\(review\);/);
   assert.match(dashboard, /<UnverifiedSubmissionCard status=\{recoveryStatus\} \/>/);
@@ -454,7 +439,7 @@ test("a stalled application persists reviewed answers before its exact packet au
   );
 });
 
-test("Tracker arms only the exact attended URL returned by the backend contract", async () => {
+test("Tracker keeps attended portal recovery out of the application dashboard", async () => {
   const [dashboard, handoff] = await Promise.all([
     readFile(new URL("../app/dashboard/applications/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../lib/attended-handoff.ts", import.meta.url), "utf8"),
@@ -463,10 +448,12 @@ test("Tracker arms only the exact attended URL returned by the backend contract"
   assert.match(handoff, /review\.ats_name === "icims"[\s\S]{0,400}ICIMS_ATTENDED_GATE_REASON[\s\S]{0,200}ICIMS_SECURITY_CODE_GATE_REASON/);
   assert.match(handoff, /return \/\^\\\/jobs\\\/\\d\+\\\/[\s\S]{0,100}\\\/login\$\/i\.test\(url\.pathname\)/);
   assert.doesNotMatch(handoff, /atsName === "icims"[\s\S]{0,400}\\\/apply\$/);
-  assert.match(dashboard, /const attendedHandoffUrl = awaitingUnverifiedSubmission \? null : exactAttendedHandoffUrl\(review\)/);
-  assert.match(dashboard, /await armHandoffs\(\[\{ id: submission\.application_id, portalUrl: attendedHandoffUrl \}\]\)/);
-  assert.match(dashboard, /companyTab\.location\.replace\(attendedHandoffUrl\)/);
-  assert.doesNotMatch(dashboard, /armHandoffs\(\[\{ id: submission\.application_id, portalUrl: portalUrl/);
+  const shipped = shippedCode(dashboard);
+  assert.doesNotMatch(shipped, /exactAttendedHandoffUrl/);
+  assert.doesNotMatch(shipped, /armHandoffs/);
+  assert.doesNotMatch(shipped, /companyTab\.location\.replace\(attendedHandoffUrl\)/);
+  assert.match(shipped, /<iframe[\s\S]{0,300}src=\{handoffUrl\}/);
+  assert.match(shipped, /Finish in this dashboard/);
 });
 
 test("unverified submission evidence precedes its outcome controls on narrow screens", async () => {

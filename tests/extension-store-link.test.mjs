@@ -143,12 +143,12 @@ describe("the composer keeps its pinned alert shape while still offering the way
     );
   });
 
-  test("the SubmissionScreen extension error keeps its own pinned paragraph too", () => {
-    assert.match(
-      page,
-      /\{extensionFillError && \(\s*\n\s*<p role="alert"[^>]*>\{extensionFillError\}<\/p>\s*\n\s*\)\}/,
-      "captcha-extension-recovery pins this verbatim; the link goes beside it, not inside it",
-    );
-    assert.match(page, /\{messageAsksForTheExtension\(extensionFillError\) && <ExtensionStoreLink/);
+  test("the SubmissionScreen does not offer the extension as an employer-page recovery", () => {
+    const start = page.indexOf("function SubmissionScreen(");
+    const end = page.indexOf("\nfunction SubmissionReceipt(", start);
+    const screen = page.slice(start, end);
+    assert.doesNotMatch(screen, /ExtensionStoreLink/);
+    assert.doesNotMatch(screen, /extensionFillError/);
+    assert.match(screen, /Finish in this dashboard/);
   });
 });

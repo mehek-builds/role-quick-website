@@ -125,7 +125,7 @@ test("the button-disabling set is still computed through questionsNeedingApplica
 
 test("the Your turn row draws the employer's options as radio inputs, never as buttons", () => {
   const row = functionBody(PAGE, "function ChecklistRow(");
-  const choices = row.slice(row.indexOf("{choices && ("), row.indexOf('{control?.element === "link"'));
+  const choices = row.slice(row.indexOf("{choices && ("), row.indexOf("{control && ("));
   assert.ok(choices.length > 0, "the choices block renders before the control pills");
   assert.match(choices, /type="radio"/);
   assert.match(choices, /onChange=\{\(\) => choices\.choose\(choices\.questionId, option\)\}/);

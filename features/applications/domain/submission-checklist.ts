@@ -16,7 +16,7 @@ import { cleanScrapedLabel, cleanScrapedPrompt } from "./scraped-text.ts";
  * has to resolve it through `checklistRowControl`, which returns a link or a button or nothing at
  * all. There is no path left that prints an action word without an element behind it.
  */
-export type SubmissionChecklistAction = "open-page" | "restart" | "answer" | "review" | "confirm" | "attach";
+export type SubmissionChecklistAction = "restart" | "answer" | "review" | "confirm" | "attach";
 
 /**
  * The most options a closed list renders as individual choice rows.
@@ -252,28 +252,15 @@ export function directQuestionTaskFingerprint(task: DirectQuestionTask): string 
  * viewer's revisit mark, and this panel is where it was not applied.
  */
 export type ChecklistRowControl =
-  | { element: "link"; label: string; name: string; href: string }
   | { element: "restart"; label: string; name: string }
   | { element: "attach"; label: string; name: string; kind: string }
-  | { element: "button"; label: string; name: string; intent: Exclude<SubmissionChecklistAction, "open-page" | "restart" | "attach">; questionId: string };
+  | { element: "button"; label: string; name: string; intent: Exclude<SubmissionChecklistAction, "restart" | "attach">; questionId: string };
 
 export function checklistRowControl(
   item: SubmissionChecklistItem,
-  context: { portalUrl?: string },
+  _context: { portalUrl?: string },
 ): ChecklistRowControl | null {
   if (!item.action || !item.actionKind) return null;
-  if (item.actionKind === "open-page") {
-    const href = context.portalUrl?.trim();
-    if (!href) return null;
-    /* Two sentences for one link, because the accessible name is a promise about what pressing it
-       is FOR - the same rule the attach and confirm controls follow. On an acknowledged row she has
-       already said the work is done, so "to handle" would be a screen reader assigning her work she
-       just marked handled; the link stays only as the way back to the page. */
-    const name = item.settled
-      ? `Open the company page for: ${item.label}. You marked this handled.`
-      : `Open the company page to handle: ${item.label}`;
-    return { element: "link", label: item.action, name, href };
-  }
   if (item.actionKind === "restart") {
     return {
       element: "restart",
@@ -423,7 +410,7 @@ const ATTENTION_BLOCKER_REWRITES: readonly { pattern: RegExp; label: string; det
        verbatim rather than be rewritten to one-box copy that erases the count. */
     pattern: /required field\b.*no label\b.*can read.*still empty/i,
     label: "One required box on the form still needs an answer",
-    detail: "Litos could not read that box's wording, so it left it empty rather than guess. Open packet review to run the form again, or answer it on the company page and tick this row when it is done.",
+    detail: "Litos could not read that box's wording, so it left it empty rather than guess. Open packet review to run the form again inside Litos.",
   },
 ];
 
@@ -446,6 +433,14 @@ function attentionBlockerRewrite(blocker: string): { label: string; detail: stri
 function blockerSubject(blocker: string): string {
   const quoted = blocker.match(/[“"]([^”"]{3,})[”"]/);
   return normalizedChecklistText(quoted?.[1] ?? blocker);
+}
+
+function dashboardOnlyBlockerLabel(blocker: string): string {
+  if (!/\b(?:company|employer)(?:'s)?\s+(?:page|site|form)\b/i.test(blocker)) return blocker;
+  const quoted = blocker.match(/[“"]([^”"]{3,})[”"]/)?.[1]?.trim();
+  return quoted
+    ? `Litos could not finish "${cleanScrapedLabel(quoted)}" in the dashboard`
+    : "Litos could not finish a required employer step in the dashboard";
 }
 
 function blockerReportsEmptyField(blocker: string): boolean {
@@ -743,7 +738,7 @@ function attachedDocumentItem(
  * a reason the screen never stated.
  *
  * Before the blocker loop, because `addUnique` drops on subject collision and the runner already
- * emits `"Transcript" is required and is still empty` as a generic open-page blocker about the same
+ * emits `"Transcript" is required and is still empty` as a generic blocker about the same
  * field. One of the two is going to vanish. The one that survives has to be the one with a control
  * that can resolve it, which means this one is added first.
  */
@@ -798,12 +793,10 @@ function documentAskItems(
         : [];
       rows.push({
         id: `document-unsupported-${ask.kind}`,
-        label: `${employer} asks for your ${ask.kind} and their form has nowhere Litos can put one`,
+        label: `Litos could not locate ${employer === "This employer" ? "the employer's" : `${employer}'s`} ${ask.kind} upload control`,
         detail: mark?.attached_at
-          ? "Litos is holding your file and found no upload control on this form to attach it to. Add it on their page yourself."
-          : "Litos found no upload control on this form, so a file added here would not reach them. Add it on their page yourself.",
-        action: "Open page",
-        actionKind: "open-page",
+          ? "Litos is holding your file, but it could not attach it in this attempt. Your application is paused here until Litos can attach the required file."
+          : "A file added here would not reach the employer in this attempt. Your application is paused here until Litos can attach the required file.",
         badge: "Required",
         /* A subject of its own, because the confirmation row above already claimed the ask's. Two
            rows sharing one subject is one row: addUnique drops the second, and whichever it dropped
@@ -929,7 +922,7 @@ export function humanInputItems(
      the label classes below are only a fallback, because the server decides with the resolver, the
      applicant profile, the JD and the posting country - none of which exist here. Omitting it
      leaves the previous label-only behaviour exactly as it was. */
-  context: { company?: string; role?: string; documents?: ChecklistDocumentMarks; sensitiveConfirmations?: readonly string[] } = {},
+  context: { company?: string; role?: string; documents?: ChecklistDocumentMarks; sensitiveConfirmations?: readonly string[]; dashboardHandoffAvailable?: boolean } = {},
 ): SubmissionChecklistItem[] {
   const items: SubmissionChecklistItem[] = [];
   for (const item of documentAskItems(review.required_documents ?? [], context, review)) addUnique(items, item);
@@ -961,9 +954,9 @@ export function humanInputItems(
     addUnique(items, {
       id: "blocker-captcha-requires-your-attention",
       label: captchaBlockers[0] ?? "CAPTCHA requires your attention",
-      action: "Open page",
-      actionKind: "open-page",
-      acknowledgeable: true,
+      detail: context.dashboardHandoffAvailable
+        ? "Complete the human check shown in the Litos dashboard."
+        : "The human check is not available in the Litos dashboard. The application remains paused here.",
     });
     return items.map(withAcknowledgement);
   }
@@ -986,12 +979,11 @@ export function humanInputItems(
     const rewriteUsable = rewrite !== null && !items.some((existing) => existing.label === rewrite.label);
     addUnique(items, {
       id: `blocker-${keyFor(blocker)}`,
-      label: rewriteUsable ? rewrite.label : blocker,
-      ...(rewriteUsable ? { detail: rewrite.detail } : {}),
-      action: restartInLitos ? "Review and fill" : "Open page",
-      actionKind: restartInLitos ? "restart" : "open-page",
+      label: rewriteUsable ? rewrite.label : dashboardOnlyBlockerLabel(blocker),
+      ...(restartInLitos
+        ? { ...(rewriteUsable ? { detail: rewrite.detail } : {}), action: "Review and fill", actionKind: "restart" as const }
+        : { detail: "Litos could not finish this required step in the dashboard. The application remains paused here." }),
       subject: blockerSubject(blocker),
-      acknowledgeable: !restartInLitos,
     });
   }
 
@@ -1258,7 +1250,7 @@ export function humanInputItems(
  */
 export function directInputTaskPlan(
   review: Pick<ApplicationReview, "attention_reason" | "attention_categories" | "attention_acknowledgements" | "cover_letter_supported" | "filled_fields" | "questions" | "question_metadata_blockers" | "questions_reviewed_at" | "required_documents" | "transcript_supported" | "stall" | "status">,
-  context: { company?: string; role?: string; documents?: ChecklistDocumentMarks; sensitiveConfirmations?: readonly string[] } = {},
+  context: { company?: string; role?: string; documents?: ChecklistDocumentMarks; sensitiveConfirmations?: readonly string[]; dashboardHandoffAvailable?: boolean } = {},
 ): DirectInputTaskPlan {
   const items = humanInputItems(review, context);
   const presentation = questionReviewPresentation(

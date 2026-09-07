@@ -219,7 +219,7 @@ describe("send eligibility discovered by hydration is offered, never forced", ()
   });
 });
 
-describe("CanonicalApplicationDetail says it is checking, not that this application is extension-only, while eligibility is still unknown", () => {
+describe("CanonicalApplicationDetail checks eligibility before showing its dashboard-only paused state", () => {
   test("the component receives a checking flag rather than deciding eligibility itself", () => {
     assert.match(
       applications,
@@ -235,14 +235,14 @@ describe("CanonicalApplicationDetail says it is checking, not that this applicat
     );
   });
 
-  test("the extension-only copy only shows once checking has settled", () => {
+  test("the paused dashboard copy only shows once checking has settled", () => {
     assert.match(applications, /checkingSendPath\s*\n\s*\? "Checking whether Litos can send this one for you\.\.\."/);
-    assert.match(applications, /"Litos will verify the extension account, bind this exact application, and open the employer page\./);
+    assert.match(applications, /"Litos cannot complete this employer form in the dashboard yet\. It will keep the packet here without marking the application sent\."/);
   });
 
-  test("the extension handoff button is held back while eligibility is still being checked, and once it is known ready", () => {
-    // Pressing it opens a real Chrome tab. A row that is about to offer the managed send screens
-    // must not also offer starting an extension handoff for the same application.
+  test("the paused state is held back while eligibility is still being checked and while managed send is ready", () => {
     assert.match(applications, /!submitted && !checkingSendPath && !readyToSend && !onCheckUnverifiedSubmission && application\.portal_url/);
+    assert.match(applications, /This employer form cannot be completed from the Litos dashboard yet/);
+    assert.doesNotMatch(applications, /Open and fill application/);
   });
 });

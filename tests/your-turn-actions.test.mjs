@@ -49,8 +49,8 @@ function jsxElement(source, name) {
 test("the action pill is an element that can act, never a styled span again", () => {
   const row = functionBody(page, "ChecklistRow");
 
-  assert.match(row, /checklistRowControl\(item, \{ portalUrl \}\)/, "the row has to ask the domain what control to draw");
-  assert.match(row, /control\?\.element === "link"/);
+  assert.match(row, /checklistRowControl\(item, \{\}\)/, "the row has to ask the domain what dashboard control to draw");
+  assert.doesNotMatch(row, /control\?\.element === "link"/);
   assert.match(row, /control\?\.element === "button"/);
   assert.match(row, /control\?\.element === "restart"/);
 
@@ -64,15 +64,11 @@ test("the action pill is an element that can act, never a styled span again", ()
   assert.match(row, /\{control\.label\}/);
 });
 
-test("OPEN PAGE is a real link and the question actions are real buttons, each with its own accessible name", () => {
+test("recovery stays in dashboard buttons with an accessible name", () => {
   const row = functionBody(page, "ChecklistRow");
 
-  const link = row.match(/<a\s[^>]*>/);
-  assert.ok(link, "the open-page branch has to render an anchor");
-  assert.match(link[0], /href=\{control\.href\}/);
-  assert.match(link[0], /target="_blank"/);
-  assert.match(link[0], /rel="noreferrer"/);
-  assert.match(link[0], /aria-label=\{control\.name\}/);
+  assert.doesNotMatch(row, /<a\s/);
+  assert.doesNotMatch(row, /control\.href/);
 
   const buttonStart = row.indexOf("<button");
   assert.notEqual(buttonStart, -1, "the answer, review and confirm branches have to render a button");
@@ -84,7 +80,7 @@ test("OPEN PAGE is a real link and the question actions are real buttons, each w
 
 test("non-question work stays actionable while trusted questions render as a direct prompt", () => {
   const list = functionBody(page, "BlockerList");
-  assert.match(list, /portalUrl=\{portalUrl\}/);
+  assert.doesNotMatch(list, /portalUrl/);
   assert.match(list, /onRestartInLitos=\{onRestartInLitos\}/);
   assert.match(list, /onOpenQuestion=\{onOpenQuestion\}/);
   assert.match(list, /onAddDocument=\{onAddDocument\}/);
@@ -94,7 +90,7 @@ test("non-question work stays actionable while trusted questions render as a dir
      when the row's checkbox stopped being scenery and started writing a stored tick. The
      whole-element pin stays, so a prop silently dropped from this line is still a failure here. */
   assert.match(page, /<DirectApplicationQuestion[\s\S]*?task=\{currentDirectQuestion\}[\s\S]*?onSave=\{saveCurrentDirectQuestion\}/);
-  assert.match(page, /<BlockerList items=\{\[currentNonQuestionTask\]\} portalUrl=\{staysInsideLitos \|\| attendedHandoffUrl \? undefined : handoffUrl \?\? portalUrl\}/);
+  assert.match(page, /<BlockerList items=\{\[currentNonQuestionTask\]\} onRestartInLitos=\{onReviewPacket\}/);
   assert.match(page, /onSaveQuestion=\{\(questionId, answer, intent, promptFingerprint, taskFingerprint, task\) => saveReviewedAnswers\(\{ questionId, answer, intent, promptFingerprint, taskFingerprint, task \}\)\}/);
   assert.match(page, /onOpenQuestion=\{\(questionId, intent\) => reviewPortalQuestions\(questionId, intent\)\}/);
   assert.match(page, /onAddDocument=\{askForDocument\}/);
@@ -148,12 +144,12 @@ test("a settled row keeps its control, and keeps it out of the panel that counts
   /* onToggleAcknowledged rides into the settled strip too: an acknowledged row's checkbox is the
      way the tick is taken back, and dropping the handler here would strand her ticks the way the
      pre-repair rows stranded "Remove this file". */
-  assert.match(list.slice(settledStrip), /<ChecklistRow key=\{item\.id\} item=\{item\} checked=\{false\} portalUrl=\{portalUrl\} onRestartInLitos=\{onRestartInLitos\} onOpenQuestion=\{onOpenQuestion\} onAddDocument=\{onAddDocument\} onToggleAcknowledged=\{onToggleAcknowledged\} tickingIds=\{tickingIds\} \/>/);
+  assert.match(list.slice(settledStrip), /<ChecklistRow key=\{item\.id\} item=\{item\} checked=\{false\} onRestartInLitos=\{onRestartInLitos\} onOpenQuestion=\{onOpenQuestion\} onAddDocument=\{onAddDocument\} onToggleAcknowledged=\{onToggleAcknowledged\} tickingIds=\{tickingIds\} \/>/);
 
   const row = functionBody(page, "ChecklistRow");
   // `checked` still suppresses the control, because the Done column has no action words to draw.
   // `settled` must NOT, because the control is the only route back to the file.
-  assert.match(row, /const control = checked \? null : checklistRowControl\(item, \{ portalUrl \}\)/);
+  assert.match(row, /const control = checked \? null : checklistRowControl\(item, \{\}\)/);
   assert.match(row, /const done = checked \|\| item\.settled === true/);
   assert.match(row, /className=\{done \? CHECKLIST_SETTLED_ACTION_CLASS : CHECKLIST_ACTION_CLASS\}/);
   assert.match(row, /\{!done && item\.badge/, "a stored file must not go on wearing a REQUIRED pill");
@@ -236,15 +232,12 @@ test("the review screen can reopen an attached document after the ask has stoppe
  * writes the same record for it: submitted, with a receipt whose source is the attended handoff and
  * whose text names her as the witness rather than claiming Litos watched it land.
  */
-test("an application Litos cannot finish has a control that finishes it", () => {
+test("an application Litos cannot finish remains blocked without manual submission attestation", () => {
   const dashboard = shippedCode(page);
   assert.match(dashboard, /const documentsLitosCannotDeliver = orderedDocumentAsks\.length > 0 \|\| undeliverableDocumentAsks\.length > 0/);
-  assert.match(
-    dashboard,
-    /documentsLitosCannotDeliver && \(\s*<Button onClick=\{onSelfSubmitted\} variant="secondary">I submitted it myself<\/Button>/,
-    "a blocked send with no way out is the trap this screen has been fixed for six times",
-  );
-  assert.match(dashboard, /\/submission\/self-submitted/);
+  assert.doesNotMatch(dashboard, /I submitted it myself/);
+  assert.doesNotMatch(dashboard, /\/submission\/self-submitted/);
+  assert.match(dashboard, /the application remains paused in Litos/);
   // And the ordered ask keeps a way to attach the unofficial copy plenty of employers accept.
   assert.match(dashboard, /orderedDocumentAsks\.map\(\(ask\) => \(\s*<Button key=\{ask\.kind\}[\s\S]{0,120}Add an unofficial \{ask\.kind\}<\/Button>/);
 });
@@ -260,7 +253,7 @@ test("a form with nowhere to put the file says so, and the settled row does not 
   const dashboard = shippedCode(page);
   assert.match(dashboard, /const transcriptPending = outstandingDocumentAsks\.length > 0 \|\| documentsLitosCannotDeliver/);
   assert.match(dashboard, /undeliverableDocumentAsks\.map\(\(ask\) => \(/);
-  assert.match(dashboard, /their form has no upload Litos can fill/);
+  assert.match(dashboard, /Litos could not locate this company&rsquo;s \{ask\.kind\} upload control/);
   assert.match(
     dashboard,
     /undeliverable: undeliverableDocumentAsks/,

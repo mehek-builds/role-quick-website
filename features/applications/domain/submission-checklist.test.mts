@@ -101,7 +101,8 @@ test("humanInputItems turns portal blockers and missing answers into checklist r
   assert.deepEqual(items.map((item) => item.label), [
     "CAPTCHA requires your attention",
   ]);
-  assert.equal(items[0]?.action, "Open page");
+  assert.equal(items[0]?.action, undefined);
+  assert.match(items[0]?.detail ?? "", /not available in the Litos dashboard/);
 });
 
 test("a stale packet is repaired inside Litos rather than assigned to the company page", () => {
@@ -115,7 +116,7 @@ test("a stale packet is repaired inside Litos rather than assigned to the compan
   assert.equal(items.length, 1);
   assert.equal(items[0]?.actionKind, "restart");
   assert.equal(items[0]?.action, "Review and fill");
-  assert.equal(items[0]?.acknowledgeable, false, "an in-dashboard repair must not pretend she handled work on the employer page");
+  assert.equal(items[0]?.acknowledgeable, undefined, "an in-dashboard repair must not ask for an external attestation");
   assert.deepEqual(checklistRowControl(items[0]!, {}), {
     element: "restart",
     label: "Review and fill",
@@ -487,14 +488,9 @@ test("every Your turn row that prints an action word resolves to a real control"
     const control = checklistRowControl(item, { portalUrl: anduril.portal_url });
     assert.ok(control, `"${item.action}" on "${item.label}" resolved to no control, which is the dead pill`);
     assert.ok(control.name.length > item.label.length, "the control has to carry its own accessible name, not just the caption");
-    /* Every member of the union has to name a real target, and each member names a different one:
-       a link has a page, an attach control has a document kind, a restart has its action name,
-       and a button has a question. The members are enumerated rather than defaulted so that a
-       fifth one added later fails to compile here instead of silently taking the questionId branch. */
+    /* Every member of the union has to name a real target. */
     assert.ok(
-      control.element === "link"
-        ? control.href.length > 0
-        : control.element === "attach"
+      control.element === "attach"
           ? control.kind.length > 0
           : control.element === "restart"
             ? control.name.length > 0
@@ -528,22 +524,14 @@ test("REVIEW opens the drafted essay answer and CONFIRM opens the answer it want
   assert.match(confirmControl?.name ?? "", /^Confirm your answer to: Will you require sponsorship/);
 });
 
-test("OPEN PAGE is a link to the employer, and renders nothing at all when there is no page to open", () => {
+test("raw employer blockers remain locked and never create an external action", () => {
   const items = humanInputItems(anduril);
-  const openRow = items.find((item) => item.action === "Open page");
-  assert.ok(openRow);
-
-  assert.deepEqual(checklistRowControl(openRow, { portalUrl: anduril.portal_url }), {
-    element: "link",
-    label: "Open page",
-    name: `Open the company page to handle: ${openRow.label}`,
-    href: anduril.portal_url,
-  });
-
-  // A control that cannot act is absent, not dead. That rule is the whole point of this change, so
-  // the no-URL case must not fall back to printing the word on its own.
-  assert.equal(checklistRowControl(openRow, {}), null);
-  assert.equal(checklistRowControl(openRow, { portalUrl: "   " }), null);
+  const blocked = items.filter((item) => !item.action && !item.questionId && !item.documentKind);
+  assert.ok(blocked.length > 0);
+  for (const row of blocked) {
+    assert.equal(row.acknowledgeable, undefined);
+    assert.equal(checklistRowControl(row, { portalUrl: anduril.portal_url }), null);
+  }
 });
 
 test("a row with no action, and an action with no target, both render no control", () => {
@@ -874,16 +862,18 @@ test("never measured is not measured false, and blocks nothing extra", () => {
   assert.deepEqual(documentControls([transcriptAsk], {}).undeliverable, []);
 });
 
-test("the checklist says the form has nowhere to put it, rather than asking her to add one", () => {
+test("an unsupported transcript stays required without an employer-page action", () => {
   const items = humanInputItems(
     { status: "needs_attention", questions: [], required_documents: [transcriptAsk], transcript_supported: false },
     { company: "Databricks" },
   );
 
   assert.equal(items.length, 1);
-  assert.equal(items[0]?.label, "Databricks asks for your transcript and their form has nowhere Litos can put one");
+  assert.equal(items[0]?.label, "Litos could not locate Databricks's transcript upload control");
+  assert.match(items[0]?.detail ?? "", /application is paused here/);
+  assert.equal(items[0]?.badge, "Required");
   assert.equal(items[0]?.documentKind, undefined, "an upload control here would be an upload that reaches nobody");
-  assert.equal(checklistRowControl(items[0]!, { portalUrl: "https://boards.example.com/x" })?.element, "link");
+  assert.equal(checklistRowControl(items[0]!, { portalUrl: "https://boards.example.com/x" }), null);
 });
 
 test("an undeliverable ask keeps the stored file's own row, so Remove stays reachable", () => {
@@ -898,7 +888,7 @@ test("an undeliverable ask keeps the stored file's own row, so Remove stays reac
 
   assert.deepEqual(items.map((item) => item.label), [
     "Your transcript is attached",
-    "Databricks asks for your transcript and their form has nowhere Litos can put one",
+    "Litos could not locate Databricks's transcript upload control",
   ]);
   assert.equal(items[0]?.settled, true);
   assert.equal(checklistRowControl(items[0]!, {})?.element, "attach", "the way back to Remove this file cannot depend on the form having a slot");
@@ -1459,7 +1449,7 @@ test("a claim on a review with no round still asks for confirmation", () => {
    sentence. The panel's checkbox used to be scenery: no handler, no request, cleared by the next
    poll (measured on the Easy Dynamics rippling packet, 2026-08-20). These tests hold the decision
    half of the repair: which rows take a tick, and what a stored tick renders as. */
-test("an acknowledged blocker renders settled with its control kept, and its tick stays live", () => {
+test("a prior employer-page acknowledgement cannot settle a current blocker", () => {
   const blocker = '"Willingness to undergo a background check" is required and is still empty';
   const base = {
     status: "needs_attention" as const,
@@ -1469,18 +1459,16 @@ test("an acknowledged blocker renders settled with its control kept, and its tic
   };
   const unticked = humanInputItems(base);
   assert.equal(unticked.length, 1);
-  assert.equal(unticked[0]?.acknowledgeable, true, "a blocker only she can resolve takes a tick");
+  assert.equal(unticked[0]?.acknowledgeable, undefined);
   assert.equal(unticked[0]?.settled, undefined, "and starts outstanding");
 
   const ticked = humanInputItems({
     ...base,
     attention_acknowledgements: { [unticked[0]!.id]: { label: blocker, acknowledged_at: "2026-08-20T09:00:00.000Z" } },
   });
-  assert.equal(ticked[0]?.settled, true, "out of the amber panel and out of the N-to-check count");
-  assert.equal(ticked[0]?.acknowledged, true, "and marked as HER tick, so the checkbox stays live to take it back");
-  assert.equal(ticked[0]?.acknowledgeable, true);
-  assert.equal(ticked[0]?.actionKind, "open-page", "the way back to the employer page survives on the settled row");
-  assert.match(ticked[0]?.detail ?? "", /Ticked off by you/, "the settled row says what the tick is: her word, not a re-measurement");
+  assert.equal(ticked[0]?.settled, undefined);
+  assert.equal(ticked[0]?.acknowledged, undefined);
+  assert.equal(ticked[0]?.actionKind, undefined);
 });
 
 test("a tick whose sentence has left the report acknowledges nothing", () => {
@@ -1494,21 +1482,22 @@ test("a tick whose sentence has left the report acknowledges nothing", () => {
   assert.equal(items[0]?.settled, undefined, "a stale key must not settle a row it never named");
 });
 
-test("the captcha row takes a tick like any other attention row", () => {
+test("the captcha row is completed only through a Litos dashboard handoff", () => {
   const base = {
     status: "needs_attention" as const,
     attention_reason: "CAPTCHA requires your attention",
     questions: [],
     filled_fields: [],
   };
-  const [captchaRow] = humanInputItems(base);
-  assert.equal(captchaRow?.acknowledgeable, true);
+  const [captchaRow] = humanInputItems(base, { dashboardHandoffAvailable: true });
+  assert.equal(captchaRow?.acknowledgeable, undefined);
+  assert.equal(captchaRow?.detail, "Complete the human check shown in the Litos dashboard.");
   const [ticked] = humanInputItems({
     ...base,
     attention_acknowledgements: { [captchaRow!.id]: { acknowledged_at: "2026-08-20T09:00:00.000Z" } },
-  });
-  assert.equal(ticked?.settled, true);
-  assert.equal(ticked?.acknowledged, true);
+  }, { dashboardHandoffAvailable: true });
+  assert.equal(ticked?.settled, undefined);
+  assert.equal(ticked?.acknowledged, undefined);
 });
 
 /* WHERE THE TICK IS REFUSED, and each refusal is a decision recorded on the type: a question row's
@@ -1527,11 +1516,7 @@ test("question and document rows take no tick, because their done is the server'
 
   assert.ok(items.length >= 3, "the fixture has to produce a blocker, a question and a document row");
   for (const item of items) {
-    if (item.id.startsWith("blocker-")) {
-      assert.equal(item.acknowledgeable, true, `${item.id} is an attention row and takes a tick`);
-    } else {
-      assert.notEqual(item.acknowledgeable, true, `${item.id} must not take a tick`);
-    }
+    assert.notEqual(item.acknowledgeable, true, `${item.id} must not take a manual employer-page tick`);
   }
 });
 
@@ -1539,7 +1524,7 @@ test("question and document rows take no tick, because their done is the server'
    already said the work is done - the same two-sentence rule the attach and confirm controls
    follow. Without this, a screen reader on the settled strip is told to "handle" the row she just
    marked handled. */
-test("the settled open-page link stops promising work and still opens the page", () => {
+test("a stored employer-page acknowledgement cannot restore an external recovery action", () => {
   const blocker = '"Discipline" is required and is still empty';
   const base = {
     status: "needs_attention" as const,
@@ -1552,10 +1537,9 @@ test("the settled open-page link stops promising work and still opens the page",
     ...base,
     attention_acknowledgements: { [row!.id]: { label: blocker, acknowledged_at: "2026-08-20T09:00:00.000Z" } },
   });
-  const control = checklistRowControl(ticked!, { portalUrl: "https://example.com/apply" });
-  assert.equal(control?.element, "link", "the way back to the page survives the tick");
-  assert.match(control?.element === "link" ? control.name : "", /You marked this handled/);
-  assert.doesNotMatch(control?.element === "link" ? control.name : "", /to handle:/);
+  assert.equal(ticked?.acknowledgeable, undefined);
+  assert.equal(ticked?.settled, undefined);
+  assert.equal(checklistRowControl(ticked!, { portalUrl: "https://example.com/apply" }), null);
 });
 
 test("the direct input plan keeps safe open and closed questions in employer order with their intent", () => {
@@ -1617,8 +1601,9 @@ test("the direct input plan keeps safe open and closed questions in employer ord
   assert.equal(plan.current?.kind, "question", "the first direct question takes precedence over external work");
   assert.equal(plan.current?.id, "review-why-role");
   assert.deepEqual(plan.nonQuestionTasks.map((task) => task.item.label), [
-    "Complete the laboratory access check on the company page",
+    "Litos could not finish a required employer step in the dashboard",
   ]);
+  assert.equal(plan.nonQuestionTasks[0]?.item.actionKind, undefined);
   assert.equal(plan.remaining, 5);
 });
 
@@ -1793,8 +1778,8 @@ test("raw attention lines remain non-question work rather than becoming answer c
 
   assert.equal(plan.questionTasks.length, 0);
   assert.equal(plan.nonQuestionTasks.length, 1);
-  assert.equal(plan.nonQuestionTasks[0]?.item.label, line);
-  assert.equal(plan.nonQuestionTasks[0]?.item.actionKind, "open-page");
+  assert.equal(plan.nonQuestionTasks[0]?.item.label, "Litos could not finish a required employer step in the dashboard");
+  assert.equal(plan.nonQuestionTasks[0]?.item.actionKind, undefined);
   assert.equal(plan.current?.kind, "non-question");
 });
 
@@ -2133,7 +2118,7 @@ test("a document row is recognised by either half of what makes it one", () => {
      than quietly becoming a blocker with no control. */
   assert.equal(isDocumentChecklistItem({ id: "a", label: "a", documentKind: "transcript" }), true);
   assert.equal(isDocumentChecklistItem({ id: "b", label: "b", actionKind: "attach" }), true);
-  assert.equal(isDocumentChecklistItem({ id: "c", label: "c", actionKind: "open-page" }), false);
+  assert.equal(isDocumentChecklistItem({ id: "c", label: "c", actionKind: "answer" }), false);
   assert.equal(isDocumentChecklistItem({ id: "d", label: "d" }), false);
 });
 
@@ -2640,6 +2625,29 @@ test("the full navigator is empty for the measured packet when nothing was answe
   // null, and directAnswerActive (needsAttention && !awaitingUnverifiedSubmission &&
   // currentDirectQuestion !== null) is false regardless of needsAttention or
   // awaitingUnverifiedSubmission - there is no question left for either of them to gate.
+});
+
+test("six saved answers yield to a new required document blocker after preparation", () => {
+  const review: Pick<ApplicationReview, "questions" | "question_metadata_blockers" | "required_documents" | "status" | "transcript_supported"> = {
+    status: "needs_attention",
+    questions: Array.from({ length: 6 }, (_value, index) => ({
+      id: `saved-${index + 1}`,
+      question: `Saved employer answer ${index + 1}`,
+      answer: `Answer ${index + 1}`,
+      kind: "required",
+      required: true,
+      portal_input_type: "text",
+      answer_source: "applicant_review",
+    })),
+    required_documents: [{ kind: "transcript", label: "Transcript", official_requested: false }],
+    transcript_supported: false,
+  };
+  const plan = directInputTaskPlan(review, { company: "QuantCo" });
+
+  assert.deepEqual(plan.questionTasks, []);
+  assert.equal(plan.nonQuestionTasks[0]?.item.badge, "Required");
+  assert.equal(plan.nonQuestionTasks[0]?.item.actionKind, undefined);
+  assert.deepEqual(directAnswerNavigationTasks(review, plan.questionTasks, []), []);
 });
 
 /* THE UNION'S OTHER HALF, PROVEN RATHER THAN ASSUMED: `answeredTasks` genuinely can keep a question
