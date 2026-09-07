@@ -5,6 +5,8 @@ import {
   DEFAULT_LITOS_PLUS_PLAN_ID,
   FEATURE_COMPARISON,
   LITOS_PLUS_PLANS,
+  litosPlusPlansForCurrency,
+  zeroDue,
 } from "../features/billing/domain/plans.ts";
 import { verifiedPlanCatalog } from "../features/billing/domain/catalog.ts";
 
@@ -21,6 +23,67 @@ test("paid terms use the approved prices, daily rates, savings, and default", ()
     { id: "litos_plus_month", cents: 3999, daily: "$1.33/day", savings: 53, popular: false },
     { id: "litos_plus_quarter", cents: 8999, daily: "$0.99/day", savings: 65, popular: true },
   ]);
+});
+
+test("every non-USD currency converts every plan and keeps the curated USD daily rate untouched", () => {
+  for (const currency of ["EUR", "GBP", "ZAR", "CAD", "INR"]) {
+    const plans = litosPlusPlansForCurrency(currency);
+    assert.equal(plans.length, LITOS_PLUS_PLANS.length);
+    for (const [index, plan] of plans.entries()) {
+      const usdPlan = LITOS_PLUS_PLANS[index];
+      assert.equal(plan.id, usdPlan.id);
+      assert.ok(plan.amountCents > 0, `${currency} ${plan.id} must have a positive amount`);
+      assert.notEqual(plan.amountCents, usdPlan.amountCents, `${currency} ${plan.id} must differ from its USD amount`);
+      assert.equal(plan.disclosure, `${plan.total} today. Renews ${plan.renewal} until canceled.`);
+      assert.match(plan.daily, /\/day$/);
+    }
+  }
+  // USD is untouched by the conversion path: the curated "$0.99/day" marketing figure for the
+  // quarterly plan, not the "$1.00/day" true division would round to.
+  assert.equal(LITOS_PLUS_PLANS.find((plan) => plan.id === "litos_plus_quarter").daily, "$0.99/day");
+});
+
+test("verifiedPlanCatalog trusts the server's detected currency but verifies its amounts independently", () => {
+  const eurPlans = litosPlusPlansForCurrency("EUR").map((plan) => ({
+    plan_id: plan.id,
+    amount_cents: plan.amountCents,
+  }));
+  const verified = verifiedPlanCatalog({ currency: "EUR", checkout_available: true, plans: eurPlans });
+  assert.equal(verified.currency, "EUR");
+  assert.equal(verified.source, "server");
+  assert.equal(verified.plans[0].id, "litos_plus_week");
+  assert.notEqual(verified.plans[0].amountCents, LITOS_PLUS_PLANS[0].amountCents, "EUR amounts must differ from USD");
+
+  // A currency claim with USD amounts underneath it (or any other mismatch) must not be
+  // trusted -- the whole catalog falls back to the static USD table instead.
+  const mismatched = verifiedPlanCatalog({
+    currency: "EUR",
+    checkout_available: true,
+    plans: LITOS_PLUS_PLANS.map((plan) => ({ plan_id: plan.id, amount_cents: plan.amountCents })),
+  });
+  assert.equal(mismatched.currency, "USD");
+  assert.equal(mismatched.source, "fallback");
+
+  // An unrecognized currency string must never reach a plan card.
+  const unsupported = verifiedPlanCatalog({ currency: "AED", checkout_available: true, plans: eurPlans });
+  assert.equal(unsupported.currency, "USD");
+});
+
+test("zeroDue formats a bare zero in the given currency with no decimals, matching the original hardcoded \"$0\"", () => {
+  assert.equal(zeroDue("USD"), "$0");
+  assert.equal(zeroDue("EUR"), "€0");
+});
+
+test("the mandatory onboarding payment screen also reads the currency-aware catalog, not the static USD table", async () => {
+  /* Caught by review, not by design: PlanCards and UpgradeModal were wired to the verified
+     server catalog, but /start's PlanStep -- the actual card-collection screen, per its own
+     file header "THE ONLY RUNG THAT ASKS FOR MONEY" -- was missed, so a non-US student could
+     see a correct localized price everywhere else and then be shown USD at the one screen
+     that takes their card. */
+  const step = await readFile(new URL("../components/start/PlanStep.tsx", import.meta.url), "utf8");
+  assert.match(step, /getPlanCatalog/);
+  assert.match(step, /const plans = catalog\?\.plans \?\? LITOS_PLUS_PLANS;/);
+  assert.match(step, /\{plans\.map\(\(option\) => \{/);
 });
 
 test("trial meters are independent and exact", () => {
@@ -56,7 +119,9 @@ test("extension checkout states the charge and the cancel window, and never prom
      chargebacks. What is pinned now is the pair a student needs: what will be taken,
      and by when they can stop it. */
   const cards = await readFile(new URL("../components/pricing/PlanCards.tsx", import.meta.url), "utf8");
-  assert.match(cards, /authenticated \|\| extensionCheckout \? plan\.total : "\$0"/);
+  // "$0" became zeroDue(catalog?.currency ?? "USD") so a EUR/GBP/etc visitor doesn't see a
+  // dollar sign glued to their local-currency renewal price in the same sentence.
+  assert.match(cards, /authenticated \|\| extensionCheckout \? plan\.total : zeroDue\(catalog\?\.currency \?\? "USD"\)/);
   assert.match(cards, /Then \$\{plan\.total\} \$\{plan\.renewal\}\. Cancel any time\./);
   assert.match(cards, /Nothing is charged for 7 days\. Cancel any time\./);
   // The claims that said the money would not be taken must not come back anywhere.
@@ -95,7 +160,10 @@ test("every plan is its own column, and the term is not a radio inside one card"
      rather than reading state that a click has not flushed yet. */
   const cards = await readFile(new URL("../components/pricing/PlanCards.tsx", import.meta.url), "utf8");
   assert.match(cards, /lg:grid-cols-4/);
-  assert.match(cards, /LITOS_PLUS_PLANS\.map\(\(plan\) => \{/);
+  // Currency-aware since the visitor's plan list can come from the verified server catalog
+  // (catalog.plans) rather than the static USD fallback; either way it is still one map over
+  // one plan array producing one column per plan, which is the property this test pins.
+  assert.match(cards, /\(catalog\?\.plans \?\? LITOS_PLUS_PLANS\)\.map\(\(plan\) => \{/);
   assert.match(cards, /continueWithPlan\(planId: LitosPlusPlanId\)/);
   assert.match(cards, /onClick=\{\(\) => void continueWithPlan\(plan\.id\)\}/);
   assert.doesNotMatch(cards, /type="radio"/);

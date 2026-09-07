@@ -14,7 +14,10 @@ test("the shared Litos+ modal preserves context and a manual way forward", async
   assert.match(modal, /const manualAction = presentRequest\.onManual/);
   assert.match(modal, /manualAction\?\.\(\)/);
   assert.match(modal, /onCloseRef\.current\(\)/);
-  assert.match(modal, /LITOS_PLUS_PLANS\.map/);
+  // Currency-aware: the modal maps over catalog.plans (falling back to the static USD table
+  // before the server catalog loads), not always the static import directly.
+  assert.match(modal, /const plans = catalog\?\.plans \?\? LITOS_PLUS_PLANS;/);
+  assert.match(modal, /\{plans\.map\(\(candidate\) => \{/);
   assert.match(modal, /Most popular/);
   assert.match(modal, /Current plan: \{accessLabel\(access\)\}/);
   assert.match(modal, /href="\/terms"/);
