@@ -40,3 +40,14 @@ test("the exact account still waits for the exact offer to be paid", () => {
     state: state("account-a", "plus_paid"),
   }), "active");
 });
+
+test("a freshly completed checkout confirms even though it lands on trial_plus, not plus_paid", () => {
+  // Every new subscription starts as a Stripe trial: the account's own paid offer completing
+  // must read as "active" here, or the return page polls out its attempts and hands a paying
+  // student a timeout instead of a receipt (this is the exact bug the fix closes).
+  assert.equal(billingReturnVerdict({
+    expectedAccountId: "account-a",
+    offerStatus: "paid",
+    state: state("account-a", "trial_plus"),
+  }), "active");
+});

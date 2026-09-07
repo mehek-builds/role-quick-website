@@ -14,8 +14,8 @@ import {
   featureAccess,
   getBillingState,
   getPlanCatalog,
+  holdsLitosPlusAccess,
   isDefinitiveCheckoutError,
-  isPaidAccess,
   rememberBillingReturnContext,
   shouldOpenUpgrade,
   type EntitlementSnapshot,
@@ -98,7 +98,10 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
         }),
         loadCatalog(),
       ]);
-      if (isPaidAccess(nextAccess)) setRequest(null);
+      /* holdsLitosPlusAccess, not isPaidAccess: a refresh that lands on a fresh trial
+         (every subscription starts there) must still dismiss the paywall, or the modal
+         sits open on an account the backend will refuse to checkout again. */
+      if (holdsLitosPlusAccess(nextAccess)) setRequest(null);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Litos could not check plan access.");
     } finally {

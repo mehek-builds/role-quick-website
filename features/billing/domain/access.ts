@@ -405,6 +405,21 @@ export function isPaidAccess(snapshot: EntitlementSnapshot | null): boolean {
   return snapshot?.access_class === "plus_paid" || snapshot?.access_class === "legacy_paid";
 }
 
+/**
+ * True once Stripe has taken card details for Litos+ in ANY form the backend will not sell
+ * a second time: a paid subscription, or the trial that precedes every new one. A fresh
+ * purchase always lands on `trial_plus` first (routes/billing.ts's `holdsLitosPlus` treats a
+ * `trialing` subscription as already-owned), so `isPaidAccess` alone is false for exactly the
+ * account this predicate exists to catch. Anything that decides whether to OFFER checkout --
+ * as opposed to whether to badge the account "Litos+" -- must consult this, not isPaidAccess:
+ * that gap is what let the onboarding plan screen and the return-from-Stripe poll keep selling
+ * a trialing account the plan it just started, only for the server to 409 "already has Litos+"
+ * on the second attempt.
+ */
+export function holdsLitosPlusAccess(snapshot: EntitlementSnapshot | null): boolean {
+  return isPaidAccess(snapshot) || snapshot?.access_class === "trial_plus";
+}
+
 export function accessLabel(snapshot: EntitlementSnapshot | null): string {
   switch (snapshot?.access_class) {
     case "trial_plus": return "Litos+ trial";

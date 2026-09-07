@@ -242,7 +242,10 @@ test("the plan step has no way past it except paying", async () => {
   assert.doesNotMatch(step, /Continue on Free/);
   assert.doesNotMatch(step, /onboarding_plan_declined/);
   assert.match(step, /\{ onSettled \}: \{ onSettled: \(\) => void \}/);
-  assert.match(step, /isPaidAccess\(access\)[\s\S]{0,600}?onSettled\(\);/);
+  // holdsLitosPlusAccess, not isPaidAccess: a completed checkout lands on `trial_plus` first
+  // (every subscription starts as the seven-day trial), and isPaidAccess alone never counts
+  // that, so the account that had just paid kept seeing this screen indefinitely.
+  assert.match(step, /holdsLitosPlusAccess\(access\)[\s\S]{0,600}?onSettled\(\);/);
   // The caller must always supply it, so a paid return is never stranded.
   assert.match(start, /<PlanStep onSettled=\{\(\) => \{ stepDone\("plan"\)/);
   assert.doesNotMatch(start, /requires_payment_method\s*\?/);
