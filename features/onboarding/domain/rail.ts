@@ -45,17 +45,19 @@ export const STEPS: { key: OnboardingStep; label: string; weight: number; condit
   { key: "sponsorship", label: "Work visa", weight: 1, conditional: true },
   { key: "review", label: "Review and send", weight: 1, conditional: true },
   { key: "trial", label: "Your trial", weight: 1, conditional: true },
-  /* NO "notifications" ENTRY ANY MORE (10 -> 9). The two switches and their sentence moved onto
-     the trial screen, whose own rationale already placed them there: permission is cheapest to
-     give right after being handed the seven days. The step name still exists in the ledger and in
-     OnboardingStep - an account that acked trial before the fold still gets a screen for it - but
-     that screen stands on "trial", so the rail never needs the key. */
   { key: "plan", label: "Your plan", weight: 1, conditional: true },
+  /* NOTIFICATIONS SITS LAST, AFTER PLAN (Mehek, 2026-09-07). It was folded into the trial screen
+     for a while (10 -> 9: "permission is cheapest to give right after being handed the seven
+     days"), then split back out and moved here. The new position is deliberate for a reason the
+     old one was not: `plan` cannot be acknowledged without a verified Stripe card on file
+     (onboarding.ts, `hasVerifiedPaymentMethod`), so this being the step directly after it makes
+     the order itself the payment gate for the last screen of setup, not just a UX preference. */
+  { key: "notifications", label: "Staying in touch", weight: 1, conditional: true },
   { key: "done", label: "Done", weight: 0 },
 ];
 
 /** The seven steps gated by `includes_application_steps`. */
-const APPLICATION_KEYS = new Set<OnboardingStep>(["match", "questions", "review", "trial", "plan"]);
+const APPLICATION_KEYS = new Set<OnboardingStep>(["match", "questions", "review", "trial", "plan", "notifications"]);
 
 /** The steps this particular student's flow contains, which is the rail's denominator.
  *

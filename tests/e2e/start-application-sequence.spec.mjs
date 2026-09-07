@@ -7,16 +7,19 @@
  * only honest way to test an irreversible action.
  *
  * What this proves:
- *   - every screen renders and advances in order, driven by the acknowledgement ledger, which by
- *     itself is six entries answered across five screens: the trial screen answers two of them;
+ *   - every screen renders and advances in order, driven by the acknowledgement ledger, which is
+ *     six entries answered across six screens, one each;
  *   - the build screen's stages are driven by real calls, and the resume stage does not resolve
  *     until generation does;
  *   - the questions screen shows the EMPLOYER'S options and refuses to auto-advance a declaration;
  *   - the review screen audits the exact packet, shows the real PDF, records the applicant's
  *     acknowledgement of it and only then issues exactly one submit-request;
- *   - the trial screen counts what is LEFT after the build spent one generation, and carries the
- *     staying-in-touch ask that used to be a screen of its own;
- *   - the plan screen's Continue hands off to Stripe with the onboarding return route.
+ *   - the trial screen counts what is LEFT after the build spent one generation;
+ *   - the plan screen's Continue hands off to Stripe with the onboarding return route, and cannot
+ *     be acknowledged by this harness because that hop leaves the app - see test 10's own note for
+ *     how the walk gets past it;
+ *   - the notifications screen is reached only once `plan` is acknowledged, which is the payment
+ *     gate for it (onboarding.ts, `hasVerifiedPaymentMethod`) - see test 10.
  */
 
 import assert from "node:assert/strict";
@@ -235,8 +238,11 @@ const PRESCRIPT = {
 
 function onboardingState() {
   /* Mirrors APPLICATION_STEPS. `build` is not here: it is a PHASE of the match screen now, not a
-     step, so the ledger never sees it. */
-  const APPLICATION = ["match", "questions", "review", "trial", "notifications", "plan"];
+     step, so the ledger never sees it. `notifications` sits after `plan` on purpose: the backend
+     will not accept a `plan` acknowledgement without a verified card, so this order is also the
+     payment gate for the last screen of setup (see test 10's own note for how this harness gets
+     past the Stripe hop `plan` requires in production). */
+  const APPLICATION = ["match", "questions", "review", "trial", "plan", "notifications"];
   const step = APPLICATION.find((key) => !acknowledged.includes(key)) ?? "done";
   return {
     step,
@@ -855,95 +861,11 @@ describe("the application sequence, end to end", () => {
     // The title follows what the student actually did, and this walk sent.
     assert.match(body, /Sent\. And here's something from us\./i);
 
-    /* NO PRESS HERE. "Start using it" leaves this screen AND answers the staying-in-touch ask
-       folded into it, so pressing it in this test would walk past the consent assertions in 08
-       before they could be made. The press belongs to the screen's last property, not its first. */
-  });
-
-  /* 08 THE STAYING-IN-TOUCH ASK, ON THE SCREEN THAT NOW CARRIES IT.
-   *
-   * This was written against a notifications screen of its own and waited on that screen's
-   * heading, which stopped rendering when the two folded together: `case "trial"` acknowledges
-   * BOTH `trial` and `notifications` in one motion, so the server serves `plan` next and the
-   * standalone screen is now reached only by an account that acked `trial` before the fold
-   * shipped. The wait timed out and main went red.
-   *
-   * THE SCREEN MOVED; THE PROPERTIES DID NOT, so they moved with it rather than being deleted.
-   * Every one of them is still pinned below, now against the trial screen's switches:
-   *   - both asks are present, and they are the two the backend actually enforces;
-   *   - the two promises it keeps are said on the screen that asks;
-   *   - NOTHING is pre-ticked, because a pre-ticked consent is not a consent;
-   *   - the PUT carries EVERY key, so an untouched box arrives as an explicit `false` rather than
-   *     as an omission the server reads as "not mentioned" and leaves a stale grant on;
-   *   - the wall of standing permissions is still not here.
-   *
-   * One property is new and belongs to the fold itself: the switches save AS THEY ARE TICKED
-   * rather than on Continue, because as a section of the trial screen save-on-continue would
-   * couple "Start using it" to a second write that can fail after both acks have landed. So the
-   * save is asserted BEFORE the button is pressed, and the button is asserted to add nothing.
-   */
-  test("08 staying in touch: two asks on the trial screen, nothing pre-ticked, and only what was ticked is granted", async () => {
-    /* Text, not a heading. This is a section of the trial screen now, under that screen's own
-       title; asking for a heading here is what the old assertion did and it is exactly the thing
-       that no longer exists. */
-    await page.getByText(/Want to know when the next one opens\?/i).waitFor({ timeout: 20_000 });
-
-    const body = await page.locator("main").innerText();
-    assert.match(body, /Tell me when a strong match opens/i);
-    assert.match(body, /Tell me when an employer replies/i);
-    /* The two promises the backend actually enforces, said on the screen that asks. */
-    assert.match(body, /at most once a day/i);
-    assert.match(body, /unsubscribe link that works without signing in/i);
-    /* Auto-apply, send-without-asking and the rest are asked at the moment their feature is first
-       used. Folding this ask into the trial screen did not make that screen the place to put them:
-       a wall of checkboxes immediately before the price is still both worse consent hygiene and a
-       worse rung. */
-    assert.doesNotMatch(body, /apply automatically|send without asking|auto-submit/i);
-
-    /* Chromium in this harness supports the Push API, so the laptop-summary control renders and
-       there are three boxes. It is deliberately NOT ticked here: doing so fires the real browser
-       permission prompt, which Playwright answers by denying, and the assertion worth making is
-       that a refused browser leaves the box off rather than that the prompt can be automated. */
-    const boxes = page.locator('main input[type="checkbox"]');
-    const count = await boxes.count();
-    assert.ok(count === 2 || count === 3, `expected two asks plus the optional laptop one, saw ${count}`);
-    for (let i = 0; i < count; i += 1) {
-      assert.equal(await boxes.nth(i).isChecked(), false, "a pre-ticked consent is not a consent");
-    }
-
-    /* AN ASSERTION, NOT A WAIT, and the distinction is worth being exact about because the first
-       draft of this line claimed to be a hydration race guard and could not have been one. The GET
-       fires when TrialStep mounts, and TrialStep's own title is the heading test 06 already waited
-       on, so by the time this runs the read landed a whole test ago. It could not synchronise
-       anything even if it needed to: the counter increments when the STUB serves the response,
-       which says nothing about React having applied the setState behind it.
-       Kept because it is worth asserting on its own. A switch that never reads shows a returning
-       student two empty boxes no matter what she already chose, and nothing else in this walk
-       would notice. */
-    assert.ok(notificationReads > 0, "the switches never read the account's preferences");
-
-    await page.getByRole("checkbox", { name: "Tell me when a strong match opens" }).check();
-
-    /* Saved on the tick. Waited for rather than read once, because the assertion is about a request
-       in flight and a bare read here is a snapshot that races it.
-       AT LEAST ONE, then the exact count separately. Polling for `=== 1` would be polling for a
-       value the counter passes THROUGH: a regression that issues two saves per tick could go 0 to 2
-       between two 50ms samples, and this would then spend its whole timeout and report "did not
-       save it" about a switch that saved twice. The two failures are opposites and must not wear
-       each other's message. */
-    await waitFor(() => notificationSaves.length >= 1, "ticking a switch did not save it");
-    assert.equal(notificationSaves.length, 1, "one tick must issue exactly one save");
-    assert.equal(notificationSaves[0].strong_match, true);
-    assert.equal(notificationSaves[0].employer_reply, false, "an unticked box is a decline, not an omission");
-    assert.equal(notificationSaves[0].activity_digest, false, "the laptop summary was never granted");
-
-    /* AND THE FOLD'S OWN CONTRACT: one press, both ledger entries, the price screen next. Reaching
-       `after the seven days` is the proof the server was told about `notifications` too -- had only
-       `trial` been acked, the server would derive the standalone notifications screen and this wait
-       would be the one that timed out. */
+    /* ONE PRESS, ONE ACK. The trial screen carries only the gift now (see test 10's note for why
+       the staying-in-touch ask moved off it and after `plan`), so "Start using it" advances
+       straight to the price screen and writes exactly the one ledger entry this screen owns. */
     await page.getByRole("button", { name: "Start using it" }).click();
     await page.getByRole("heading", { name: /after the seven days/i }).waitFor({ timeout: 20_000 });
-    assert.equal(notificationSaves.length, 1, "Continue wrote again; the switches had already saved");
   });
 
   test("09 the plan: pre-selected, one control, and no way past it without a card", async () => {
@@ -1006,17 +928,17 @@ describe("the application sequence, end to end", () => {
     assert.deepEqual(forward, ["Continue with 3 months"]);
   });
 
-  test("the whole sequence was walked in order", () => {
-    assert.deepEqual(acknowledged, ["match", "questions", "review", "trial", "notifications"]);
-  });
-
   /* GOING BACK TO CHANGE AN ANSWER, and coming back to where you were.
    *
    * The bug this pins: every screen's Continue acknowledges and refreshes, and the rendered step is
    * `revisiting ?? served`. Finish a revisited screen with that path and the acknowledgement writes
    * a second time while the override keeps the student standing on the screen they just finished,
    * so the button they pressed appears to do nothing. Two assertions, because either one alone
-   * passes on the broken version: the ledger must not gain a row, AND the flow must move. */
+   * passes on the broken version: the ledger must not gain a row, AND the flow must move.
+   *
+   * Run here, still standing on the plan screen, because it is the last point in the walk this
+   * harness reaches by real clicks alone - see test 10 for why the rest of the walk from here is
+   * simulated rather than clicked. */
   test("a revisited screen returns the student instead of pinning them, and writes nothing new", async () => {
     const before = acknowledged.length;
 
@@ -1037,5 +959,80 @@ describe("the application sequence, end to end", () => {
       before,
       `revisiting wrote ${acknowledged.length - before} acknowledgement(s); the ledger already held that screen`,
     );
+  });
+
+  /* 10 THE STAYING-IN-TOUCH ASK, ON THE SCREEN AFTER THE PRICE.
+   *
+   * `plan`'s Continue navigates away to Stripe (checkout()'s own `window.location.assign`), and no
+   * browser automation in this harness can complete a real Stripe checkout and be handed back. So
+   * this test does not click "Continue with 3 months" at all - it simulates the ONE THING a
+   * completed, verified checkout leaves behind for this account: a `plan` acknowledgement. Pushing
+   * it into the same `acknowledged` array the stub already reads is standing in for
+   * PlanStep.tsx's own `onSettled`, which fires for exactly this reason once `getBillingState()`
+   * reads back a paid entitlement. A reload then asks the stub fresh, and `onboardingState()`
+   * derives `notifications` because it is the first unacknowledged member of APPLICATION_STEPS'
+   * new order - the same derivation production runs, just reached without the external hop.
+   *
+   * Everything below is what this screen must still do now that it stands alone again:
+   *   - both asks are present, and they are the two the backend actually enforces;
+   *   - the two promises it keeps are said on the screen that asks;
+   *   - NOTHING is pre-ticked, because a pre-ticked consent is not a consent;
+   *   - the PUT carries EVERY key, so an untouched box arrives as an explicit `false` rather than
+   *     as an omission the server reads as "not mentioned" and leaves a stale grant on;
+   *   - a switch saves itself, as it is ticked, so Continue stays about one thing;
+   *   - the wall of standing permissions is still not here.
+   */
+  test("10 staying in touch: reached only after plan is acknowledged, nothing pre-ticked, and only what was ticked is granted", async () => {
+    acknowledged.push("plan");
+    await page.reload({ waitUntil: "domcontentloaded" });
+
+    await page.getByRole("heading", { name: /want to know when the next one opens/i }).waitFor({ timeout: 20_000 });
+
+    const body = await page.locator("main").innerText();
+    assert.match(body, /Tell me when a strong match opens/i);
+    assert.match(body, /Tell me when an employer replies/i);
+    /* The two promises the backend actually enforces, said on the screen that asks. */
+    assert.match(body, /at most daily/i);
+    assert.match(body, /unsubscribe link that works without signing in/i);
+    /* Auto-apply, send-without-asking and the rest are asked at the moment their feature is first
+       used, not on the last screen of setup. */
+    assert.doesNotMatch(body, /apply automatically|send without asking|auto-submit/i);
+
+    /* Chromium in this harness supports the Push API, so the laptop-summary control renders and
+       there are three boxes. It is deliberately NOT ticked here: doing so fires the real browser
+       permission prompt, which Playwright answers by denying, and the assertion worth making is
+       that a refused browser leaves the box off rather than that the prompt can be automated. */
+    const boxes = page.locator('main input[type="checkbox"]');
+    const count = await boxes.count();
+    assert.ok(count === 2 || count === 3, `expected two asks plus the optional laptop one, saw ${count}`);
+    for (let i = 0; i < count; i += 1) {
+      assert.equal(await boxes.nth(i).isChecked(), false, "a pre-ticked consent is not a consent");
+    }
+
+    assert.ok(notificationReads > 0, "the switches never read the account's preferences");
+
+    await page.getByRole("checkbox", { name: "Tell me when a strong match opens" }).check();
+
+    /* Saved on the tick. Waited for rather than read once, because the assertion is about a request
+       in flight and a bare read here is a snapshot that races it.
+       AT LEAST ONE, then the exact count separately. Polling for `=== 1` would be polling for a
+       value the counter passes THROUGH: a regression that issues two saves per tick could go 0 to 2
+       between two 50ms samples, and this would then spend its whole timeout and report "did not
+       save it" about a switch that saved twice. */
+    await waitFor(() => notificationSaves.length >= 1, "ticking a switch did not save it");
+    assert.equal(notificationSaves.length, 1, "one tick must issue exactly one save");
+    assert.equal(notificationSaves[0].strong_match, true);
+    assert.equal(notificationSaves[0].employer_reply, false, "an unticked box is a decline, not an omission");
+    assert.equal(notificationSaves[0].activity_digest, false, "the laptop summary was never granted");
+
+    await page.getByRole("button", { name: "Continue" }).click();
+    await waitFor(() => acknowledged.includes("notifications"), "Continue did not acknowledge the last screen");
+    assert.equal(notificationSaves.length, 1, "Continue wrote again; the switch had already saved");
+  });
+
+  test("the whole sequence was walked in order", () => {
+    /* `plan` is here because test 10 injected it, standing in for a completed Stripe checkout - see
+       that test's own note. Every other entry was written by a real click in this file. */
+    assert.deepEqual(acknowledged, ["match", "questions", "review", "trial", "plan", "notifications"]);
   });
 });

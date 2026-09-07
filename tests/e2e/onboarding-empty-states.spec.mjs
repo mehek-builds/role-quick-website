@@ -71,8 +71,8 @@ after(async () => {
  * original assertion and shortened with it. */
 test("every onboarding checkpoint renders with a progress indicator", async () => {
   const checkpoints = [
-    /* NINE, and the QA fixture walks the full nine because it describes a student whose first
-       employer did NOT ask about work eligibility. Eight is the other flow, for the ~40% whose
+    /* TEN, and the QA fixture walks the full ten because it describes a student whose first
+       employer did NOT ask about work eligibility. Nine is the other flow, for the ~40% whose
        employer asks both halves itself; that one is pinned in start-onboarding-checklist.spec.mjs
        and against `flowSteps` directly in tests/start-rail-denominator.test.mjs.
      *
@@ -80,11 +80,12 @@ test("every onboarding checkpoint renders with a progress indicator", async () =
        shows up here as a deliberate edit: the rail is a wayfinding device, and one that counts
        wrong is worse than none (#285). It read 14 until the cut removed the one-page and details
        screens and the merges folded `build` into `match` and `impact` into `resume`; ten became
-       nine when the notifications screen folded onto the trial screen (rail.ts, "Nine steps"). */
-    ["focus", "What are you going after?", "Setup: step 1 of 9, Your roles"],
-    ["resume", "Start with your resume.", "Setup: step 2 of 9, Your resume"],
-    ["sponsorship", "Where can you work?", "Setup: step 5 of 9, Work visa"],
-    ["done", "Setup complete.", "Setup: step 9 of 9, Done"],
+       nine when the notifications screen folded onto the trial screen, and back to ten when it
+       split back out and moved after `plan` (Mehek, 2026-09-07). */
+    ["focus", "What are you going after?", "Setup: step 1 of 10, Your roles"],
+    ["resume", "Start with your resume.", "Setup: step 2 of 10, Your resume"],
+    ["sponsorship", "Where can you work?", "Setup: step 5 of 10, Work visa"],
+    ["done", "Setup complete.", "Setup: step 10 of 10, Done"],
   ];
 
 
