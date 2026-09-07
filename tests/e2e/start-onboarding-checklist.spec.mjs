@@ -681,9 +681,9 @@ test("criteria 1-4: the first screen welcomes, orients, and asks for one thing",
     assert.equal(fileInputs, 0, "the first screen asks for a file before asking what the student wants");
     /* VISIBLE fields, because the criterion is about what the screen ASKS for and a field that has
        not been revealed yet is not an ask. The roles screen keeps categories and recruiting periods
-       inside a shut <details> labelled OPTIONAL, and holds the location question behind the same
-       gate as the titles, so a COLD first screen is taps only. Their inputs are in the DOM or
-       reachable the moment two chips are tapped, so a raw count would fail a screen that is
+       inside a shut <details> labelled OPTIONAL, and holds the location question behind the field
+       and stage answers together, so a COLD first screen is taps only. Their inputs are in the DOM
+       or reachable the moment two chips are tapped, so a raw count would fail a screen that is
        behaving correctly. Scoped this way the assertion also gets STRICTER in the direction that
        matters: show one of them on arrival and this fails, which is exactly when it should.
 
@@ -697,13 +697,15 @@ test("criteria 1-4: the first screen welcomes, orients, and asks for one thing",
     assert.equal(prematureFields, 0, "the first screen asks for fields that are not needed to start");
     /* On ARRIVAL there is no free-text input at all, and that is the gate doing its job rather
        than an accident: the title search lives inside the titles block, and the titles block is
-       withheld until a field and a stage are chosen. A cold first screen is therefore taps only,
-       which is the strongest form this criterion can take. The search is asserted where it
-       actually appears, in the walk below, after the two answers that summon it. */
+       withheld until a field is chosen (2026-09-07: no longer until a stage too - stage cannot
+       filter the derived list, so it stopped gating the reveal, and the block now sits directly
+       under Field with Stage moved below it). A cold first screen is therefore taps only, which is
+       the strongest form this criterion can take. The search is asserted where it actually
+       appears, in the walk below, after the field answer that summons it. */
     assert.equal(
       await page.locator("main #additional-role:visible").count(),
       0,
-      "the title search is offered before a field and a stage have been chosen",
+      "the title search is offered before a field has been chosen",
     );
 
     /* And the resume still gets asked for, one screen later. A reorder that quietly dropped the
@@ -824,10 +826,11 @@ test("a failed application-profile read blocks approval instead of clearing save
 test("the walk: every step in order, each one advancing the rail by one", async () => {
   try {
     /* ── Step 1, Your roles ────────────────────────────────────────────────
-       Answered in the order the screen asks: a field, then a stage, and only then a title. The
-       title assertion in the middle is the point of the screen - the offer is DERIVED from the
-       field, so a walk that could pick a title before choosing a field would mean the gate is not
-       real. */
+       Answered in the order the screen asks: a field, then a title, then a stage. The title
+       assertion in the middle is the point of the screen - the offer is DERIVED from the field
+       alone, so a walk that could pick a title before choosing a field would mean the gate is not
+       real, and a walk that had to touch Stage first to see it would mean the gate was asking for
+       an answer it does not use. */
     /* NOT pushed: the criteria test above already recorded this screen as `first`, and the rail
        arithmetic at the end counts each screen once. Roles is the first screen now, so it is that
        test's reading rather than this walk's. */
@@ -847,8 +850,14 @@ test("the walk: every step in order, each one advancing the rail by one", async 
     );
 
     await page.getByRole("button", { name: "Software & AI", exact: true }).click();
-    await page.getByRole("button", { name: "Internship", exact: true }).click();
+    /* THE REGRESSION THIS GUARDS: titles must be offered off the field alone, before the stage is
+       ever touched. Stage cannot filter the derived list (titles are stored stage-free), so it has
+       no reason to gate the reveal - and "Jobs that fit" now sits under Field in the JSX for the
+       same reason, ahead of Stage rather than after it. Waiting for the button HERE, with no Stage
+       click in between, is what would have caught the flow-version-3 bug: the offer appearing only
+       once a stage chip was also pressed. */
     await softwareEngineer.waitFor({ timeout: 10_000 });
+    await page.getByRole("button", { name: "Internship", exact: true }).click();
     await softwareEngineer.click();
 
     const rolesContinue = page.locator("button", { hasText: "Continue" });

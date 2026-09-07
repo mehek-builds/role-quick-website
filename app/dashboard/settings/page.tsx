@@ -1064,7 +1064,7 @@ export default function Settings() {
             <form onSubmit={changePassword} className="pt-4">
               <h3 className="text-sm font-medium text-ink">Set or change password</h3>
               <p className="mt-1 text-xs leading-5 text-muted">
-                Use 15 to 128 characters. Changing it signs out every older session.
+                Use 15 to 128 characters, with a number and a symbol and no spaces. Changing it signs out every older session.
               </p>
               <div className="mt-4 grid gap-3 sm:grid-cols-3">
                 <input
