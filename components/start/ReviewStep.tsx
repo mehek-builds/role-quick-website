@@ -56,13 +56,14 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ErrorNote, PendingLabel } from "@/components/app/ui";
+import { ErrorNote, LoadingOrb, PendingLabel } from "@/components/app/ui";
 import { Button } from "@/components/app/Button";
 import { ApiError, api, type MonitoredJob, type PacketAuditResponse, type ResumeSpec } from "@/lib/api";
 import {
   acknowledgePacketAudit,
   acknowledgePacketEvidence,
   buildRequirementIndex,
+  cleanJdCapture,
   EMPTY_REQUIREMENT_INDEX,
   educationDrift,
   educationDriftMessage,
@@ -412,6 +413,12 @@ export function ReviewStep({
     ? buildRequirementIndex(jdMatch.matched, jdMatch.missing)
     : EMPTY_REQUIREMENT_INDEX;
 
+  /* The same cleaning the dashboard's draft (unaudited) surfaces apply: a captured posting can
+     carry the employer's application FORM alongside it (field labels, "SUBMIT YOUR APPLICATION",
+     "Loading"), which reads as a broken scrape on the one screen a first-run student is asked to
+     trust. Never hidden silently - removedLines drives the disclosure below. */
+  const cleanedJd = useMemo(() => cleanJdCapture(posting.description), [posting.description]);
+
   return (
     <StartShell step="review" title="Happy with this? Then send it." wide>
       {error && <div className="mb-4"><ErrorNote message={error} /></div>}
@@ -436,7 +443,17 @@ export function ReviewStep({
                 {posting.ats_name}
               </p>
               {posting.description && (
-                <MarkedPostingBody description={posting.description} jdMatch={jdMatch} />
+                <>
+                  <MarkedPostingBody description={cleanedJd.text} jdMatch={jdMatch} />
+                  {cleanedJd.removedLines.length > 0 && (
+                    <details className="mt-1">
+                      <summary className="cursor-pointer text-[11px] text-muted underline underline-offset-2">
+                        {cleanedJd.removedLines.length} form line{cleanedJd.removedLines.length === 1 ? "" : "s"} from the page capture hidden. Show the raw capture
+                      </summary>
+                      <p className="mt-2 whitespace-pre-line text-[11px] leading-5 text-muted">{posting.description}</p>
+                    </details>
+                  )}
+                </>
               )}
             </div>
           </section>
@@ -480,9 +497,9 @@ export function ReviewStep({
                   )}
                 </div>
               ) : applicationId ? (
-                <p role="status" className="min-h-[170px] rounded-inner bg-panel-soft px-4 py-3 text-sm text-muted">
-                  Litos is checking the exact packet it is about to send.
-                </p>
+                <div className="flex min-h-[170px] items-center rounded-inner bg-panel-soft px-4 py-3">
+                  <LoadingOrb label="Litos is checking the exact packet it is about to send." />
+                </div>
               ) : (
                 /* No packet row, so there is nothing to audit and nothing to send. Said here rather
                    than left for the press to discover, because the button below is now disabled and
