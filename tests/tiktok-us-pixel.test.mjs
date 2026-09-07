@@ -28,8 +28,27 @@ test("the verified Stripe return Purchase is routed to the US pixel", async () =
   assert.match(client, /ttq\?\.instance\(pixelCode\)\.track/);
   assert.match(server, /event_source_id: TIKTOK_US_PIXEL_CODE/);
   assert.doesNotMatch(server, /DA3DU3JC77U208UL6HS0/);
-  assert.match(billingReturn, /trackTikTokPixelEvent\("Purchase"/);
+  // Purchase firing (dedupe + trackTikTokPixelEvent("Purchase", ...)) lives in
+  // firePurchaseEventOnce (lib/tiktok-client.ts), shared with the onboarding
+  // notifications screen -- the return page calls it, rather than inlining the
+  // pixel call itself.
+  assert.match(client, /export function firePurchaseEventOnce/);
+  assert.match(client, /trackTikTokPixelEvent\("Purchase"/);
+  assert.match(billingReturn, /firePurchaseEventOnce\(purchaseSentRef, receipt, context\)/);
   assert.match(billingReturn, /billingReturnVerdict/);
+});
+
+test("onboarding fires Purchase from the notifications screen only, not from the return page", async () => {
+  const [billingReturn, notificationsStep] = await Promise.all([
+    read("app/billing/return/page.tsx"),
+    read("components/start/NotificationsStep.tsx"),
+  ]);
+
+  // The return page's website branch must skip firing for an onboarding-sourced
+  // checkout (returnRoute === "/start", set only by PlanStep.tsx): onboarding's
+  // Purchase event is the notifications screen's job, not this page's.
+  assert.match(billingReturn, /if \(storedContext\.returnRoute !== "\/start"\) firePurchaseEventOnce/);
+  assert.match(notificationsStep, /firePurchaseEventOnce\(purchaseSentRef, receipt\)/);
 });
 
 test("every checkout entry point sends InitiateCheckout through the browser pixel", async () => {

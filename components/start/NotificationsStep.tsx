@@ -33,12 +33,13 @@
  * and an unsubscribe link on every message that works without signing in.
  */
 
-import { useEffect, useState } from "react";
-import { getNotificationPreferences, setNotificationPreferences } from "@/lib/api";
+import { useEffect, useRef, useState } from "react";
+import { getBillingReceipt, getNotificationPreferences, setNotificationPreferences } from "@/lib/api";
 import { disablePush, enablePush, hasPushSubscription, pushSupport } from "@/lib/push";
 import { ErrorNote } from "@/components/app/ui";
 import { LaterLink, PrimaryButton, StartShell } from "./ui";
 import { track } from "@/lib/analytics";
+import { firePurchaseEventOnce } from "@/lib/tiktok-client";
 
 type Choice = { strong_match: boolean; employer_reply: boolean; activity_digest: boolean };
 
@@ -243,6 +244,32 @@ export function NotificationsStep({
   onLater: () => void;
 }) {
   const [busy, setBusy] = useState(false);
+  /* THE ONLY PLACE ONBOARDING FIRES TIKTOK'S PURCHASE EVENT (Mehek, 2026-09-08).
+     "Purchase" here means a card on file, not money collected: the trial takes
+     nothing today, and the header comment above already establishes that a
+     student cannot reach this screen without hasVerifiedPaymentMethod passing
+     server-side. So mounting this screen IS the signal, and it is the single
+     onboarding-flow trigger point on purpose -- app/billing/return/page.tsx's
+     website branch deliberately skips firing for an onboarding-sourced
+     checkout (returnRoute === "/start") so the event is not reported twice
+     from two different screens for one purchase. litos-api's Stripe-webhook
+     fallback (litos-backend's lib/tiktokEvents.ts) still fires independently
+     of any of this, as the reliable backstop for a student who never reaches
+     this screen at all; it builds the same event id from the same checkout
+     reference, so TikTok's own dedup collapses the two if both land. */
+  const purchaseSentRef = useRef(false);
+  useEffect(() => {
+    let cancelled = false;
+    void getBillingReceipt()
+      .then((receipt) => {
+        if (!cancelled) firePurchaseEventOnce(purchaseSentRef, receipt);
+      })
+      .catch(() => {
+        /* No receipt yet is not an error worth surfacing here: litos-api's
+           webhook fallback still reports the purchase either way. */
+      });
+    return () => { cancelled = true; };
+  }, []);
   return (
     <StartShell step="notifications" title="Want to know when the next one opens?">
       <NotificationChoices />

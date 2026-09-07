@@ -56,3 +56,37 @@ export function trackTikTokPixelEvent(
     /* analytics must never break the funnel */
   }
 }
+
+type PurchaseReceipt = { reference: string | null; amount_cents: number; currency: string };
+
+/* Shared by every place Purchase can fire client-side (app/billing/return/page.tsx's
+   website branch, components/start/NotificationsStep.tsx). Keys the sessionStorage
+   dedupe (and the TikTok event id) on the receipt's own reference whenever one is
+   available -- litos-api's Stripe-webhook fallback (litos-backend's
+   lib/tiktokEvents.ts) builds the exact same id from the same underlying value
+   (provider_checkout_id's last 12 characters), so TikTok's own event-id dedup
+   collapses the case where both the client and the server-side fallback fire for
+   one purchase.
+
+   fallbackKey is optional: a caller with no receipt yet and nothing unique to key
+   on (unlike app/billing/return/page.tsx, which always has the checkout's own
+   "context") should pass nothing and let this no-op rather than dedupe on a
+   non-unique placeholder, which would silently drop a second real purchase. */
+export function firePurchaseEventOnce(
+  purchaseSentRef: { current: boolean },
+  receipt: PurchaseReceipt | null,
+  fallbackKey?: string,
+) {
+  const dedupeId = receipt?.reference ?? fallbackKey;
+  if (!dedupeId) return;
+  const purchaseKey = `litos_tiktok_purchase_sent:${dedupeId}`;
+  if (purchaseSentRef.current || window.sessionStorage.getItem(purchaseKey) === "1") return;
+  purchaseSentRef.current = true;
+  window.sessionStorage.setItem(purchaseKey, "1");
+  const purchaseEventId = `purchase:${dedupeId}`;
+  const purchaseProperties = receipt
+    ? { value: receipt.amount_cents / 100, currency: receipt.currency }
+    : undefined;
+  sendTikTokEvent("Purchase", purchaseEventId, purchaseProperties);
+  trackTikTokPixelEvent("Purchase", purchaseEventId, purchaseProperties);
+}
