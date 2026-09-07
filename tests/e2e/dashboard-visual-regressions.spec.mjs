@@ -689,6 +689,7 @@ async function dashboardContext({
   submitRequestFixtures = {},
   bootstrapFixture = null,
   jobFixture = null,
+  managedPrepareFixture = null,
   profileFixture = STUB["/profile"],
   targetingFixture = STUB["/profile/targeting"],
 }) {
@@ -700,6 +701,7 @@ async function dashboardContext({
   let pendingSubmissionReadGate = null;
   let pendingTranscriptAttachGate = null;
   let pendingResumeGenerateGate = null;
+  let pendingJobExtractGate = null;
   let pendingBankSaveGate = null;
   let pendingParsedProfileSaveGate = null;
   let pendingProfileUploadGate = null;
@@ -732,6 +734,9 @@ async function dashboardContext({
        the document the row named rather than merely that the modal changed stage. */
     storedDocumentAttachWrites: [],
     applicationMutationRequests: [],
+    resumeGenerationWrites: [],
+    jobExtractionWrites: [],
+    managedPrepareWrites: [],
     networkStatusReads: 0,
     networkCommitWrites: 0,
     outreachApplicationWrites: [],
@@ -808,6 +813,16 @@ async function dashboardContext({
       const released = new Promise((resolve) => { release = resolve; });
       const settled = new Promise((resolve) => { markSettled = resolve; });
       pendingResumeGenerateGate = { markStarted, released, markSettled, response };
+      return { started, release, settled };
+    },
+    holdNextJobExtract(response) {
+      let markStarted;
+      let release;
+      let markSettled;
+      const started = new Promise((resolve) => { markStarted = resolve; });
+      const released = new Promise((resolve) => { release = resolve; });
+      const settled = new Promise((resolve) => { markSettled = resolve; });
+      pendingJobExtractGate = { markStarted, released, markSettled, response };
       return { started, release, settled };
     },
     holdNextBankSave() {
@@ -1044,6 +1059,7 @@ async function dashboardContext({
         return;
       }
       if (method === "POST" && pathname === "/resume/generate") {
+        state.resumeGenerationWrites.push(request.postDataJSON());
         const gate = pendingResumeGenerateGate;
         if (gate) {
           pendingResumeGenerateGate = null;
@@ -1056,6 +1072,27 @@ async function dashboardContext({
         };
         await fulfillJson(route, response.body, response.status);
         gate?.markSettled();
+        return;
+      }
+      if (method === "POST" && pathname === "/jobs/extract") {
+        state.jobExtractionWrites.push(request.postDataJSON());
+        const gate = pendingJobExtractGate;
+        if (gate) {
+          pendingJobExtractGate = null;
+          gate.markStarted();
+          await gate.released;
+        }
+        const response = gate?.response ?? {
+          status: 500,
+          body: { error: "the visual fixture requires an explicit job extraction response" },
+        };
+        await fulfillJson(route, response.body, response.status);
+        gate?.markSettled();
+        return;
+      }
+      if (method === "POST" && pathname === "/applications/managed-prepare" && managedPrepareFixture) {
+        state.managedPrepareWrites.push(request.postDataJSON());
+        await fulfillJson(route, managedPrepareFixture.body, managedPrepareFixture.status);
         return;
       }
       if (denyOutreachContacts && method === "POST" && pathname === "/applications") {
@@ -3193,30 +3230,175 @@ test("A saved context question advances on the first visit", async () => {
   }
 });
 
-test("The manual composer reveals requirements before an action can fail", async () => {
-  const { context, page, state } = await newDashboardPage({ viewport: { width: 390, height: 844 } });
+test("The manual composer stays inside Litos and starts internal tailoring", async () => {
+  const { context, page, state } = await newDashboardPage({
+    viewport: { width: 390, height: 844 },
+    profileFixture: {
+      ...STUB["/profile"],
+      full_name: "Fixture Student",
+      resume_email: "fixture@example.invalid",
+    },
+  });
+  const popups = [];
+  page.on("popup", (popup) => popups.push(popup));
   try {
     await page.goto(`${ORIGIN}/dashboard/applications?new=1&intent=fill`, { waitUntil: "domcontentloaded" });
     await page.getByRole("heading", { name: "Fill an application.", exact: true }).waitFor({ state: "visible" });
-    const fill = page.getByRole("button", { name: "Open and fill employer form", exact: true });
     const tailor = page.getByRole("button", { name: "Tailor resume first", exact: true });
-    assert.equal(await fill.isDisabled(), true, "the empty composer exposed an active fill action");
+    assert.equal(await page.getByRole("button", { name: "Open and fill employer form", exact: true }).count(), 0);
+    assert.equal(await page.getByRole("button", { name: "Prepare in Litos", exact: true }).count(), 0);
     assert.equal(await tailor.isDisabled(), true, "the empty composer exposed an active tailoring action");
     assert.equal(await page.getByLabel("Job description").count(), 0, "the optional tailoring field dominated the default mobile form");
-    await page.getByText("Company, role, and a complete HTTPS job URL unlock the extension fallback.", { exact: false }).waitFor({ state: "visible" });
+    await page.getByText("Add or read the job description, then tailor the packet in Litos.", { exact: true }).waitFor({ state: "visible" });
 
     await page.getByLabel("Company").fill("Fixture Systems");
     await page.getByLabel("Role").fill("Product Engineering Intern");
     await page.getByLabel("Job URL").fill("http://jobs.example.com/product-engineering-intern");
-    assert.equal(await fill.isDisabled(), true, "an insecure or incomplete URL unlocked the employer form");
     await page.getByLabel("Job URL").fill("https://jobs.example.com/product-engineering-intern");
-    assert.equal(await fill.isEnabled(), true, "a complete manual application did not unlock filling");
+    assert.equal(await page.getByRole("button", { name: "Prepare in Litos", exact: true }).count(), 0);
     assert.equal(await tailor.isDisabled(), true, "tailoring unlocked without a job description");
 
     await page.getByRole("button", { name: "Add a job description to tailor first", exact: true }).click();
     await page.getByLabel("Job description").fill(HOME_JOB_FIXTURE.description);
     assert.equal(await tailor.isEnabled(), true, "a complete tailoring draft did not unlock tailoring");
+    const generated = state.holdNextResumeGenerate({
+      status: 500,
+      body: { error: "fixture stopped after proving the internal generation request" },
+    });
+    await tailor.click();
+    await generated.started;
+    assert.equal(popups.length, 0, "manual tailoring opened an employer page");
+    assert.deepEqual(state.applicationMutationRequests, [], "manual tailoring called an application fill or send endpoint");
+    assert.equal(state.resumeGenerationWrites.length, 1);
+    assert.equal(state.resumeGenerationWrites[0].company, "Fixture Systems");
+    assert.equal(state.resumeGenerationWrites[0].role, "Product Engineering Intern");
+    assert.equal(state.resumeGenerationWrites[0].application.portal_url, "https://jobs.example.com/product-engineering-intern");
+    assert.equal(state.resumeGenerationWrites[0].jd_text, HOME_JOB_FIXTURE.description);
+    assert.equal("job_id" in state.resumeGenerationWrites[0], false, "a manual URL minted monitored posting authority");
+    generated.release();
+    await generated.settled;
+    await page.getByRole("alert").filter({ hasText: "fixture stopped after proving the internal generation request" }).waitFor({ state: "visible" });
     assertNoPageErrors(state, "Manual application composer readiness");
+  } finally {
+    await context.close();
+  }
+});
+
+test("Read job binds direct preparation only to its exact current URL", async () => {
+  const { context, page, state } = await newDashboardPage({
+    viewport: { width: 390, height: 844 },
+    managedPrepareFixture: {
+      status: 503,
+      body: { error: "fixture stopped after proving the managed preparation request" },
+    },
+  });
+  const staleJobId = "11111111-1111-4111-8111-111111111111";
+  const currentJobId = "22222222-2222-4222-8222-222222222222";
+  const firstUrl = "https://jobs.example.com/fixture-systems/first-role";
+  const secondUrl = "https://jobs.example.com/fixture-systems/current-role";
+  const popups = [];
+  page.on("popup", (popup) => popups.push(popup));
+  try {
+    await page.goto(`${ORIGIN}/dashboard/applications?new=1&intent=fill`, { waitUntil: "domcontentloaded" });
+    await page.getByLabel("Company").fill("Fixture Systems");
+    await page.getByLabel("Role").fill("Product Engineering Intern");
+    await page.getByLabel("Job URL").fill(firstUrl);
+
+    const staleRead = state.holdNextJobExtract({
+      status: 200,
+      body: {
+        jd_text: HOME_JOB_FIXTURE.description,
+        company: "Fixture Systems",
+        role: "Product Engineering Intern",
+        job_id: staleJobId,
+      },
+    });
+    await page.getByRole("button", { name: "Read job", exact: true }).click();
+    await staleRead.started;
+    await page.getByLabel("Job URL").fill(secondUrl);
+    const staleResponse = page.waitForResponse((response) => (
+      response.url() === `${BACKEND_ORIGIN}/jobs/extract`
+      && response.request().postDataJSON()?.job_url === firstUrl
+    ));
+    staleRead.release();
+    await Promise.all([staleRead.settled, staleResponse]);
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    assert.equal(await page.getByRole("button", { name: "Prepare in Litos", exact: true }).count(), 0, "a stale Read job response bound its posting id to a new URL");
+
+    const editedIdentityRead = state.holdNextJobExtract({
+      status: 200,
+      body: {
+        jd_text: HOME_JOB_FIXTURE.description,
+        company: "Fixture Systems",
+        role: "Product Engineering Intern",
+        job_id: currentJobId,
+      },
+    });
+    await page.getByRole("button", { name: "Read job", exact: true }).click();
+    await editedIdentityRead.started;
+    await page.getByLabel("Role").fill("Different Product Internship");
+    const editedIdentityResponse = page.waitForResponse((response) => (
+      response.url() === `${BACKEND_ORIGIN}/jobs/extract`
+      && response.request().postDataJSON()?.job_url === secondUrl
+    ));
+    editedIdentityRead.release();
+    await Promise.all([editedIdentityRead.settled, editedIdentityResponse]);
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    assert.equal(await page.getByRole("button", { name: "Prepare in Litos", exact: true }).count(), 0, "an identity edit during Read job restored its stale posting id");
+
+    const mismatchedIdentityRead = state.holdNextJobExtract({
+      status: 200,
+      body: {
+        jd_text: HOME_JOB_FIXTURE.description,
+        company: "Fixture Systems",
+        role: "Product Engineering Intern",
+        job_id: currentJobId,
+      },
+    });
+    await page.getByRole("button", { name: "Read job", exact: true }).click();
+    await mismatchedIdentityRead.started;
+    const mismatchedIdentityResponse = page.waitForResponse((response) => (
+      response.url() === `${BACKEND_ORIGIN}/jobs/extract`
+      && response.request().postDataJSON()?.job_url === secondUrl
+    ));
+    mismatchedIdentityRead.release();
+    await Promise.all([mismatchedIdentityRead.settled, mismatchedIdentityResponse]);
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    assert.equal(await page.getByRole("button", { name: "Prepare in Litos", exact: true }).count(), 0, "a mismatched typed role adopted the monitored posting identity");
+
+    await page.getByLabel("Role").fill("Product Engineering Intern");
+    const currentRead = state.holdNextJobExtract({
+      status: 200,
+      body: {
+        jd_text: HOME_JOB_FIXTURE.description,
+        company: "Fixture Systems",
+        role: "Product Engineering Intern",
+        job_id: currentJobId,
+      },
+    });
+    await page.getByRole("button", { name: "Read job", exact: true }).click();
+    await currentRead.started;
+    const currentResponse = page.waitForResponse((response) => (
+      response.url() === `${BACKEND_ORIGIN}/jobs/extract`
+      && response.request().postDataJSON()?.job_url === secondUrl
+    ));
+    currentRead.release();
+    await Promise.all([currentRead.settled, currentResponse]);
+    const prepare = page.getByRole("button", { name: "Prepare in Litos", exact: true });
+    await prepare.waitFor({ state: "visible" });
+    const managedRequest = page.waitForResponse((response) => (
+      response.url() === `${BACKEND_ORIGIN}/applications/managed-prepare`
+      && response.request().method() === "POST"
+      && response.status() === 503
+    ));
+    await prepare.click();
+    await managedRequest;
+    assert.deepEqual(state.applicationMutationRequests, [{ method: "POST", pathname: "/applications/managed-prepare" }]);
+    assert.equal(state.managedPrepareWrites.length, 1);
+    assert.equal(state.managedPrepareWrites[0].job_id, currentJobId);
+    assert.equal(state.managedPrepareWrites[0].resume_source, "main_resume");
+    assert.equal(popups.length, 0, "managed preparation opened an employer page");
+    assertNoPageErrors(state, "Read job exact posting binding");
   } finally {
     await context.close();
   }
@@ -4324,6 +4506,8 @@ test("delayed resume denials restore focus after the initiating control changes"
       resume_email: "fixture@example.invalid",
     },
   });
+  const applicationPopups = [];
+  applications.page.on("popup", (popup) => applicationPopups.push(popup));
   try {
     await applications.page.goto(`${ORIGIN}/dashboard/applications?new=1`, { waitUntil: "domcontentloaded" });
     await applications.page.getByRole("heading", { name: "Fill an application." }).waitFor({ state: "visible" });
@@ -4342,6 +4526,11 @@ test("delayed resume denials restore focus after the initiating control changes"
     await applicationDenial.settled;
     const applicationUpgrade = applications.page.getByRole("dialog", { name: "Tailor this resume with Litos+" });
     await applicationUpgrade.waitFor({ state: "visible" });
+    await applicationUpgrade.getByText("You can keep editing the application details without upgrading.", { exact: true }).waitFor({ state: "visible" });
+    assert.equal(
+      await applicationUpgrade.getByText("Your main resume can still be used to fill this application.", { exact: true }).count(),
+      0,
+    );
     await finishDashboardAnimations(applications.page);
     await waitForStableGeometry(applicationUpgrade, "Applications delayed-denial upgrade dialog");
     await applications.page.waitForFunction(() => {
@@ -4363,9 +4552,12 @@ test("delayed resume denials restore focus after the initiating control changes"
     await applications.page.getByText("applied today").first().waitFor({ state: "visible", timeout: 15_000 });
     await waitForStableContent(applications.page.locator("main").first(), "Applications delayed-denial page behind the dialog");
     await capturePass(applications.page, "applications-delayed-denial-upgrade");
-    await applicationUpgrade.getByRole("button", { name: "Close Litos+ options" }).click();
+    assert.equal(await applicationUpgrade.getByRole("button", { name: "Fill with my main resume", exact: true }).count(), 0);
+    await applicationUpgrade.getByRole("button", { name: "Keep editing", exact: true }).click();
     await applicationUpgrade.waitFor({ state: "detached" });
     await applications.page.waitForFunction(() => document.activeElement?.getAttribute("data-focus-probe") === "application-tailor-trigger");
+    assert.equal(applicationPopups.length, 0, "the no-job upgrade dismissal opened an employer page");
+    assert.deepEqual(applications.state.applicationMutationRequests, [], "the no-job upgrade dismissal started an application fill");
     assertNoPageErrors(applications.state, "Applications delayed paywall focus");
   } finally {
     await applications.context.close();

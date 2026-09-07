@@ -124,34 +124,27 @@ test("explicit plan entry points open for grandfathered accounts with preserved 
   assert.match(settings, /trigger: "choose_litos_plus"[\s\S]*source: "plan_management"/);
 });
 
-test("Free filling uses canonical application seams and never generation", async () => {
-  const [applications, bridge] = await Promise.all([
-    read("app/dashboard/applications/page.tsx"),
-    read("lib/extension-bridge.ts"),
-  ]);
+test("manual applications stay inside Litos through tailoring", async () => {
+  const applications = await read("app/dashboard/applications/page.tsx");
   const fill = applications.slice(
     applications.indexOf("async function fillApplication"),
     applications.indexOf("async function createApplication"),
   );
-  assert.match(fill, /api<\{ application: CanonicalApplication; created: boolean \}>\("\/applications"/);
-  assert.match(fill, /`\/applications\/\$\{encodeURIComponent\(created\.application\.id\)\}\/fill`/);
-  assert.match(fill, /source_surface: "dashboard"/);
-  assert.doesNotMatch(fill, /source_surface: "applications"/);
-  assert.match(fill, /ensureCurrentExtensionSession/);
-  assert.match(fill, /await startFreeFillThroughExtension/);
-  assert.match(fill, /companyTab\.location\.replace\(handoff\.portal_url\)/);
-  assert.ok(
-    fill.indexOf("await startFreeFillThroughExtension") < fill.indexOf("companyTab.location.replace"),
-    "the employer portal must not load until the extension explicitly arms the canonical fill",
+  const tailor = applications.slice(
+    applications.indexOf("async function createApplication"),
+    applications.indexOf("async function generateCoverLetter"),
   );
-  assert.doesNotMatch(fill, /armHandoffs\(/);
-  assert.doesNotMatch(fill, /\/resume\/generate/);
-  assert.match(bridge, /type: "LITOS_START_FREE_FILL"/);
-  assert.doesNotMatch(bridge.slice(bridge.indexOf("export async function startFreeFillThroughExtension"), bridge.indexOf("export async function armHandoffs")), /fill_data_url/);
-  assert.doesNotMatch(applications, /Factual fields prepared/);
-  assert.match(applications, /Click Fill in the Litos extension card/);
+  assert.match(fill, /if \(draft\.jobId\)[\s\S]*prepareMonitoredApplication/);
+  assert.match(fill, /choose Tailor resume first to prepare this application in Litos/);
+  assert.doesNotMatch(fill, /window\.open|location\.replace|startFreeFillThroughExtension|ensureCurrentExtensionSession/);
+  assert.doesNotMatch(fill, /api<[^>]+>\("\/applications"|\/applications\/[^\s]*\/fill/);
+  assert.match(tailor, /api<ResumeGenerationResponse>\("\/resume\/generate"/);
+  assert.match(tailor, /manualLabel: draft\.jobId \? "Fill with my main resume" : "Keep editing"/);
+  assert.match(tailor, /draft\.jobId[\s\S]*explanation: "You can keep editing the application details without upgrading\."/);
+  assert.match(tailor, /\.\.\.\(draft\.jobId[\s\S]*onManual:/);
   assert.match(applications, /variant="secondary"[\s\S]*onClick=\{\(event\) => onTailor\(event\.currentTarget\)\}[\s\S]*"Tailor resume first"/);
-  assert.match(applications, /onClick=\{onFill\}[\s\S]*"Open and fill employer form"/);
+  assert.match(applications, /\{managedPrepare && \([\s\S]*onClick=\{onFill\}[\s\S]*"Prepare in Litos"/);
+  assert.doesNotMatch(applications, /Open and fill employer form|extension fallback|Click Fill in the Litos extension card/);
   const routedJob = applications.slice(
     applications.indexOf("if (!pendingJob || packets === null) return;"),
     applications.indexOf("/* Fail closed during query-only navigation."),
@@ -182,7 +175,7 @@ test("a canonical Free application upgrades documents without creating another T
   );
   const canonicalDetail = applications.slice(
     applications.indexOf("function CanonicalApplicationDetail"),
-    applications.indexOf("function ApplicationFillReceipt"),
+    applications.indexOf("function packetTimestamp"),
   );
 
   assert.match(tailoring, /application_id: draft\.canonicalApplicationId/);

@@ -207,15 +207,14 @@ describe("send eligibility discovered by hydration is offered, never forced", ()
 
   test("the unlabelled three-colour bar is off the card that reports state", () => {
     /* A segmented horizontal bar at the top of the one card whose job is reporting how far an
-       application has got reads as a progress meter, and it had no labels and no relationship to
-       state. It stays on the fill receipt, which reports a finished handoff. */
+       application has got reads as a progress meter, and it has no labels or relationship to
+       state. */
     const card = applications.slice(
       applications.indexOf("function CanonicalApplicationDetail("),
-      applications.indexOf("function ApplicationFillReceipt("),
+      applications.indexOf("function packetTimestamp("),
     );
-    assert.ok(card.length > 0, "CanonicalApplicationDetail must still precede ApplicationFillReceipt");
+    assert.ok(card.length > 0, "CanonicalApplicationDetail must still precede packetTimestamp");
     assert.doesNotMatch(card, /grid h-1 grid-cols-3/);
-    assert.match(applications, /grid h-1 grid-cols-3/, "the motif itself is not deleted from the file");
   });
 });
 
