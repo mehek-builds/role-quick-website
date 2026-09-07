@@ -46,13 +46,17 @@ test("both onboarding claim exits go through the shared route", () => {
   }
 });
 
-/* `next` is not a parameter /login has ever read. It looked like the thing carrying the student
- * back to setup, so its presence made the broken URL read as deliberate. What actually returns
- * them is landingRoute(), which asks the server whether onboarding is unfinished and answers
- * "/start" when it is - so the promise both screens make is kept by the code that decides it. */
-test("no claim exit relies on a next parameter login does not implement", () => {
-  assert.doesNotMatch(loginSource, /params\.get\("next"\)/);
-  for (const source of [buildStepSource, planStepSource]) {
-    assert.doesNotMatch(source, /next=\/start/);
+/* `next` was not a parameter /login read, and its presence made the broken URL read as deliberate.
+ * What actually returns the student to setup is landingRoute(), which asks the server whether
+ * onboarding is unfinished and answers "/start" when it is - so the promise both screens make is
+ * kept by the code that decides it.
+ *
+ * Asserted on the CALL SITES only, deliberately. Pinning "/login does not read next" would have
+ * made this test fail the day someone adds real `next` support, which is a legitimate change and
+ * none of this test's business. What must stay true is narrower: neither claim exit depends on a
+ * redirect parameter to get the student home. */
+test("no claim exit relies on a next parameter to get back to setup", () => {
+  for (const [name, source] of [["BuildStep", buildStepSource], ["PlanStep", planStepSource]]) {
+    assert.doesNotMatch(source, /next=\/start/, `${name} must not depend on a next parameter`);
   }
 });
