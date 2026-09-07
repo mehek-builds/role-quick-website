@@ -59,6 +59,10 @@ test("saved answers honor standing consent while retaining a manual fallback", a
     new URL("../app/dashboard/applications/page.tsx", import.meta.url),
     "utf8",
   );
+  const recoveryStatus = await readFile(
+    new URL("../features/applications/domain/unverified-recovery-status.ts", import.meta.url),
+    "utf8",
+  );
 
   assert.match(dashboard, /await prepareApplication\(questions, options\)/);
   const requiredRouteStart = dashboard.indexOf("function routeMissingRequiredAnswers(");
@@ -193,7 +197,10 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   assert.match(dashboard, /Litos will never pretend to be you/);
   assert.match(dashboard, /will not get past the puzzle that checks you are human, a code on your phone, a login/);
   assert.match(dashboard, /submission\.cover_letter && review\.cover_letter_supported !== false/);
-  assert.match(dashboard, /Litos checks the original application attempt/);
+  assert.match(dashboard, /const recoveryStatus = unverifiedRecoveryStatus\(review\);/);
+  assert.match(dashboard, /<UnverifiedSubmissionCard status=\{recoveryStatus\} \/>/);
+  assert.match(dashboard, /\{status\.description\}/);
+  assert.match(recoveryStatus, /Litos checks the original application attempt/);
   assert.doesNotMatch(dashboard, /Review the answers that need your voice/);
   assert.doesNotMatch(dashboard, /Continue to \$\{questions\.length\} question/);
 });
