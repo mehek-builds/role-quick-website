@@ -1032,7 +1032,6 @@ describe("the application sequence, end to end", () => {
     assert.match(body, /Tell me when an employer replies/i);
     /* The two promises the backend actually enforces, said on the screen that asks. */
     assert.match(body, /at most daily/i);
-    assert.match(body, /unsubscribe link that works without signing in/i);
     /* Auto-apply, send-without-asking and the rest are asked at the moment their feature is first
        used, not on the last screen of setup. */
     assert.doesNotMatch(body, /apply automatically|send without asking|auto-submit/i);

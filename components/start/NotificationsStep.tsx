@@ -231,11 +231,6 @@ export function NotificationChoices() {
           are back. They do not follow you to your phone.
         </p>
       )}
-
-      <p className="mt-5 text-[13px] leading-5 text-muted">
-        Emails carry an unsubscribe link that works without signing in, and all of these live in
-        Settings under Automation afterwards.
-      </p>
     </>
   );
 }
