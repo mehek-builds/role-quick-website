@@ -32,9 +32,14 @@ export function isSafeCheckoutUrl(value: string): boolean {
 export function isStripeCheckoutUrl(value: string): boolean {
   try {
     const url = new URL(value);
-    return url.protocol === "https:"
-      && url.hostname === "checkout.stripe.com"
-      && url.pathname.startsWith("/c/pay/");
+    /* No path check: Stripe does not commit to one shape. A Checkout Session with
+       nothing due today (our card-required trial, payment_method_collection=always
+       + trial_period_days) came back as "/f/pay/..." on 2026-09-07, not the "/c/pay/..."
+       this used to require, and got rejected client-side as an invalid Stripe URL even
+       though the backend had a live session. checkout.stripe.com is the actual security
+       boundary here (only Stripe serves it) -- same reasoning isStripePortalUrl below
+       already uses for billing.stripe.com, with no path check either. */
+    return url.protocol === "https:" && url.hostname === "checkout.stripe.com";
   } catch {
     return false;
   }
