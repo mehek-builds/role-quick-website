@@ -9,7 +9,7 @@ test("billing return verifies the exact offer and account record, then handles c
   const page = read("app/billing/return/page.tsx");
   assert.match(page, /getBillingOffer\(context\)/);
   assert.match(page, /billingReturnVerdict\(/);
-  assert.match(page, /expectedAccountId: storedContext\.accountId/);
+  assert.match(page, /expectedAccountId: storedContext\?\.accountId \?\? state\?\.account_id/);
   assert.match(page, /api<Me>\("\/me"\)/);
   assert.match(page, /Nothing was charged/);
   assert.match(page, /Payment could not be confirmed yet/);

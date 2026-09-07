@@ -41,6 +41,25 @@ test("the exact account still waits for the exact offer to be paid", () => {
   }), "active");
 });
 
+test("with no independent account to check, passing the server's own account id resolves on offer status alone", () => {
+  /* This is the call-site pattern app/billing/return/page.tsx uses when there is no
+     locally stored checkout context to compare against (storedContext missing):
+     expectedAccountId falls back to state.account_id itself, so this specific
+     check can never produce a false "mismatch" -- the real ownership proof for
+     that case is the server-scoped getBillingOffer 404 check next to it, not this
+     function. */
+  assert.equal(billingReturnVerdict({
+    expectedAccountId: "account-a",
+    offerStatus: "paid",
+    state: state("account-a", "trial_plus"),
+  }), "active");
+  assert.equal(billingReturnVerdict({
+    expectedAccountId: "account-a",
+    offerStatus: "checkout_created",
+    state: state("account-a", "free_new"),
+  }), "pending");
+});
+
 test("a freshly completed checkout confirms even though it lands on trial_plus, not plus_paid", () => {
   // Every new subscription starts as a Stripe trial: the account's own paid offer completing
   // must read as "active" here, or the return page polls out its attempts and hands a paying

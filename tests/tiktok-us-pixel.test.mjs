@@ -46,8 +46,10 @@ test("onboarding fires Purchase from the notifications screen only, not from the
 
   // The return page's website branch must skip firing for an onboarding-sourced
   // checkout (returnRoute === "/start", set only by PlanStep.tsx): onboarding's
-  // Purchase event is the notifications screen's job, not this page's.
-  assert.match(billingReturn, /if \(storedContext\.returnRoute !== "\/start"\) firePurchaseEventOnce/);
+  // Purchase event is the notifications screen's job, not this page's. storedContext
+  // can be missing (see the mismatch-fallback test below), so this reads it optionally
+  // rather than assuming it is always present.
+  assert.match(billingReturn, /if \(\(storedContext\?\.returnRoute \?\? null\) !== "\/start"\) firePurchaseEventOnce/);
   assert.match(notificationsStep, /firePurchaseEventOnce\(purchaseSentRef, receipt\)/);
 });
 
