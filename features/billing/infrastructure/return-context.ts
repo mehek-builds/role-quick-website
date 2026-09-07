@@ -20,13 +20,13 @@ function safeOfferId(value: string | null | undefined): string | null {
    payment came back to a generic "different account" error instead of the trial's
    confirmation screen. Add a route here whenever a new surface starts a checkout. */
 const SAFE_RETURN_ROUTE_PREFIXES = ["dashboard", "billing", "start"];
+const SAFE_RETURN_ROUTE_PATTERN = new RegExp(`^/(?:${SAFE_RETURN_ROUTE_PREFIXES.join("|")})(?:/|$)`);
 
 function safeReturnRoute(value: unknown): string | null {
   if (typeof value !== "string") return null;
   try {
     const url = new URL(value, "https://trylitos.com");
-    const prefixPattern = new RegExp(`^/(?:${SAFE_RETURN_ROUTE_PREFIXES.join("|")})(?:/|$)`);
-    if (url.origin !== "https://trylitos.com" || !prefixPattern.test(url.pathname)) return null;
+    if (url.origin !== "https://trylitos.com" || !SAFE_RETURN_ROUTE_PATTERN.test(url.pathname)) return null;
     return `${url.pathname}${url.search}${url.hash}`;
   } catch {
     return null;
