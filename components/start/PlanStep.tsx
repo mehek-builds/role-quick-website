@@ -40,6 +40,7 @@ import {
   type PlanCatalog,
 } from "@/features/billing";
 import { track } from "@/lib/analytics";
+import { GUEST_CLAIM_ROUTE } from "@/lib/api";
 import { sendTikTokEvent, trackTikTokPixelEvent } from "@/lib/tiktok-client";
 import { operationIdFor, completeOperationId } from "@/lib/operation-id";
 import { PrimaryButton, StartShell } from "./ui";
@@ -131,7 +132,7 @@ export function PlanStep({ onSettled }: { onSettled: () => void }) {
       const code = (reason as { data?: { code?: string } } | null)?.data?.code;
       if (code === "claim_required") {
         track("onboarding_plan_claim_required", {});
-        window.location.assign("/login?intent=claim&next=/start");
+        window.location.assign(GUEST_CLAIM_ROUTE);
         return;
       }
       setError(reason instanceof Error ? reason.message : "Checkout could not open. Nothing was charged.");

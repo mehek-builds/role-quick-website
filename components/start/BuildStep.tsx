@@ -25,7 +25,7 @@
 import { useEffect, useState } from "react";
 import { ThinkingOrb } from "thinking-orbs";
 import { ErrorNote } from "@/components/app/ui";
-import { api, ApiError, getJob, getPostingQuestions, isGuestSession, type MonitoredJob, type ResumeSpec } from "@/lib/api";
+import { api, ApiError, getJob, getPostingQuestions, GUEST_CLAIM_ROUTE, isGuestSession, type MonitoredJob, type ResumeSpec } from "@/lib/api";
 import {
   fetchJdMatch,
   prescriptMetadataBlockers,
@@ -400,7 +400,7 @@ export function BuildStep({
             </PrimaryButton>
           )}
           {guestNeedsEmail && (
-            <PrimaryButton onClick={() => { track("onboarding_build_claim_required", {}); window.location.assign("/login?intent=claim&next=/start"); }}>
+            <PrimaryButton onClick={() => { track("onboarding_build_claim_required", {}); window.location.assign(GUEST_CLAIM_ROUTE); }}>
               Add my email
             </PrimaryButton>
           )}
