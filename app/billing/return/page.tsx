@@ -171,6 +171,31 @@ function PrintedReceipt({ receipt }: { receipt: BillingReceipt }) {
   );
 }
 
+/* Shared by both the website and extension checkout branches below. Keys the
+   sessionStorage dedupe (and the TikTok event id) on the receipt's own
+   reference whenever one is available, falling back to a per-flow id only
+   when it isn't -- fallbackKey alone (e.g. the URL's "context") is not
+   unique per purchase, it's a small fixed set of offer/route slugs reused
+   across every purchase of that type, so keying on it alone would silently
+   drop a second real purchase's Purchase event in the same browser tab. */
+function firePurchaseEventOnce(
+  purchaseSentRef: { current: boolean },
+  receipt: BillingReceipt | null,
+  fallbackKey: string,
+) {
+  const dedupeId = receipt?.reference ?? fallbackKey;
+  const purchaseKey = `litos_tiktok_purchase_sent:${dedupeId}`;
+  if (purchaseSentRef.current || window.sessionStorage.getItem(purchaseKey) === "1") return;
+  purchaseSentRef.current = true;
+  window.sessionStorage.setItem(purchaseKey, "1");
+  const purchaseEventId = `purchase:${dedupeId}`;
+  const purchaseProperties = receipt
+    ? { value: receipt.amount_cents / 100, currency: receipt.currency }
+    : undefined;
+  sendTikTokEvent("Purchase", purchaseEventId, purchaseProperties);
+  trackTikTokPixelEvent("Purchase", purchaseEventId, purchaseProperties);
+}
+
 export default function BillingReturnPage() {
   const [result, setResult] = useState<Result | null>(null);
   const [portalBusy, setPortalBusy] = useState(false);
@@ -229,6 +254,14 @@ export default function BillingReturnPage() {
           if (reply?.ok === true
             && reply.active === true
             && (reply.access_class === "plus_paid" || reply.access_class === "legacy_paid")) {
+            /* Mirrors the website branch below: fire Purchase only once the extension
+               itself has confirmed the account is active/paid, not on the redirect
+               alone. The extension surface has no receipt of its own, so fetch the
+               same /billing/receipt the website branch uses -- it's account-scoped,
+               not surface-scoped. */
+            const receipt = await getBillingReceipt().catch(() => null);
+            if (stopped) return;
+            firePurchaseEventOnce(purchaseSentRef, receipt, context ?? reply.account_id);
             setResult({ kind: "extension_active", actionReady: reply.action_ready === true });
             return;
           }
@@ -294,17 +327,7 @@ export default function BillingReturnPage() {
                window is real, not theoretical) without relying on TikTok's Events API
                to dedupe two separate CAPI calls sent minutes apart, which isn't a
                documented guarantee. */
-            const purchaseKey = `litos_tiktok_purchase_sent:${receipt?.reference ?? context}`;
-            if (!purchaseSentRef.current && window.sessionStorage.getItem(purchaseKey) !== "1") {
-              purchaseSentRef.current = true;
-              window.sessionStorage.setItem(purchaseKey, "1");
-              const purchaseEventId = `purchase:${receipt?.reference ?? context}`;
-              const purchaseProperties = receipt
-                ? { value: receipt.amount_cents / 100, currency: receipt.currency }
-                : undefined;
-              sendTikTokEvent("Purchase", purchaseEventId, purchaseProperties);
-              trackTikTokPixelEvent("Purchase", purchaseEventId, purchaseProperties);
-            }
+            firePurchaseEventOnce(purchaseSentRef, receipt, context);
           }
           return;
         }
