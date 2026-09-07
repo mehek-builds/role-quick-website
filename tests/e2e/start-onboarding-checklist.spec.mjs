@@ -701,11 +701,22 @@ test("criteria 1-4: the first screen welcomes, orients, and asks for one thing",
        filter the derived list, so it stopped gating the reveal, and the block now sits directly
        under Field with Stage moved below it). A cold first screen is therefore taps only, which is
        the strongest form this criterion can take. The search is asserted where it actually
-       appears, in the walk below, after the field answer that summons it. */
+       appears, in the walk below, after the field answer that summons it.
+
+       The "Add another field" box (2026-09-07) has no earlier answer to wait behind - Field is the
+       first ask, not the second - so it is gated by its own tap instead: the "+ Other" chip opens
+       it, and it stays shut until then. Exercised in its own spec below, alongside a check that a
+       typed field matching one of the fixed nine by label reuses that field rather than adding a
+       second chip for it. */
     assert.equal(
       await page.locator("main #additional-role:visible").count(),
       0,
       "the title search is offered before a field has been chosen",
+    );
+    assert.equal(
+      await page.locator("main #additional-field:visible").count(),
+      0,
+      "the free-text field box is open before its reveal chip was tapped",
     );
 
     /* And the resume still gets asked for, one screen later. A reorder that quietly dropped the
@@ -1334,6 +1345,73 @@ test("a place chosen from the dropdown adds itself; typing the same text does no
 
   await page.getByRole("button", { name: "Toronto, Canada", exact: true }).waitFor({ timeout: 5000 });
   assert.equal(await field.inputValue(), "", "the box kept the place the dropdown just added");
+});
+
+test("a typed field adds its own chip; a typed field matching a known label reuses that field instead of duplicating it", async () => {
+  resetProgress();
+  savedTargeting = { ...EMPTY_TARGETING };
+
+  await page.goto(`${ORIGIN}/start`, { waitUntil: "domcontentloaded" });
+  await screen("Your roles");
+
+  /* COLD ARRIVAL IS STILL TAPS ONLY. Field is the first ask, so this box has no fieldsReady-style
+     answer to wait behind - the "+ Other" chip is the gate instead, and it must not be pre-opened. */
+  assert.equal(
+    await page.locator("main #additional-field:visible").count(),
+    0,
+    "the free-text field box is open before the reveal chip was tapped",
+  );
+  const revealChip = page.getByRole("button", { name: "+ Other", exact: true });
+  await revealChip.waitFor({ timeout: 10_000 });
+
+  await revealChip.click();
+  const fieldInput = page.getByLabel("Add another field");
+  await fieldInput.waitFor({ timeout: 10_000 });
+
+  // A field with no match among the fixed nine: stored and rendered as typed.
+  await fieldInput.fill("Biotech");
+  await fieldInput.press("Enter");
+  const biotechChip = page.getByRole("button", { name: "Biotech", exact: true });
+  await biotechChip.waitFor({ timeout: 10_000 });
+  assert.equal(await biotechChip.getAttribute("aria-pressed"), "true", "a typed field was added but not shown as selected");
+  assert.equal(await fieldInput.inputValue(), "", "the field box kept the text it just added");
+
+  // A field typed in different case that DOES match one of the nine by label: no duplicate chip,
+  // the real field is selected instead, and its titles derive - proving the match actually wires
+  // into titlesForFields rather than only cosmetically avoiding a second chip.
+  await fieldInput.fill("design");
+  await fieldInput.press("Enter");
+  assert.equal(
+    await page.getByRole("button", { name: /^design$/i }).count(),
+    1,
+    "typing a known field's label by hand created a duplicate chip instead of reusing the fixed one",
+  );
+  const designChip = page.getByRole("button", { name: "Design", exact: true });
+  assert.equal(await designChip.getAttribute("aria-pressed"), "true", "typing a known field's label did not select the fixed chip");
+  await page.getByRole("button", { name: "Product Designer", exact: true }).waitFor({ timeout: 10_000 });
+
+  /* THE LANDMINE CASE: a typed field that matches one of the nine by ID rather than by label.
+     "Quant" case-folds to Finance & trading's internal id ("quant"), and unlike six of the other
+     eight ids that id is not a substring of its own label ("Finance & trading"), so it never
+     surfaces in the dropdown below and Enter falls through to the raw typed text rather than a
+     picked suggestion's label. A label-only match check would then compare "quant" against every
+     label, find none, and store the RAW text "Quant" (original case preserved) - which reads as a
+     match to the eye but is a distinct string from the real id "quant" everywhere case-sensitive
+     equality is used downstream (`fields.includes`, `Array.some`, `Set.has` in
+     categoriesForFields/titlesForFields), so it would render as an ORPHANED "Quant" chip: it counts
+     toward fieldsReady, but derives no titles, no category, and never lights up the real Finance &
+     trading chip a reader would expect it to mean. Checking id case-insensitively here, the same
+     way label already is, is what turns that into the real field instead. */
+  await fieldInput.fill("Quant");
+  await fieldInput.press("Enter");
+  assert.equal(
+    await page.getByRole("button", { name: "Quant", exact: true }).count(),
+    0,
+    "typing a field's internal id in a different case left it as an orphaned chip instead of resolving to the fixed field",
+  );
+  const financeChip = page.getByRole("button", { name: "Finance & trading", exact: true });
+  assert.equal(await financeChip.getAttribute("aria-pressed"), "true", "typing a field's internal id did not select the fixed chip it names");
+  await page.getByRole("button", { name: "Quantitative Trader", exact: true }).waitFor({ timeout: 10_000 });
 });
 
 /* THE ACCOUNTS THAT ALREADY TICKED THE BOX.

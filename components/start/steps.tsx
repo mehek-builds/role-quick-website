@@ -214,8 +214,22 @@ function FocusForm({
   const [newTitle, setNewTitle] = useState("");
   const [roleMenuOpen, setRoleMenuOpen] = useState(false);
   const [activeMatchIndex, setActiveMatchIndex] = useState(0);
+  const [newField, setNewField] = useState("");
+  const [fieldMenuOpen, setFieldMenuOpen] = useState(false);
+  const [activeFieldMatchIndex, setActiveFieldMatchIndex] = useState(0);
+  /* Shut on arrival, same reason the title search waits for a field: the checklist-design audit
+     (#285, held by tests/e2e/start-onboarding-checklist criterion 3) asserts a COLD screen is taps
+     only, with no free-text input reachable before a chip is tapped. Field is the very first ask,
+     so there is no earlier answer to gate this box behind - a tap of its own is the gate instead,
+     the same role the "+ Remote" chip plays for locations further down. */
+  const [fieldInputOpen, setFieldInputOpen] = useState(false);
+  const fieldInputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (fieldInputOpen) fieldInputRef.current?.focus();
+  }, [fieldInputOpen]);
 
   /* Field alone is enough to offer titles: titlesForFields only reads fields, and titles are
      stored stage-free (cleanTitle strips "intern" off them), so stage cannot filter the list and
@@ -268,8 +282,53 @@ function FocusForm({
       .slice(0, 6);
   }, [offered, newTitle]);
 
+  /* Anything in `fields` that is not one of the nine FIELDS ids: a field the student typed rather
+     than tapped. Rendered as its own chip below the fixed row, same as `offered`'s extra titles -
+     the fixed nine are not the whole vocabulary, only the fast path through it. */
+  const customFields = useMemo(() => fields.filter((id) => !FIELDS.some((field) => field.id === id)), [fields]);
+
+  const fieldMatches = useMemo(() => {
+    const needle = newField.trim().toLowerCase();
+    return FIELDS
+      .filter((field) => !fields.includes(field.id))
+      .filter((field) => !needle || field.label.toLowerCase().includes(needle))
+      .slice(0, 6);
+  }, [fields, newField]);
+
   function toggleField(id: string) {
     setFields((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+  }
+
+  /* A typed field that MATCHES one of the nine by LABEL OR ID is stored as that field's id, not
+     the typed string - so "software & ai" and the tapped chip are the same entry, and the typed
+     one still feeds categoriesForFields/titlesForFields instead of degrading to a label nothing
+     recognises. Both are checked, not label alone: six of the nine ids ("software", "data",
+     "product", "hardware", "marketing", "sales") are substrings of their own label, so typing one
+     already surfaces it in the dropdown below and Enter resolves it through the picked SUGGESTION's
+     label - but "quant" (Finance & trading) is not a substring of its label, so it never appears
+     as a suggestion, and a label-only check would let it fall through as a UNMATCHED custom entry
+     that happens to equal the field's real id. `fields.includes(field.id)` downstream cannot tell
+     that apart from an actual tap of the Finance & trading chip - it would light that chip up with
+     no chip ever having been shown for what was typed. Checking id here closes that gap for every
+     field, not just the ones an autocomplete happens to save.
+
+     Anything that matches neither is stored as typed: it counts toward fieldsReady and can be
+     removed like any other chip, but titlesForFields and categoriesForFields both read fields
+     against the known nine and drop what they don't recognise (see lib/onboarding-role-inference.ts),
+     so a field with no fixed match derives no titles and no category on its own - the student
+     either gets a title from another field they also picked, or types one in Jobs that fit, and
+     opens "More job preferences" to name a category by hand if focusProblem asks for one. */
+  function addField(value: string) {
+    const clean = value.trim();
+    if (!clean) return;
+    const known = FIELDS.find(
+      (field) => field.label.toLowerCase() === clean.toLowerCase() || field.id.toLowerCase() === clean.toLowerCase(),
+    );
+    const id = known ? known.id : clean;
+    setFields((current) => current.some((item) => item.toLowerCase() === id.toLowerCase()) ? current : [...current, id]);
+    setActiveFieldMatchIndex(0);
+    setNewField("");
+    setFieldMenuOpen(false);
   }
 
   function toggleTitle(title: string) {
@@ -356,7 +415,95 @@ function FocusForm({
               onClick={() => toggleField(field.id)}
             />
           ))}
+          {customFields.map((field) => (
+            <Chip key={field} label={field} on onClick={() => toggleField(field)} />
+          ))}
+          {/* The reveal: a tap, not a fifth text box on a screen the audit measures as taps-only.
+              Field is the first ask, so nothing earlier can gate this the way fieldsReady gates
+              the title search - this chip is that gate instead. */}
+          {!fieldInputOpen && (
+            <Chip label="+ Other" on={false} onClick={() => setFieldInputOpen(true)} />
+          )}
         </div>
+
+        {fieldInputOpen && (
+        <div
+          className="relative mt-3 max-w-sm"
+          onBlur={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget)) setFieldMenuOpen(false);
+          }}
+        >
+          <label htmlFor="additional-field" className="text-xs text-muted">Add another field</label>
+          <div className="mt-1.5 flex gap-2">
+            <input
+              ref={fieldInputRef}
+              id="additional-field"
+              value={newField}
+              onChange={(event) => {
+                setActiveFieldMatchIndex(0);
+                setNewField(event.target.value);
+                setFieldMenuOpen(true);
+              }}
+              onFocus={() => setFieldMenuOpen(true)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  addField(fieldMenuOpen && fieldMatches[activeFieldMatchIndex] ? fieldMatches[activeFieldMatchIndex].label : newField);
+                }
+                if (event.key === "Escape") setFieldMenuOpen(false);
+                if (event.key === "ArrowDown") {
+                  event.preventDefault();
+                  setFieldMenuOpen(true);
+                  setActiveFieldMatchIndex((current) => Math.min(current + 1, Math.max(0, fieldMatches.length - 1)));
+                }
+                if (event.key === "ArrowUp") {
+                  event.preventDefault();
+                  setActiveFieldMatchIndex((current) => Math.max(0, current - 1));
+                }
+              }}
+              placeholder="Type any field"
+              maxLength={80}
+              role="combobox"
+              aria-expanded={fieldMenuOpen}
+              aria-controls="additional-field-options"
+              aria-activedescendant={fieldMenuOpen && fieldMatches[activeFieldMatchIndex] ? `additional-field-option-${activeFieldMatchIndex}` : undefined}
+              autoComplete="off"
+              className="min-h-[44px] min-w-0 flex-1 rounded-inner border border-control-border bg-white px-4 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
+            />
+            <button
+              type="button"
+              onClick={() => addField(newField)}
+              disabled={!newField.trim()}
+              className="min-h-[44px] rounded-inner border border-border px-4 text-sm text-ink hover:border-brand disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Add
+            </button>
+          </div>
+          {fieldMenuOpen && fieldMatches.length > 0 && (
+            <ul
+              id="additional-field-options"
+              role="listbox"
+              className="absolute inset-x-0 top-full z-20 mt-1 max-h-56 overflow-auto rounded-inner border border-border bg-white py-1 shadow-overlay"
+            >
+              {fieldMatches.map((field, index) => (
+                <li
+                  key={field.id}
+                  id={`additional-field-option-${index}`}
+                  role="option"
+                  aria-selected={index === activeFieldMatchIndex}
+                  onPointerDown={(event) => {
+                    event.preventDefault();
+                    addField(field.label);
+                  }}
+                  className={`cursor-pointer px-4 py-2 text-sm hover:text-ink ${index === activeFieldMatchIndex ? "bg-surface-alt text-ink" : "text-muted hover:bg-surface-alt"}`}
+                >
+                  {field.label}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        )}
       </div>
 
       <div className="mb-7">
