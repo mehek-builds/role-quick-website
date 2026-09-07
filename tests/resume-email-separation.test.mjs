@@ -28,20 +28,13 @@ describe("personal resume email and portal routing email stay separate", () => {
     assert.match(resumePage, /Litos login email:/);
   });
 
-  test("the attended application panel labels the generated address as portal-only", () => {
-    assert.match(applications, /manualTrialPacket=\{manualTrialEvidence\?\.response \?\? null\}/);
-    assert.match(applications, /manualTrialPacketEvidenceIsFresh\(selected\.id, activePacketEvidence\)/);
+  test("application recovery keeps the generated portal address internal", () => {
     assert.match(applications, /\/packet-audit`, \{ method: "POST" \}/);
     assert.match(applications, /revalidateAcknowledgedPacketEvidence\(currentEvidence, requestedId, currentAudit, Date\.now\(\)\)/);
-    assert.match(applications, /async function openManualAttendedHandoff\(\)/);
-    assert.match(applications, /await api<ManualHandoffResponse>\(`\/applications\/\$\{submission\.application_id\}\/submission\/manual-handoff`, \{ method: "POST" \}\)/);
-    assert.match(applications, /manualHandoffMatchesPacket\(current, attendedHandoffUrl, manualTrialPacket\)/);
-    assert.match(applications, /companyTab\.location\.replace\(handoff\.url\)/);
-    assert.match(applications, /<Button onClick=\{\(\) => void openManualAttendedHandoff\(\)\}/);
-    assert.doesNotMatch(applications, /<ButtonLink href=\{attendedHandoffUrl\}[\s\S]{0,120}Open manually/);
-    assert.doesNotMatch(applications, /Portal routing email:[\s\S]{0,120}review\.applicant_email\?\.address/);
-    assert.match(applications, /Resume email:/);
-    assert.match(applications, /Portal routing email:/);
-    assert.match(applications, /The PDF keeps your personal resume email\./);
+    assert.doesNotMatch(applications, /manualTrialPacket/);
+    assert.doesNotMatch(applications, /\/submission\/manual-handoff/);
+    assert.doesNotMatch(applications, /Portal routing email:/);
+    assert.doesNotMatch(applications, /review\.applicant_email\?\.address/);
+    assert.match(applications, /<ResumePaper spec=\{stripMetadata\(packet\.spec\)\}/);
   });
 });

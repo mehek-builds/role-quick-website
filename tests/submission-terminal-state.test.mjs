@@ -64,17 +64,18 @@ test("every path that receives a review routes the screen from it", async () => 
  * These sat in the Tracker labelled "Ready" with a live "Fill the form" control; the applicant
  * found out only after a multi-minute run came back "This portal is not supported yet". The
  * tailored resume is still worth having, so the job is not hidden: the copy says what Litos cannot
- * do and hands over the company's page.
+ * do and keeps the packet in Litos without offering an external recovery path.
  */
-test("an unsupported portal replaces the send control with a way to apply by hand", async () => {
+test("an unsupported portal replaces the send control with a paused dashboard state", async () => {
   const dashboard = await readFile(dashboardUrl, "utf8");
 
-  assert.match(dashboard, /Litos cannot fill in this company’s page\. Your resume is ready, so apply on their site\./);
-  // The send control is behind the capability check, and the link out takes its place.
+  assert.match(dashboard, /Litos cannot fill this company&rsquo;s form in the dashboard yet\. Your packet is ready, but this application stays paused here\./);
+  // The send control is behind the capability check, and no employer-page action takes its place.
   assert.match(
     dashboard,
-    /review\.portal_supported === false[\s\S]{0,900}Open the company page[\s\S]{0,900}: <Button/,
+    /review\.portal_supported === false[\s\S]{0,900}application stays paused here[\s\S]{0,900}review\.portal_supported !== false && <Button/,
   );
+  assert.doesNotMatch(dashboard, /Open the company page/);
   assert.match(dashboard, /const reviewPrimaryLabel[\s\S]{0,500}"Approve packet and fill form"/);
   // The resume itself stays reachable: this is a gate on submitting, not on the packet.
   assert.match(dashboard, /selected\.download_url[\s\S]{0,200}View exact PDF/);

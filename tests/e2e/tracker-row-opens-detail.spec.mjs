@@ -536,6 +536,10 @@ await context.route("**/*", async (route) => {
       await json({ ...(id === READY.id ? noSubmissionAuthority("ready") : {}), application_id: id, review: submissionReviewOverrides.get(id) ?? packet.spec._review, cover_letter: null });
       return;
     }
+    if (method === "GET" && /^\/applications\/[^/]+\/cover-letter$/.test(pathname)) {
+      await route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ detail: "Cover letter not found" }) });
+      return;
+    }
     await json(STUB[pathname] ?? {});
     return;
   }
@@ -972,7 +976,7 @@ browserTest("a failed canonical Back load never leaves the prior application's c
     await openTracker();
     await page.locator(`${LEDGER} button[aria-pressed]:visible`).filter({ hasText: CANONICAL_A.role }).click();
     await page.waitForURL((url) => url.searchParams.get("application") === CANONICAL_A.id, { timeout: 10_000, waitUntil: "domcontentloaded" });
-    await page.getByRole("button", { name: "Open and fill application", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("button", { name: "Tailor resume", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     assert.equal(await page.getByRole("button", { name: /All applications/ }).count(), 1, "a canonical detail must not repeat the page-level application escape");
 
     await page.getByRole("button", { name: "Switch applications", exact: true }).click();
@@ -983,24 +987,16 @@ browserTest("a failed canonical Back load never leaves the prior application's c
     failApplicationHistory = true;
     await page.goBack();
     await page.waitForURL((url) => url.searchParams.get("application") === CANONICAL_A.id, { timeout: 10_000, waitUntil: "domcontentloaded" });
-    await page.getByRole("button", { name: "Open and fill application", exact: true }).waitFor({ state: "hidden", timeout: 10_000 });
-    /* waitFor hidden, not an instant count, and this is the second time that has had to be said
-     * here. The defect this case exists to catch is B's identity SURVIVING under A's URL, and
-     * waitFor still fails on that just as well as an instant count would. But an instant count
-     * ALSO fails when B's teardown lags one render behind the button above, which is a timing
-     * artifact of the runner, not the defect - this exact assertion was the suite's one CI-only
-     * failure on 2026-08-31 (green twice locally on that commit), was rewritten as an instant
-     * count anyway, and then reproduced the identical CI-only failure again on 2026-09-05 (green
-     * across 5 branch runs and 3 main runs locally on that head) - so both assertions on this line
-     * are now waitFor, matching the heading check below that already got this treatment the first
-     * time. */
+    /* Wait for B's controls and identity to leave the page. An instant count can observe the one
+     * render where B's teardown trails the canonical URL change, which is runner timing rather
+     * than the stale-workspace defect this case protects against. */
     await page.getByRole("button", { name: "Tailor resume", exact: true }).waitFor({ state: "hidden", timeout: 10_000 });
     await page.getByRole("heading", { name: CANONICAL_B.role, exact: true }).first().waitFor({ state: "hidden", timeout: 10_000 });
 
     failApplicationHistory = false;
     await page.goForward();
     await page.waitForURL((url) => url.searchParams.get("application") === CANONICAL_B.id, { timeout: 10_000, waitUntil: "domcontentloaded" });
-    await page.getByRole("button", { name: "Open and fill application", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("button", { name: "Tailor resume", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
   } finally {
     failApplicationHistory = false;
     canonicalApplicationsOverride = null;

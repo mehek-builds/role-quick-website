@@ -26,7 +26,6 @@ import {
   type JobsPage,
   type MonitoredJob,
   type PacketAuditResponse,
-  type ManualHandoffResponse,
   type ResumeSpec,
   type SubmissionRetrySafety,
   confirmPostingStillOpen,
@@ -62,8 +61,7 @@ import { TranscriptModal } from "@/components/app/TranscriptModal";
 import { AutopilotLockNote, NextMatchCard, useAutopilot, type NextMatch } from "@/components/app/Autopilot";
 import { InterviewPrep } from "@/components/app/InterviewPrep";
 import { fetchJdMatch, resumeSpecText } from "@/features/applications";
-import { exactAttendedHandoffUrl } from "@/lib/attended-handoff";
-import { armHandoffs, ensureCurrentExtensionSession, minimumAttendedHandoffExtensionVersion, startFreeFillThroughExtension } from "@/lib/extension-bridge";
+import { ensureCurrentExtensionSession, startFreeFillThroughExtension } from "@/lib/extension-bridge";
 import { applyBankVariant, type ApplyOutcome } from "@/features/applications";
 import { RequirementProvider, RequirementText, MatchLegend } from "@/components/app/RequirementText";
 import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX, exactPacketAuditClauses, exactPacketAuditRanges } from "@/features/applications";
@@ -86,12 +84,12 @@ import { replaceClosedComposerUrl } from "./composer-url";
 import { applicationSelectionPath } from "./application-selection-url";
 import { applicationMatchesQuery, applicationNextActionRank, applicationWorkflowRevision } from "@/features/applications";
 import { ExactPacketPdf } from "@/components/app/ExactPacketPdf";
-import { AuditedJobDescription, manualHandoffMatchesPacket, manualTrialPacketEvidenceIsFresh, PacketAuditBreakdown, packetAuditDisplayIsExact, packetAuditResponseMatchesApplication } from "@/components/app/PacketAuditEvidence";
+import { AuditedJobDescription, PacketAuditBreakdown, packetAuditDisplayIsExact, packetAuditResponseMatchesApplication } from "@/components/app/PacketAuditEvidence";
 import { acknowledgePacketAudit, acknowledgePacketEvidence, packetQuestionsSnapshot, reconcilePacketPdfVerification, reconcileUnacknowledgedPacketPoll, revalidateAcknowledgedPacketEvidence, type PacketEvidenceSession, type PacketPdfEvidenceVerification } from "@/features/applications";
 import { useBilling } from "@/components/billing/BillingProvider";
 import { isStructuredUpgradeDenial } from "@/features/billing";
 import { completeOperationId, operationIdFor } from "@/lib/operation-id";
-import { applicationPacketAuthorityState, awaitingUnverifiedSubmissionResolution, employerActionRefusalMessage, confirmedProjectionForPacket, managedPrepareAuthorityEnvelopeFromUnknown, managedPrepareAuthorityMatchesPacket, quarantinedSubmissionAuthority, reviewClaimsSubmissionSent, reviewForSubmissionProjection, submissionAuthorityEnvelopeFromUnknown, submissionMutationResponseMatchesApplication, submissionProjectionIsConfirmed } from "@/features/applications";
+import { applicationPacketAuthorityState, awaitingUnverifiedSubmissionResolution, employerActionRefusalMessage, confirmedProjectionForPacket, managedPrepareAuthorityEnvelopeFromUnknown, managedPrepareAuthorityMatchesPacket, quarantinedSubmissionAuthority, reviewClaimsSubmissionSent, reviewForSubmissionProjection, submissionAuthorityEnvelopeFromUnknown, submissionMutationResponseMatchesApplication, submissionProjectionIsConfirmed, unverifiedRecoveryStatus, type UnverifiedRecoveryStatus } from "@/features/applications";
 import { useSidebarCollapse } from "@/app/dashboard/dashboard-shell";
 
 type Screen = "review" | "questions" | "submitting" | "portal" | "submitted";
@@ -153,6 +151,13 @@ type DirectAnswerProgress = {
 };
 
 const EMPTY_DIRECT_ANSWER_DRAFTS: ReadonlyMap<string, DirectAnswerDraft> = new Map();
+
+function withoutApplicationEntry<T>(current: ReadonlyMap<string, T>, applicationId: string): ReadonlyMap<string, T> {
+  if (!current.has(applicationId)) return current;
+  const next = new Map(current);
+  next.delete(applicationId);
+  return next;
+}
 
 function directAnswerPassKey(review: ApplicationReview): string {
   return review.questions_reviewed_at ?? review.submission_run_id ?? review.updated_at;
@@ -1080,6 +1085,15 @@ function Applications() {
   const [directAnswerFailures, setDirectAnswerFailures] = useState<ReadonlyMap<string, DirectAnswerFailure>>(() => new Map());
   const [directAnswerDrafts, setDirectAnswerDrafts] = useState<ReadonlyMap<string, ReadonlyMap<string, DirectAnswerDraft>>>(() => new Map());
   const [directAnswerAnnouncement, setDirectAnswerAnnouncement] = useState<{ token: number; message: string } | null>(null);
+  function forgetCompletedDirectAnswerSession(applicationId: string) {
+    /* A successful submit-request response starts a new operational phase. The answered-question
+       navigator is intentionally kept while the applicant moves among saved answers, but it must
+       not survive the fill result and cover fresh document, consent, or human-check blockers. Keep
+       drafts: an unsaved answer is recovery data and this transition does not prove it is obsolete. */
+    setDirectAnswerPasses((current) => withoutApplicationEntry(current, applicationId));
+    setDirectAnswerProgresses((current) => withoutApplicationEntry(current, applicationId));
+    setDirectAnswerFailures((current) => withoutApplicationEntry(current, applicationId));
+  }
   useEffect(() => {
     if (!directAnswerAnnouncement) return;
     const timer = window.setTimeout(() => setDirectAnswerAnnouncement(null), 1_200);
@@ -3052,11 +3066,6 @@ function Applications() {
       || activePacketEvidence.questionsSnapshot !== currentQuestionsSnapshot),
   );
   const packetEvidenceReviewed = Boolean(packetEvidenceReady && activePacketEvidence?.acknowledged);
-  const manualTrialEvidence = selected
-    && activePacketEvidence
-    && manualTrialPacketEvidenceIsFresh(selected.id, activePacketEvidence)
-    ? activePacketEvidence
-    : null;
   /* THE AUDIT BRANCH MUST NOT REPORT A ZERO IT NEVER MEASURED. `clauses.filter(verdict ===
      "missing").length` is 0 both when the audit found no gaps and when it could not score a single
      clause, and those two render identically as "(0)" - a green-lit all-clear sitting directly above
@@ -4447,6 +4456,7 @@ function Applications() {
         });
         const result = submissionResponseForDisplay(raw, { packetId: applicationId });
         captureCompletedSubmission(result, options.restart ? "restart" : "review");
+        forgetCompletedDirectAnswerSession(applicationId);
         if (selectedIdRef.current !== applicationId) {
           setPackets((current) => current?.map((packet) => packetAfterLinkedMutation(
             packet,
@@ -4503,33 +4513,17 @@ function Applications() {
     }
   }
 
-  async function completeHandoff(outcome: "cleared" | "submitted" = "cleared") {
+  async function completeHandoff() {
     if (!selected || !submission) return;
     if (submission.application_id !== selected.id) return;
     const requestedId = selected.id;
     setError(null);
     try {
       const rawResult = qaMode
-        ? outcome === "submitted"
-          ? {
-            ...submission,
-            review: {
-              ...submission.review,
-              status: "submitted" as const,
-              submitted_at: new Date().toISOString(),
-              attention_reason: undefined,
-              receipt: {
-                confirmation_text: "Submitted by the applicant in the live company page",
-                final_url: submission.review.portal_url ?? "/qa/portal-submission/success",
-                captured_at: new Date().toISOString(),
-                source: "attended_handoff" as const,
-              },
-            },
-          }
-          : { ...submission, review: { ...submission.review, status: "ready_for_final_approval" as const, attention_reason: undefined } }
+        ? { ...submission, review: { ...submission.review, status: "ready_for_final_approval" as const, attention_reason: undefined } }
         : await api<SubmissionResponse>(`/applications/${requestedId}/submission/handoff-complete`, {
           method: "POST",
-          body: JSON.stringify({ outcome }),
+          body: JSON.stringify({ outcome: "cleared" }),
         });
       const result = qaMode
         ? rawResult
@@ -4554,71 +4548,6 @@ function Applications() {
     } catch (reason) {
       if (!(await recoverPacketAuditReview(requestedId, reason))) {
         setError(reason instanceof Error ? reason.message : "We could not tell whether it went through.");
-      }
-    }
-  }
-
-  /* THE EXIT FROM A SEND THAT CAN NEVER GO GREEN.
-   *
-   * Two states reach it and both were permanent. She presses "I've ordered it", which records the
-   * acknowledgement and deliberately attaches nothing, because Litos cannot make a registrar mail a
-   * sealed transcript; or the run measures this form and finds no control it can put the file in.
-   * Either way the eighth gate term stays true forever, "Send it" is grey for the life of the packet,
-   * and the modal that put her there has already told her "This application then finishes with you
-   * rather than with Litos" - about a screen that had nothing on it that could finish anything.
-   *
-   * Deliberately the SAME words as the control on a stalled handoff two branches below, because it
-   * is the same sentence about the same act. The server writes the same record for it too: submitted,
-   * with a receipt whose source names an attended handoff and whose text names her as the witness. It
-   * refuses outright for an application Litos could still finish itself, so this is not a way past a
-   * send gate that is doing its job.
-   */
-  async function recordSelfSubmitted() {
-    if (!selected || !submission) return;
-    if (submission.application_id !== selected.id) return;
-    const requestedId = selected.id;
-    setError(null);
-    try {
-      const rawResult = qaMode
-        ? {
-          ...submission,
-          review: {
-            ...submission.review,
-            status: "submitted" as const,
-            submitted_at: new Date().toISOString(),
-            attention_reason: undefined,
-            receipt: {
-              confirmation_text: "Confirmed by you: this employer asked for a document Litos could not attach, so you sent this application yourself.",
-              final_url: submission.review.portal_url ?? "/qa/portal-submission/success",
-              captured_at: new Date().toISOString(),
-              source: "attended_handoff" as const,
-            },
-          },
-        }
-        : await api<SubmissionResponse>(`/applications/${requestedId}/submission/self-submitted`, { method: "POST" });
-      const result = qaMode
-        ? rawResult
-        : submissionResponseForDisplay(rawResult, { packetId: requestedId });
-      if (selectedIdRef.current !== requestedId) {
-        setPackets((current) => current?.map((packet) => packet.id === requestedId ? packetWithDirectSubmission(packet, result) : packet) ?? current);
-        return;
-      }
-      const published = publishSubmissionEnvelope(submissionRef, result, "direct");
-      const nextEvidence = reconcilePacketEvidenceWithSubmission(
-        packetEvidenceRef.current,
-        requestedId,
-        published.review.questions,
-        published.review.packet_audit,
-      );
-      packetEvidenceRef.current = nextEvidence;
-      setPacketEvidence(nextEvidence);
-      setQuestions(published.review.questions);
-      setPackets((current) => current?.map((packet) => packet.id === requestedId ? packetWithDirectSubmission(packet, published) : packet) ?? current);
-      setSubmission(published);
-      moveToScreen(published.review.status === "submitted" ? "submitted" : "portal");
-    } catch (reason) {
-      if (!(await recoverPacketAuditReview(requestedId, reason))) {
-        setError(reason instanceof Error ? reason.message : "We could not record that you sent this one yourself.");
       }
     }
   }
@@ -5381,7 +5310,7 @@ function Applications() {
            nothing, metadataRefreshOutranksStandingAttention lost its acknowledged-audit arm, the
            stale attention sentence re-occluded the launch panel, and the flow cycled answers screen
            to attention screen with the managed re-read never on screen. The reconciliation is the
-           same decision prepareApplication, completeHandoff and recordSelfSubmitted already apply
+           same decision prepareApplication and completeHandoff already apply
            to their own server envelopes: evidence stands only while the response's questions still
            byte-match the audited snapshot and the packet audit identity is unchanged, so a save
            that edited any answer still voids it, and nothing is ever acknowledged on her behalf. */
@@ -5490,78 +5419,6 @@ function Applications() {
     } finally {
       securityCodeInFlight.current = null;
       setSecurityCodeId(null);
-    }
-  }
-
-  /* Answer the one question that unlocks a re-run of an application that stopped without saying
-   * whether it reached the employer. `found` is her own look, never a guess: `true` records this as
-   * sent (the same terminal state a confirmed send reaches, with the source named so the receipt
-   * never claims Litos verified it), `false` releases the claim so submit-request's disposition gate
-   * can start a fresh run instead of refusing forever. Ref-guarded for the same reason
-   * submitSecurityCode is: a real employer sits on the other end, and a repeat while the first
-   * answer is still in flight must not fire a second request. */
-  const unverifiedSubmissionInFlight = useRef<string | null>(null);
-  const [unverifiedSubmissionId, setUnverifiedSubmissionId] = useState<string | null>(null);
-  const [unverifiedSubmissionError, setUnverifiedSubmissionError] = useState<string | null>(null);
-
-  async function submitUnverifiedOutcome(found: boolean) {
-    if (!selected || !submission || submission.application_id !== selected.id) return;
-    if (unverifiedSubmissionInFlight.current === selected.id) return;
-    const requestedId = selected.id;
-    unverifiedSubmissionInFlight.current = requestedId;
-    setUnverifiedSubmissionId(requestedId);
-    setUnverifiedSubmissionError(null);
-    try {
-      const now = new Date().toISOString();
-      const rawResult = qaMode
-        ? found
-          ? {
-            ...submission,
-            review: {
-              ...submission.review,
-              status: "submitted" as const,
-              submitted_at: submission.review.unverified_submission?.at ?? now,
-              submission_error: undefined,
-              attention_reason: undefined,
-              attention_categories: undefined,
-              unverified_submission: { ...submission.review.unverified_submission!, resolution: "sent" as const, resolved_at: now },
-              receipt: {
-                confirmation_text: "Confirmed by you: you found this application in the employer’s portal after Litos pressed Send and lost the answer.",
-                final_url: submission.review.unverified_submission?.portal_url ?? submission.review.portal_url ?? "/qa/portal-submission/success",
-                captured_at: now,
-                source: "attended_handoff" as const,
-              },
-            },
-          }
-          : {
-            ...submission,
-            review: {
-              ...submission.review,
-              status: "needs_attention" as const,
-              submission_claimed_at: undefined,
-              unverified_submission: { ...submission.review.unverified_submission!, resolution: "not_sent" as const, resolved_at: now },
-              attention_reason: "You checked and the employer does not have this one, so nothing was sent. Litos can send it again whenever you are ready.",
-              attention_categories: ["unverified_submission" as const],
-            },
-          }
-        : await api<SubmissionResponse>(`/applications/${requestedId}/submission/unverified`, {
-          method: "POST",
-          body: JSON.stringify({ found }),
-        });
-      const result = qaMode
-        ? rawResult
-        : submissionResponseForDisplay(rawResult, { packetId: requestedId });
-      if (selectedIdRef.current !== requestedId) return;
-      submissionRef.current = result;
-      setSubmission(result);
-      setPackets((current) => current?.map((packet) => packet.id === requestedId ? packetWithSubmission(packet, result) : packet) ?? current);
-      moveToScreen(screenForStatus(result.review.status, "portal"));
-    } catch (reason) {
-      if (selectedIdRef.current !== requestedId) return;
-      setUnverifiedSubmissionError(reason instanceof Error ? reason.message : "Could not record what you found.");
-    } finally {
-      unverifiedSubmissionInFlight.current = null;
-      setUnverifiedSubmissionId(null);
     }
   }
 
@@ -6155,6 +6012,7 @@ function Applications() {
                awaitingUnverifiedSubmission already true off this exact packet's review. */
             openApplication(canonicalUnverifiedSubmissionPacket, { history: "replace" });
           } : null}
+          unverifiedSubmissionReview={canonicalUnverifiedSubmissionPacket?.spec._review ?? null}
           fillBusy={creating === "fill"}
           tailorBusy={creating === "tailor"}
           coverLetterBusy={coverLetterBusy}
@@ -6170,14 +6028,6 @@ function Applications() {
           coverLetterEditorOpen={canonicalCoverLetterEditorOpen}
           coverLetterDownloadUrl={canonicalCoverLetter?.download_url ?? canonicalGeneratedPacket?.cover_letter_download_url ?? null}
           error={canonicalFillError}
-          onFill={() => void fillApplication({
-            company: canonicalSelected.company,
-            role: canonicalSelected.role,
-            portalUrl: canonicalSelected.portal_url ?? "",
-            jobDescription: "",
-            jobId: canonicalSelected.job_id ?? null,
-            canonicalApplicationId: canonicalSelected.id,
-          }, "tracker")}
           onTailor={(upgradeTrigger) => void tailorCanonicalApplication(canonicalSelected, upgradeTrigger)}
           onOpenCoverLetterEditor={() => {
             setCanonicalCoverLetterEditorOpen(true);
@@ -6371,14 +6221,10 @@ function Applications() {
           resumeRecord={canonicalApplicationsByAnyId[selected.id]}
           submission={selectedSubmission}
           packetEvidenceReviewed={packetEvidenceReviewed}
-          manualTrialPacket={manualTrialEvidence?.response ?? null}
           approving={approvingId === selected.id}
           securityCodeSubmitting={securityCodeId === selected.id}
           securityCodeError={securityCodeError}
           onSubmitSecurityCode={submitSecurityCode}
-          unverifiedSubmissionSubmitting={unverifiedSubmissionId === selected.id}
-          unverifiedSubmissionError={unverifiedSubmissionError}
-          onSubmitUnverifiedOutcome={submitUnverifiedOutcome}
           educationProfile={educationProfile}
           educationProfileStatus={qaMode === true ? "ready" : educationProfileStatus}
           onCheckResume={() => moveToScreen("review")}
@@ -6481,18 +6327,6 @@ function Applications() {
           onToggleAcknowledged={(item, acknowledged) => void toggleAttentionAcknowledgement(item, acknowledged)}
           attentionTicking={attentionTicking}
           onAddDocument={askForDocument}
-          onSelfSubmitted={() => void recordSelfSubmitted()}
-          onPacketAuditRefusal={(reason) => recoverPacketAuditReview(selected.id, reason)}
-          onOpenWithExtension={() => void fillApplication({
-            company: selected.job_context.company ?? "",
-            role: selected.job_context.role ?? "",
-            portalUrl: selectedSubmission.review.portal_url ?? "",
-            jobDescription: "",
-            jobId: selected.job_context.job_id ?? null,
-            canonicalApplicationId: canonicalIdByPacketId[selected.id] ?? null,
-          }, "submission")}
-          extensionFillBusy={creating === "fill"}
-          extensionFillError={submissionFillError}
           onRefreshResumeContact={() => void refreshResumeContact(selected.id)}
           resumeContactRefreshBusy={resumeContactRefreshId === selected.id}
           resumeContactRefreshError={resumeContactRefreshError?.applicationId === selected.id ? resumeContactRefreshError.message : null}
@@ -6736,33 +6570,27 @@ function Applications() {
               it says what the colour MEANS rather than what it IS. Two names
               for one colour is worse than no name. Guarded by R-046 in
               tests/review-highlighting.test.mjs. */}
-          {/* The send control is gated on portal_supported, not just on saving state.
-              Packets on company-owned careers pages used to sit here behind a live "Fill the form"
-              button that could only ever fail: the run started, drove a browser for minutes, and
-              came back with "This portal is not supported yet". Nine of one account's ten failures
-              were that. The tailored resume is still worth having, so this says what Litos cannot
-              do and hands the applicant the page instead of hiding the job. */}
+          {/* The send control is gated on portal_supported, not just on saving state. An unsupported
+              portal remains visible with its completed packet, but it does not hand the applicant
+              to an employer page. This dashboard is the only application workflow. */}
           {/* The two sentences are NOT the same kind of sentence, which is why only one of them is
               allowed to disappear on a phone.
               The supported line describes what the button next to it already says: on a 375px
               screen it wraps to two rows and the bar, which is now sticky, was eating ~150px of an
               812px viewport to restate "Fill the form" in a longer form. It comes back at sm.
               The unsupported line is the opposite: it is the only thing that explains why the
-              button says "Open the company page" instead, and dropping it would leave a student
-              with a control that looks like a mistake. It is shown at every width. */}
+              application is paused. It is shown at every width. */}
           {/* justify-end below sm is not a style preference. `hidden` is display:none, so the caption
               is not a flex item there at all, and justify-between with ONE item resolves to
               flex-start: the primary action slid to the left edge on a phone while the same bar on
               the questions screen sat right. Same bar, three alignments, depending on branch. */}
           <TerminalActionBar className="justify-end sm:justify-between lg:!sticky lg:!bottom-[var(--dashboard-action-sticky-offset,2.5rem)] lg:!shadow-raised">
             {review.portal_supported === false
-              ? <p className="text-sm text-ink">Litos cannot fill in this company’s page. Your resume is ready, so apply on their site.</p>
+              ? <p className="text-sm text-ink">Litos cannot fill this company&rsquo;s form in the dashboard yet. Your packet is ready, but this application stays paused here.</p>
               : <p className="hidden text-sm text-ink sm:block">Litos fills the form with your saved answers and this resume.</p>}
             <div className="flex gap-2">
               {(activePacketEvidence?.response.pdf.download_url ?? selected.download_url) && (activePacketEvidence?.response.pdf.download_url ?? selected.download_url) !== "#" && <a href={activePacketEvidence?.response.pdf.download_url ?? selected.download_url} className="rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink">View exact PDF</a>}
-              {review.portal_supported === false
-                ? review.portal_url && <a href={review.portal_url} target="_blank" rel="noreferrer" className="rounded-full bg-action px-5 py-2.5 text-sm font-medium text-action-ink hover:bg-brand-ink">Open the company page</a>
-                    : <Button onClick={reviewPrimaryAction} disabled={reviewPrimaryDisabled} className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">
+              {review.portal_supported !== false && <Button onClick={reviewPrimaryAction} disabled={reviewPrimaryDisabled} className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">
                   {reviewPrimaryBusy
                     ? <PendingLabel state="solving" onColor>Making...</PendingLabel>
                     : reviewPrimaryLabel}
@@ -6839,6 +6667,7 @@ function CanonicalApplicationDetail({
   requiredQuestionsRemaining,
   onContinueToSend,
   onCheckUnverifiedSubmission,
+  unverifiedSubmissionReview,
   fillBusy,
   tailorBusy,
   coverLetterBusy,
@@ -6851,7 +6680,6 @@ function CanonicalApplicationDetail({
   coverLetterEditorOpen,
   coverLetterDownloadUrl,
   error,
-  onFill,
   onTailor,
   onOpenCoverLetterEditor,
   onGenerateCoverLetter,
@@ -6888,6 +6716,8 @@ function CanonicalApplicationDetail({
    *  rendered and disabled - "a control that cannot act is not shown" applies here exactly the way
    *  it already does to onOpenPacket below. */
   onCheckUnverifiedSubmission: (() => void) | null;
+  /** The linked packet review that owns the held submission attempt. It is display context only. */
+  unverifiedSubmissionReview: ApplicationReview | null;
   fillBusy: boolean;
   tailorBusy: boolean;
   coverLetterBusy: boolean;
@@ -6904,7 +6734,6 @@ function CanonicalApplicationDetail({
   coverLetterEditorOpen: boolean;
   coverLetterDownloadUrl: string | null;
   error: string | null;
-  onFill: () => void;
   onTailor: (upgradeTrigger: HTMLButtonElement) => void;
   onOpenCoverLetterEditor: () => void;
   onGenerateCoverLetter: (upgradeTrigger: HTMLButtonElement) => void;
@@ -6926,6 +6755,9 @@ function CanonicalApplicationDetail({
   const answersOutstanding = readyToSend && questionsRemaining > 0;
   const sendable = readyToSend && questionsRemaining === 0;
   const questionsPhrase = questionsRemaining === 1 ? "1 required question" : `${questionsRemaining} required questions`;
+  const recoveryStatus = onCheckUnverifiedSubmission
+    ? unverifiedRecoveryStatus(unverifiedSubmissionReview)
+    : null;
   return (
     <Card className="overflow-hidden">
       {/* THE THREE-COLOUR BAR CAME OFF THIS CARD, 2026-08-29. It is the pillar motif (teal / brand /
@@ -6958,7 +6790,7 @@ function CanonicalApplicationDetail({
                   ? `${questionsPhrase} before Litos can send this.`
                   : sendable
                     ? "Litos can send this application for you."
-                    : onCheckUnverifiedSubmission ? "Checking the employer response." : "Continue on the employer's form."}
+                    : recoveryStatus ? recoveryStatus.canonicalSummary : "This application is paused in Litos."}
           </p>
           <p className="mt-1 text-small leading-6 text-muted">
             {submitted
@@ -6973,24 +6805,22 @@ function CanonicalApplicationDetail({
                   ? "The tailored packet is ready and the portal is one Litos can submit through. The employer still asks for answers only you can give, so Litos stops here rather than sending an incomplete form. Answering them is the last step before it can go."
                   : sendable
                     ? "This application's tailored packet is ready on a portal Litos can submit through. Continue to Litos's managed review and send screen to finish it - no extension, no separate tab."
-                    : onCheckUnverifiedSubmission ? "Litos keeps this attempt locked while it checks for confirmation. It will not send a duplicate." : "Litos will verify the extension account, bind this exact application, and open the employer page. Click Fill in the extension card, review every field, then press the employer's submit control yourself."}
+                    : recoveryStatus ? recoveryStatus.canonicalDescription : "Litos cannot complete this employer form in the dashboard yet. It will keep the packet here without marking the application sent."}
           </p>
         </div>
         {/* A CLAIM THE FREE-FILL CARD HAS NO WAY TO SHOW, let alone resolve.
          *
-         * `application` never carries `unverified_submission` - it is a field on the linked
-         * PACKET's review, and this card is built from the lighter canonical record alone (see
-         * CanonicalApplicationDetail's own history: it never fetches /submission). Rendered only
-         * when the page has already found that packet AND its own unresolved claim (see
+         * `application` never carries `unverified_submission` or outcome recovery. Both are fields
+         * on the linked PACKET's review, which the page passes separately as display context.
+         * Rendered only when the page has already found that packet AND its own unresolved claim (see
          * unverifiedSubmissionLinkedPacketFromCanonicalEnvelope), so this box and the ordinary
          * copy above never disagree about whether one exists. The press below reaches
-         * SubmissionScreen's UnverifiedSubmissionCard, which is where the yes/no actually lives -
-         * this box only gets her there. */}
+         * SubmissionScreen's matching status card, which carries the same exact-attempt copy. */}
         {onCheckUnverifiedSubmission && (
           <div role="alert" className="mt-4 rounded-inner border border-warn/40 bg-warn-soft px-4 py-3">
-            <p className="font-mono text-label uppercase tracking-[0.08em] text-warn">Checking submission</p>
+            <p className="font-mono text-label uppercase tracking-[0.08em] text-warn">{recoveryStatus?.heading}</p>
             <p className="mt-1 text-small leading-6 text-muted">
-              Litos checks the original attempt for employer confirmation automatically. This application remains unverified until that confirmation is found. You do not need to check another website.
+              {recoveryStatus?.description}
             </p>
             <Button onClick={onCheckUnverifiedSubmission} size="sm" className="mt-3">View status</Button>
           </div>
@@ -7085,12 +6915,9 @@ function CanonicalApplicationDetail({
         </div>
         {error && <div className="mt-4"><ErrorNote message={error} /></div>}
         <div className="mt-5 flex flex-wrap gap-3">
-          {/* readyToSend gets its OWN button rather than reusing onFill, and the extension button is
-              held back while it is true: pressing "Open and fill application" starts the extension
-              handoff, and a row Litos can send directly should be routed to the managed screens
-              instead, not offered a second, worse path to the same application. checkingSendPath
-              holds both back for the same reason one half-second earlier - the eligibility check
-              itself is still in flight, so neither action is safe to offer yet. */}
+          {/* readyToSend gets its OWN button rather than reusing onFill. A row Litos can send
+              directly should be routed to the managed screens. checkingSendPath holds actions
+              back while the eligibility check is still in flight. */}
           {/* THE BUTTON NAMES WHERE IT GOES. Both arms reach the same managed screens through the
               same handler - the destination was never wrong, the promise was. "Continue to send" is
               reserved for a packet that is actually sendable; when the employer is still asking for
@@ -7103,9 +6930,7 @@ function CanonicalApplicationDetail({
             </Button>
           )}
           {!submitted && !checkingSendPath && !readyToSend && !onCheckUnverifiedSubmission && application.portal_url && (
-            <Button type="button" disabled={fillBusy || tailorBusy} onClick={onFill}>
-              {fillBusy ? "Checking extension..." : "Open and fill application"}
-            </Button>
+            <p className="text-small text-muted">This employer form cannot be completed from the Litos dashboard yet.</p>
           )}
           {!submitted && !checkingSendPath && !readyToSend && !application.portal_url && <p className="text-small text-muted">This record has no employer form URL. Add the job again with its exact HTTPS application link.</p>}
           <ButtonLink href="/dashboard/settings#application-details" variant="quiet">Review saved details</ButtonLink>
@@ -8172,16 +7997,12 @@ function SecurityCodeCard({ review, submitting, error, onSubmitCode }: {
 }
 
 /** Automatic verification owns the outcome; this card never asks for a manual attestation. */
-function UnverifiedSubmissionCard({ review }: { review: ApplicationReview }) {
-  const exhausted = review.outcome_recovery?.state === "unresolved"
-    && (review.unverified_submission?.employer_page_checks?.length ?? 0) >= 3;
+function UnverifiedSubmissionCard({ status }: { status: UnverifiedRecoveryStatus }) {
   return (
     <div className="mt-4 rounded-inner border border-border bg-surface-alt p-4" role="status">
-      <p className="font-mono text-label uppercase tracking-[0.08em] text-muted">{exhausted ? "Submission not verified" : "Checking submission"}</p>
+      <p className="font-mono text-label uppercase tracking-[0.08em] text-muted">{status.heading}</p>
       <p className="mt-2 text-small leading-6 text-ink">
-        {exhausted
-          ? "Litos could not verify the employer's response. This application stays unverified. A matching confirmation can still update it automatically."
-          : "Litos checks the original application attempt for an employer confirmation automatically. You do not need to open the employer's website."}
+        {status.description}
       </p>
       <p className="mt-2 text-small leading-6 text-muted">Litos will not send this application again while its result is uncertain.</p>
     </div>
@@ -8566,7 +8387,7 @@ export function DirectApplicationQuestion({ task, position, total, saving, saved
   );
 }
 
-function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceReviewed, manualTrialPacket, approving, securityCodeSubmitting, securityCodeError, onSubmitSecurityCode, educationProfile, educationProfileStatus, onCheckResume, onReloadCoverLetter, onWriteCoverLetter, coverLetterReloading, onHandoffComplete, onApprove, sendRefusal, onRestart, restarting, onRetry, employerActionRefusal, onReviewPacket, onReviewQuestions, onOpenQuestion, onChooseOption, onSaveQuestion, onSkipQuestion, savingAnswer, answeredQuestionFingerprints, directAnswerProgress, directAnswerDrafts, directAnswerFailure, onDirectAnswerDraftChange, onClearDirectAnswerDraft, onNavigateDirectQuestion, onClearDirectAnswerFailure, onRefreshQuestionMetadata, questionMetadataRefreshing, questionMetadataRefreshDisabled, questionMetadataNeedsPacketReview, questionMetadataRefreshError, onQuestionsFinished, onAddDocument, onToggleAcknowledged, attentionTicking, onSelfSubmitted, onPacketAuditRefusal, onOpenWithExtension, extensionFillBusy, extensionFillError, onRefreshResumeContact, resumeContactRefreshBusy, resumeContactRefreshError, onConfirmPostingOpen, confirmPostingOpenBusy, confirmPostingOpenError }: { packet: GeneratedResume; resumeRecord?: ChecklistResumeRecord; submission: SubmissionResponse; packetEvidenceReviewed: boolean; manualTrialPacket: PacketAuditResponse | null; approving: boolean; securityCodeSubmitting: boolean; securityCodeError: string | null; onSubmitSecurityCode: (code: string) => void; unverifiedSubmissionSubmitting: boolean; unverifiedSubmissionError: string | null; onSubmitUnverifiedOutcome: (found: boolean) => void; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onReloadCoverLetter: () => void; onWriteCoverLetter: () => void; coverLetterReloading: boolean; onHandoffComplete: (outcome?: "cleared" | "submitted") => void; onApprove: () => void; sendRefusal: { message: string; issues: string[] } | null; onRestart: () => void; restarting: boolean; onRetry: () => void; employerActionRefusal: string | null; onReviewPacket: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string, intent?: SubmissionChecklistAction) => void; onChooseOption: (questionId: string, option: string) => void; onSaveQuestion: (questionId: string, answer: string, intent: DirectQuestionTaskIntent, promptFingerprint: string, taskFingerprint: string, task: DirectQuestionTask) => Promise<DirectAnswerSaveResult>; onSkipQuestion: (questionId: string, intent: DirectQuestionTaskIntent, promptFingerprint: string, taskFingerprint: string, task: DirectQuestionTask) => Promise<DirectAnswerSaveResult>; savingAnswer: boolean; answeredQuestionFingerprints: ReadonlySet<string>; directAnswerProgress: DirectAnswerProgress | null; directAnswerDrafts: ReadonlyMap<string, DirectAnswerDraft>; directAnswerFailure: DirectAnswerFailure | null; onDirectAnswerDraftChange: (questionId: string, promptFingerprint: string, taskFingerprint: string, answer: string) => void; onClearDirectAnswerDraft: (promptFingerprint: string) => void; onNavigateDirectQuestion: (promptFingerprint: string) => void; onClearDirectAnswerFailure: (promptFingerprint: string) => void; onRefreshQuestionMetadata: () => void; questionMetadataRefreshing: boolean; questionMetadataRefreshDisabled: boolean; questionMetadataNeedsPacketReview: boolean; questionMetadataRefreshError: string | null; onQuestionsFinished: () => void; onAddDocument: (kind: string) => void; onToggleAcknowledged: (item: SubmissionChecklistItem, acknowledged: boolean) => void; attentionTicking: ReadonlySet<string>; onSelfSubmitted: () => void; onPacketAuditRefusal: (reason: unknown) => Promise<boolean>; onOpenWithExtension: () => void; extensionFillBusy: boolean; extensionFillError: string | null; onRefreshResumeContact: () => void; resumeContactRefreshBusy: boolean; resumeContactRefreshError: string | null; onConfirmPostingOpen: () => void; confirmPostingOpenBusy: boolean; confirmPostingOpenError: string | null }) {
+function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceReviewed, approving, securityCodeSubmitting, securityCodeError, onSubmitSecurityCode, educationProfile, educationProfileStatus, onCheckResume, onReloadCoverLetter, onWriteCoverLetter, coverLetterReloading, onHandoffComplete, onApprove, sendRefusal, onRestart, restarting, onRetry, employerActionRefusal, onReviewPacket, onReviewQuestions, onOpenQuestion, onChooseOption, onSaveQuestion, onSkipQuestion, savingAnswer, answeredQuestionFingerprints, directAnswerProgress, directAnswerDrafts, directAnswerFailure, onDirectAnswerDraftChange, onClearDirectAnswerDraft, onNavigateDirectQuestion, onClearDirectAnswerFailure, onRefreshQuestionMetadata, questionMetadataRefreshing, questionMetadataRefreshDisabled, questionMetadataNeedsPacketReview, questionMetadataRefreshError, onQuestionsFinished, onAddDocument, onToggleAcknowledged, attentionTicking, onRefreshResumeContact, resumeContactRefreshBusy, resumeContactRefreshError, onConfirmPostingOpen, confirmPostingOpenBusy, confirmPostingOpenError }: { packet: GeneratedResume; resumeRecord?: ChecklistResumeRecord; submission: SubmissionResponse; packetEvidenceReviewed: boolean; approving: boolean; securityCodeSubmitting: boolean; securityCodeError: string | null; onSubmitSecurityCode: (code: string) => void; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onReloadCoverLetter: () => void; onWriteCoverLetter: () => void; coverLetterReloading: boolean; onHandoffComplete: () => void; onApprove: () => void; sendRefusal: { message: string; issues: string[] } | null; onRestart: () => void; restarting: boolean; onRetry: () => void; employerActionRefusal: string | null; onReviewPacket: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string, intent?: SubmissionChecklistAction) => void; onChooseOption: (questionId: string, option: string) => void; onSaveQuestion: (questionId: string, answer: string, intent: DirectQuestionTaskIntent, promptFingerprint: string, taskFingerprint: string, task: DirectQuestionTask) => Promise<DirectAnswerSaveResult>; onSkipQuestion: (questionId: string, intent: DirectQuestionTaskIntent, promptFingerprint: string, taskFingerprint: string, task: DirectQuestionTask) => Promise<DirectAnswerSaveResult>; savingAnswer: boolean; answeredQuestionFingerprints: ReadonlySet<string>; directAnswerProgress: DirectAnswerProgress | null; directAnswerDrafts: ReadonlyMap<string, DirectAnswerDraft>; directAnswerFailure: DirectAnswerFailure | null; onDirectAnswerDraftChange: (questionId: string, promptFingerprint: string, taskFingerprint: string, answer: string) => void; onClearDirectAnswerDraft: (promptFingerprint: string) => void; onNavigateDirectQuestion: (promptFingerprint: string) => void; onClearDirectAnswerFailure: (promptFingerprint: string) => void; onRefreshQuestionMetadata: () => void; questionMetadataRefreshing: boolean; questionMetadataRefreshDisabled: boolean; questionMetadataNeedsPacketReview: boolean; questionMetadataRefreshError: string | null; onQuestionsFinished: () => void; onAddDocument: (kind: string) => void; onToggleAcknowledged: (item: SubmissionChecklistItem, acknowledged: boolean) => void; attentionTicking: ReadonlySet<string>; onRefreshResumeContact: () => void; resumeContactRefreshBusy: boolean; resumeContactRefreshError: string | null; onConfirmPostingOpen: () => void; confirmPostingOpenBusy: boolean; confirmPostingOpenError: string | null }) {
   const { review } = submission;
   /* The same decision the packet review screen renders from - see resumeContactStaleNotice and
      refreshResumeContact in this file. Computed once here rather than at each read below, so the
@@ -8581,133 +8402,21 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
      why nothing here treats that shape differently. Extracted to the domain layer so this exact
      predicate is what the tests pin, not a copy of it. */
   const awaitingUnverifiedSubmission = awaitingUnverifiedSubmissionResolution(review);
-  /* Every control below that can replay, resolve, or open a live/exact form for this application is
-     gated HERE, at the one place they all read from, rather than at each button individually. That
-     is not a style preference: the four buttons this feature explicitly gated (Review and fill, Try
-     again, I cleared the check, I submitted it myself) missed the others that share the same
-     `needsAttention` flag - Check the answers, Finish in this dashboard, the live iframe, Open in
-     new tab, and Open exact company form all read `hasQuestionsToReview` / `handoffUrl` /
-     `attendedHandoffUrl` and would have rendered right alongside the yes/no card, letting her
-     interact with (or submit through) the exact form the card exists to ask about first. Gating the
-     three shared values instead of the many places that read them makes the exclusion automatic for
-     every future control built on them, the same way `awaiting_security_code` gets it for free by
-     being its own status. */
+  const recoveryStatus = unverifiedRecoveryStatus(review);
+  /* Every control below that can replay or resolve this application is gated here, at the one place
+     they all read from. The unresolved-submission card must settle before a new managed action can
+     start, while an embedded human check remains a dashboard-only continuation. */
   const hasQuestionsToReview = needsAttention && !awaitingUnverifiedSubmission && review.questions.length > 0;
   const handoffUrl = needsAttention && !awaitingUnverifiedSubmission ? submission.handoff_url : undefined;
   /* Prefers the stalled run's own recorded location over the packet's general portal_url: they can
      differ (posting migrations, a portal_url repaired after the fact), and while an unverified send
      is open, "the exact page this stopped on" is the only one that answers her question. */
-  const portalUrl = (awaitingUnverifiedSubmission ? review.unverified_submission?.portal_url : undefined)?.trim()
-    ?? review.portal_url?.trim();
   /* `portal_supported: true` is the server's answer that this packet belongs to a family Litos can
-     fill itself. A managed run may still stop without a surviving browser session, but that does
-     not turn the employer page into the recovery path: Review and fill starts a fresh managed run
-     from the exact packet and the saved answers. Keep every generic Open page escape off this
-     screen in that case, or an autonomous board advertises the manual workflow at the first retry. */
+     fill itself. A managed run may still stop without a surviving browser session. Review and fill
+     starts a fresh managed run from the exact packet and saved answers. */
   const staysInsideLitos = review.portal_supported === true;
-  /* Gated the same way every other post-resolution control is (see the comment above
-     awaitingUnverifiedSubmission): only once she has answered "it is not there" does a recovery
-     control belong on screen at all. Narrower than that gate alone, though - `challenge_on_screen`
-     is a fact about THIS specific stop, not about needs_attention in general, so an ordinary timeout
-     or provider error still offers only Try again. A CAPTCHA wall is not always deterministic (a
-     retry can draw an easier challenge, or none), so this sits ALONGSIDE Try again rather than
-     replacing it: the extension path is the guaranteed way to finish it now, not the only way. */
-  const captchaBlockedLastAttempt = needsAttention && !awaitingUnverifiedSubmission
-    && review.unverified_submission?.challenge_on_screen === true;
-  const attendedHandoffUrl = awaitingUnverifiedSubmission ? null : exactAttendedHandoffUrl(review);
-  const canFinishInDashboard = Boolean(handoffUrl) && !attendedHandoffUrl;
-  /* An external-recovery control (Finish in this dashboard / Open exact company form / Open in
-     new tab) is on the action row, and each of those defaults to the primary variant. While one
-     is present, the review controls demote so the row keeps exactly one filled button. */
-  const rowExternalPrimary = canFinishInDashboard || Boolean(attendedHandoffUrl);
-  const [attendedHandoffState, setAttendedHandoffState] = useState<"idle" | "preparing" | "failed">("idle");
-  const [attendedHandoffError, setAttendedHandoffError] = useState<string | null>(null);
-
-  async function openAttendedHandoff() {
-    if (!attendedHandoffUrl || attendedHandoffState === "preparing") return;
-    const companyTab = window.open("about:blank", "_blank");
-    if (!companyTab) {
-      setAttendedHandoffState("failed");
-      setAttendedHandoffError("Chrome blocked the company tab. Allow pop-ups for Litos, then try again.");
-      return;
-    }
-    try {
-      companyTab.opener = null;
-      companyTab.document.body.textContent = "Litos is verifying the exact saved application.";
-    } catch {
-      companyTab.close();
-      setAttendedHandoffState("failed");
-      setAttendedHandoffError("Litos could not prepare a safe company tab. Nothing was opened.");
-      return;
-    }
-
-    setAttendedHandoffState("preparing");
-    setAttendedHandoffError(null);
-    const extension = await ensureCurrentExtensionSession(
-      { token: getToken(), guest: isGuestSession() },
-      minimumAttendedHandoffExtensionVersion(review.ats_name),
-    );
-    if (!extension.installed || !extension.signedIn || extension.otherAccount) {
-      companyTab.close();
-      setAttendedHandoffState("failed");
-      setAttendedHandoffError(extension.updateRequired
-        ? "Update the Litos extension from the Chrome Web Store, then try again. This saved application needs the current version."
-        : extension.otherAccount
-          ? "The Litos extension is signed in to another account. Sign out there, then try again."
-          : "Install the current Litos extension and sign in to this account before opening the company form.");
-      return;
-    }
-    const armed = await armHandoffs([{ id: submission.application_id, portalUrl: attendedHandoffUrl }]);
-    if (!armed) {
-      companyTab.close();
-      setAttendedHandoffState("failed");
-      setAttendedHandoffError("Litos could not bind this exact saved application to Chrome. Nothing was opened.");
-      return;
-    }
-    try {
-      companyTab.location.replace(attendedHandoffUrl);
-      setAttendedHandoffState("idle");
-    } catch {
-      companyTab.close();
-      setAttendedHandoffState("failed");
-      setAttendedHandoffError("Chrome could not open the exact saved company form. Nothing was submitted.");
-    }
-  }
-
-  async function openManualAttendedHandoff() {
-    if (!attendedHandoffUrl || !manualTrialPacket || attendedHandoffState === "preparing") return;
-    const companyTab = window.open("about:blank", "_blank");
-    if (!companyTab) {
-      setAttendedHandoffState("failed");
-      setAttendedHandoffError("Chrome blocked the company tab. Allow pop-ups for Litos, then try again.");
-      return;
-    }
-    try {
-      companyTab.opener = null;
-      companyTab.document.body.textContent = "Litos is rechecking the exact packet and routing email.";
-    } catch {
-      companyTab.close();
-      setAttendedHandoffState("failed");
-      setAttendedHandoffError("Litos could not prepare a safe company tab. Nothing was opened.");
-      return;
-    }
-    setAttendedHandoffState("preparing");
-    setAttendedHandoffError(null);
-    try {
-      const current = await api<ManualHandoffResponse>(`/applications/${submission.application_id}/submission/manual-handoff`, { method: "POST" });
-      const handoff = current.manual_handoff;
-      if (!manualHandoffMatchesPacket(current, attendedHandoffUrl, manualTrialPacket)) {
-        throw new Error("The saved packet, routing email, or company form changed. Review the exact packet again before opening the company form.");
-      }
-      companyTab.location.replace(handoff.url);
-      setAttendedHandoffState("idle");
-    } catch (reason) {
-      companyTab.close();
-      if (await onPacketAuditRefusal(reason)) return;
-      setAttendedHandoffState("failed");
-      setAttendedHandoffError(reason instanceof Error ? reason.message : "Litos could not revalidate this exact packet. Nothing was opened.");
-    }
-  }
+  const canFinishInDashboard = Boolean(handoffUrl);
+  const rowDashboardPrimary = canFinishInDashboard;
   /* A wait that ends. "Loading cover letter." used to be the ONLY thing this screen said about a
      cover letter that never arrived, and it said it forever, beside a Send button that was greyed
      out and gave no reason. The wait is now bounded: after COVER_LETTER_WAIT_MS, which is six
@@ -8760,6 +8469,7 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
     role: packet.job_context.role,
     documents: submission.documents,
     sensitiveConfirmations: submission.sensitive_questions_requiring_confirmation,
+    dashboardHandoffAvailable: canFinishInDashboard,
   });
   const directProgressKey = directAnswerPassKey(review);
   const directProgress = directAnswerProgress?.key === directProgressKey
@@ -8943,6 +8653,10 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
   const serverSensitiveLabels = submission.sensitive_questions_requiring_confirmation;
   const unconfirmedSensitiveRows = humanInputItems(review, { sensitiveConfirmations: serverSensitiveLabels })
     .filter((item) => item.actionKind === "confirm" && !item.settled);
+  const preparedAnswersCanBeEdited = review.status === "ready_for_final_approval"
+    && review.questions.length > 0
+    && reviewAnswerEditRoute(review) === "reopen"
+    && !requiredAnswerMissing;
   const sensitiveQuestionPresent = review.questions.some((question) => requiresSensitiveQuestionReview(question.question, question.answer))
     /* A question the SERVER says needs confirming blocks the send here too, so the button stops
        offering a press the server has already decided to refuse. Measured live on Exa packet
@@ -9118,7 +8832,7 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
               {awaitingSecurityCode
                 ? "One code away"
                 : awaitingUnverifiedSubmission
-                  ? "Checking submission"
+                  ? recoveryStatus.heading
                   : needsAttention
                     ? currentNonQuestionTask
                       ? "One thing to finish"
@@ -9136,7 +8850,7 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
             )}
             {awaitingUnverifiedSubmission ? null : needsAttention ? (
               currentNonQuestionTask ? (
-                <BlockerList items={[currentNonQuestionTask]} portalUrl={staysInsideLitos || attendedHandoffUrl ? undefined : handoffUrl ?? portalUrl} onRestartInLitos={onReviewPacket} onOpenQuestion={onOpenQuestion} onChooseOption={onChooseOption} onAddDocument={onAddDocument} onToggleAcknowledged={onToggleAcknowledged} tickingIds={attentionTicking} />
+                <BlockerList items={[currentNonQuestionTask]} onRestartInLitos={onReviewPacket} onOpenQuestion={onOpenQuestion} onChooseOption={onChooseOption} onAddDocument={onAddDocument} onToggleAcknowledged={onToggleAcknowledged} tickingIds={attentionTicking} />
               ) : directTaskPlan.metadataBlockers.length > 0 ? (
                 <div className="mt-6 border-t border-border pt-6">
                   <p className="text-small font-medium text-ink">
@@ -9153,14 +8867,6 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
                         {canFinishInDashboard ? (
                           <ButtonLink href="#live-company-page" block className="sm:w-auto">
                             Answer in this dashboard
-                          </ButtonLink>
-                        ) : attendedHandoffUrl ? (
-                          <Button onClick={() => void openAttendedHandoff()} disabled={attendedHandoffState === "preparing"} block className="sm:w-auto">
-                            {attendedHandoffState === "preparing" ? "Checking extension..." : "Open exact company form"}
-                          </Button>
-                        ) : !staysInsideLitos && (handoffUrl ?? portalUrl) ? (
-                          <ButtonLink href={(handoffUrl ?? portalUrl)!} target="_blank" rel="noreferrer" block className="sm:w-auto">
-                            Answer on company page
                           </ButtonLink>
                         ) : (
                           <Button onClick={onReviewPacket} block className="sm:w-auto">Review application</Button>
@@ -9223,7 +8929,7 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
           />
         )}
         {awaitingUnverifiedSubmission && (
-          <UnverifiedSubmissionCard review={review} />
+          <UnverifiedSubmissionCard status={recoveryStatus} />
         )}
         {/* THE ONE STEP THAT SURVIVES THE UNVERIFIED-SUBMISSION MODE.
          *
@@ -9250,8 +8956,7 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
          *
          * Rendered through the SAME BlockerList the ordinary panel uses, off the same plan, so this
          * is one more caller of the step mechanism rather than a second surface with its own copy.
-         * `portalUrl` is deliberately omitted: an open-page link belongs to the suppressed controls,
-         * and a document row does not use one. */}
+         * A document row carries only its dashboard attachment control. */}
         {awaitingUnverifiedSubmission && unverifiedDocumentSteps.length > 0 && (
           <BlockerList
             items={unverifiedDocumentSteps}
@@ -9420,77 +9125,35 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
           <div className="mt-4 rounded-inner border border-border bg-surface px-4 py-3">
             <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">The code needs you</p>
             <p className="mt-1 text-xs text-muted">
-              Litos was not sure it finished this step. Finish it in the browser panel here when it is available, or open the company page.
+              Litos was not sure it finished this step. Complete it in the browser panel here when it is available. Otherwise, this application stays paused.
             </p>
           </div>
         )}
-        {attendedHandoffUrl && (
+        {needsAttention && !awaitingUnverifiedSubmission && !canFinishInDashboard && (
           <div className="mt-4 rounded-inner border border-border bg-surface-alt px-4 py-3">
-            <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Continue in Chrome</p>
-            <p className="mt-1 text-xs leading-5 text-muted">
-              Litos will verify this account, bind the exact saved packet to the company&rsquo;s one-click form, and refill it before you review and submit.
-            </p>
-            {manualTrialPacket && (
-              <div className="mt-3 rounded-inner border border-border bg-surface px-3 py-3 text-xs leading-5 text-muted">
-                <p className="font-medium text-ink">Manual dashboard trial</p>
-                <p className="mt-1">Use this exact frozen resume and the separate Litos routing email if the published extension is still waiting for store approval. The PDF keeps your personal resume email.</p>
-                <div className="mt-2 flex flex-wrap items-center gap-3">
-                  <a href={manualTrialPacket.pdf.download_url} target="_blank" rel="noreferrer" className="font-medium text-brand-ink underline-offset-2 hover:underline">
-                    Open exact PDF
-                  </a>
-                  <span className="text-[11px] text-ink">
-                    Resume email: <span className="font-mono">{manualTrialPacket.packet_audit.identities.resume_email}</span>
-                  </span>
-                  <span className="text-[11px] text-ink">
-                    Portal routing email: <span className="font-mono">{manualTrialPacket.packet_audit.identities.applicant_email}</span>
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-        {needsAttention && !awaitingUnverifiedSubmission && !canFinishInDashboard && !attendedHandoffUrl && (
-          <div className="mt-4 rounded-inner border border-border bg-surface-alt px-4 py-3">
-            <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">{staysInsideLitos ? "Restart inside Litos" : "No live browser to reopen"}</p>
+            <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">{staysInsideLitos ? "Restart inside Litos" : "Paused in Litos"}</p>
             <p className="mt-1 text-xs leading-5 text-muted">
               {staysInsideLitos
                 ? "Litos can run this company form again from your saved resume and answers. Open packet review to check them and start the fill again. You do not need the company site."
-                : "This stop came from a managed run or a pre-fill gate, so Litos only has the filled preview and the blocker list here. Open the company page once, finish the check, then mark it done."}
+                : "Litos cannot complete this required employer step in the dashboard. The application stays blocked here and is not marked sent."}
             </p>
           </div>
         )}
         <div className="mt-7 flex flex-wrap gap-2">
           {canFinishInDashboard && <ButtonLink href="#live-company-page">Finish in this dashboard</ButtonLink>}
-          {attendedHandoffUrl && (
-            <>
-              <Button onClick={() => void openAttendedHandoff()} disabled={attendedHandoffState === "preparing"}>
-                {attendedHandoffState === "preparing" ? "Checking extension..." : "Open exact company form"}
-              </Button>
-              {manualTrialPacket && (
-                <Button onClick={() => void openManualAttendedHandoff()} disabled={attendedHandoffState === "preparing"} variant="secondary">
-                  {attendedHandoffState === "preparing" ? "Rechecking packet..." : "Open manually"}
-                </Button>
-              )}
-            </>
-          )}
-          {needsAttention && !staysInsideLitos && handoffUrl && !attendedHandoffUrl && <ButtonLink href={handoffUrl} target="_blank" rel="noreferrer" variant={canFinishInDashboard ? "secondary" : "primary"}>Open in new tab</ButtonLink>}
-          {needsAttention && !staysInsideLitos && !handoffUrl && !attendedHandoffUrl && portalUrl && <ButtonLink href={portalUrl} target="_blank" rel="noreferrer" variant="secondary">Open company page</ButtonLink>}
-          {/* ONE primary in this row, counted across every control the row can render. The
-              external-recovery controls above (Finish in this dashboard, Open exact company form,
-              Open in new tab) default to primary, so whenever one of them is present the two
-              review controls both demote; otherwise the primary is the control the current task
-              resolves through. */}
-          {hasQuestionsToReview && <Button onClick={onReviewQuestions} variant={rowExternalPrimary || (needsAttention && currentNonQuestionTask) ? "secondary" : "primary"}>Check the answers</Button>}
+          {/* ONE primary in this row. The embedded dashboard continuation takes priority when it is
+              available; otherwise the current review task owns the primary control. */}
+          {hasQuestionsToReview && <Button onClick={onReviewQuestions} variant={rowDashboardPrimary || (needsAttention && currentNonQuestionTask) ? "secondary" : "primary"}>Check the answers</Button>}
           {/* The audited re-run. "Try again" replays submit-request against the LAST acknowledged
               packet, and any saved answer since then changes packet_version, so on exactly the rows
               this screen exists for it answers 409 packet_stale forever. The review screen owns the
               fresh audit, the exact-PDF gate and the acknowledged send, and needs_attention rows had
               no route to it: measured on Belvedere 2026-08-18, where every exit from this screen was
               a stale retry. */}
-          {/* None of these four replay or resolve anything while the claim is still on the row for
+          {/* None of these controls replay or resolve anything while the claim is still on the row for
               an unverified send - submit-request would just answer the same 409 again - so they wait
-              for UnverifiedSubmissionCard's yes/no to release it first. */}
-          {needsAttention && !awaitingUnverifiedSubmission && <Button onClick={onReviewPacket} variant={!rowExternalPrimary && (!hasQuestionsToReview || currentNonQuestionTask) ? "primary" : "secondary"}>Open packet review</Button>}
+              for UnverifiedSubmissionCard's exact-attempt status to release it first. */}
+          {needsAttention && !awaitingUnverifiedSubmission && <Button onClick={onReviewPacket} variant={!rowDashboardPrimary && (!hasQuestionsToReview || currentNonQuestionTask) ? "primary" : "secondary"}>Open packet review</Button>}
           {/* A CONTROL THAT CANNOT ACT IS NOT SHOWN. `needsAttention` here is the DISPLAYED
               status, and a quarantined authority rewrites a live `filling` row into exactly
               that (reviewForSubmissionProjection) - so this button used to render on the
@@ -9499,22 +9162,9 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
               before its fetch. Gating on the handler's own refusal is what forecloses that
               class: this exists only where the press would reach the network. */}
           {needsAttention && !awaitingUnverifiedSubmission && !employerActionRefusal && <Button onClick={onRetry} variant="secondary">Try again</Button>}
-          {/* The synced-fill recovery: the extension reads the SAME reviewed answers this managed
-              run already produced (handoff-packet.ts on the extension side), so nothing here
-              regenerates or re-syncs anything - it opens the employer's page with those answers
-              ready to place, and she solves whatever check stopped the managed run herself.
-
-              disabled and errored through their own props rather than reusing canonicalFillError:
-              that state is only read inside CanonicalApplicationDetail, a screen this button does
-              not live on, so a failure here (blocked pop-up, extension not installed, a failed
-              /applications call) would otherwise fail with no visible feedback at all. */}
-          {captchaBlockedLastAttempt && (
-            <Button onClick={onOpenWithExtension} variant="secondary" disabled={extensionFillBusy}>
-              {extensionFillBusy ? "Checking extension..." : "Open and fill with extension"}
-            </Button>
-          )}
-          {needsAttention && !awaitingUnverifiedSubmission && submission.handoff_url && <Button onClick={() => onHandoffComplete("cleared")} variant="secondary">I cleared the check</Button>}
-          {needsAttention && !awaitingUnverifiedSubmission && submission.handoff_url && <Button onClick={() => onHandoffComplete("submitted")} variant="secondary">I submitted it myself</Button>}
+          {/* This records that the human check in the embedded dashboard has cleared. It does not
+              claim submission and does not open another page. */}
+          {needsAttention && !awaitingUnverifiedSubmission && submission.handoff_url && <Button onClick={onHandoffComplete} variant="secondary">I cleared the check</Button>}
           {/* Same rule on the failed-run exit: a stale audit already routes to packet review,
               and a refused employer action now routes there too rather than offering a
               retry that returns before it fetches. */}
@@ -9565,6 +9215,13 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
           {review.status === "ready_for_final_approval" && requiredAnswerMissing && (
             <Button onClick={onReviewQuestions} variant="secondary">Fix an answer</Button>
           )}
+          {/* A prepared form can hold a complete answer that is still factually imprecise. Reopen
+              is the only safe edit route on this status because Save refills the employer form and
+              takes a fresh preview. The missing-answer case keeps its more specific Fix an answer
+              control, so the action row never offers two controls for the same editor. */}
+          {preparedAnswersCanBeEdited && (
+            <Button onClick={onReviewQuestions} variant="secondary">Edit answers</Button>
+          )}
           {/* An ask she has answered with "I have ordered it" keeps a control, because plenty of
               employers write "official" and take the downloaded PDF, and the modal's own second door
               is the one this opens. It is worded differently from the row above so the two buttons
@@ -9584,33 +9241,8 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
           {review.status === "ready_for_final_approval" && attachedDocumentKinds.map((kind) => (
             <Button key={kind} onClick={() => onAddDocument(kind)} variant="quiet">Your {kind}</Button>
           ))}
-          {/* THE CONTROL THAT FINISHES AN APPLICATION LITOS CANNOT.
-              A registrar's sealed copy and a form with no upload control are the two things no
-              button on this screen can produce, and both leave the send gate shut for good. The
-              modal already told her "This application then finishes with you rather than with
-              Litos"; before this there was nothing here that finished it, so the packet sat at
-              ready_for_final_approval behind a grey Send button forever.
-              The same words as the control on a stalled handoff above, because it is the same act
-              and the server writes the same record for it. */}
-          {review.status === "ready_for_final_approval" && documentsLitosCannotDeliver && (
-            <Button onClick={onSelfSubmitted} variant="secondary">I submitted it myself</Button>
-          )}
           {review.status === "ready_for_final_approval" && <Button onClick={approveVerifiedPreview} disabled={finalApprovalBlocked}>Send application</Button>}
         </div>
-        {attendedHandoffState === "preparing" && (
-          <p role="status" aria-live="polite" className="mt-3 text-xs leading-5 text-muted">
-            Verifying the current Litos extension and saved application.
-          </p>
-        )}
-        {attendedHandoffError && (
-          <p role="alert" className="mt-3 text-xs leading-5 text-danger">{attendedHandoffError}</p>
-        )}
-        {extensionFillError && (
-          <p role="alert" className="mt-3 text-xs leading-5 text-danger">{extensionFillError}</p>
-        )}
-        {/* Sibling of the alert rather than a child, for the same reason as ComposerRefusalNote:
-            the paragraph above is pinned verbatim by captcha-extension-recovery. */}
-        {messageAsksForTheExtension(extensionFillError) && <ExtensionStoreLink className="mt-2 inline-block text-xs" />}
         {/* The server's own answer to the last press, beside the button that made it. Never routed
             through the page banner: the poll clears that one, and this screen is long enough that a
             message at the top of it is off screen from the control it is about. */}
@@ -9726,7 +9358,7 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
             names them by the buttons beside it, rather than repeating a demand she has answered. */}
         {review.status === "ready_for_final_approval" && orderedDocumentAsks.map((ask) => (
           <p key={ask.kind} className="mt-3 text-xs leading-5 text-warn">
-            You said you have ordered your official {ask.kind}. Litos cannot send a sealed copy from your registrar, so it cannot finish this one. Attach an unofficial copy if this company takes one, or send it on their page and press I submitted it myself.
+            You said you have ordered your official {ask.kind}. Litos cannot send a sealed copy from your registrar, so this application remains paused in Litos. You can attach an unofficial copy here if this company accepts one.
           </p>
         ))}
         {/* THE MEASUREMENT SAID SO, AND THE SCREEN SAYS IT.
@@ -9737,10 +9369,10 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
             delivered one and the row that confirms the storage must not answer for the employer. */}
         {review.status === "ready_for_final_approval" && undeliverableDocumentAsks.map((ask) => (
           <p key={ask.kind} className="mt-3 text-xs leading-5 text-warn">
-            This company asks for a {ask.kind} and their form has no upload Litos can fill, so a file added here would not reach them and Litos cannot finish this one. Add it on their page yourself, then press I submitted it myself.
+            Litos could not locate this company&rsquo;s {ask.kind} upload control. A file added here would not reach the employer in this attempt, so the application remains paused in Litos.
           </p>
         ))}
-        <p className="mt-5 text-xs leading-5 text-muted">Litos will never pretend to be you. It will not get past the puzzle that checks you are human, a code on your phone, a login, or anything you have to swear to. It only says an application is sent once the company confirms it.</p>
+        <p className="mt-5 text-xs leading-5 text-muted">When Litos cannot complete a human check in this dashboard, the application stays blocked. Litos only says an application is sent once the company confirms it.</p>
         </>}
       </Card>
       {!awaitingUnverifiedSubmission && !directAnswerActive && filledFormEvidence}
@@ -9782,13 +9414,13 @@ const CHECKLIST_SETTLED_ACTION_CLASS = "inline-flex min-h-11 w-fit items-center 
    2026-08-08, and it is why an account with 79 prepared resumes has sent none: the panel names the
    work, and the only control it offers is decoration.
 
-   Every pill now comes from checklistRowControl, which returns a real <a href> or a real <button>
-   bound to onOpenQuestion, or NOTHING when there is no target to act on. There is no branch left
+   Every pill now comes from checklistRowControl, which returns a real <button> bound to a dashboard
+   action, or NOTHING when there is no target to act on. There is no branch left
    that draws the word without the element. Each control also carries its own accessible name, so a
    screen reader hears "Confirm your answer to: will you require sponsorship ..." rather than the
    bare "button" read_page found on the live page. */
-function ChecklistRow({ item, checked, portalUrl, onRestartInLitos, onOpenQuestion, onChooseOption, onAddDocument, onToggleAcknowledged, tickingIds }: { item: SubmissionChecklistItem; checked: boolean; portalUrl?: string; onRestartInLitos?: () => void; onOpenQuestion?: (questionId: string, intent?: SubmissionChecklistAction) => void; onChooseOption?: (questionId: string, option: string) => void; onAddDocument?: (kind: string) => void; onToggleAcknowledged?: (item: SubmissionChecklistItem, acknowledged: boolean) => void; tickingIds?: ReadonlySet<string> }) {
-  const control = checked ? null : checklistRowControl(item, { portalUrl });
+function ChecklistRow({ item, checked, onRestartInLitos, onOpenQuestion, onChooseOption, onAddDocument, onToggleAcknowledged, tickingIds }: { item: SubmissionChecklistItem; checked: boolean; onRestartInLitos?: () => void; onOpenQuestion?: (questionId: string, intent?: SubmissionChecklistAction) => void; onChooseOption?: (questionId: string, option: string) => void; onAddDocument?: (kind: string) => void; onToggleAcknowledged?: (item: SubmissionChecklistItem, acknowledged: boolean) => void; tickingIds?: ReadonlySet<string> }) {
+  const control = checked ? null : checklistRowControl(item, {});
   /* THE CHECKBOX IS LIVE ONLY WHERE A TICK CAN BE STORED, which is the acknowledgeable rows - the
      attention blockers whose "done" only she can know - on a screen that passed a handler. Ticking
      writes through POST /applications/:id/review/attention-acks and the row re-renders settled from
@@ -9840,7 +9472,7 @@ function ChecklistRow({ item, checked, portalUrl, onRestartInLitos, onOpenQuesti
             onChange={() => toggleTick(item, item.acknowledged !== true)}
             aria-label={item.acknowledged === true
               ? `Untick ${item.label}. You marked this handled yourself.`
-              : `Mark ${item.label} done. This records that you handled it on the company page yourself.`}
+              : `Mark ${item.label} done. This records that you handled this step.`}
             className="h-[14px] w-[14px] accent-teal-ink disabled:opacity-50"
           />
         </label>
@@ -9887,15 +9519,6 @@ function ChecklistRow({ item, checked, portalUrl, onRestartInLitos, onOpenQuesti
       </span>
       {control && (
         <span className="col-start-2 mt-2 flex min-w-0 flex-wrap items-center gap-2 sm:col-start-3 sm:row-start-1 sm:mt-0 sm:justify-self-end sm:self-center">
-          {control?.element === "link" && (
-            /* The same done switch the button branches carry, needed here since acknowledged rows
-               made open-page the first link that can appear settled: a filled pill inside the quiet
-               settled strip would be the loudest thing on the panel beside the one row that needs
-               nothing doing. */
-            <a href={control.href} target="_blank" rel="noreferrer" aria-label={control.name} className={done ? CHECKLIST_SETTLED_ACTION_CLASS : CHECKLIST_ACTION_CLASS}>
-              {control.label}
-            </a>
-          )}
           {control?.element === "button" && onOpenQuestion && (
             <button type="button" aria-label={control.name} onClick={() => onOpenQuestion(control.questionId, control.intent)} className={done ? CHECKLIST_SETTLED_ACTION_CLASS : CHECKLIST_ACTION_CLASS}>
               {control.label}
@@ -9922,7 +9545,7 @@ function ChecklistRow({ item, checked, portalUrl, onRestartInLitos, onOpenQuesti
   );
 }
 
-function BlockerList({ items, portalUrl, onRestartInLitos, onOpenQuestion, onChooseOption, onAddDocument, onToggleAcknowledged, tickingIds }: { items: readonly SubmissionChecklistItem[]; portalUrl?: string; onRestartInLitos?: () => void; onOpenQuestion?: (questionId: string, intent?: SubmissionChecklistAction) => void; onChooseOption?: (questionId: string, option: string) => void; onAddDocument?: (kind: string) => void; onToggleAcknowledged?: (item: SubmissionChecklistItem, acknowledged: boolean) => void; tickingIds?: ReadonlySet<string> }) {
+function BlockerList({ items, onRestartInLitos, onOpenQuestion, onChooseOption, onAddDocument, onToggleAcknowledged, tickingIds }: { items: readonly SubmissionChecklistItem[]; onRestartInLitos?: () => void; onOpenQuestion?: (questionId: string, intent?: SubmissionChecklistAction) => void; onChooseOption?: (questionId: string, option: string) => void; onAddDocument?: (kind: string) => void; onToggleAcknowledged?: (item: SubmissionChecklistItem, acknowledged: boolean) => void; tickingIds?: ReadonlySet<string> }) {
   /* Split before anything is drawn, because these are two different sentences and only one of them
      is a demand. An outstanding row is work the employer is still waiting on. A settled row states
      that something is already handled and keeps a control only so she can change it, which is why
@@ -9937,7 +9560,7 @@ function BlockerList({ items, portalUrl, onRestartInLitos, onOpenQuestion, onCho
   return (
     <>
       {outstanding.length === 0 ? (
-        <p className="mt-2 text-sm leading-6 text-muted">Open the company page.</p>
+        <p className="mt-2 text-sm leading-6 text-muted">This application remains paused in Litos.</p>
       ) : (
         <div className="mt-4">
           <div className="flex items-center justify-between gap-4">
@@ -9946,7 +9569,7 @@ function BlockerList({ items, portalUrl, onRestartInLitos, onOpenQuestion, onCho
           </div>
           <ul className="mt-2 divide-y divide-border border-y border-border [&>li]:py-2 md:[&>li]:py-4">
           {outstanding.map((item) => (
-            <ChecklistRow key={item.id} item={item} checked={false} portalUrl={portalUrl} onRestartInLitos={onRestartInLitos} onOpenQuestion={onOpenQuestion} onChooseOption={onChooseOption} onAddDocument={onAddDocument} onToggleAcknowledged={onToggleAcknowledged} tickingIds={tickingIds} />
+            <ChecklistRow key={item.id} item={item} checked={false} onRestartInLitos={onRestartInLitos} onOpenQuestion={onOpenQuestion} onChooseOption={onChooseOption} onAddDocument={onAddDocument} onToggleAcknowledged={onToggleAcknowledged} tickingIds={tickingIds} />
           ))}
           </ul>
         </div>
@@ -9958,7 +9581,7 @@ function BlockerList({ items, portalUrl, onRestartInLitos, onOpenQuestion, onCho
             /* onToggleAcknowledged rides into the settled box too: an acknowledged row's checkbox
                is how the tick is taken back, and a settled box without it would strand her ticks
                exactly the way the pre-repair rows stranded "Remove this file". */
-            <ChecklistRow key={item.id} item={item} checked={false} portalUrl={portalUrl} onRestartInLitos={onRestartInLitos} onOpenQuestion={onOpenQuestion} onAddDocument={onAddDocument} onToggleAcknowledged={onToggleAcknowledged} tickingIds={tickingIds} />
+            <ChecklistRow key={item.id} item={item} checked={false} onRestartInLitos={onRestartInLitos} onOpenQuestion={onOpenQuestion} onAddDocument={onAddDocument} onToggleAcknowledged={onToggleAcknowledged} tickingIds={tickingIds} />
           ))}
           </ul>
         </div>

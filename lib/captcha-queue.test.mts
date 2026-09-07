@@ -4,7 +4,6 @@ import {
   describeRemainingWork,
   describeWait,
   isWaitingOnHuman,
-  safePortalUrl,
   waitingApplications,
   type StallInfo,
 } from "./captcha-queue.ts";
@@ -78,15 +77,16 @@ test("an application with no company still appears, with readable placeholders",
   assert.equal(entry?.role, "this role");
 });
 
-test("the portal url rides along so the queue can send them back to the right page", () => {
+test("an open unknown stall cannot carry an external employer action into the home queue", () => {
   const [entry] = waitingApplications([
     packet("with-url", {
       status: "needs_attention",
       portal_url: "https://boards.greenhouse.io/acme/jobs/1",
-      stall: STALL,
+      stall: { ...STALL, provider: "unknown" },
     }),
   ]);
-  assert.equal(entry?.portalUrl, "https://boards.greenhouse.io/acme/jobs/1");
+  assert.equal(entry?.id, "with-url");
+  assert.equal("portalUrl" in entry!, false);
 });
 
 // ---- wording ----
@@ -120,62 +120,21 @@ test("an unreadable timestamp degrades to something true rather than throwing", 
  * infrastructure kept a live session. Promising a specific outcome here, even a truer-sounding one,
  * would repeat the exact mistake this test exists to catch. */
 test("nothing promises what the old new-tab trip could not deliver", () => {
-  for (const stage of ["at_submit", "before_fill"] as const) {
-    const copy = describeRemainingWork(stage);
-    assert.doesNotMatch(copy, /opens blank/);
-    assert.doesNotMatch(copy, /different browser/);
-    // Nor may it promise the opposite without evidence: no claim that a fill or a live view is
-    // guaranteed, since neither is true unconditionally.
-    assert.doesNotMatch(copy, /fills the form/);
-    assert.doesNotMatch(copy, /live view/);
-  }
+  const copy = describeRemainingWork();
+  assert.doesNotMatch(copy, /opens blank/);
+  assert.doesNotMatch(copy, /different browser/);
+  // Nor may it promise the opposite without evidence: no claim that a fill or a live view is
+  // guaranteed, since neither is true unconditionally.
+  assert.doesNotMatch(copy, /fills the form/);
+  assert.doesNotMatch(copy, /live view/);
+  assert.doesNotMatch(copy, /nothing (?:was )?sent/i);
+  assert.doesNotMatch(copy, /nothing is filled/i);
+  assert.doesNotMatch(copy, /try again/i);
 });
 
-/* The stage still carries a real distinction: one run got as far as the check, the other never
- * touched the form. Both continue inside Litos, and both say how far the earlier run got. */
-test("the stage still says how far the earlier run actually got", () => {
-  assert.match(describeRemainingWork("at_submit"), /the run that stopped/);
-  assert.match(describeRemainingWork("before_fill"), /Nothing is filled in yet/);
-});
-
-/* Every stage sends the applicant to the same place - Litos's own dashboard, not the employer's
- * page - even though what happens after they arrive is not this function's to promise. */
-test("every stage sends the applicant to continue inside Litos", () => {
-  assert.match(describeRemainingWork("at_submit"), /Continue in Litos/);
-  assert.match(describeRemainingWork("before_fill"), /Continue in Litos/);
-});
-
-// ---- link safety ----
-//
-// The backend's guard is zod .url(), which accepts `javascript:alert(1)`. This block puts a button
-// in front of the applicant and tells them to click it, so it is the wrong place to trust a URL.
-
-test("a javascript url never becomes a link", () => {
-  assert.equal(safePortalUrl("javascript:alert(1)"), undefined);
-});
-
-test("a data url never becomes a link", () => {
-  assert.equal(safePortalUrl("data:text/html,<script>alert(1)</script>"), undefined);
-});
-
-test("plain http does not become a link either", () => {
-  assert.equal(safePortalUrl("http://boards.greenhouse.io/acme/jobs/1"), undefined);
-});
-
-test("an https portal url is kept", () => {
-  assert.equal(safePortalUrl("https://boards.greenhouse.io/acme/jobs/1"), "https://boards.greenhouse.io/acme/jobs/1");
-});
-
-test("an unparseable url is dropped rather than thrown on", () => {
-  assert.equal(safePortalUrl("not a url"), undefined);
-  assert.equal(safePortalUrl(undefined), undefined);
-});
-
-// The row still appears: the application needs finishing whether or not we can link to it.
-test("a row with an unsafe url still appears, just without the link", () => {
-  const queue = waitingApplications([
-    packet("unsafe", { status: "needs_attention", portal_url: "javascript:alert(1)", stall: STALL }),
-  ]);
-  assert.equal(queue.length, 1);
-  assert.equal(queue[0]?.portalUrl, undefined);
+test("the queue sends every open stall to Litos for status and available steps", () => {
+  assert.equal(
+    describeRemainingWork(),
+    "Open this application in Litos to see its current status and available steps.",
+  );
 });

@@ -29,7 +29,8 @@ test("Applications stacks task copy above its action and aligns actions beside t
   assert.match(row, /<span className="block min-w-0 sm:col-start-2">\s*<span className="block min-w-0 break-words">/);
   assert.match(row, /col-start-2 mt-2[^"\n]*sm:col-start-3 sm:row-start-1 sm:mt-0 sm:justify-self-end/);
   assert.match(applications, /const CHECKLIST_ACTION_CLASS = "[^"]*min-h-11[^"]*"/);
-  assert.match(row, /<a href=\{control\.href\}[^>]*className=\{done \? CHECKLIST_SETTLED_ACTION_CLASS : CHECKLIST_ACTION_CLASS\}/);
+  assert.match(row, /<button type="button" aria-label=\{control\.name\}[^>]*className=\{done \? CHECKLIST_SETTLED_ACTION_CLASS : CHECKLIST_ACTION_CLASS\}/);
+  assert.doesNotMatch(row, /<a href=\{control\.href\}/);
 });
 
 test("Applications folds completed checks behind a readable disclosure while input is still needed", () => {

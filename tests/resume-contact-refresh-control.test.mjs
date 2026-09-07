@@ -351,7 +351,7 @@ test("the packet screen wires the handler to the button it renders beside Edit r
 test("SubmissionScreen receives the handler and busy/error state as props, not as a data prop it re-derives", () => {
   assert.match(
     pageSource,
-    /onOpenWithExtension, extensionFillBusy, extensionFillError, onRefreshResumeContact, resumeContactRefreshBusy, resumeContactRefreshError, onConfirmPostingOpen, confirmPostingOpenBusy, confirmPostingOpenError \}: \{/,
+    /attentionTicking, onRefreshResumeContact, resumeContactRefreshBusy, resumeContactRefreshError, onConfirmPostingOpen, confirmPostingOpenBusy, confirmPostingOpenError \}: \{/,
     "the three new props must be threaded through SubmissionScreen's own destructure - joined more"
     + " recently by the confirm-posting-open trio this same destructure mirrors, see"
     + " tests/posting-status-confirm-control.test.mjs",

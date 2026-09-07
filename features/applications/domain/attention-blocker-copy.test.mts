@@ -20,19 +20,19 @@ const baseReview = {
   status: "needs_attention",
 } as Parameters<typeof humanInputItems>[0];
 
-test("the unlabeled-field diagnostic renders as an action, not the runner's sentence", () => {
+test("the unlabeled-field diagnostic renders as a locked dashboard blocker", () => {
   const items = humanInputItems(baseReview);
   const row = items.find((item) => item.id.startsWith("blocker-"));
   assert.ok(row, "the blocker row still exists");
   assert.equal(row.label, "One required box on the form still needs an answer");
-  assert.match(row.detail ?? "", /packet review/i);
-  assert.match(row.detail ?? "", /tick this row/i);
-  /* The rewrite is copy only: the row still keys, dedupes and acknowledges off the original. */
-  assert.equal(row.acknowledgeable, true);
+  assert.match(row.detail ?? "", /application remains paused here/i);
+  assert.equal(row.action, undefined);
+  assert.equal(row.actionKind, undefined);
+  assert.equal(row.acknowledgeable, undefined);
   assert.ok(row.subject, "subject survives for dedupe");
 });
 
-test("an acknowledged rewritten row settles and reports the tick, not the rewrite detail", () => {
+test("an old acknowledgement cannot settle a locked employer blocker", () => {
   const items = humanInputItems({
     ...baseReview,
     attention_acknowledgements: Object.fromEntries(
@@ -43,19 +43,20 @@ test("an acknowledged rewritten row settles and reports the tick, not the rewrit
   });
   const row = items.find((item) => item.id.startsWith("blocker-"));
   assert.ok(row);
-  assert.equal(row.settled, true);
-  assert.match(row.detail ?? "", /Ticked off by you/);
+  assert.equal(row.settled, undefined);
+  assert.match(row.detail ?? "", /application remains paused here/i);
 });
 
-test("an unrecognized attention sentence still renders verbatim", () => {
+test("an unrecognized employer-page instruction is replaced with dashboard-only copy", () => {
   const items = humanInputItems({
     ...baseReview,
     attention_reason: "The employer's page asked for a notarized unicorn licence",
   });
   const row = items.find((item) => item.id.startsWith("blocker-"));
   assert.ok(row);
-  assert.equal(row.label, "The employer's page asked for a notarized unicorn licence");
-  assert.equal(row.detail, undefined);
+  assert.equal(row.label, "Litos could not finish a required employer step in the dashboard");
+  assert.match(row.detail ?? "", /application remains paused here/i);
+  assert.equal(row.action, undefined);
 });
 
 test("two distinct blockers matching one rewrite never collapse: the second stays verbatim", () => {
