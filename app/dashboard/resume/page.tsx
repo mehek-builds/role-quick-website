@@ -4,6 +4,7 @@ import { Button } from "@/components/app/Button";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { api, ApiError, ExperienceEntry, getTargeting, uploadResume } from "@/lib/api";
+import { buildBaseResume, getBaseResume, type BuildFrame } from "@/lib/base-resume";
 import {
   APPLICATION_DOCUMENT_ACCEPT_ATTRIBUTE,
   APPLICATION_DOCUMENT_SIZE_LIMIT_LABEL,
@@ -47,6 +48,16 @@ export default function ResumeWorkspace() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [dragActive, setDragActive] = useState(false);
   const mutations = useResumeMutationController();
+  /* Whether the ACTUAL tailorable resume (profiles.base_resume_json) exists, as distinct from the
+   * parsed profile above. /start's BaseResumeStep is the only place that has ever written it - an
+   * account that uploads or replaces a resume from this page alone (this page's own "Ready" chip
+   * reflects the parse only) never builds one, and every managed-prepare / tailor call then refuses
+   * with main_resume_missing. There is no way back into /start once onboarding is marked complete,
+   * so an account in this state had no in-product way out before this. */
+  const [baseResumeState, setBaseResumeState] = useState<"unknown" | "missing" | "ready">("unknown");
+  const [buildingBaseResume, setBuildingBaseResume] = useState(false);
+  const [baseResumeBuildError, setBaseResumeBuildError] = useState<string | null>(null);
+  const baseResumeCheckedForProfileRef = useRef(false);
   const {
     bankLoadError,
     entries,
@@ -227,6 +238,33 @@ export default function ResumeWorkspace() {
       void Promise.allSettled(requests);
     });
   }, [loadBank, loadProfile]);
+
+  // Runs once the parsed profile is known to be ready - checking sooner would ask a question the
+  // main resume route cannot yet answer, and checking on every render would poll it forever.
+  useEffect(() => {
+    if (profile === null || profile === "missing") return;
+    if (baseResumeCheckedForProfileRef.current) return;
+    baseResumeCheckedForProfileRef.current = true;
+    let cancelled = false;
+    void getBaseResume()
+      .then((stored) => { if (!cancelled) setBaseResumeState(stored ? "ready" : "missing"); })
+      .catch(() => { if (!cancelled) setBaseResumeState("missing"); });
+    return () => { cancelled = true; };
+  }, [profile]);
+
+  function handleBuildBaseResume() {
+    if (buildingBaseResume) return;
+    setBuildingBaseResume(true);
+    setBaseResumeBuildError(null);
+    void buildBaseResume((frame: BuildFrame) => {
+      if (frame.event === "done") setBaseResumeState("ready");
+      if (frame.event === "error") setBaseResumeBuildError(frame.message);
+    })
+      .catch((reason) => {
+        setBaseResumeBuildError(reason instanceof Error ? reason.message : "Could not build your main resume.");
+      })
+      .finally(() => setBuildingBaseResume(false));
+  }
 
   function retryProfile() {
     void loadProfile();
@@ -468,6 +506,20 @@ export default function ResumeWorkspace() {
             />
           </div>
         </div>
+
+        {profile !== null && profile !== "missing" && baseResumeState === "missing" && (
+          <div className="mt-5 rounded-inner border border-border bg-surface-alt px-5 py-4 text-sm">
+            <p className="font-medium text-ink">Finish setting up your resume.</p>
+            <p className="mt-1 text-muted">
+              Litos has read this PDF, but has not yet built the one-page resume it tailors for each
+              job. Build it once and every application can be prepared and filled from it.
+            </p>
+            {baseResumeBuildError && <div className="mt-3"><ErrorNote message={baseResumeBuildError} /></div>}
+            <Button className="mt-3" onClick={handleBuildBaseResume} disabled={buildingBaseResume || mutationBusy}>
+              {buildingBaseResume ? <PendingLabel state="composing" onColor>Building...</PendingLabel> : "Build main resume"}
+            </Button>
+          </div>
+        )}
 
         {uploadBlockedReason && (
           <p id="resume-upload-blocked-reason" className="mt-3 text-xs text-muted">
