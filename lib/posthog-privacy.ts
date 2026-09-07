@@ -1,4 +1,4 @@
-import type { CaptureResult, Properties } from "posthog-js/dist/module.slim";
+import type { CaptureResult, Properties } from "posthog-js/dist/module.full.no-external";
 
 const URL_KEYS = new Set(["$current_url", "$initial_current_url"]);
 const DROP_KEYS = new Set([
