@@ -1201,6 +1201,23 @@ export type ApplicationReview = {
      *  posting_confirmed_open_at below for display convenience. */
     confirmed_open_at?: string;
   };
+  /* THE SEND LITOS HELD ON PURPOSE, AND WHICH FIELD HELD IT.
+   *
+   * Written by the backend (recordManagedAuthorizedAttemptWithheld) when the secure browser reached
+   * the send control, bound it, and then declined to press it because a required answer could not be
+   * confirmed. Nothing reached the employer: the row carries no unverified_submission and there is
+   * nothing for her to go and look for.
+   *
+   * `labels` are the employer's own question labels for the controls that stopped it, already
+   * resolved on the backend against the controls the run's own proof enumerated - never an answer
+   * she typed. `human_verification` is the dashboard human-verification channel's own reason for
+   * giving her nothing to touch, when it had one; it used to exist only in the server's logs, which
+   * is the whole reason a refused challenge looked exactly like a form with no challenge on it. */
+  press_withheld?: {
+    labels: string[];
+    human_verification?: string;
+    at: string;
+  };
   /** THE ONE FACT ABOUT posting_status THAT SURVIVES ACROSS READS rather than being re-derived:
    *  her own word, typed once, that the employer still accepts applications past a stated deadline.
    *  Everything else about posting_status is recomputed fresh on every read. */
