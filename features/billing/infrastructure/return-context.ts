@@ -11,11 +11,22 @@ function safeOfferId(value: string | null | undefined): string | null {
   return typeof value === "string" && /^[0-9a-f-]{36}$/i.test(value) ? value : null;
 }
 
+/* Every first-party return route this can be asked to remember, kept in one place so
+   writing a context and reading it back always agree on what counts as safe (both
+   rememberBillingReturnContext and billingReturnContext call this same function).
+   "start" is the onboarding flow (components/start/PlanStep.tsx) -- omitting it here
+   silently dropped every onboarding checkout's return context (safeReturnRoute
+   returning null made rememberBillingReturnContext a no-op), so a real, successful
+   payment came back to a generic "different account" error instead of the trial's
+   confirmation screen. Add a route here whenever a new surface starts a checkout. */
+const SAFE_RETURN_ROUTE_PREFIXES = ["dashboard", "billing", "start"];
+const SAFE_RETURN_ROUTE_PATTERN = new RegExp(`^/(?:${SAFE_RETURN_ROUTE_PREFIXES.join("|")})(?:/|$)`);
+
 function safeReturnRoute(value: unknown): string | null {
   if (typeof value !== "string") return null;
   try {
     const url = new URL(value, "https://trylitos.com");
-    if (url.origin !== "https://trylitos.com" || !/^\/(dashboard|billing)(?:\/|$)/.test(url.pathname)) return null;
+    if (url.origin !== "https://trylitos.com" || !SAFE_RETURN_ROUTE_PATTERN.test(url.pathname)) return null;
     return `${url.pathname}${url.search}${url.hash}`;
   } catch {
     return null;
