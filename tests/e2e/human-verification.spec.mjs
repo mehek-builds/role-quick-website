@@ -24,6 +24,7 @@ for (let n = 0; n < 160; n++) {
 const browser = await chromium.launch();
 test.after(async () => { await browser.close(); server.kill("SIGTERM"); });
 const image = (await sharp({ create: { width: 400, height: 300, channels: 3, background: "#eeeeee" } }).jpeg().toBuffer()).toString("base64");
+const replacementImage = (await sharp({ create: { width: 400, height: 300, channels: 3, background: "#4477aa" } }).jpeg().toBuffer()).toString("base64");
 const pointerAckDelay = Number(process.env.HUMAN_VERIFICATION_POINTER_ACK_DELAY_MS ?? 0);
 const completionTimeout = Number(process.env.HUMAN_VERIFICATION_COMPLETION_TIMEOUT_MS ?? 15000);
 assert.ok(Number.isFinite(pointerAckDelay) && pointerAckDelay >= 0, "pointer acknowledgment delay must be a non-negative number");
@@ -50,21 +51,25 @@ async function stableBoundingBox(locator, timeout = 5000, stableFor = 300) {
   assert.fail(`challenge image did not settle within ${timeout}ms: ${JSON.stringify(previous)}`);
 }
 
-for (const width of [1280, 320]) test(`human input remains inside the dashboard at ${width}px`, async () => {
+for (const mode of ["lost acknowledgment", "stale frame replacement"])
+for (const width of [1280, 320]) test(`human input handles ${mode} inside the dashboard at ${width}px`, async () => {
   const context = await browser.newContext({ viewport: { width, height: 900 } });
   const packet = structuredClone(RESUMES.find(r => r.spec?._review?.status === "ready_for_final_approval"));
   assert.ok(packet);
   packet.spec._review = { ...packet.spec._review, status: "submitting", updated_at: new Date().toISOString(), questions: [] };
   const claim = "aaaaaaaa-1111-4111-8111-111111111111";
   const frameId = "bbbbbbbb-2222-4222-8222-222222222222";
+  const replacementFrameId = "cccccccc-3333-4333-8333-333333333333";
   const commands = [], commandTrace = [], unexpected = [];
   let nextSequence = 1, lost = false, pending = false, remotePointerDown = false;
-  let resolvePointerUp, resolveFocus;
+  let activeFrameId = frameId, activeRevision = 1, activeImage = image;
+  let resolvePointerUp, resolveFocus, resolveReplacementFocus;
   const pointerUpReceived = new Promise(resolve => { resolvePointerUp = resolve; });
   const focusReceived = new Promise(resolve => { resolveFocus = resolve; });
-  const frame = () => ({ state: "waiting", attemptId: claim, frameId, revision: 1, nextSequence,
+  const replacementFocusReceived = new Promise(resolve => { resolveReplacementFocus = resolve; });
+  const frame = () => ({ state: "waiting", attemptId: claim, frameId: activeFrameId, revision: activeRevision, nextSequence,
     pointerDown: remotePointerDown, inputPending: pending, width: 400, height: 300, expiresAt: Date.now() + 60000,
-    capturedAt: Date.now(), image, mimeType: "image/jpeg" });
+    capturedAt: Date.now(), image: activeImage, mimeType: "image/jpeg" });
   const result = { application_id: packet.id, review: packet.spec._review,
     submission_projection: { state: "none" }, retry_safety: { kind: "no_evidence" },
     submission_authority: { schema_version: "submission-authority-v1", revision: "12", state: "none",
@@ -85,17 +90,32 @@ for (const width of [1280, 320]) test(`human input remains inside the dashboard 
       commands.push(command);
       commandTrace.push(trace);
       assert.equal(command.attemptId, claim);
-      assert.equal(command.frameId, frameId);
+      assert.equal(command.frameId, activeFrameId);
+      assert.equal(command.revision, activeRevision);
       assert.equal(command.sequence, nextSequence);
       nextSequence++;
       if (command.type === "pointer" && command.phase === "down") remotePointerDown = true;
       if (command.type === "pointer" && command.phase === "up") remotePointerDown = false;
       if (command.type === "pointer" && command.phase === "up") resolvePointerUp();
-      if (command.type === "focus") resolveFocus();
+      if (command.type === "focus" && command.frameId === frameId) resolveFocus();
+      if (command.type === "focus" && command.frameId === replacementFrameId) resolveReplacementFocus();
       if (pointerAckDelay && command.type === "pointer") await delay(pointerAckDelay);
       if (lost) {
-        lost = false; pending = true; trace.status = 500;
-        await json({ error: "Synthetic lost acknowledgment" }, 500);
+        lost = false;
+        if (mode === "stale frame replacement") {
+          activeFrameId = replacementFrameId;
+          activeRevision = 2;
+          activeImage = replacementImage;
+          nextSequence = 41;
+          remotePointerDown = false;
+          pending = false;
+          trace.status = 409;
+          await json({ error: "Synthetic stale frame", code: "HUMAN_VERIFICATION_FRAME_STALE" }, 409);
+        } else {
+          pending = true;
+          trace.status = 500;
+          await json({ error: "Synthetic lost acknowledgment" }, 500);
+        }
       } else {
         trace.status = 200;
         await json({ ok: true, nextSequence });
@@ -185,6 +205,19 @@ for (const width of [1280, 320]) test(`human input remains inside the dashboard 
     await panel.getByRole("button", { name: "Refresh verification view" }).click();
     await page.waitForFunction(() => !document.querySelector('[role="alert"]')?.textContent);
     assert.equal(commands.length, count, "refresh sends no human command");
+    if (mode === "stale frame replacement") {
+      await page.waitForFunction(expected => {
+        const challenge = [...document.images].find(node => node.alt === "Live company human-verification challenge");
+        return challenge?.complete && challenge.naturalWidth > 0 && challenge.src === `data:image/jpeg;base64,${expected}`;
+      }, replacementImage);
+      await panel.getByRole("button", { name: "Enter challenge", exact: true }).click();
+      assert.equal(await completesWithin(replacementFocusReceived, completionTimeout), true,
+        `replacement focus did not arrive: ${JSON.stringify(await diagnostics())}`);
+      const replacementCommand = commands.at(-1);
+      assert.equal(replacementCommand.frameId, replacementFrameId);
+      assert.equal(replacementCommand.revision, 2);
+      assert.equal(replacementCommand.sequence, 41);
+    }
     assert.equal(new URL(page.url()).origin, origin);
     assert.equal(context.pages().length, 1);
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
