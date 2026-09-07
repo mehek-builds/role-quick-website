@@ -1,17 +1,10 @@
 /**
- * The "waiting on you" queue.
+ * The home human-verification notice queue.
  *
- * When an application stops on a human-verification check, the check can only be answered by the
- * person whose application it is. That used to mean sending them to the employer's own site in a
- * fresh tab, refilled only if the browser extension happened to be installed and signed in there.
- * It now means reopening the application inside Litos's own dashboard first: the review screen it
- * lands on (`SubmissionScreen`, `app/dashboard/applications/page.tsx`) owns the actual decision of
- * how to finish - a live in-dashboard fill where the infrastructure supports it, the extension where
- * an ATS family still requires it, or a plain retry otherwise - so this queue's only job is to get
- * the applicant to that screen and let it decide, not to promise a specific mechanism itself.
- *
- * So this is not a work queue anyone else can drain: it is a list pointed at its owner, and the only
- * useful thing it can do is get them back to the right screen quickly.
+ * A legacy needs-attention status plus an unresolved human-verification stall is a discovery signal.
+ * It does not establish what the employer requested, whether anything was submitted, or whether a
+ * retry is safe. This queue surfaces the application and links to its current Litos screen. That
+ * screen owns action eligibility because it has the latest evidence for the exact application.
  *
  * Ordered oldest first, which is the whole promise. The application nobody has dealt with is exactly
  * the one that keeps getting re-observed, so any ordering that responds to recent activity would
@@ -32,14 +25,11 @@ export type WaitingApplication = {
   id: string;
   company: string;
   role: string;
-  portalUrl?: string;
   stalledAt: string;
-  stage: "before_fill" | "at_submit";
 };
 
 type ReviewLike = {
   status?: string;
-  portal_url?: string;
   stall?: StallInfo;
 };
 
@@ -50,34 +40,13 @@ type PacketLike = {
 };
 
 /**
- * Status is the authority on whether the applicant still owes something; the stall only says the
- * reason is a human-verification check.
+ * Legacy status and stall are both required to discover an unresolved human-verification notice.
  *
- * Both halves are required. Status alone sweeps in every other reason an application needs
- * attention - a missing field, an unanswered attestation - and this queue promises something
- * narrower than that. An open stall alone would resurrect finished work.
+ * Status alone sweeps in every other reason an application needs attention. An open stall alone can
+ * resurrect finished work. Neither field is submission authority or proof that retrying is safe.
  */
 export function isWaitingOnHuman(review: ReviewLike | null | undefined): boolean {
   return review?.status === "needs_attention" && !!review.stall && !review.stall.resolved_at;
-}
-
-/**
- * Only an https URL is allowed to become a link.
- *
- * portal_url arrives from backend data that ultimately traces back to an employer's posting or a
- * pasted link, and the backend's own guard is zod .url(), which happily accepts
- * `javascript:alert(1)`. This is now a secondary, optional link (the primary control is the
- * in-dashboard one keyed on `id`, which needs no external URL at all), but it still puts a link in
- * front of the applicant, so the same rule applies: anything that is not https is dropped rather
- * than trusted.
- */
-export function safePortalUrl(raw: string | undefined): string | undefined {
-  if (!raw) return undefined;
-  try {
-    return new URL(raw).protocol === "https:" ? raw : undefined;
-  } catch {
-    return undefined;
-  }
 }
 
 export function waitingApplications(packets: readonly PacketLike[]): WaitingApplication[] {
@@ -87,9 +56,7 @@ export function waitingApplications(packets: readonly PacketLike[]): WaitingAppl
       id: packet.id,
       company: packet.job_context?.company?.trim() || "This company",
       role: packet.job_context?.role?.trim() || "this role",
-      portalUrl: safePortalUrl(packet.spec?._review?.portal_url),
       stalledAt: packet.spec!._review!.stall!.stalled_at,
-      stage: packet.spec!._review!.stall!.stage,
     }))
     .sort((left, right) => (left.stalledAt < right.stalledAt ? -1 : left.stalledAt > right.stalledAt ? 1 : 0));
 }
@@ -113,21 +80,12 @@ export function describeWait(stalledAt: string, now: number): string {
 }
 
 /**
- * What is actually left to do, which must not overstate it.
+ * Where to inspect the application without claiming what the earlier attempt did.
  *
- * This used to depend on whether the browser extension was installed and signed in, because the
- * only place that could refill the form was the employer's own page in the applicant's own browser.
- * That dependency is gone, but nothing has taken its place as a promise this function can make. What
- * happens on arrival is decided by SubmissionScreen (app/dashboard/applications/page.tsx), and it
- * genuinely varies: a live in-dashboard fill needs a browser session the current infrastructure does
- * not keep (measured against production: no packet has ever carried one), and some ATS families
- * still route through the extension regardless (exactAttendedHandoffUrl, lib/attended-handoff.ts).
- * Promising a specific mechanism here would be exactly the overstatement the previous version of
- * this function was written to remove, just relocated rather than fixed. So this says only what is
- * true unconditionally: where to go, and how far the earlier run got.
+ * An unresolved legacy stall does not establish whether the earlier attempt filled or submitted the
+ * application, and it does not establish retry eligibility. The exact application screen owns those
+ * decisions using its current evidence. This copy only identifies where to inspect that status.
  */
-export function describeRemainingWork(stage: "before_fill" | "at_submit"): string {
-  return stage === "at_submit"
-    ? "Litos filled it in the run that stopped. Continue in Litos to review it and try again."
-    : "Nothing is filled in yet. Continue in Litos to try the fill again.";
+export function describeRemainingWork(): string {
+  return "Open this application in Litos to see its current status and available steps.";
 }

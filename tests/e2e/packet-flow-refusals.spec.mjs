@@ -203,11 +203,12 @@ async function openAuditedFlow(packet, { ackResponse = null, submitResponse = nu
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const auditResponse = packetAuditResponse(packet);
   const submission = submissionFor(packet, auditResponse);
+  const fixtureResumes = RESUMES.map((stored) => stored.id === packet.id ? packet : stored);
   /* `landed` overrides where the accepted send LANDS (both the submit response and every
      subsequent /submission poll answer), so a case can park the flow on a poll-active screen
      like the needs_attention portal instead of the terminal receipt. */
   const landedSubmission = landed ? { ...submission, review: { ...submission.review, ...landed } } : null;
-  const counts = { ack: 0, submit: 0, submissionReads: 0, audits: 0, revalidations: 0 };
+  const counts = { ack: 0, submit: 0, approve: 0, submissionReads: 0, audits: 0, revalidations: 0, submitBodies: [] };
   let submitInFlight = false;
   await context.route("**/*", async (route) => {
     const url = route.request().url();
@@ -218,6 +219,8 @@ async function openAuditedFlow(packet, { ackResponse = null, submitResponse = nu
     if (url.startsWith(BACKEND_ORIGIN)) {
       const p = new URL(url).pathname;
       const json = async (body, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
+      if (p === "/resume/history") return json({ resumes: fixtureResumes });
+      if (p === "/dashboard/bootstrap") return json({ ...STUB[p], resume_history: { resumes: fixtureResumes } });
       if (p.endsWith("/packet-audit/acknowledge")) {
         counts.ack += 1;
         if (ackResponse) return json(ackResponse.body, ackResponse.status);
@@ -233,6 +236,7 @@ async function openAuditedFlow(packet, { ackResponse = null, submitResponse = nu
       }
       if (p.endsWith("/submit-request")) {
         counts.submit += 1;
+        counts.submitBodies.push(route.request().postDataJSON());
         submitInFlight = true;
         if (holdSubmitMs > 0) await delay(holdSubmitMs);
         submitInFlight = false;
@@ -240,6 +244,7 @@ async function openAuditedFlow(packet, { ackResponse = null, submitResponse = nu
         if (landedSubmission) return json(landedSubmission);
         return json(landedResponse(submission, packet));
       }
+      if (p.endsWith("/submission/approve")) counts.approve += 1;
       /* The review_edit save that precedes the audit on resume_ready packets. Echo the saved
          review; the flow only needs the envelope back. */
       if (p.endsWith("/review") && route.request().method() === "PUT") return json(submission);
@@ -262,13 +267,14 @@ async function openAuditedFlow(packet, { ackResponse = null, submitResponse = nu
 
   const page = await context.newPage();
   await page.goto(`${ORIGIN}/dashboard/applications?application=${packet.id}&intent=apply`, { waitUntil: "domcontentloaded" });
-  const firstLabel = packet === READY ? "Review and send" : "Review and fill";
+  const prepared = packet.spec._review.status === "ready_for_final_approval";
+  const firstLabel = prepared ? "Review and send" : "Review and fill";
   const first = page.getByRole("button", { name: firstLabel, exact: true });
   await first.waitFor({ state: "visible", timeout: 25_000 });
   await first.click();
   await page.getByText("Exact audited PDF loaded, 1 page.", { exact: true })
     .waitFor({ state: "visible", timeout: 25_000 });
-  const secondLabel = packet === READY ? "Review filled form" : "Approve packet and fill form";
+  const secondLabel = prepared ? "Review filled form" : "Approve packet and fill form";
   const second = page.getByRole("button", { name: secondLabel, exact: true });
   await second.waitFor({ state: "visible", timeout: 25_000 });
 
@@ -303,6 +309,49 @@ const ACK_CLAIMED = "This application cannot be acknowledged in its current stat
 const ACK_STALE = "The rendered packet no longer matches the saved application. Reload it before continuing.";
 const SUBMIT_STALE = "This application changed after you approved the exact packet Litos prepared, so it was not sent.";
 const REVALIDATION_STALE = "The saved application changed while it was being audited. Reload it and audit again.";
+
+browserTest("a complete optional answer on a prepared form can be edited and refilled", async (hold) => {
+  const locationQuestion = {
+    id: "location",
+    kind: "required",
+    required: false,
+    question: "Where are you located?",
+    answer: "Example City",
+    answer_state: "answered",
+    portal_input_type: "text",
+  };
+  const prepared = {
+    ...READY,
+    spec: {
+      ...READY.spec,
+      _review: { ...READY.spec._review, questions: [locationQuestion] },
+    },
+  };
+  const { context, page, second, counts } = await openAuditedFlow(prepared, {
+    landed: { status: "filling", preview_screenshot_url: undefined },
+  });
+  hold(page);
+  await second.click();
+
+  const edit = page.getByRole("button", { name: "Edit answers", exact: true });
+  await edit.waitFor({ state: "visible", timeout: 15_000 });
+  assert.equal(await page.getByRole("button", { name: "Fix an answer", exact: true }).count(), 0);
+  assert.equal(await page.getByRole("button", { name: "Check the answers", exact: true }).count(), 0);
+  await edit.click();
+
+  const answer = page.getByRole("textbox", { name: locationQuestion.question, exact: true });
+  await answer.waitFor({ state: "visible", timeout: 15_000 });
+  assert.equal(await answer.inputValue(), "Example City");
+  await answer.fill("Example City, Example State, USA");
+  await page.getByRole("button", { name: "Save and fill the form again", exact: true }).click();
+  await page.getByRole("heading", { name: "Filling form", exact: true }).waitFor({ state: "visible", timeout: 15_000 });
+
+  assert.equal(counts.submit, 1);
+  assert.equal(counts.approve, 0, "editing must refill the form without sending it");
+  assert.equal(counts.submitBodies[0].restart, true);
+  assert.equal(counts.submitBodies[0].questions.find((question) => question.id === locationQuestion.id).answer, "Example City, Example State, USA");
+  await context.close();
+});
 
 browserTest("a refused acknowledge on Approve packet and fill form says the server's sentence, and keeps saying it", async (hold) => {
   const { context, page, second, counts } = await openAuditedFlow(FILL, {

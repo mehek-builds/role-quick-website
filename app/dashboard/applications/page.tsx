@@ -91,7 +91,7 @@ import { acknowledgePacketAudit, acknowledgePacketEvidence, packetQuestionsSnaps
 import { useBilling } from "@/components/billing/BillingProvider";
 import { isStructuredUpgradeDenial } from "@/features/billing";
 import { completeOperationId, operationIdFor } from "@/lib/operation-id";
-import { applicationPacketAuthorityState, awaitingUnverifiedSubmissionResolution, employerActionRefusalMessage, confirmedProjectionForPacket, managedPrepareAuthorityEnvelopeFromUnknown, managedPrepareAuthorityMatchesPacket, quarantinedSubmissionAuthority, reviewClaimsSubmissionSent, reviewForSubmissionProjection, submissionAuthorityEnvelopeFromUnknown, submissionMutationResponseMatchesApplication, submissionProjectionIsConfirmed } from "@/features/applications";
+import { applicationPacketAuthorityState, awaitingUnverifiedSubmissionResolution, employerActionRefusalMessage, confirmedProjectionForPacket, managedPrepareAuthorityEnvelopeFromUnknown, managedPrepareAuthorityMatchesPacket, quarantinedSubmissionAuthority, reviewClaimsSubmissionSent, reviewForSubmissionProjection, submissionAuthorityEnvelopeFromUnknown, submissionMutationResponseMatchesApplication, submissionProjectionIsConfirmed, unverifiedRecoveryStatus, type UnverifiedRecoveryStatus } from "@/features/applications";
 import { useSidebarCollapse } from "@/app/dashboard/dashboard-shell";
 
 type Screen = "review" | "questions" | "submitting" | "portal" | "submitted";
@@ -6155,6 +6155,7 @@ function Applications() {
                awaitingUnverifiedSubmission already true off this exact packet's review. */
             openApplication(canonicalUnverifiedSubmissionPacket, { history: "replace" });
           } : null}
+          unverifiedSubmissionReview={canonicalUnverifiedSubmissionPacket?.spec._review ?? null}
           fillBusy={creating === "fill"}
           tailorBusy={creating === "tailor"}
           coverLetterBusy={coverLetterBusy}
@@ -6839,6 +6840,7 @@ function CanonicalApplicationDetail({
   requiredQuestionsRemaining,
   onContinueToSend,
   onCheckUnverifiedSubmission,
+  unverifiedSubmissionReview,
   fillBusy,
   tailorBusy,
   coverLetterBusy,
@@ -6888,6 +6890,8 @@ function CanonicalApplicationDetail({
    *  rendered and disabled - "a control that cannot act is not shown" applies here exactly the way
    *  it already does to onOpenPacket below. */
   onCheckUnverifiedSubmission: (() => void) | null;
+  /** The linked packet review that owns the held submission attempt. It is display context only. */
+  unverifiedSubmissionReview: ApplicationReview | null;
   fillBusy: boolean;
   tailorBusy: boolean;
   coverLetterBusy: boolean;
@@ -6926,6 +6930,9 @@ function CanonicalApplicationDetail({
   const answersOutstanding = readyToSend && questionsRemaining > 0;
   const sendable = readyToSend && questionsRemaining === 0;
   const questionsPhrase = questionsRemaining === 1 ? "1 required question" : `${questionsRemaining} required questions`;
+  const recoveryStatus = onCheckUnverifiedSubmission
+    ? unverifiedRecoveryStatus(unverifiedSubmissionReview)
+    : null;
   return (
     <Card className="overflow-hidden">
       {/* THE THREE-COLOUR BAR CAME OFF THIS CARD, 2026-08-29. It is the pillar motif (teal / brand /
@@ -6958,7 +6965,7 @@ function CanonicalApplicationDetail({
                   ? `${questionsPhrase} before Litos can send this.`
                   : sendable
                     ? "Litos can send this application for you."
-                    : onCheckUnverifiedSubmission ? "Checking the employer response." : "Continue on the employer's form."}
+                    : recoveryStatus ? recoveryStatus.canonicalSummary : "Continue on the employer's form."}
           </p>
           <p className="mt-1 text-small leading-6 text-muted">
             {submitted
@@ -6973,24 +6980,22 @@ function CanonicalApplicationDetail({
                   ? "The tailored packet is ready and the portal is one Litos can submit through. The employer still asks for answers only you can give, so Litos stops here rather than sending an incomplete form. Answering them is the last step before it can go."
                   : sendable
                     ? "This application's tailored packet is ready on a portal Litos can submit through. Continue to Litos's managed review and send screen to finish it - no extension, no separate tab."
-                    : onCheckUnverifiedSubmission ? "Litos keeps this attempt locked while it checks for confirmation. It will not send a duplicate." : "Litos will verify the extension account, bind this exact application, and open the employer page. Click Fill in the extension card, review every field, then press the employer's submit control yourself."}
+                    : recoveryStatus ? recoveryStatus.canonicalDescription : "Litos will verify the extension account, bind this exact application, and open the employer page. Click Fill in the extension card, review every field, then press the employer's submit control yourself."}
           </p>
         </div>
         {/* A CLAIM THE FREE-FILL CARD HAS NO WAY TO SHOW, let alone resolve.
          *
-         * `application` never carries `unverified_submission` - it is a field on the linked
-         * PACKET's review, and this card is built from the lighter canonical record alone (see
-         * CanonicalApplicationDetail's own history: it never fetches /submission). Rendered only
-         * when the page has already found that packet AND its own unresolved claim (see
+         * `application` never carries `unverified_submission` or outcome recovery. Both are fields
+         * on the linked PACKET's review, which the page passes separately as display context.
+         * Rendered only when the page has already found that packet AND its own unresolved claim (see
          * unverifiedSubmissionLinkedPacketFromCanonicalEnvelope), so this box and the ordinary
          * copy above never disagree about whether one exists. The press below reaches
-         * SubmissionScreen's UnverifiedSubmissionCard, which is where the yes/no actually lives -
-         * this box only gets her there. */}
+         * SubmissionScreen's matching status card, which carries the same exact-attempt copy. */}
         {onCheckUnverifiedSubmission && (
           <div role="alert" className="mt-4 rounded-inner border border-warn/40 bg-warn-soft px-4 py-3">
-            <p className="font-mono text-label uppercase tracking-[0.08em] text-warn">Checking submission</p>
+            <p className="font-mono text-label uppercase tracking-[0.08em] text-warn">{recoveryStatus?.heading}</p>
             <p className="mt-1 text-small leading-6 text-muted">
-              Litos checks the original attempt for employer confirmation automatically. This application remains unverified until that confirmation is found. You do not need to check another website.
+              {recoveryStatus?.description}
             </p>
             <Button onClick={onCheckUnverifiedSubmission} size="sm" className="mt-3">View status</Button>
           </div>
@@ -8172,16 +8177,12 @@ function SecurityCodeCard({ review, submitting, error, onSubmitCode }: {
 }
 
 /** Automatic verification owns the outcome; this card never asks for a manual attestation. */
-function UnverifiedSubmissionCard({ review }: { review: ApplicationReview }) {
-  const exhausted = review.outcome_recovery?.state === "unresolved"
-    && (review.unverified_submission?.employer_page_checks?.length ?? 0) >= 3;
+function UnverifiedSubmissionCard({ status }: { status: UnverifiedRecoveryStatus }) {
   return (
     <div className="mt-4 rounded-inner border border-border bg-surface-alt p-4" role="status">
-      <p className="font-mono text-label uppercase tracking-[0.08em] text-muted">{exhausted ? "Submission not verified" : "Checking submission"}</p>
+      <p className="font-mono text-label uppercase tracking-[0.08em] text-muted">{status.heading}</p>
       <p className="mt-2 text-small leading-6 text-ink">
-        {exhausted
-          ? "Litos could not verify the employer's response. This application stays unverified. A matching confirmation can still update it automatically."
-          : "Litos checks the original application attempt for an employer confirmation automatically. You do not need to open the employer's website."}
+        {status.description}
       </p>
       <p className="mt-2 text-small leading-6 text-muted">Litos will not send this application again while its result is uncertain.</p>
     </div>
@@ -8581,6 +8582,7 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
      why nothing here treats that shape differently. Extracted to the domain layer so this exact
      predicate is what the tests pin, not a copy of it. */
   const awaitingUnverifiedSubmission = awaitingUnverifiedSubmissionResolution(review);
+  const recoveryStatus = unverifiedRecoveryStatus(review);
   /* Every control below that can replay, resolve, or open a live/exact form for this application is
      gated HERE, at the one place they all read from, rather than at each button individually. That
      is not a style preference: the four buttons this feature explicitly gated (Review and fill, Try
@@ -8943,6 +8945,10 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
   const serverSensitiveLabels = submission.sensitive_questions_requiring_confirmation;
   const unconfirmedSensitiveRows = humanInputItems(review, { sensitiveConfirmations: serverSensitiveLabels })
     .filter((item) => item.actionKind === "confirm" && !item.settled);
+  const preparedAnswersCanBeEdited = review.status === "ready_for_final_approval"
+    && review.questions.length > 0
+    && reviewAnswerEditRoute(review) === "reopen"
+    && !requiredAnswerMissing;
   const sensitiveQuestionPresent = review.questions.some((question) => requiresSensitiveQuestionReview(question.question, question.answer))
     /* A question the SERVER says needs confirming blocks the send here too, so the button stops
        offering a press the server has already decided to refuse. Measured live on Exa packet
@@ -9118,7 +9124,7 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
               {awaitingSecurityCode
                 ? "One code away"
                 : awaitingUnverifiedSubmission
-                  ? "Checking submission"
+                  ? recoveryStatus.heading
                   : needsAttention
                     ? currentNonQuestionTask
                       ? "One thing to finish"
@@ -9223,7 +9229,7 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
           />
         )}
         {awaitingUnverifiedSubmission && (
-          <UnverifiedSubmissionCard review={review} />
+          <UnverifiedSubmissionCard status={recoveryStatus} />
         )}
         {/* THE ONE STEP THAT SURVIVES THE UNVERIFIED-SUBMISSION MODE.
          *
@@ -9564,6 +9570,13 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
               the same broken promise in the other direction. */}
           {review.status === "ready_for_final_approval" && requiredAnswerMissing && (
             <Button onClick={onReviewQuestions} variant="secondary">Fix an answer</Button>
+          )}
+          {/* A prepared form can hold a complete answer that is still factually imprecise. Reopen
+              is the only safe edit route on this status because Save refills the employer form and
+              takes a fresh preview. The missing-answer case keeps its more specific Fix an answer
+              control, so the action row never offers two controls for the same editor. */}
+          {preparedAnswersCanBeEdited && (
+            <Button onClick={onReviewQuestions} variant="secondary">Edit answers</Button>
           )}
           {/* An ask she has answered with "I have ordered it" keeps a control, because plenty of
               employers write "official" and take the downloaded PDF, and the modal's own second door

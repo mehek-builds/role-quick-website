@@ -2220,7 +2220,7 @@ test("the unverified-submission card's gate and copy both delegate to the tested
   );
   assert.match(
     page,
-    /<UnverifiedSubmissionCard review=\{review\} \/>/,
+    /<UnverifiedSubmissionCard status=\{recoveryStatus\} \/>/,
     "the automatic recovery card reads structured state instead of old manual-attestation instructions",
   );
 });
