@@ -2,17 +2,21 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { isLemonSqueezyCheckoutUrl, isLemonSqueezyPortalUrl, isLitosPayCheckoutUrl, isSafeBillingPortalUrl, isSafeCheckoutUrl, isStripeCheckoutUrl, isStripePortalUrl } from "../lib/billing.ts";
 
-test("accepts Stripe checkout URLs regardless of the single-letter path prefix", () => {
+test("accepts any checkout.stripe.com path, not just one known prefix", () => {
   /* Confirmed against production on 2026-09-08: a Checkout Session with nothing due
      today (the card-required trial) comes back as "/f/pay/", not "/c/pay/" -- both
      are real, live Stripe URLs. Rejecting the trial's shape broke every trial
-     checkout while paid-immediately checkouts (still "/c/pay/") kept working. */
+     checkout while paid-immediately checkouts (still "/c/pay/") kept working. Stripe
+     does not commit to a URL shape, so this checks host + protocol only, same as
+     isStripePortalUrl does for billing.stripe.com -- a THIRD prefix (or none) must
+     also keep working, not just the two seen so far. */
   assert.equal(isStripeCheckoutUrl("https://checkout.stripe.com/c/pay/cs_live_abc#fidkdW"), true);
   assert.equal(isStripeCheckoutUrl("https://checkout.stripe.com/f/pay/cs_live_abc#fidkdW"), true);
+  assert.equal(isStripeCheckoutUrl("https://checkout.stripe.com/embedded/pay/cs_live_abc"), true);
+  assert.equal(isStripeCheckoutUrl("https://checkout.stripe.com/cs_live_abc"), true);
   assert.equal(isStripeCheckoutUrl("http://checkout.stripe.com/c/pay/cs_live_abc"), false);
   assert.equal(isStripeCheckoutUrl("https://checkout.stripe.com.evil.example/c/pay/cs_live_abc"), false);
   assert.equal(isStripeCheckoutUrl("https://buy.stripe.com/cs_live_abc"), false);
-  assert.equal(isStripeCheckoutUrl("https://checkout.stripe.com/cs_live_abc"), false);
 });
 
 test("accepts only reusable HTTPS Lemon Squeezy checkout links", () => {
