@@ -1,6 +1,10 @@
 import {
+  DEFAULT_CURRENCY,
   LITOS_PLUS_PLANS,
+  isSupportedCurrency,
+  litosPlusPlansForCurrency,
   type LitosPlusPlan,
+  type SupportedCurrency,
 } from "./plans.ts";
 
 type ServerPlan = Partial<LitosPlusPlan> & {
@@ -11,6 +15,7 @@ type ServerPlan = Partial<LitosPlusPlan> & {
 
 export type PlanCatalog = {
   plans: LitosPlusPlan[];
+  currency: SupportedCurrency;
   checkoutAvailable: boolean;
   source: "server" | "fallback";
 };
@@ -35,17 +40,26 @@ function amount(plan: ServerPlan): number | null {
       : null;
 }
 
+/**
+ * The server decides which currency a visitor sees (it alone knows their detected country);
+ * this only ever verifies the AMOUNT the server claims for that currency against our own
+ * conversion table, the same defense-in-depth this file already applied to USD. A currency we
+ * don't recognize, or amounts that don't match our own table for it, fall the whole page back
+ * to the static USD plans -- never a price nobody can independently confirm.
+ */
 export function verifiedPlanCatalog(value: unknown): PlanCatalog {
   const received = serverPlans(value);
   const response = value && typeof value === "object"
-    ? value as { checkout_available?: unknown }
+    ? value as { checkout_available?: unknown; currency?: unknown }
     : null;
-  const verified = LITOS_PLUS_PLANS.every((expected) => {
+  const currency: SupportedCurrency = isSupportedCurrency(response?.currency) ? response.currency : DEFAULT_CURRENCY;
+  const expectedPlans = litosPlusPlansForCurrency(currency);
+  const verified = expectedPlans.every((expected) => {
     const found = received.find((candidate) => planIdentity(candidate) === expected.id);
     return found && amount(found) === expected.amountCents;
   });
   const planAvailability = received
-    .filter((candidate) => LITOS_PLUS_PLANS.some((expected) => expected.id === planIdentity(candidate)))
+    .filter((candidate) => expectedPlans.some((expected) => expected.id === planIdentity(candidate)))
     .every((candidate) => candidate.checkout_available === true);
   const availability = verified && (
     response?.checkout_available === true
@@ -53,7 +67,8 @@ export function verifiedPlanCatalog(value: unknown): PlanCatalog {
   );
 
   return {
-    plans: [...LITOS_PLUS_PLANS],
+    plans: verified ? expectedPlans : [...LITOS_PLUS_PLANS],
+    currency: verified ? currency : DEFAULT_CURRENCY,
     checkoutAvailable: Boolean(availability),
     source: verified ? "server" : "fallback",
   };

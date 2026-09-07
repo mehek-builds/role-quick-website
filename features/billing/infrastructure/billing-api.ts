@@ -75,7 +75,7 @@ export async function getPlanCatalog(): Promise<PlanCatalog> {
   try {
     return verifiedPlanCatalog(await api<unknown>("/billing/plans", { cache: "no-store" }));
   } catch {
-    return { plans: [...LITOS_PLUS_PLANS], checkoutAvailable: false, source: "fallback" };
+    return { plans: [...LITOS_PLUS_PLANS], currency: "USD", checkoutAvailable: false, source: "fallback" };
   }
 }
 

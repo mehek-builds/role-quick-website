@@ -33,10 +33,11 @@ import {
   LITOS_PLUS_PLANS,
   createLitosPlusCheckout,
   getBillingState,
+  getPlanCatalog,
   isPaidAccess,
-  litosPlusPlan,
   rememberBillingReturnContext,
   type LitosPlusPlanId,
+  type PlanCatalog,
 } from "@/features/billing";
 import { track } from "@/lib/analytics";
 import { sendTikTokEvent, trackTikTokPixelEvent } from "@/lib/tiktok-client";
@@ -56,14 +57,22 @@ export function PlanStep({ onSettled }: { onSettled: () => void }) {
   const [settled, setSettled] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const plan = litosPlusPlan(selected);
+  const [catalog, setCatalog] = useState<PlanCatalog | null>(null);
+  const plans = catalog?.plans ?? LITOS_PLUS_PLANS;
+  const plan = plans.find((candidate) => candidate.id === selected)
+    ?? plans.find((candidate) => candidate.id === DEFAULT_LITOS_PLUS_PLAN_ID)!;
   const tiktokCheckoutIdsRef = useRef(new Map<string, string>());
 
   useEffect(() => {
     let cancelled = false;
-    getBillingState()
-      .then((access) => {
+    // getPlanCatalog() rides alongside the entitlement read rather than gating it -- this is
+    // the last, mandatory step of onboarding, and a slow or failed currency lookup must not
+    // delay or block the card screen. It only ever swaps the display currency; the static USD
+    // table above is a perfectly safe placeholder while it resolves.
+    Promise.all([getBillingState(), getPlanCatalog()])
+      .then(([access, nextCatalog]) => {
         if (cancelled) return;
+        setCatalog(nextCatalog);
         if (isPaidAccess(access)) {
           track("onboarding_plan_already_paid", {});
           /* The only way off this screen that is not the checkout button, and it fires for
@@ -145,7 +154,7 @@ export function PlanStep({ onSettled }: { onSettled: () => void }) {
       {error && <div className="mb-4"><ErrorNote message={error} /></div>}
 
       <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
-        {LITOS_PLUS_PLANS.map((option) => {
+        {plans.map((option) => {
           const on = option.id === selected;
           return (
             <button

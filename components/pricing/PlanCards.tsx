@@ -14,6 +14,7 @@ import {
   isLitosPlusPlanId,
   isPaidAccess,
   rememberBillingReturnContext,
+  zeroDue,
   type EntitlementSnapshot,
   type LitosPlusPlanId,
   type PlanCatalog,
@@ -168,7 +169,7 @@ export function PlanCards() {
           </ul>
         </article>
 
-        {LITOS_PLUS_PLANS.map((plan) => {
+        {(catalog?.plans ?? LITOS_PLUS_PLANS).map((plan) => {
           const busy = busyPlan === plan.id;
           const preselected = selected === plan.id;
           const label = paid
@@ -205,7 +206,7 @@ export function PlanCards() {
                 {busy ? <PendingLabel onColor>Opening Stripe</PendingLabel> : loading ? <PendingLabel onColor>Checking terms</PendingLabel> : label}
               </Button>
               <p className="mt-3 min-h-10 text-center text-label text-muted" aria-live="polite">
-                Due today {authenticated || extensionCheckout ? plan.total : "$0"}. {authenticated || extensionCheckout
+                Due today {authenticated || extensionCheckout ? plan.total : zeroDue(catalog?.currency ?? "USD")}. {authenticated || extensionCheckout
                   ? `Renews ${plan.renewal} until canceled.`
                   : `Then ${plan.total} ${plan.renewal}. Cancel any time.`}
               </p>

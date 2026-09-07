@@ -10,7 +10,6 @@ import {
   LITOS_PLUS_PLANS,
   PLUS_FEATURES,
   accessLabel,
-  litosPlusPlan,
   type EntitlementSnapshot,
   type LitosPlusPlanId,
   type PlanCatalog,
@@ -197,7 +196,11 @@ export function UpgradeModal({
     manualLabel: presentRequest.manualLabel ?? defaults.manualLabel,
   };
   const manualAction = presentRequest.onManual;
-  const plan = litosPlusPlan(selectedPlan);
+  // Currency-correct once the server-verified catalog has loaded; the static USD table is only
+  // the pre-load/fallback shape, same as PlanCards.
+  const plans = catalog?.plans ?? LITOS_PLUS_PLANS;
+  const plan = plans.find((candidate) => candidate.id === selectedPlan)
+    ?? plans.find((candidate) => candidate.id === DEFAULT_LITOS_PLUS_PLAN_ID)!;
   const trial = access?.access_class === "trial_plus";
   const checkoutAvailable = catalog?.checkoutAvailable === true;
   const primaryLabel = trial ? "Choose Litos+" : `Continue with ${plan.shortLabel}`;
@@ -278,7 +281,7 @@ export function UpgradeModal({
 
               <fieldset className="mt-5 space-y-3">
                 <legend className="sr-only">Litos+ term</legend>
-                {LITOS_PLUS_PLANS.map((candidate) => {
+                {plans.map((candidate) => {
                   const selected = selectedPlan === candidate.id;
                   return (
                     <label
