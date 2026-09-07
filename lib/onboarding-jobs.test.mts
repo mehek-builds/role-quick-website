@@ -42,3 +42,25 @@ test("does not treat an explicit new-grad role as a full-time type match", () =>
   });
   assert.equal(ranked[0].id, "swe");
 });
+
+test("puts a contract role first when contract is the selected stage", () => {
+  const contractJobs: OnboardingJob[] = [
+    ...jobs,
+    { id: "contract", company: "G", title: "Software Engineer, Contract", location: "Remote", ats: "greenhouse", applyUrl: "https://example.com/contract" },
+  ];
+  assert.equal(rankOnboardingJobs(contractJobs, {
+    titles: ["Software Engineer"],
+    role_types: ["contract"],
+  })[0].id, "contract");
+});
+
+test("a contract title does not satisfy a full-time stage", () => {
+  const ranked = rankOnboardingJobs([
+    { id: "contract", company: "G", title: "Software Engineer, Contract", location: "Remote", ats: "greenhouse", applyUrl: "https://example.com/contract" },
+    jobs.find((job) => job.id === "swe")!,
+  ], {
+    titles: ["Software Engineer"],
+    role_types: ["full-time"],
+  });
+  assert.equal(ranked[0].id, "swe");
+});

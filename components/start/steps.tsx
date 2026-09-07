@@ -46,7 +46,7 @@ import { Highlights, WelcomeNote } from "./Welcome";
 import { ErrorNote, PendingLabel } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
 import { JOB_TITLES } from "@/lib/job-titles";
-import { FIELDS, categoriesForFields, fieldsForCategories, focusPatch, focusProblem, focusSeed, inferResumeTargeting, titlesForFields, type SavedFocus } from "@/lib/onboarding-role-inference";
+import { FIELDS, categoriesForFields, customFieldId, fieldsForCategories, fieldsForSavedFocus, focusPatch, focusProblem, focusSeed, inferResumeTargeting, titlesForFields, type SavedFocus } from "@/lib/onboarding-role-inference";
 import { rankOnboardingJobs, type OnboardingJob } from "@/lib/onboarding-jobs";
 import { measureElapsed, resumeReadyTiming } from "@/lib/monotonic-timing";
 import { resumeUploadState } from "@/features/onboarding";
@@ -170,9 +170,39 @@ function FocusForm({
      Seeded from SAVED CATEGORIES first and from the resume guess only where nothing is stored,
      which is the same direction focusSeed takes for titles: a stated answer outranks a guess. */
   const [fields, setFields] = useState<string[]>(() => {
-    const stored = fieldsForCategories(saved?.categories);
+    // fieldsForSavedFocus, not the bare fieldsForCategories: a custom field also resolves to
+    // "other" (see CUSTOM_FIELD_PREFIX below) and never round-trips its own label, so the plain
+    // category lookup would pre-check Marketing and Sales for a student who typed something
+    // unrelated. See fieldsForSavedFocus's own comment for the guard.
+    const stored = fieldsForSavedFocus(saved?.categories, saved?.titles);
     return stored.length > 0 ? stored : fieldsForCategories(guess?.categories);
   });
+  /* CUSTOM FIELDS live inside `fields` too (see CUSTOM_FIELD_PREFIX in onboarding-role-inference.ts)
+     so the gate above and categoriesForFields/titlesForFields stay correct unchanged. What they
+     cannot carry is the typed label, so this map is the only new state: id -> what the student
+     typed. There is no round trip back from a saved account - a custom field is never reconstructed
+     from `categories` on return, because "other" is shared with marketing/sales and cannot say
+     which one a student meant - so this always starts empty, the same as every other empty draft. */
+  const [customFieldLabels, setCustomFieldLabels] = useState<Record<string, string>>({});
+  const [newField, setNewField] = useState("");
+
+  function addCustomField(label: string) {
+    const clean = label.trim();
+    if (!clean) return;
+    const id = customFieldId(clean);
+    setFields((current) => (current.includes(id) ? current : [...current, id]));
+    setCustomFieldLabels((current) => ({ ...current, [id]: clean }));
+    setNewField("");
+  }
+
+  function removeCustomField(id: string) {
+    setFields((current) => current.filter((item) => item !== id));
+    setCustomFieldLabels((current) => {
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
+  }
   /* A LIST, NOT A COMMA-SEPARATED STRING, and that is a correctness fix rather than a nicety.
      Splitting the field on commas made the two halves of this control contradict each other: 122
      of the 149 places it suggests have a comma IN THE NAME ("San Francisco, CA", "Toronto,
@@ -353,6 +383,46 @@ function FocusForm({
               onClick={() => toggleField(field.id)}
             />
           ))}
+          {/* Typed fields, one chip each. Click removes - there is no "add it back" list to return
+              a removed one to, unlike the built-in chips above, so this is a delete rather than a
+              toggle. */}
+          {Object.entries(customFieldLabels).map(([id, label]) => (
+            <Chip key={id} label={label} on onClick={() => removeCustomField(id)} />
+          ))}
+        </div>
+
+        {/* NOT ONE OF THE TEN FAMILIES ABOVE is not the same as no field at all - there are more
+            careers than the list covers, and until now a student in one of them had no way to reach
+            the title box below (ready gates on `fields.length > 0`, built-in or typed). This writes
+            straight into `fields` under a namespaced id (see CUSTOM_FIELD_PREFIX in
+            onboarding-role-inference.ts) so it satisfies that gate the same way a built-in field
+            does, and resolves to the "other" category. */}
+        <div className="relative mt-3 max-w-sm">
+          <label htmlFor="custom-field" className="text-xs text-muted">Don&apos;t see your field? Add your own.</label>
+          <div className="mt-1.5 flex gap-2">
+            <input
+              id="custom-field"
+              value={newField}
+              onChange={(event) => setNewField(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter") return;
+                event.preventDefault();
+                addCustomField(newField);
+              }}
+              placeholder="e.g. Supply chain"
+              maxLength={60}
+              autoComplete="off"
+              className="min-h-[44px] min-w-0 flex-1 rounded-inner border border-control-border bg-white px-4 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
+            />
+            <button
+              type="button"
+              onClick={() => addCustomField(newField)}
+              disabled={!newField.trim()}
+              className="min-h-[44px] rounded-inner border border-border px-4 text-sm text-ink hover:border-brand disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Add
+            </button>
+          </div>
         </div>
       </div>
 
