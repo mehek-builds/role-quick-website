@@ -10,6 +10,8 @@ import {
   unverifiedSubmissionLinkedPacketFromCanonicalEnvelope,
   withRestoredLinkedPackets,
   mergeCanonicalApplicationHistory,
+  packetAfterLinkedMutation,
+  packetAfterLinkedResumeSave,
   upsertCanonicalApplicationHistory,
 } from "./canonical-tracker.ts";
 
@@ -76,6 +78,135 @@ test("the canonical envelope retains linked packet data without a duplicate", ()
   assert.equal(merged[0].spec._review?.status, "needs_attention");
   assert.equal(canonicalApplicationFromPacket(merged[0])?.id, "canonical-application");
   assert.equal(linkedLegacyPacketFromCanonicalTrackerPacket(merged[0])?.id, packet.id);
+});
+
+test("a saved linked resume updates its canonical envelope without losing canonical identity", () => {
+  const packet = legacy({
+    download_url: "https://files.example/resume-before.pdf",
+    spec: {
+      ...legacy().spec,
+      experience: [{
+        org: "Tonee",
+        title: "Product Manager",
+        date_range: "2025",
+        bullets: ["Authored a specification reducing latency."],
+      }],
+    } as GeneratedResume["spec"],
+  });
+  const application = canonical({
+    legacy_generated_resume_id: packet.id,
+    submission_state: "ready_to_submit",
+    review_state: "ready_to_submit",
+  });
+  const [envelope] = mergeCanonicalApplicationHistory([packet], [application]);
+  const restored = linkedLegacyPacketFromCanonicalTrackerPacket(envelope);
+  assert.ok(restored);
+
+  const savedSpec = {
+    ...restored.spec,
+    experience: restored.spec.experience.map((entry) => ({
+      ...entry,
+      bullets: ["Authored a specification targeting a latency reduction."],
+    })),
+  };
+  const saved = {
+    spec: savedSpec,
+    download_url: "https://files.example/resume-after.pdf",
+  };
+  /* This is the exact predicate saveResume used before the fix. The selected packet has the
+     legacy id, but the history array holds its envelope under the canonical id, so the map keeps
+     the stale object. Keep the old behavior in the test so the regression proves it can see the
+     live failure rather than merely exercising the replacement helper. */
+  const oldSaveAdoption = (candidate: GeneratedResume) => candidate.id === restored.id
+    ? { ...candidate, ...saved }
+    : candidate;
+  const oldEnvelope = oldSaveAdoption(envelope);
+  const oldRestored = linkedLegacyPacketFromCanonicalTrackerPacket(oldEnvelope);
+  assert.ok(oldRestored);
+  assert.throws(
+    () => assert.equal(oldRestored.spec.experience[0].bullets[0], savedSpec.experience[0].bullets[0]),
+    /Expected values to be strictly equal/,
+    "the regression fixture no longer reproduces the stale saved-resume comparison",
+  );
+
+  const savedEnvelope = packetAfterLinkedResumeSave(envelope, restored.id, saved);
+  const savedRestored = linkedLegacyPacketFromCanonicalTrackerPacket(savedEnvelope);
+
+  assert.equal(savedEnvelope.id, application.id, "the Tracker row must keep its canonical id");
+  assert.equal(canonicalApplicationFromPacket(savedEnvelope), application, "canonical lifecycle metadata was replaced");
+  assert.equal(savedRestored?.id, packet.id, "the legacy route alias was lost");
+  assert.equal(savedEnvelope.download_url, "https://files.example/resume-after.pdf");
+  assert.equal(savedRestored?.spec.experience[0].bullets[0], savedSpec.experience[0].bullets[0]);
+});
+
+test("a direct legacy resume save keeps the existing behavior", () => {
+  const packet = legacy({ download_url: "https://files.example/resume-before.pdf" });
+  const saved = {
+    spec: {
+      ...packet.spec,
+      skills: ["TypeScript", "PostgreSQL"],
+    },
+    download_url: "https://files.example/resume-after.pdf",
+  };
+
+  const updated = packetAfterLinkedResumeSave(packet, packet.id, saved);
+
+  assert.deepEqual(updated.spec, saved.spec);
+  assert.equal(updated.download_url, saved.download_url);
+  assert.equal(updated.id, packet.id);
+});
+
+test("a linked resume save leaves every unrelated canonical envelope untouched", () => {
+  const packet = legacy({ id: "other-legacy-resume" });
+  const [envelope] = mergeCanonicalApplicationHistory([packet], [canonical({
+    id: "other-canonical-application",
+    legacy_generated_resume_id: packet.id,
+  })]);
+
+  const result = packetAfterLinkedResumeSave(envelope, "legacy-resume", {
+    spec: { ...packet.spec, skills: ["should not appear"] },
+    download_url: "https://files.example/wrong-resume.pdf",
+  });
+
+  assert.equal(result, envelope, "an unrelated envelope was rebuilt or changed");
+});
+
+test("a linked submission mutation runs under the legacy id and preserves canonical proof metadata", () => {
+  const packet = legacy();
+  const application = canonical({
+    legacy_generated_resume_id: packet.id,
+    submission_state: "ready_to_submit",
+    review_state: "ready_to_submit",
+  });
+  const [envelope] = mergeCanonicalApplicationHistory([packet], [application]);
+  const authority = { schema_version: "submission-authority-v1", revision: "13" };
+  const projection = { state: "confirmed", packet_id: packet.id };
+
+  const updated = packetAfterLinkedMutation(envelope, packet.id, (linked) => {
+    assert.equal(linked.id, packet.id, "the mutation received the canonical id instead of the legacy packet id");
+    return {
+      ...linked,
+      submission_authority: authority as GeneratedResume["submission_authority"],
+      submission_projection: projection as GeneratedResume["submission_projection"],
+      spec: {
+        ...linked.spec,
+        _review: {
+          ...linked.spec._review!,
+          status: "submitted",
+          questions: [{ id: "location", question: "Where are you based?", answer: "Dubai", kind: "required", required: true }],
+        },
+      },
+    };
+  });
+  const restored = linkedLegacyPacketFromCanonicalTrackerPacket(updated);
+
+  assert.equal(updated.id, application.id);
+  assert.equal(canonicalApplicationFromPacket(updated), application);
+  assert.equal(restored?.id, packet.id);
+  assert.equal(restored?.spec._review?.status, "submitted");
+  assert.equal(restored?.spec._review?.questions[0].answer, "Dubai");
+  assert.equal(restored?.submission_authority, authority);
+  assert.equal(restored?.submission_projection, projection);
 });
 
 test("a submitted canonical application owns the linked packet lifecycle and visible id", () => {

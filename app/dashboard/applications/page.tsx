@@ -35,7 +35,7 @@ import {
 import { Card, Chip, EmptyState, ErrorNote, ExtensionStoreLink, PendingLabel, ScrollableRow, ShimmerRows, TerminalActionBar, formatRelativeDate } from "@/components/app/ui";
 import { CompanyLogo } from "@/components/app/CompanyLogo";
 import { ThinkingOrb } from "thinking-orbs";
-import { canonicalApplicationFromPacket, canRemoveFromTracker, canonicalEnvelopeLegacyHydrationId, canonicalEnvelopeWithMissingLegacyHydration, canonicalTrackerPacket, explicitTerms, sendableLinkedPacketFromCanonicalEnvelope, unverifiedSubmissionLinkedPacketFromCanonicalEnvelope, withRestoredLinkedPackets, linkedLegacyPacketFromCanonicalTrackerPacket, mergeCanonicalApplicationHistory, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, reviewWithLists, screenForStatus, sectionHeading, selectedPacketForRequest, startsNewSection, statusLabel, stripMetadata, upsertCanonicalApplicationHistory } from "@/features/applications";
+import { canonicalApplicationFromPacket, canRemoveFromTracker, canonicalEnvelopeLegacyHydrationId, canonicalEnvelopeWithMissingLegacyHydration, canonicalTrackerPacket, explicitTerms, sendableLinkedPacketFromCanonicalEnvelope, unverifiedSubmissionLinkedPacketFromCanonicalEnvelope, withRestoredLinkedPackets, linkedLegacyPacketFromCanonicalTrackerPacket, mergeCanonicalApplicationHistory, mergeDiscoveredQuestions, packetAfterLinkedMutation, packetAfterLinkedResumeSave, portalName, reviewablePackets as onlyReviewablePackets, reviewWithLists, screenForStatus, sectionHeading, selectedPacketForRequest, startsNewSection, statusLabel, stripMetadata, upsertCanonicalApplicationHistory } from "@/features/applications";
 import { applicationFilterFromSearch, applicationFilterHeading, cleanJdCapture, ledgerRendersOnLanding, pipelineCounts, postingStatusBadge, postingStatusBlocksSend, reviewCanBeSent, sentSince, startOfLocalDay, statusMatchesApplicationFilter, unansweredRequiredQuestionCount, type ApplicationFilter } from "@/features/applications";
 import { nextPreferredReadyPacket, packetMatchesJob } from "@/features/applications";
 import { REVIEW_ANSWERS_FROZEN_NOTICE, REVIEW_ANSWERS_REOPEN_NOTICE, REVIEW_ANSWERS_REOPEN_REFUSED, auditAnswerWrite, reviewAnswerEditRoute, reviewAnswersNeedSave, saveReviewAnswers, type ReviewAnswerSaveResponse } from "@/features/applications";
@@ -1988,12 +1988,17 @@ function Applications() {
       : hydrateQuestionMetadata ? mergeDiscoveredQuestions(current, result.review.questions) : current);
     setPackets((current) => {
       if (!current) return current;
-      const packet = current.find((item) => item.id === requestedId);
-      if (!packet) return current;
-      const nextPacket = packetWithSubmission(packet, result);
-      return packet === nextPacket
-        ? current
-        : current.map((item) => item.id === requestedId ? nextPacket : item);
+      let changed = false;
+      const next = current.map((packet) => {
+        const nextPacket = packetAfterLinkedMutation(
+          packet,
+          requestedId,
+          (linked) => packetWithSubmission(linked, result),
+        );
+        if (nextPacket !== packet) changed = true;
+        return nextPacket;
+      });
+      return changed ? next : current;
     });
     // A poll that succeeds clears a stale banner from an earlier transient failure. Without this a
     // single 502 during a multi-minute run left "Could not refresh portal status" pinned above a
@@ -4078,9 +4083,7 @@ function Applications() {
           { method: "PATCH", body: JSON.stringify({ spec }) },
         );
         setPackets((current) =>
-          current?.map((packet) =>
-            packet.id === applicationId ? { ...packet, spec: updated.spec, download_url: updated.download_url } : packet,
-          ) ?? current,
+          current?.map((packet) => packetAfterLinkedResumeSave(packet, applicationId, updated)) ?? current,
         );
         /* The server response is the saved resume, including any canonical pruning or ordering it
            applied before regenerating the PDF. Auditing the request copy after installing the
@@ -4238,9 +4241,11 @@ function Applications() {
         savedReview = saved.review;
         if (selectedIdRef.current !== applicationId) return;
         setSubmission((current) => current?.application_id === applicationId ? { ...current, review: saved.review } : current);
-        setPackets((current) => current?.map((packet) => packet.id === applicationId
-          ? { ...packet, spec: { ...packet.spec, _review: saved.review } }
-          : packet) ?? current);
+        setPackets((current) => current?.map((packet) => packetAfterLinkedMutation(
+          packet,
+          applicationId,
+          (linked) => ({ ...linked, spec: { ...linked.spec, _review: saved.review } }),
+        )) ?? current);
       } else if (answerWrite === "answers_only" && reviewAnswersNeedSave(canonicalReview.questions, questions)) {
         /* The same helper the Save button uses, so there is one definition of this request and one
            reading of the 202 that means a run wrote to the packet under it.
@@ -4265,9 +4270,11 @@ function Applications() {
         if (selectedIdRef.current !== applicationId) return;
         savedReview = result.review;
         setSubmission((current) => current?.application_id === applicationId ? { ...current, review: result.review } : current);
-        setPackets((current) => current?.map((packet) => packet.id === applicationId
-          ? { ...packet, spec: { ...packet.spec, _review: result.review } }
-          : packet) ?? current);
+        setPackets((current) => current?.map((packet) => packetAfterLinkedMutation(
+          packet,
+          applicationId,
+          (linked) => ({ ...linked, spec: { ...linked.spec, _review: result.review } }),
+        )) ?? current);
       }
       const response = await api<PacketAuditResponse>(`/applications/${applicationId}/packet-audit`, { method: "POST" });
       if (selectedIdRef.current !== applicationId) return;
@@ -4291,9 +4298,15 @@ function Applications() {
       const auditedQuestions = Array.isArray(response.questions) ? response.questions : questions;
       setQuestions(auditedQuestions);
       const auditedReview = { ...savedReview, packet_audit: response.packet_audit, questions: auditedQuestions };
-      setPackets((current) => current?.map((packet) => packet.id === applicationId
-        ? { ...packet, download_url: response.pdf.download_url, spec: { ...packet.spec, _review: auditedReview } }
-        : packet) ?? current);
+      setPackets((current) => current?.map((packet) => packetAfterLinkedMutation(
+        packet,
+        applicationId,
+        (linked) => ({
+          ...linked,
+          download_url: response.pdf.download_url,
+          spec: { ...linked.spec, _review: auditedReview },
+        }),
+      )) ?? current);
       setSubmission((current) => current?.application_id === applicationId ? { ...current, review: auditedReview } : current);
       setPacketEvidence({
         applicationId,
@@ -4435,11 +4448,19 @@ function Applications() {
         const result = submissionResponseForDisplay(raw, { packetId: applicationId });
         captureCompletedSubmission(result, options.restart ? "restart" : "review");
         if (selectedIdRef.current !== applicationId) {
-          setPackets((current) => current?.map((packet) => packet.id === applicationId ? packetWithDirectSubmission(packet, result) : packet) ?? current);
+          setPackets((current) => current?.map((packet) => packetAfterLinkedMutation(
+            packet,
+            applicationId,
+            (linked) => packetWithDirectSubmission(linked, result),
+          )) ?? current);
           return;
         }
         const published = publishSubmissionEnvelope(submissionRef, result, "direct");
-        setPackets((current) => current?.map((packet) => packet.id === applicationId ? packetWithDirectSubmission(packet, published) : packet) ?? current);
+        setPackets((current) => current?.map((packet) => packetAfterLinkedMutation(
+          packet,
+          applicationId,
+          (linked) => packetWithDirectSubmission(linked, published),
+        )) ?? current);
         const nextEvidence = reconcilePacketEvidenceWithSubmission(
           packetEvidenceRef.current,
           applicationId,
@@ -5134,7 +5155,11 @@ function Applications() {
           const refreshed: SubmissionResponse = { ...latestSubmission, application_id: applicationId, review: result.review };
           const reconciled = nextSubmissionState(latestSubmission, refreshed);
           submissionSnapshotsRef.current.set(applicationId, reconciled);
-          setPackets((current) => current?.map((packet) => packet.id === applicationId ? packetWithDirectSubmission(packet, reconciled) : packet) ?? current);
+          setPackets((current) => current?.map((packet) => packetAfterLinkedMutation(
+            packet,
+            applicationId,
+            (linked) => packetWithDirectSubmission(linked, reconciled),
+          )) ?? current);
           const submissionBeforeRefusal = submissionRef.current;
           const published = publishSubmissionEnvelope(submissionRef, reconciled, "direct");
           if (published !== submissionBeforeRefusal) {
@@ -5236,7 +5261,11 @@ function Applications() {
           advanceSubmissionPublicationGeneration(submissionPublicationGenerationsRef.current, applicationId);
         }
         submissionSnapshotsRef.current.set(applicationId, saved);
-        setPackets((current) => current?.map((packet) => packet.id === applicationId ? packetWithDirectSubmission(packet, saved) : packet) ?? current);
+        setPackets((current) => current?.map((packet) => packetAfterLinkedMutation(
+          packet,
+          applicationId,
+          (linked) => packetWithDirectSubmission(linked, saved),
+        )) ?? current);
       }
       if (direct && safeDirectTask && safeDirectPromptFingerprint && acceptedAnswerOwnsProgress) {
         completedDirectPromptFingerprints.add(safeDirectPromptFingerprint);
@@ -5584,8 +5613,20 @@ function Applications() {
            since the wrong-employer finding; this path did not, and installing A's result while B is
            selected renders A's confirmation text and reference id under B's role and company. The
            send still completed and the poll will pick it up when they return to it. */
-        if (selectedIdRef.current !== requestedId) return;
+        if (selectedIdRef.current !== requestedId) {
+          setPackets((current) => current?.map((packet) => packetAfterLinkedMutation(
+            packet,
+            requestedId,
+            (linked) => packetWithDirectSubmission(linked, result),
+          )) ?? current);
+          return;
+        }
         submissionRef.current = result;
+        setPackets((current) => current?.map((packet) => packetAfterLinkedMutation(
+          packet,
+          requestedId,
+          (linked) => packetWithDirectSubmission(linked, result),
+        )) ?? current);
         setSubmission(result);
         /* This response is the END of the send, not an acknowledgement that it started, exactly as
            in prepareApplication above, and it was installed into state and then never routed off.

@@ -267,7 +267,7 @@ test("accepted answer writes stay owned by their application and latest submissi
   assert.match(save, /savingAnswersRef\.current\.add\(applicationId\)/);
   assert.match(save, /const selectionRevision = editorRevisionRef\.current/);
   assert.match(save, /selectedIdRef\.current !== applicationId/);
-  assert.match(save, /packetWithDirectSubmission\(packet, saved\)/);
+  assert.match(save, /packetAfterLinkedMutation\([\s\S]*?applicationId,[\s\S]*?packetWithDirectSubmission\(linked, saved\)/);
   assert.match(save, /setDirectAnswerPasses/);
   assert.match(save, /directAnswerPassKey\(saved\.review\)/);
   assert.match(save, /mayAdvance: false/);

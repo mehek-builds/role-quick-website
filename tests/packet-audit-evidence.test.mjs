@@ -289,13 +289,13 @@ test("prepare and poll responses hydrate the generated cover letter into review 
   assert.match(poll, /const incomingCoverLetter = submissionCoverLetterField\(result\)/);
   assert.match(poll, /setCoverLetterBody\(incomingCoverLetter\.value\?\.body \?\? ""\)/);
   assert.match(poll, /if \(!incomingCoverLetter\.value\) setCoverLetterDownloadUrl\(null\)/);
-  assert.match(poll, /packetWithSubmission\(packet, result\)/);
-  assert.match(prepare, /packetWithDirectSubmission\(packet, published\)/);
+  assert.match(poll, /packetAfterLinkedMutation\([\s\S]*?requestedId,[\s\S]*?packetWithSubmission\(linked, result\)/);
+  assert.match(prepare, /packetAfterLinkedMutation\([\s\S]*?applicationId,[\s\S]*?packetWithDirectSubmission\(linked, published\)/);
   assert.match(prepare, /const incomingCoverLetter = submissionCoverLetterField\(published\)/);
   assert.match(prepare, /setCoverLetterBody\(incomingCoverLetter\.value\?\.body \?\? ""\)/);
   assert.match(prepare, /if \(!incomingCoverLetter\.value\) setCoverLetterDownloadUrl\(null\)/);
   const directPublish = prepare.indexOf('publishSubmissionEnvelope(submissionRef, result, "direct")');
-  const currentPacketWrite = prepare.indexOf("packetWithDirectSubmission(packet, published)");
+  const currentPacketWrite = prepare.indexOf("packetWithDirectSubmission(linked, published)");
   const submissionWrite = prepare.indexOf("setSubmission(published)");
   assert.ok(directPublish >= 0, "the submit response must synchronously publish its envelope");
   assert.ok(currentPacketWrite > directPublish, "the current packet write must follow ref publication");
