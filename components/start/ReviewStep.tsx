@@ -244,9 +244,18 @@ export function ReviewStep({
     if (!applicationId) return;
     let active = true;
     /* Warmed alongside the audit rather than after it. ExactPacketPdf's own `await import` becomes a
-       module-cache hit, so the viewer chunk and its worker stop being a serial tail behind the audit,
-       the download and the hash on the one screen where a first-run student is watching all four. */
+       module-cache hit, so the parser chunk stops being a serial tail behind the audit, the download
+       and the hash on the one screen where a first-run student is watching all four.
+       THE WORKER SCRIPT IS A SEPARATE FETCH THIS DID NOT WARM, and on this screen that gap is the
+       whole story: /start is every account's first-ever page load of the site, so the browser has
+       never fetched anything here before, including the 1.2MB `/vendor/pdf.worker.min.mjs` that
+       `pdfjs.getDocument()` only requests once ExactPacketPdf's render effect actually runs, after
+       the audit and the PDF download have already spent part of the render deadline. Fetching it
+       here too means it is sitting in the HTTP cache (or already in flight, since the browser
+       coalesces identical concurrent requests to the same URL) by the time the worker asks for it,
+       instead of starting a second cold download in serial behind everything else on this screen. */
     void import("pdfjs-dist").catch(() => {});
+    void fetch("/vendor/pdf.worker.min.mjs", { credentials: "same-origin" }).catch(() => {});
     void api<PacketAuditResponse>(`/applications/${applicationId}/packet-audit`, { method: "POST" })
       .then((response) => {
         if (!active) return;

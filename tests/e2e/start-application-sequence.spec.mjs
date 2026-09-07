@@ -52,6 +52,15 @@ const notificationSaves = [];
    this GET and setState from it, so a tick landing before it resolves would be silently undone.
    Counted rather than kept, because the only question asked of it is whether it has happened. */
 let notificationReads = 0;
+/* THE WARM-UP RACE. The review screen's mount effect fires both the pdfjs-dist module import and
+   this fetch for the real worker script in the same tick, before it even knows an audit exists;
+   ExactPacketPdf's own getDocument() call, later, wants that exact file too. Without the mount-time
+   fetch, the browser's first-ever request for `/vendor/pdf.worker.min.mjs` (a 1.2MB file, on the
+   one screen every account hits with a cold cache) does not go out until after the audit answers
+   and the PDF has downloaded and hashed - a serial tail this asserts is gone by checking which of
+   the two requests the app issues first. */
+let workerScriptRequestedAt = null;
+let pdfDownloadRequestedAt = null;
 let submitRequests = 0;
 const savedAnswers = [];
 let checkoutRequests = 0;
@@ -295,6 +304,16 @@ before(async () => {
     window.localStorage.setItem("rq_token", `eyJhbGciOiJub25lIn0.${claims}.stub`);
   });
   page = await context.newPage();
+
+  page.on("request", (request) => {
+    const pathname = new URL(request.url()).pathname;
+    if (pathname === "/vendor/pdf.worker.min.mjs" && workerScriptRequestedAt === null) {
+      workerScriptRequestedAt = Date.now();
+    }
+    if (pathname === "/qa/exact-packet-fixture.pdf" && pdfDownloadRequestedAt === null) {
+      pdfDownloadRequestedAt = Date.now();
+    }
+  });
 
   /* Intercept by ORIGIN, not by a fixed API host. NEXT_PUBLIC_API_URL is baked into the client
      bundle at BUILD time, so setting it when `next start` runs changes nothing: the page calls
@@ -748,6 +767,18 @@ describe("the application sequence, end to end", () => {
 
   test("06 review: the exact packet is audited and shown, approved by the press, and sent once", async () => {
     await page.getByRole("heading", { name: /happy with this/i }).waitFor({ timeout: 20_000 });
+
+    /* THE WORKER SCRIPT IS FETCHED BEFORE THE PDF IT WILL RENDER, not after. Without the mount-time
+       warm fetch, this component's first-ever request for `/vendor/pdf.worker.min.mjs` is issued by
+       pdfjs-dist's own getDocument() call inside ExactPacketPdf's render effect, which cannot run
+       until the audited PDF has already been downloaded and hashed - so the worker request would
+       land strictly AFTER pdfDownloadRequestedAt, not before it. */
+    await waitFor(() => pdfDownloadRequestedAt !== null, "the review screen never downloaded the exact PDF");
+    assert.ok(workerScriptRequestedAt !== null, "the review screen never fetched the PDF worker script");
+    assert.ok(
+      workerScriptRequestedAt <= pdfDownloadRequestedAt,
+      "the PDF worker script was fetched only after the PDF download, instead of warmed alongside the audit",
+    );
 
     const body = await page.locator("main").innerText();
     /* THE SCREEN SHOWS WHAT IT ASKS ABOUT (Mehek, 2026-09-01). This used to be a bare recap: two
