@@ -23,6 +23,7 @@ export * from "./domain/tracker-removal";
 export * from "./domain/packet-evidence-session";
 export * from "./domain/pipeline-counts";
 export * from "./domain/packet-pdf-verification";
+export * from "./domain/pre-send-verification";
 export * from "./domain/prescript";
 export * from "./domain/question-review-presentation";
 export {

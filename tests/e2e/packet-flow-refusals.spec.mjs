@@ -35,7 +35,7 @@ import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { chromium } from "playwright-core";
 
-import { BACKEND_ORIGIN, RESUMES, SESSION_TOKEN, STUB, confirmedAuthorityFor } from "./fixture-data.mjs";
+import { BACKEND_ORIGIN, RESUMES, SESSION_TOKEN, STUB, confirmedAuthorityFor, fixtureAuthority, fixturePacketId } from "./fixture-data.mjs";
 
 async function freePort() {
   return new Promise((resolve, reject) => {
@@ -199,7 +199,7 @@ function landedResponse(submission, packet) {
  * @param revalidationRefusal  {status, body} answered by every packet-audit AFTER the
  *                             acknowledgement, which is exactly the poll's revalidation
  */
-async function openAuditedFlow(packet, { ackResponse = null, submitResponse = null, holdSubmitMs = 0, revalidationRefusal = null, landed = null } = {}) {
+async function openAuditedFlow(packet, { ackResponse = null, submitResponse = null, holdSubmitMs = 0, revalidationRefusal = null, landed = null, generated = null } = {}) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const auditResponse = packetAuditResponse(packet);
   const submission = submissionFor(packet, auditResponse);
@@ -208,7 +208,7 @@ async function openAuditedFlow(packet, { ackResponse = null, submitResponse = nu
      subsequent /submission poll answer), so a case can park the flow on a poll-active screen
      like the needs_attention portal instead of the terminal receipt. */
   const landedSubmission = landed ? { ...submission, review: { ...submission.review, ...landed } } : null;
-  const counts = { ack: 0, submit: 0, approve: 0, submissionReads: 0, audits: 0, revalidations: 0, submitBodies: [] };
+  const counts = { ack: 0, submit: 0, approve: 0, submissionReads: 0, audits: 0, revalidations: 0, generate: 0, submitBodies: [], generateBodies: [] };
   let submitInFlight = false;
   await context.route("**/*", async (route) => {
     const url = route.request().url();
@@ -219,8 +219,28 @@ async function openAuditedFlow(packet, { ackResponse = null, submitResponse = nu
     if (url.startsWith(BACKEND_ORIGIN)) {
       const p = new URL(url).pathname;
       const json = async (body, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
-      if (p === "/resume/history") return json({ resumes: fixtureResumes });
-      if (p === "/dashboard/bootstrap") return json({ ...STUB[p], resume_history: { resumes: fixtureResumes } });
+      const historyResumes = generated && counts.generate > 0 ? [generated, ...fixtureResumes] : fixtureResumes;
+      if (p === "/resume/history") return json({ resumes: historyResumes });
+      /* The rebuild path reads the account's resume identity before it generates anything, and
+         refuses without a personal email. The shared PROFILE fixture predates that read. */
+      if (p === "/profile") return json({ ...STUB["/profile"], resume_email: "fixture@example.invalid" });
+      /* Only the rebuild case needs a tailoring entitlement, so it is granted here rather than in
+         the shared fixture: a Free account genuinely meets the upgrade modal on this button, and
+         that is the correct product behaviour every other spec should keep measuring. */
+      if (p === "/billing/state" && generated) {
+        const base = STUB[p];
+        return json({
+          ...base,
+          entitlement: { ...base.entitlement, features: { ...base.entitlement.features, ai_resume_tailoring: true } },
+        });
+      }
+      if (p === "/resume/generate") {
+        counts.generate += 1;
+        counts.generateBodies.push(route.request().postDataJSON());
+        if (!generated) return json({ error: "no rebuild fixture" }, 500);
+        return json({ resume_id: generated.id, application: generated, artifact_id: null });
+      }
+      if (p === "/dashboard/bootstrap") return json({ ...STUB[p], resume_history: { resumes: historyResumes } });
       if (p.endsWith("/packet-audit/acknowledge")) {
         counts.ack += 1;
         if (ackResponse) return json(ackResponse.body, ackResponse.status);
@@ -243,6 +263,20 @@ async function openAuditedFlow(packet, { ackResponse = null, submitResponse = nu
         if (submitResponse) return json(submitResponse.body, submitResponse.status);
         if (landedSubmission) return json(landedSubmission);
         return json(landedResponse(submission, packet));
+      }
+      /* The rebuilt packet is its own application and must answer for itself. Serving the refused
+         packet's envelope here would hand the new row another packet's status and land it on the
+         portal screen. */
+      if (generated && p === `/applications/${generated.id}/submission`) {
+        counts.submissionReads += 1;
+        return json({
+          application_id: generated.id,
+          submission_projection: generated.submission_projection,
+          retry_safety: generated.retry_safety,
+          submission_authority: generated.submission_authority,
+          review: generated.spec._review,
+          cover_letter: null,
+        });
       }
       if (p.endsWith("/submission/approve")) counts.approve += 1;
       /* The review_edit save that precedes the audit on resume_ready packets. Echo the saved
@@ -448,6 +482,76 @@ browserTest("a coded stale packet revalidation returns to fresh review without r
   assert.ok(counts.revalidations >= 1, "the poll never revalidated the acknowledged packet");
   assert.equal(counts.ack, 1, "recovery must not acknowledge the fresh audit");
   assert.equal(counts.submit, 1, "recovery must not retry the send");
+  await context.close();
+});
+
+/* THE 2026-09-07 DEAD END. volley-backend PR #1058 put a pre-send resume verification in front of
+   submit-request, and every packet this account tailored before that rule existed answers it. The
+   dashboard showed the sentence, left "Approve packet and fill form" armed to re-fire the identical
+   422, and offered no rebuild control on the review screen at all. */
+const PRE_SEND_ERROR = "Verify the resume before sending. The current packet is not ready for submission.";
+const PRE_SEND_ISSUE = "grounding: a <entry> metric is stored as a target, plan, or forecast but rendered as an achieved result";
+
+browserTest("a pre-send verification refusal disables the send and offers one rebuild", async (hold) => {
+  /* The rebuilt packet needs its OWN unsent submission-authority envelope. Copying FILL's would
+     bind another packet's identity to this id, and packetForSubmissionDisplay quarantines that on
+     sight into the needs-attention screen - the review flow would never render. */
+  const REBUILT_KEY = "presend-rebuild";
+  const rebuilt = {
+    ...FILL,
+    ...fixtureAuthority(REBUILT_KEY, "resume_ready"),
+    id: fixturePacketId(REBUILT_KEY),
+    spec: { ...FILL.spec, _review: { ...FILL.spec._review, status: "resume_ready" } },
+  };
+  const { context, page, second, counts } = await openAuditedFlow(FILL, {
+    submitResponse: {
+      status: 422,
+      body: { error: PRE_SEND_ERROR, code: "PRE_SEND_VERIFICATION_FAILED", issues: [PRE_SEND_ISSUE] },
+    },
+    generated: rebuilt,
+  });
+  hold(page);
+  await second.click();
+
+  const banner = page.getByRole("alert").filter({ hasText: PRE_SEND_ERROR }).first();
+  await banner.waitFor({ state: "visible", timeout: 20_000 });
+  /* The rule's own words about the entry it objected to. A refusal she cannot act on is worse than
+     no refusal, and "verify the resume" alone does not say which line failed. */
+  assert.ok((await banner.innerText()).includes(PRE_SEND_ISSUE), "the banner never named the offending entry");
+
+  /* THE SEND IS WITHDRAWN, not merely captioned. Before this it stayed enabled and every press
+     re-fired the same 422. */
+  const send = page.getByRole("button", { name: "Approve packet and fill form", exact: true });
+  await send.waitFor({ state: "visible", timeout: 20_000 });
+  assert.equal(await send.isDisabled(), true, "the send stayed armed over a refusal it cannot clear");
+
+  const rebuild = page.getByRole("button", { name: "Rebuild the resume for this job", exact: true });
+  await rebuild.waitFor({ state: "visible", timeout: 20_000 });
+  assert.equal(await rebuild.isDisabled(), false);
+  assert.equal(counts.submit, 1);
+
+  await rebuild.click();
+  await page.waitForFunction(
+    (id) => window.location.search.includes(id),
+    rebuilt.id,
+    { timeout: 25_000 },
+  );
+  assert.equal(counts.generate, 1, "one press must spend exactly one tailoring");
+  const body = counts.generateBodies[0];
+  /* The posting is NOT re-read: the rebuild is judged against the same frozen job description the
+     refused packet was tailored against, so a board row that has since closed cannot block it. */
+  assert.equal(body.jd_text, FILL.spec._review.jd_text);
+  /* No job_id. A stale board id 409s job_not_available at /resume/generate; the canonical row
+     carries its own and the server reads that one. */
+  assert.equal(body.job_id, undefined);
+  assert.equal(body.application.portal_url, FILL.spec._review.portal_url);
+  assert.equal(body.company, FILL.job_context.company);
+  assert.equal(body.role, FILL.job_context.role);
+  assert.equal(counts.submit, 1, "the rebuild must not send anything");
+  /* The new packet's own review, with its own send available again. */
+  await page.getByRole("button", { name: "Review and fill", exact: true })
+    .waitFor({ state: "visible", timeout: 20_000 });
+  assert.equal(await page.getByRole("alert").filter({ hasText: PRE_SEND_ERROR }).count(), 0);
   await context.close();
 });
 
