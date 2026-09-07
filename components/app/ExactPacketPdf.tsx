@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 
 import { Button } from "@/components/app/Button";
+import { LoadingOrb } from "@/components/app/ui";
 import { verifyPacketPdfBytes, type PacketPdfBinding, type PacketPdfEvidenceVerification } from "@/features/applications";
 
 /* Why every step here is on a clock.
@@ -407,7 +408,11 @@ export function ExactPacketPdf({
   }, [auditDigest, renderSource, timeoutMs, verificationKey]);
 
   if (currentView.state === "loading") {
-    return <p role="status" className="rounded-inner bg-panel-soft px-4 py-3 text-sm text-muted">Loading and verifying the exact resume PDF.</p>;
+    return (
+      <div className="flex items-center rounded-inner bg-panel-soft px-4 py-3">
+        <LoadingOrb label="Loading and verifying the exact resume PDF." />
+      </div>
+    );
   }
   if (currentView.state === "failed") {
     return (
