@@ -18,6 +18,19 @@ export type DashboardInitialState = {
   identity: { full_name?: string; email?: string; resume_email?: string };
   applicationProfile: ApplicationProfile;
   packets: GeneratedResume[];
+  /**
+   * Whether an inventory source actually answered, or every one of them failed soft to an empty
+   * list.
+   *
+   * Each packet fetch below degrades to [] rather than rejecting. That is right for the page - a
+   * dead /resume/history must not blank Home - and wrong for anything that COUNTS packets, because
+   * "no inventory came back" and "this account has sent nothing" reach the reader as the same
+   * empty array. Momentum's "sent in total" is the surface that cannot tell them apart: it prints
+   * `pipeline.sent`, and 0 is not nullish, so Funnel's `sent ?? f.applications_submitted` cannot
+   * fall back to the backend's own figure. A caller that STATES a count gates on this; a caller
+   * that merely lists packets ignores it and renders the empty list it was handed.
+   */
+  inventoryObserved: boolean;
   outreach: OutreachEvent[];
   autoSubmitEnabled: boolean;
 };
@@ -57,6 +70,10 @@ export function dashboardStateFromBootstrap(bootstrap: DashboardBootstrap): Dash
     },
     applicationProfile: bootstrap.application_profile ?? {},
     packets: Array.isArray(bootstrap.resume_history?.resumes) ? bootstrap.resume_history.resumes : [],
+    /* The array itself is the evidence. A payload carrying `resumes: []` measured an empty
+       inventory and is believed; one whose resume_history is missing or malformed - exactly the
+       drift isBootstrapV1 deliberately does not validate - measured nothing. */
+    inventoryObserved: Array.isArray(bootstrap.resume_history?.resumes),
     outreach: Array.isArray(bootstrap.outreach) ? bootstrap.outreach : [],
     autoSubmitEnabled: bootstrap.onboarding?.automatic_submission_enabled === true,
   };
@@ -86,11 +103,11 @@ async function withCanonicalApplications(
   packets: GeneratedResume[],
   merge: CanonicalHistoryMerge | undefined,
   canonicalRequest: Promise<{ applications: CanonicalApplication[] } | null> | null,
-): Promise<GeneratedResume[]> {
-  if (!merge || !canonicalRequest) return packets;
+): Promise<{ packets: GeneratedResume[]; observed: boolean }> {
+  if (!merge || !canonicalRequest) return { packets, observed: false };
   const canonical = await canonicalRequest;
-  if (!canonical || !Array.isArray(canonical.applications)) return packets;
-  return merge(packets, canonical.applications);
+  if (!canonical || !Array.isArray(canonical.applications)) return { packets, observed: false };
+  return { packets: merge(packets, canonical.applications), observed: true };
 }
 
 /** Keep the web deploy reversible while the aggregate endpoint rolls out independently. */
@@ -124,7 +141,10 @@ export async function loadDashboardInitialState(request: DashboardRequester, mer
     const bootstrap = await request<unknown>("/dashboard/bootstrap", { cache: "no-store" });
     if (isBootstrapV1(bootstrap)) {
       const state = dashboardStateFromBootstrap(bootstrap);
-      return { ...state, packets: await withCanonicalApplications(state.packets, mergeCanonicalHistory, canonicalRequest) };
+      const inventory = await withCanonicalApplications(state.packets, mergeCanonicalHistory, canonicalRequest);
+      /* Either source answering is enough. The canonical list alone can carry applications the
+         history window never held - that asymmetry is the whole reason the merge exists. */
+      return { ...state, packets: inventory.packets, inventoryObserved: state.inventoryObserved || inventory.observed };
     }
   } catch (error) {
     if (!supportsLegacyFallback(error)) throw error;
@@ -135,22 +155,31 @@ export async function loadDashboardInitialState(request: DashboardRequester, mer
     request<{ jobs: MonitoredJob[] }>("/jobs?offset=0"),
     request<Targeting>("/profile/targeting").catch(() => ({ categories: null, titles: null, role_types: null, locations: null, remote_only: false, primary_period: null, backup_period: null })),
     request<Partial<ParsedProfile>>("/profile").catch(() => ({ skills: [], target_roles: [] })),
-    request<{ resumes: GeneratedResume[] }>("/resume/history").catch(() => ({ resumes: [] })),
+    /* null, not `{ resumes: [] }`: the empty list this used to substitute was indistinguishable
+       from an account that has generated nothing, and that is the distinction inventoryObserved
+       exists to carry. */
+    request<{ resumes: GeneratedResume[] }>("/resume/history").catch(() => null),
     request<ApplicationProfile>("/profile/application").catch(() => ({})),
     request<OutreachEvent[]>("/track/events").catch(() => []),
     request<{ automatic_submission_enabled?: boolean }>("/onboarding/state").catch(() => ({ automatic_submission_enabled: false })),
   ]);
 
-  return dashboardStateFromBootstrap({
-    schema_version: 1,
-    me,
-    jobs,
-    targeting,
-    profile,
-    resume_history: { resumes: await withCanonicalApplications(resumeHistory.resumes ?? [], mergeCanonicalHistory, canonicalRequest) },
-    application_profile: applicationProfile,
-    outreach,
-    onboarding: { automatic_submission_enabled: onboarding.automatic_submission_enabled === true },
-    warnings: [],
-  });
+  const inventory = await withCanonicalApplications(resumeHistory?.resumes ?? [], mergeCanonicalHistory, canonicalRequest);
+  return {
+    ...dashboardStateFromBootstrap({
+      schema_version: 1,
+      me,
+      jobs,
+      targeting,
+      profile,
+      resume_history: { resumes: inventory.packets },
+      application_profile: applicationProfile,
+      outreach,
+      onboarding: { automatic_submission_enabled: onboarding.automatic_submission_enabled === true },
+      warnings: [],
+    }),
+    /* Overrides the projection's own reading, which is looking at the list assembled directly
+       above and would call it observed whether or not either fetch answered. */
+    inventoryObserved: Array.isArray(resumeHistory?.resumes) || inventory.observed,
+  };
 }

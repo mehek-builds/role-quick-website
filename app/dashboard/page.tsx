@@ -280,6 +280,12 @@ export default function Home() {
      student to guess whether to wait, fix something, or give up. */
   const [preparationErrors, setPreparationErrors] = useState<Record<string, string>>({});
   const [loadedAt, setLoadedAt] = useState(0);
+  /* Whether the load brought an inventory back, or fell soft to an empty one.
+     Every packet source in loadDashboardInitialState degrades to [] rather than rejecting, so a
+     resolved load is NOT the same claim as a counted one: /resume/history answering 500 and an
+     account that has generated nothing both arrive here as `packets: []` with loadedAt stamped.
+     inventoryObserved is the loader telling the two apart. */
+  const [inventoryObserved, setInventoryObserved] = useState(false);
   const prewarmStarted = useRef(false);
   const resumeOperationIds = useRef(new Map<string, string>());
   const homeMountedRef = useRef(true);
@@ -324,6 +330,7 @@ export default function Home() {
         if (cancelled) return;
         setMe(initial.me);
         setLoadedAt(Date.now());
+        setInventoryObserved(initial.inventoryObserved);
         setJobs(initial.jobs);
         setTargeting(initial.targeting);
         setIdentity(initial.identity);
@@ -439,8 +446,16 @@ export default function Home() {
    * the Stat itself. What changes is only that the caller stops claiming a figure it has not counted.
    *
    * loadedAt is the existing load signal (0 until the fetch resolves, already read that way for the
-   * trial banner). QA mode populates packets without it, so it is admitted on its own. */
-  const inventoryLoaded = qaMode || loadedAt > 0;
+   * trial banner). QA mode populates packets without it, so it is admitted on its own.
+   *
+   * loadedAt ALONE was not enough, and the gap is the same defect by a second route. Every packet
+   * source in the loader fails soft to an empty list, so a dead /resume/history (or a bootstrap
+   * whose resume_history is missing - isBootstrapV1 does not validate it) resolves the load, stamps
+   * loadedAt, and leaves `packets` [] with nothing on screen to say so. The stat would then print 0
+   * as a counted answer, which is exactly the sentence this comment exists to prevent, just after
+   * the load window rather than during it. inventoryObserved is the loader reporting whether any
+   * source actually answered; the two together are the honest gate. */
+  const inventoryLoaded = qaMode || (loadedAt > 0 && inventoryObserved);
   const applicationSummary = useMemo(
     () => ({ ready: pipeline.ready, submitted: pipeline.sent, needsAction: pipeline.needsYou }),
     [pipeline],
