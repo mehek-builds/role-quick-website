@@ -40,7 +40,7 @@ import { duplicateBadge, duplicatePostingMarks, duplicatePostingNote } from "@/f
 import { isHttpsJobUrl, missingApplicationFields, type ApplicationDraftField } from "@/features/applications";
 import { COVER_LETTER_WAIT_MS, HANDOFF_CLOCK_TICK_MS, coverLetterBlocks, coverLetterGate, documentsFromSpecMarks, handoffWindowExpired, nextCoverLetterValue, nextSubmissionState, publishSubmissionEnvelope, reconcilePacketEvidenceAfterResumeRegeneration, reconcilePacketEvidenceWithSubmission, resumeContactRefreshBlockedReason, resumeContactStaleNotice, submissionAfterPacketAudit, submissionCoverLetterField, submissionReviewPacketIdentity, submissionSnapshotIsOlder, type ResumeContactStaleLike } from "@/features/applications";
 import { MatchScore, MatchGaps } from "@/components/app/MatchScore";
-import { auditRefusalCode, historicalPacketAuditStaleMessage, nextMatchScoreRequest, packetAuditReviewRecoveryCode } from "@/features/applications";
+import { auditRefusalCode, historicalPacketAuditStaleMessage, nextMatchScoreRequest, packetAuditReviewRecoveryCode, preSendVerificationRefusal, preSendVerificationReviewState, type PreSendVerificationRefusal } from "@/features/applications";
 import { getBaseResume } from "@/lib/base-resume";
 import { RequirementBreakdown } from "@/components/app/RequirementBreakdown";
 import { ResumeHealth } from "@/components/app/ResumeHealth";
@@ -1211,6 +1211,18 @@ function Applications() {
    * under the Send button for Redwood. Render-time comparison rather than an effect, so switching
    * away is enough to retire it. */
   const [sendRefusal, setSendRefusal] = useState<{ applicationId: string; message: string; issues: string[] } | null>(null);
+  /* THE ONE SEND REFUSAL NOTHING ON THIS SCREEN COULD ANSWER, held apart from `error` so it can be
+     rendered as a stop with a way out rather than as a sentence over a still-armed button.
+     Application-scoped for the same reason sendRefusal above is. See
+     features/applications/domain/pre-send-verification.ts. */
+  const [preSendVerification, setPreSendVerification] = useState<PreSendVerificationRefusal | null>(null);
+  /* Which packet is being rebuilt for a failed pre-send verification. An id rather than a boolean so
+     the busy label stays attached to the packet that started it when the application switcher is
+     used, matching metadataRefreshId below. The generation itself is deduped twice over inside
+     createApplication - by operation_id against the server and by beginCanonicalRequest locally - so
+     this exists to stop a second press ever reaching it, not as the only guard. */
+  const [preSendRebuildId, setPreSendRebuildId] = useState<string | null>(null);
+  const preSendRebuildRef = useRef<string | null>(null);
   const [restartingId, setRestartingId] = useState<string | null>(null);
   /* A stale metadata screen needs a new employer-form read, but it must not silently carry edits
      the applicant has not saved. The ref closes the same-tick double-click gap; the id keeps the
@@ -1458,6 +1470,7 @@ function Applications() {
     setError(null);
     setPollError(null);
     setSendRefusal(null);
+    setPreSendVerification(null);
     moveToScreen("review");
     setNotice("Litos is refreshing the exact packet for review.");
     try {
@@ -1579,6 +1592,7 @@ function Applications() {
         setError(null);
         setPollError(null);
         setSendRefusal(null);
+        setPreSendVerification(null);
         setNotice(null);
       });
       return;
@@ -1649,6 +1663,7 @@ function Applications() {
       setError(null);
       setPollError(null);
       setSendRefusal(null);
+      setPreSendVerification(null);
       setNotice(null);
       moveToScreen(packetEntryScreen(selectedReview));
     });
@@ -1712,6 +1727,7 @@ function Applications() {
       setQuestions([]);
       setSubmission(null);
       setSendRefusal(null);
+      setPreSendVerification(null);
       setNotice(null);
       options.afterReset?.();
     };
@@ -2868,6 +2884,15 @@ function Applications() {
           setUnsendable((current) => new Set(current).add(id));
           return;
         }
+        /* Same park, same reason, for the pre-send resume verification. It is a property of the
+           stored packet's wording, so it will answer identically on every unattended retry until
+           the packet is rebuilt, and the rebuild is an explicit act on the review screen that
+           spends a monthly tailoring. Parking the row leaves it for her instead of burning the
+           countdown on a refusal the autopilot cannot clear. */
+        if (preSendVerificationRefusal(id, reason)) {
+          setUnsendable((current) => new Set(current).add(id));
+          return;
+        }
         /* Stays in the page banner, deliberately, and is NOT a composer refusal. Nobody pressed a
            composer button: this is the countdown on NextMatchCard reaching zero, or that card's own
            Send. Routing it into the composer would put an answer about the autopilot next to a
@@ -3123,9 +3148,19 @@ function Applications() {
                 : activePacketEvidence.questionsSnapshot !== currentQuestionsSnapshot
                   ? "The answers changed after the packet audit. Audit this packet again."
                   : null;
+  /* The send is WITHDRAWN, not merely captioned, while a pre-send verification refusal stands.
+     Derived here, beside reviewPrimaryDisabled, so the button's disabled state and the banner that
+     explains it are read off one value and can never disagree - the same rule employerActionRefusal
+     follows for the portal screen's Try again. */
+  const preSendVerificationBlock = preSendVerificationReviewState(preSendVerification, {
+    applicationId: selected?.id ?? null,
+    jdText: review?.jd_text,
+    rebuilding: Boolean(selected && preSendRebuildId === selected.id),
+  });
   const reviewPrimaryBusy = saving || coverLetterBusy || packetAuditBusy;
   const reviewPrimaryDisabled = reviewPrimaryBusy
     || !review?.jd_text.trim()
+    || preSendVerificationBlock !== null
     || Boolean(activePacketEvidence && !packetEvidenceReady && !packetEvidenceNeedsFreshAudit);
   const reviewPrimaryLabel = !activePacketEvidence
     ? review?.status === "ready_for_final_approval"
@@ -3295,6 +3330,62 @@ function Applications() {
       );
     } finally {
       if (canonicalRequestOwnsLifecycle(requestScope)) setCreating(null);
+    }
+  }
+
+  /* THE ONE WAY OUT OF A FAILED PRE-SEND VERIFICATION, and the only control this screen offers while
+   * one stands. It is deliberately the SAME generation path "Tailor resume" uses on the canonical
+   * card - createApplication -> POST /resume/generate carrying application_id - and differs from it
+   * in exactly two ways, both of which matter here:
+   *
+   *   1. THE JOB DESCRIPTION IS THE ONE ALREADY FROZEN ON THIS PACKET. tailorCanonicalApplication
+   *      re-reads the posting first (GET /jobs/:id, or /jobs/extract against the portal URL), which
+   *      is the right thing when the applicant is starting from a Tracker row and wrong here: the
+   *      packet in front of her was tailored against a stored jd_text, the rebuild has to be judged
+   *      against that same text, and boards rotate and purge rows daily - a posting that closed
+   *      since would turn a repair Litos can perform into a dead end for the second time.
+   *   2. NO job_id IS SENT. The rebuild is bound to the URL and the canonical row, not to a board
+   *      row that may no longer resolve: /resume/generate 409s job_not_available for a stale id it
+   *      is handed, and canonicalApplicationBindingMismatches ignores an OMITTED jobId while
+   *      comparing every id it is given. The server still reads the canonical row's own job_id when
+   *      it has one, so the posting linkage is not lost by leaving it out.
+   *
+   * The canonical application id is carried through unchanged, so this replaces the packet on the
+   * existing Tracker row rather than minting a twin (see #855). company, role and portal_url are
+   * read off the canonical row for the same reason: those three are compared field by field against
+   * it server-side, and the packet's own copy can be older than the row's.
+   *
+   * On success createApplication opens the new packet, which lands on its review screen - the
+   * refusal state is keyed to the OLD packet id and retires itself the moment that happens. */
+  async function rebuildPacketForPreSendVerification(trigger: HTMLElement | null) {
+    const packet = selected;
+    const refusal = preSendVerification;
+    if (!packet || !refusal || refusal.applicationId !== packet.id) return;
+    /* Closes the same-tick double-click gap ahead of createApplication's own operation_id and
+       canonical-request guards, so a second press cannot even start a request, let alone spend a
+       second monthly tailoring. */
+    if (preSendRebuildRef.current) return;
+    const jobDescription = review?.jd_text?.trim() ?? "";
+    if (!jobDescription) return;
+    const canonical = canonicalApplicationsByAnyId[packet.id] ?? null;
+    const draft: NewApplicationDraft = {
+      company: canonical?.company ?? packet.job_context.company,
+      role: canonical?.role ?? packet.job_context.role,
+      portalUrl: canonical?.portal_url ?? review?.portal_url ?? "",
+      jobDescription,
+      jobId: null,
+      canonicalApplicationId: canonical?.id ?? null,
+    };
+    preSendRebuildRef.current = packet.id;
+    setPreSendRebuildId(packet.id);
+    /* No banner clearing here: createApplication owns the announcement for this press, clears the
+       page banner and the notice itself, and answers its own failures through
+       reportGenerationFailure. A second writer would be a second live region. */
+    try {
+      await createApplication(draft, trigger);
+    } finally {
+      preSendRebuildRef.current = null;
+      setPreSendRebuildId(null);
     }
   }
 
@@ -4341,6 +4432,7 @@ function Applications() {
     moveToScreen("submitting");
     setError(null);
     setSendRefusal(null);
+    setPreSendVerification(null);
     track("application_submission_requested", {
       source: qaMode ? "qa" : options.source ?? (options.restart ? "restart" : "review"),
     });
@@ -4396,6 +4488,23 @@ function Applications() {
       }
     } catch (reason) {
       if (await recoverPacketAuditReview(applicationId, reason)) return;
+      /* THE PRE-SEND VERIFICATION REFUSAL IS NOT A BANNER, it is a stop with one way out.
+       *
+       * 422 PRE_SEND_VERIFICATION_FAILED says this packet's own wording fails a rule that did not
+       * exist when it was tailored, so nothing on the review screen can clear it: pressing the send
+       * again re-fires the identical refusal, and the only honest remedy is rebuilding the resume
+       * for this same job. Routed to its own state rather than to `error` so the review screen can
+       * withdraw the send control and offer that rebuild, instead of leaving an armed button under
+       * a sentence explaining why it cannot work. It goes to the REVIEW screen even on a restart,
+       * because the rebuild control lives there and the portal screen has none. */
+      const preSend = preSendVerificationRefusal(applicationId, reason);
+      if (preSend) {
+        moveToScreen("review");
+        setError(null);
+        setSendRefusal(null);
+        setPreSendVerification(preSend);
+        return;
+      }
       /* A restart is pressed FROM the portal screen and is about the packet on it, so its refusal
          goes back there and lands beside the control, not on the review screen behind a banner. */
       moveToScreen(options.failureScreen ?? (options.restart ? "portal" : "review"));
@@ -5347,6 +5456,7 @@ function Applications() {
     setApproveStartedAt(new Date().toISOString());
     setError(null);
     setSendRefusal(null);
+    setPreSendVerification(null);
     setSubmittingPhase("sending");
     moveToScreen("submitting");
     try {
@@ -5600,6 +5710,37 @@ function Applications() {
           the student fixes the education line rather than sitting there until she saves. */}
       {reviewOpen && educationDriftBanner && (
         <p role="alert" className="rounded-inner bg-danger-soft px-4 py-3 text-sm text-danger">{educationDriftBanner}</p>
+      )}
+      {/* A STOP WITH A WAY OUT, which is the whole point of it not being an ErrorNote.
+          The sentence names what the rule objected to, line by line, in the server's own words, and
+          the only control under it is the one that can actually clear it. "Approve packet and fill
+          form" is disabled off the SAME derived value (reviewPrimaryDisabled), so the applicant is
+          never left pressing a button into the identical 422.
+          Deliberately NOT offering "Edit resume" here: this is wording Litos generated and Litos
+          rejected, and asking her to hand-fix it is asking her to do the product's work. */}
+      {reviewOpen && preSendVerificationBlock && (
+        <div role="alert" className="rounded-inner bg-danger-soft px-4 py-3 text-sm leading-6 text-danger">
+          <p>{preSendVerificationBlock.message}</p>
+          <ul className="mt-2 list-disc space-y-1 pl-5">
+            {preSendVerificationBlock.issues.map((issue) => <li key={issue}>{issue}</li>)}
+          </ul>
+          <p className="mt-2">Litos wrote this resume, so Litos fixes it. Rebuilding writes a new one for this same job and keeps it on this application.</p>
+          <div className="mt-3">
+            <Button
+              type="button"
+              data-pre-send-rebuild
+              disabled={!preSendVerificationBlock.rebuildAvailable}
+              onClick={(event) => void rebuildPacketForPreSendVerification(event.currentTarget)}
+            >
+              {preSendVerificationBlock.rebuildInProgress
+                ? <PendingLabel state="solving" onColor>Rebuilding...</PendingLabel>
+                : "Rebuild the resume for this job"}
+            </Button>
+          </div>
+          {preSendVerificationBlock.rebuildBlockedReason && (
+            <p className="mt-2">{preSendVerificationBlock.rebuildBlockedReason}</p>
+          )}
+        </div>
       )}
       {notice && <p role="status" className="rounded-inner bg-positive-soft px-4 py-3 text-sm text-positive">{notice}</p>}
       {showNewApplication && (
