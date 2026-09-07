@@ -12,7 +12,7 @@ import {
   type BillingReceipt,
   type Me,
 } from "@/lib/api";
-import { sendTikTokEvent, trackTikTokPixelEvent } from "@/lib/tiktok-client";
+import { firePurchaseEventOnce } from "@/lib/tiktok-client";
 import { isSafeBillingPortalUrl } from "@/lib/billing";
 import { retryPremiumActionThroughExtension, verifyExtensionCheckoutReturn } from "@/lib/extension-bridge";
 import {
@@ -171,31 +171,6 @@ function PrintedReceipt({ receipt }: { receipt: BillingReceipt }) {
   );
 }
 
-/* Shared by both the website and extension checkout branches below. Keys the
-   sessionStorage dedupe (and the TikTok event id) on the receipt's own
-   reference whenever one is available, falling back to a per-flow id only
-   when it isn't -- fallbackKey alone (e.g. the URL's "context") is not
-   unique per purchase, it's a small fixed set of offer/route slugs reused
-   across every purchase of that type, so keying on it alone would silently
-   drop a second real purchase's Purchase event in the same browser tab. */
-function firePurchaseEventOnce(
-  purchaseSentRef: { current: boolean },
-  receipt: BillingReceipt | null,
-  fallbackKey: string,
-) {
-  const dedupeId = receipt?.reference ?? fallbackKey;
-  const purchaseKey = `litos_tiktok_purchase_sent:${dedupeId}`;
-  if (purchaseSentRef.current || window.sessionStorage.getItem(purchaseKey) === "1") return;
-  purchaseSentRef.current = true;
-  window.sessionStorage.setItem(purchaseKey, "1");
-  const purchaseEventId = `purchase:${dedupeId}`;
-  const purchaseProperties = receipt
-    ? { value: receipt.amount_cents / 100, currency: receipt.currency }
-    : undefined;
-  sendTikTokEvent("Purchase", purchaseEventId, purchaseProperties);
-  trackTikTokPixelEvent("Purchase", purchaseEventId, purchaseProperties);
-}
-
 export default function BillingReturnPage() {
   const [result, setResult] = useState<Result | null>(null);
   const [portalBusy, setPortalBusy] = useState(false);
@@ -326,8 +301,16 @@ export default function BillingReturnPage() {
                entry for this offer lives in sessionStorage too, for hours, so the
                window is real, not theoretical) without relying on TikTok's Events API
                to dedupe two separate CAPI calls sent minutes apart, which isn't a
-               documented guarantee. */
-            firePurchaseEventOnce(purchaseSentRef, receipt, context);
+               documented guarantee.
+
+               NOT fired here for an onboarding checkout (storedContext.returnRoute
+               is "/start", set only by components/start/PlanStep.tsx): onboarding
+               fires Purchase itself, once, from the notifications screen -- the one
+               screen in onboarding that a card-verified account reaches -- rather
+               than from this generic return page. Firing here too would double the
+               onboarding surface's report of "the purchase event" to a moment
+               earlier than the one Mehek wants counted. */
+            if (storedContext.returnRoute !== "/start") firePurchaseEventOnce(purchaseSentRef, receipt, context);
           }
           return;
         }
