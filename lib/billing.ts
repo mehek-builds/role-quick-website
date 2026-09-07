@@ -32,9 +32,15 @@ export function isSafeCheckoutUrl(value: string): boolean {
 export function isStripeCheckoutUrl(value: string): boolean {
   try {
     const url = new URL(value);
+    /* Stripe does not always use "/c/pay/": a Checkout Session with nothing due today
+       (our card-required trial, payment_method_collection=always + trial_period_days)
+       comes back as "/f/pay/" instead. Both are single-letter path prefixes ahead of
+       "/pay/<session id>", so match the shape rather than one literal segment -- the
+       2026-09-07 trial checkouts were live, valid Stripe URLs that this check rejected
+       for using the trial's prefix. */
     return url.protocol === "https:"
       && url.hostname === "checkout.stripe.com"
-      && url.pathname.startsWith("/c/pay/");
+      && /^\/[a-z]\/pay\//.test(url.pathname);
   } catch {
     return false;
   }
