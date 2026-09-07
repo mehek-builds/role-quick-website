@@ -1201,6 +1201,32 @@ export type ApplicationReview = {
      *  posting_confirmed_open_at below for display convenience. */
     confirmed_open_at?: string;
   };
+  /* THE SEND LITOS HELD ON PURPOSE, AND WHICH FIELD HELD IT.
+   *
+   * Written by the backend (recordManagedAuthorizedAttemptWithheld) when the secure browser reached
+   * the send control, bound it, and then declined to press it because a required answer could not be
+   * confirmed. Nothing reached the employer: the row carries no unverified_submission and there is
+   * nothing for her to go and look for.
+   *
+   * `labels` are the employer's own question labels for the controls that stopped it, already
+   * resolved on the backend against the controls the run's own proof enumerated - never an answer
+   * she typed, never an internal token, and never a selector.
+   *
+   * Why the live challenge gate gave her nothing to touch is NOT here: it is on
+   * dashboard_human_verification below, which the backend writes on every parked send. */
+  press_withheld?: {
+    labels: string[];
+    at: string;
+  };
+  /* WHY THE LIVE CHALLENGE NEVER OPENED, sanitized by the backend (PR 1050). `closed_reason` is one
+   * of the runner's own reason words or null; an unrecognised one never leaves the backend. Present
+   * only when this run asked for the human-verification channel at all. */
+  dashboard_human_verification?: {
+    requested: true;
+    gate_entered: boolean;
+    offered: boolean;
+    closed_reason: string | null;
+  };
   /** THE ONE FACT ABOUT posting_status THAT SURVIVES ACROSS READS rather than being re-derived:
    *  her own word, typed once, that the employer still accepts applications past a stated deadline.
    *  Everything else about posting_status is recomputed fresh on every read. */

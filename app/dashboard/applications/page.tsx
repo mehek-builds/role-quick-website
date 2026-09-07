@@ -41,6 +41,7 @@ import { isHttpsJobUrl, missingApplicationFields, type ApplicationDraftField } f
 import { COVER_LETTER_WAIT_MS, HANDOFF_CLOCK_TICK_MS, coverLetterBlocks, coverLetterGate, documentsFromSpecMarks, handoffWindowExpired, nextCoverLetterValue, nextSubmissionState, publishSubmissionEnvelope, reconcilePacketEvidenceAfterResumeRegeneration, reconcilePacketEvidenceWithSubmission, resumeContactRefreshBlockedReason, resumeContactStaleNotice, submissionAfterPacketAudit, submissionCoverLetterField, submissionReviewPacketIdentity, submissionSnapshotIsOlder, type ResumeContactStaleLike } from "@/features/applications";
 import { MatchScore, MatchGaps } from "@/components/app/MatchScore";
 import { auditRefusalCode, historicalPacketAuditStaleMessage, nextMatchScoreRequest, packetAuditReviewRecoveryCode } from "@/features/applications";
+import { PRESS_WITHHELD_NOTHING_SENT, pressWithheldHeadline, pressWithheldHumanVerificationCopy, pressWithheldLabels, pressWithheldShowsList } from "@/lib/press-withheld";
 import { getBaseResume } from "@/lib/base-resume";
 import { RequirementBreakdown } from "@/components/app/RequirementBreakdown";
 import { ResumeHealth } from "@/components/app/ResumeHealth";
@@ -7092,6 +7093,41 @@ function PostingStatusNotice({ review, busy, error, onConfirmOpen }: {
   );
 }
 
+/* WHY LITOS DID NOT SEND THIS ONE, ON THE CARD, NAMING THE FIELD.
+ *
+ * Measured 2026-09-07 on the live Lever sends. The secure browser reached the send control, bound it
+ * and then declined to press it, and the applicant read a sentence that said only that "one of the
+ * required answers" could not be confirmed. The failing control's own employer label was in the run's
+ * proof the whole time, and three further presses were spent guessing which field it was. The second
+ * half is the same defect one layer down: when the human-verification channel refuses to hand her
+ * the company's check, it records why, and that reason reached the server's logs and nowhere else.
+ *
+ * NOT AN ERROR PANEL. The border and tone match PostingStatusNotice's advisory shape rather than the
+ * danger styling, because nothing broke and nothing was sent: this is a form with one field left,
+ * and the next step is hers. Rendered above the task list so it is read before the controls, and
+ * only when the backend actually wrote the record - an older row simply keeps the sentence it has.
+ */
+function PressWithheldNotice({ review }: { review: Pick<ApplicationReview, "press_withheld" | "dashboard_human_verification"> }) {
+  const withheld = review.press_withheld;
+  if (!withheld) return null;
+  const labels = pressWithheldLabels(withheld);
+  const verification = pressWithheldHumanVerificationCopy(review.dashboard_human_verification);
+  return (
+    <div role="status" className="mb-5 rounded-inner border border-border bg-surface-alt px-4 py-3 text-small leading-6">
+      <p className="font-medium text-ink">Litos held this send</p>
+      <p className="mt-1 text-ink">{pressWithheldHeadline(labels)}</p>
+      {/* Exactly one of the headline and this list names the fields. See pressWithheldShowsList. */}
+      {pressWithheldShowsList(labels) && (
+        <ul className="mt-2 list-disc space-y-1 pl-5 text-muted">
+          {labels.map((label) => <li key={label}>{label}</li>)}
+        </ul>
+      )}
+      {verification && <p className="mt-2 text-muted">{verification}</p>}
+      <p className="mt-2 text-muted">{PRESS_WITHHELD_NOTHING_SENT}</p>
+    </div>
+  );
+}
+
 function ResumeEditor({ spec, name, contact, editedTerms, onChange, onPatchEntry }: { spec: ResumeSpec; name: string; contact: string; editedTerms: ReadonlySet<string>; onChange: (spec: ResumeSpec) => void; onPatchEntry: (index: number, patch: Partial<ResumeSpec["experience"][number]>) => void }) {
   return (
     <div className="mx-auto max-w-[640px] rounded-inner border border-border bg-white px-5 py-5 font-serif text-[11.5px] leading-[1.35] text-black shadow-[0_1px_2px_rgba(0,0,0,0.06),0_12px_32px_-12px_rgba(0,0,0,0.18)] sm:px-8">
@@ -8645,6 +8681,7 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
           error={confirmPostingOpenError}
           onConfirmOpen={onConfirmPostingOpen}
         />
+        <PressWithheldNotice review={review} />
         {directRecoveryNeeded && (
           <div role="alert" className="mb-5 rounded-inner border border-border bg-surface-alt p-4">
             <p className="text-small font-medium text-ink">This employer field changed before your answer was saved.</p>
