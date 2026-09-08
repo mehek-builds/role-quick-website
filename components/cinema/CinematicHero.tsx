@@ -59,8 +59,11 @@ const CHAPTERS = [
   { at: 0.0, label: "00 · Job found" },
   { at: 0.24, label: "01 · Resume" },
   { at: 0.5, label: "02 · Forms" },
-  { at: 0.74, label: "03 · Emails" },
-  { at: 0.92, label: "04 · Ready to send" },
+  /* "03 . Emails" was here until 2026-09-08 and went with the outreach feature. The remaining
+     chapters keep their own `at` marks rather than being respaced, because those mark moments in
+     the film itself: moving them would put a label over footage it does not describe. The film
+     simply runs unlabelled through the stretch the Emails chapter used to name. */
+  { at: 0.92, label: "03 · Ready to send" },
 ];
 
 /* The `storeUrl` prop is gone with the CTAs that used it: neither the hero

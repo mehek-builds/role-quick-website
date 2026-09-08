@@ -194,7 +194,8 @@ test("homepage pillar CTAs point at real /try steps", () => {
   const home = readFileSync(join(APP, "page.tsx"), "utf8");
   const steps = [...home.matchAll(/href="\/try\?step=([a-z]+)"/g)].map((m) => m[1]);
 
-  assert.ok(steps.length >= 3, `expected the three pillar CTAs, found ${steps.length}`);
+  // Two pillars since 2026-09-08: the Emails pillar went with the outreach feature.
+  assert.ok(steps.length >= 2, `expected the two pillar CTAs, found ${steps.length}`);
 
   /* The step names must be ones TrySimulator will actually honour. Its deep-link
      allowlist is the source of truth; a CTA naming a step outside it silently

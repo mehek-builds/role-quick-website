@@ -89,30 +89,18 @@ test("every shared empty state names a contextual visual", async () => {
   }
 });
 
-test("filtered email results explain the filter and provide an escape route", async () => {
-  const outreach = await read("app/dashboard/outreach/page.tsx");
-
-  assert.match(outreach, /Clear the filter to see every email\./);
-  assert.match(outreach, /onClick=\{\(\) => setFilter\("all"\)\}/);
-  assert.match(outreach, />\s*Clear filter\s*</);
-});
-
 test("load failures are separate from empty data and offer retry actions", async () => {
   const applications = await read("app/dashboard/applications/page.tsx");
-  const outreach = await read("app/dashboard/outreach/page.tsx");
   const jobs = await read("app/dashboard/jobs/page.tsx");
   const home = await read("app/dashboard/page.tsx");
 
   assert.match(applications, /title="Applications did not load\."/);
-  assert.match(outreach, /role="alert"[\s\S]{0,300}Emails did not load\./);
   assert.match(jobs, /<DataErrorState[\s\S]*?title="Jobs did not load\."/);
   assert.match(home, /title="Your dashboard did not load\."/);
   for (const source of [applications, home]) {
     assert.match(source, /visual="error"/);
     assert.match(source, />\s*Try again\s*</);
   }
-  assert.match(outreach, />\s*Try again\s*</);
-  assert.match(outreach, /setEvents\(\[\]\)/);
   assert.match(jobs, /onRetry=\{\(\) => window\.location\.reload\(\)\}/);
 });
 
@@ -126,23 +114,19 @@ test("an empty Tracker filter can always return to all applications", async () =
 
 test("local QA can render real zero states without a live account", async () => {
   const applications = await read("app/dashboard/applications/page.tsx");
-  const outreach = await read("app/dashboard/outreach/page.tsx");
   const jobs = await read("app/dashboard/jobs/page.tsx");
 
   assert.match(applications, /qaScenario === "empty"[\s\S]*?setPackets\(\[\]\)/);
-  assert.match(outreach, /qaScenario === "empty" \? \[\] : QA_EVENTS/);
   assert.match(jobs, /qaScenario === "empty"[\s\S]*?setJobs\(\[\]\)/);
-  for (const source of [applications, outreach]) {
+  for (const source of [applications]) {
     assert.match(source, /window\.location\.hostname === "localhost"/);
   }
 });
 
 test("local QA can render load failures without calling the backend", async () => {
   const applications = await read("app/dashboard/applications/page.tsx");
-  const outreach = await read("app/dashboard/outreach/page.tsx");
   const jobs = await read("app/dashboard/jobs/page.tsx");
 
   assert.match(applications, /qaScenario === "error"[\s\S]*?setError\("We could not load your applications\."\)/);
-  assert.match(outreach, /qaScenario === "error"[\s\S]*?setError\("We could not load your emails\."\)/);
   assert.match(jobs, /qaScenario === "error"[\s\S]*?setError\("We could not load your jobs\."\)/);
 });

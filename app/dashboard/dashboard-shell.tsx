@@ -17,14 +17,11 @@ import { onboardingDeferredForSession } from "@/lib/onboarding-flow";
 import { isQaRender } from "@/lib/qa-mode";
 import { currentKeyboardInset } from "@/lib/keyboard-inset";
 import {
-  ChatIcon,
   ChevronIcon,
   ClipboardIcon,
   DocumentIcon,
   GearIcon,
   HomeIcon,
-  MailIcon,
-  PersonIcon,
   SearchIcon,
 } from "@/components/app/NavIcons";
 import { BillingProvider } from "@/components/billing/BillingProvider";
@@ -446,7 +443,7 @@ export function DashboardShell({
             </div>
             <nav aria-label="More dashboard destinations" className="mt-3 grid gap-2">
               {[
-                              { href: "/dashboard/settings", label: "Account", Icon: GearIcon },
+                { href: "/dashboard/settings", label: "Account", Icon: GearIcon },
               ].map((item) => (
                 <Link
                   key={item.href}
