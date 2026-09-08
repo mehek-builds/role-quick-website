@@ -91,6 +91,12 @@ export function QuestionsStep({
   const complete = allRequiredAnswered(questions, answers);
   const left = remainingRequired(questions, answers);
 
+  /* What the employer asked, as she should read it. `question` remains the identity an answer
+     carries once it leaves this screen; this is only ever rendered. */
+  function shown(question: PostingPrescriptQuestion): string {
+    return question.display_question ?? question.question;
+  }
+
   function choose(question: PostingPrescriptQuestion, value: string) {
     setAnswers((prev) => ({ ...prev, [answerKey(question)]: value }));
     const at = questions.indexOf(question);
@@ -175,10 +181,10 @@ export function QuestionsStep({
         </header>
 
         <div className="flex min-w-0 flex-col gap-3 p-4">
-          <p className="min-w-0 text-[15px] leading-6 text-ink [overflow-wrap:anywhere]">{current.question}</p>
+          <p className="min-w-0 text-[15px] leading-6 text-ink [overflow-wrap:anywhere]">{shown(current)}</p>
 
           {kindOf(current) === "closed" ? (
-            <div role="radiogroup" aria-label={current.question} className="flex min-w-0 flex-wrap gap-2">
+            <div role="radiogroup" aria-label={shown(current)} className="flex min-w-0 flex-wrap gap-2">
               {(current.options ?? []).map((option, i) => {
                 const on = answers[answerKey(current)] === option;
                 return (
@@ -204,7 +210,7 @@ export function QuestionsStep({
             /* Open question: their form takes words, so this takes words. No letters, because
                there is no list of theirs to letter. */
             <label className="block">
-              <span className="sr-only">{current.question}</span>
+              <span className="sr-only">{shown(current)}</span>
               <textarea
                 value={answers[answerKey(current)] ?? ""}
                 maxLength={current.max_length ?? undefined}
