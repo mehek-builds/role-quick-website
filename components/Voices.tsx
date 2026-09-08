@@ -21,7 +21,7 @@
    first and stays the largest thing in the section.
 
    The per-quote "ANONYMOUS" footer came off the same day, also on her call.
-   It costs nothing: the eyebrow "What testers said" already says whose words
+   It costs nothing: the eyebrow "What users said" already says whose words
    these are, so the attribution is made once for the set instead of five
    times, and the store listing does the same with "FROM THE LITOS BETA
    GROUP". Dropping the label is NOT permission to attach names later. */
@@ -65,7 +65,7 @@ export function Voices() {
             the page that says it. */}
         <div>
           <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-brand-ink">
-            What testers said
+            What users said
           </p>
           <h2 className="mt-3 text-section font-[450] leading-[1.1] tracking-[-0.02em] text-ink">
             In their words.
