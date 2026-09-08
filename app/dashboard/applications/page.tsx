@@ -31,7 +31,7 @@ import {
 import { Card, Chip, EmptyState, ErrorNote, ExtensionStoreLink, PendingLabel, ScrollableRow, ShimmerRows, TerminalActionBar, formatRelativeDate } from "@/components/app/ui";
 import { CompanyLogo } from "@/components/app/CompanyLogo";
 import { ThinkingOrb } from "thinking-orbs";
-import { canonicalApplicationFromPacket, canRemoveFromTracker, canonicalEnvelopeLegacyHydrationId, canonicalEnvelopeWithMissingLegacyHydration, canonicalTrackerPacket, explicitTerms, sendableLinkedPacketFromCanonicalEnvelope, unverifiedSubmissionLinkedPacketFromCanonicalEnvelope, withRestoredLinkedPackets, linkedLegacyPacketFromCanonicalTrackerPacket, mergeCanonicalApplicationHistory, mergeDiscoveredQuestions, packetAfterLinkedMutation, packetAfterLinkedResumeSave, portalName, reviewablePackets as onlyReviewablePackets, reviewWithLists, screenForStatus, sectionHeading, selectedPacketForRequest, startsNewSection, statusLabel, stripMetadata, upsertCanonicalApplicationHistory } from "@/features/applications";
+import { canonicalApplicationFromPacket, canRemoveFromTracker, canonicalEnvelopeLegacyHydrationId, canonicalEnvelopeWithMissingLegacyHydration, canonicalTrackerPacket, explicitTerms, sendableLinkedPacketFromCanonicalEnvelope, unverifiedSubmissionLinkedPacketFromCanonicalEnvelope, withRestoredLinkedPackets, linkedLegacyPacketFromCanonicalTrackerPacket, mergeCanonicalApplicationHistory, mergeDiscoveredQuestions, packetAfterLinkedMutation, packetAfterLinkedResumeSave, portalName, reviewablePackets as onlyReviewablePackets, reviewWithLists, screenForStatus, sectionHeading, submissionPollIsRequired, selectedPacketForRequest, startsNewSection, statusLabel, stripMetadata, upsertCanonicalApplicationHistory } from "@/features/applications";
 import { applicationFilterFromSearch, applicationFilterHeading, cleanJdCapture, ledgerRendersOnLanding, pipelineCounts, postingStatusBadge, postingStatusBlocksSend, reviewCanBeSent, sentSince, startOfLocalDay, statusMatchesApplicationFilter, unansweredRequiredQuestionCount, type ApplicationFilter } from "@/features/applications";
 import { nextPreferredReadyPacket, packetMatchesJob } from "@/features/applications";
 import { REVIEW_ANSWERS_FROZEN_NOTICE, REVIEW_ANSWERS_REOPEN_NOTICE, REVIEW_ANSWERS_REOPEN_REFUSED, auditAnswerWrite, reviewAnswerEditRoute, reviewAnswersNeedSave, saveReviewAnswers, type ReviewAnswerSaveResponse } from "@/features/applications";
@@ -2114,8 +2114,15 @@ function Applications() {
     }) ?? current);
   }, [setSubmission]);
 
+  /* Read from the packet list rather than from `submission`, and that is the load-bearing half: on
+     a packet parked with an unresolved send the poll had never run, so there IS no submission
+     response to read the state out of. The list is served by /resume/history, which this screen
+     does fetch. See submissionPollIsRequired for the ninety minutes of measurement behind it. */
+  const selectedPacketReview = (packets ?? []).find((packet) => packet.id === selectedId)?.spec._review;
+  const pollRequired = submissionPollIsRequired(screen, selectedPacketReview);
+
   useEffect(() => {
-    if (!selectedId || qaMode || !["submitting", "portal"].includes(screen)) return;
+    if (!selectedId || qaMode || !pollRequired) return;
     let cancelled = false;
     let timer: number | undefined;
     let inFlight = false;
@@ -2152,7 +2159,7 @@ function Applications() {
       document.removeEventListener("visibilitychange", onVisibility);
       if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, [qaMode, refreshSubmission, screen, selectedId]);
+  }, [qaMode, refreshSubmission, pollRequired, selectedId]);
 
   useEffect(() => {
     const bootstrapGeneration = ++applicationBootstrapGenerationRef.current;
