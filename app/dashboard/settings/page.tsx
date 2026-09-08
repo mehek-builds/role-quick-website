@@ -60,7 +60,15 @@ import {
   captchaConsentPatch,
   captchaConsentVerdict,
 } from "@/lib/captcha-consent";
+import {
+  portalAccountConsentedAt,
+  portalAccountConsentedAtReported,
+  portalAccountConsentGranted,
+  portalAccountConsentPatch,
+  portalAccountConsentVerdict,
+} from "@/lib/portal-account-consent";
 import { CaptchaConsentControl } from "@/components/app/CaptchaConsentControl";
+import { PortalAccountConsentControl } from "@/components/app/PortalAccountConsentControl";
 import { ConsentAcknowledgementControl } from "@/components/app/ConsentAcknowledgementControl";
 import {
   CONSENT_GRANTS,
@@ -148,6 +156,9 @@ export default function Settings() {
      the two writers the payload split exists to keep apart: whichever request settled first would
      clear the flag and re-enable both controls while the other was still in flight. */
   const [savingCaptchaConsent, setSavingCaptchaConsent] = useState(false);
+  const [portalAccountConsent, setPortalAccountConsent] = useState(false);
+  const [portalAccountConsentGrantedAt, setPortalAccountConsentGrantedAt] = useState<string | null>(null);
+  const [savingPortalAccountConsent, setSavingPortalAccountConsent] = useState(false);
   /* THE CONTROL /start's COPY PROMISES. That screen says "you can turn either of these off at any
      time in Settings", and until this existed that sentence was false: this page rendered only
      submission, verification and human checks. A revocation path that does not exist is not a
@@ -421,6 +432,8 @@ export default function Settings() {
            the stale version this is the screen where they can grant it again. */
         setCaptchaConsent(captchaConsentGranted(onboardingRes));
         setCaptchaConsentGrantedAt(captchaConsentedAt(onboardingRes));
+        setPortalAccountConsent(portalAccountConsentGranted(onboardingRes));
+        setPortalAccountConsentGrantedAt(portalAccountConsentedAt(onboardingRes));
         setConsentGrants(Object.fromEntries(
           CONSENT_GRANTS.map((grant) => [grant.field, consentAcknowledgementGranted(onboardingRes, grant.field)]),
         ));
@@ -599,6 +612,37 @@ export default function Settings() {
       setError(err instanceof Error ? err.message : "Could not save that change.");
     } finally {
       setSavingCaptchaConsent(false);
+    }
+  }
+
+  /* Its own writer rather than a branch of saveAutomation, for the reason changeCaptchaConsent has
+     one: the payload names exactly one column. The API reads an omitted field as "leave it alone"
+     and an explicit false as a revocation, so a patch that also carried a neighbouring permission
+     would revoke one she never touched. That independence matters most on this arm, because its
+     date is the record of an act that left a third-party account behind. */
+  async function changePortalAccountConsent(enabled: boolean) {
+    const previous = portalAccountConsent;
+    const previousGrantedAt = portalAccountConsentGrantedAt;
+    setPortalAccountConsent(enabled);
+    setSavingPortalAccountConsent(true);
+    setError(null);
+    try {
+      const result = await setAutomationSettings(portalAccountConsentPatch(enabled));
+      /* The server's verdict, not the checkbox's own optimism: a grant recorded against the
+         superseded 2026-08-19 wording comes back false, and the box has to follow it. An API that
+         answers without the field keeps what was there rather than being read as a revocation. */
+      const verdict = portalAccountConsentVerdict(result);
+      setPortalAccountConsent(verdict ?? previous);
+      /* Not sent is not the same as sent-as-null, exactly as on the captcha arm: reading a missing
+         field as null would wipe a date GET /onboarding/state still returns. */
+      const reportedAt = portalAccountConsentedAtReported(result);
+      setPortalAccountConsentGrantedAt(reportedAt === undefined ? previousGrantedAt : reportedAt);
+    } catch (err) {
+      setPortalAccountConsent(previous);
+      setPortalAccountConsentGrantedAt(previousGrantedAt);
+      setError(err instanceof Error ? err.message : "Could not save that change.");
+    } finally {
+      setSavingPortalAccountConsent(false);
     }
   }
 
@@ -1243,6 +1287,19 @@ export default function Settings() {
                   grantedAt={captchaConsentGrantedAt}
                   disabled={savingCaptchaConsent}
                   onChange={(enabled) => void changeCaptchaConsent(enabled)}
+                />
+                {/* LAST, because it is the most consequential grant on the screen and the only one
+                    that leaves something behind: revoking it does not close an account it opened.
+                    Like the two above it, this control is also the only re-consent path there is -
+                    the backend constant moved to 2026-09-08 when Workday's password-mandatory signup
+                    widened the act, every earlier grant verdicts false, and until this shipped no
+                    screen in the product rendered the permission at all. */}
+                <PortalAccountConsentControl
+                  idPrefix="settings"
+                  value={portalAccountConsent}
+                  grantedAt={portalAccountConsentGrantedAt}
+                  disabled={savingPortalAccountConsent}
+                  onChange={(enabled) => void changePortalAccountConsent(enabled)}
                 />
               </div>
               <p className="mt-4 text-xs leading-5 text-muted">Litos stops when an answer is missing or the site needs you.</p>
