@@ -34,12 +34,18 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { getBillingReceipt, getNotificationPreferences, setNotificationPreferences } from "@/lib/api";
+import {
+  api,
+  getBillingReceipt,
+  getNotificationPreferences,
+  setNotificationPreferences,
+  type Me,
+} from "@/lib/api";
 import { disablePush, enablePush, hasPushSubscription, pushSupport } from "@/lib/push";
 import { ErrorNote } from "@/components/app/ui";
 import { LaterLink, PrimaryButton, StartShell } from "./ui";
 import { track } from "@/lib/analytics";
-import { firePurchaseEventOnce } from "@/lib/tiktok-client";
+import { firePurchaseEventOnce, matchingWithin } from "@/lib/tiktok-client";
 
 type Choice = { strong_match: boolean; employer_reply: boolean; activity_digest: boolean };
 
@@ -259,16 +265,26 @@ export function NotificationsStep({
      reference, so TikTok's own dedup collapses the two if both land. */
   const purchaseSentRef = useRef(false);
   useEffect(() => {
-    let cancelled = false;
+    /* Receipt carries value/currency and the plan+interval that become content_id;
+       /me carries the Advanced Matching email. Only the receipt is load-bearing, and
+       /me is bounded by matchingWithin so a hung read costs the email rather than the
+       event: this screen has a Continue button a student can click immediately, and an
+       unbounded wait silently cost conversions.
+
+       NO `cancelled` FLAG, deliberately, and its absence is the fix rather than an
+       oversight: this effect updates no state, and firePurchaseEventOnce dedupes on
+       sessionStorage, so completing after an unmount is harmless while abandoning on
+       unmount loses a real conversion. A cleanup that set a flag nothing reads would
+       only imply a guard that is not there. */
     void getBillingReceipt()
-      .then((receipt) => {
-        if (!cancelled) firePurchaseEventOnce(purchaseSentRef, receipt);
+      .then(async (receipt) => {
+        const me = await matchingWithin(api<Me>("/me"));
+        firePurchaseEventOnce(purchaseSentRef, receipt, undefined, { email: me?.email });
       })
       .catch(() => {
         /* No receipt yet is not an error worth surfacing here: litos-api's
            webhook fallback still reports the purchase either way. */
       });
-    return () => { cancelled = true; };
   }, []);
   return (
     <StartShell step="notifications" title="Want to know when the next one opens?">

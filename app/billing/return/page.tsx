@@ -236,6 +236,16 @@ export default function BillingReturnPage() {
                not surface-scoped. */
             const receipt = await getBillingReceipt().catch(() => null);
             if (stopped) return;
+            /* DELIBERATELY NO ADVANCED MATCHING ON THIS BRANCH. The website session
+               here can belong to a DIFFERENT account than the extension one that just
+               paid (the whole reason this branch asks the extension to verify itself
+               rather than reading /me), so /me and the application profile would
+               attach the wrong person's email and phone to this purchase. A missing
+               identifier costs match quality; a wrong one corrupts it. litos-api's
+               Stripe-webhook fallback supplies both for this purchase anyway, resolved
+               from Stripe's own customer mapping rather than a browser session.
+               tests/litos-plus-pricing.test.mjs pins this branch shut against any
+               session-identity lookup, so read that guard before adding a fetch here. */
             firePurchaseEventOnce(purchaseSentRef, receipt, context ?? reply.account_id);
             setResult({ kind: "extension_active", actionReady: reply.action_ready === true });
             return;
@@ -307,14 +317,19 @@ export default function BillingReturnPage() {
         ) {
           const receipt = await getBillingReceipt().catch(() => null);
           if (!stopped) {
+            /* The screen paints on the receipt alone, and nothing else is awaited
+               before it. An earlier version fetched the application profile here for a
+               phone number and a Promise.all let that read hold a student who had just
+               paid on the verifying screen; phone is no longer sent at all, so the only
+               identifier is me.email, which is already loaded. */
             setResult({ kind: "active", me, receipt });
             /* Fired only after billingReturnVerdict confirms Stripe itself (via
                reconcileBillingCheckout above), not on a client-side assumption that
                checkout succeeded -- this is the one point in the funnel with real
                server-verified proof of payment.
 
-               purchaseSentRef alone only guards one mount: browser back/forward within
-               this tab remounts the page and would re-run this whole branch. The
+               purchaseSentRef guards a remount within this tab (browser back/forward
+               re-runs this whole branch). The
                sessionStorage flag survives that remount (billingReturnContext's own
                entry for this offer lives in sessionStorage too, for hours, so the
                window is real, not theoretical) without relying on TikTok's Events API
@@ -334,7 +349,11 @@ export default function BillingReturnPage() {
                (receipt.reference, or this offer's context id), so a genuine double
                submission still dedupes on TikTok's side by event_id -- unlike
                silently under-reporting every conversion this branch cannot place. */
-            if ((storedContext?.returnRoute ?? null) !== "/start") firePurchaseEventOnce(purchaseSentRef, receipt, context);
+            if ((storedContext?.returnRoute ?? null) !== "/start") {
+              /* me is already loaded above, so this needs no extra request and cannot
+                 delay the screen. Email is the only identifier sent. */
+              firePurchaseEventOnce(purchaseSentRef, receipt, context, { email: me.email });
+            }
           }
           return;
         }
