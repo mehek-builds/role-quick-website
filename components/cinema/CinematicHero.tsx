@@ -608,31 +608,14 @@ export function CinematicHero() {
               bottom, and lands the actions level with the demo's own send
               button across the gap. */}
           <div className="rq-glass rq-enter mx-auto flex w-full max-w-2xl flex-col justify-center gap-8 px-7 py-10 text-center sm:px-9 sm:py-9 xl:max-w-none xl:justify-between xl:gap-6 xl:px-10 xl:py-12 xl:text-left">
-            {/* Nothing above the fold said what Litos IS: the H1 names a
-                speed and the sub names a mechanism, so a first-time visitor
-                had to infer the category. This is the same line the Chrome
-                Web Store listing already leads with (store-assets-v2 shot 1).
-                It says "job seekers" and must keep saying it: an earlier
-                version narrowed it to "students and new grads", which read
-                as a product nobody else was allowed to use. Students and new
-                grads are one audience Litos serves, not the only one. */}
-            <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-brand-ink">
-                      Free Chrome extension for job seekers, with a full web dashboard.
-            </p>
-
             {/* The middle band: the claim and the one line explaining it,
                 grouped so justify-between treats them as a single object. */}
             <div>
-              {/* In the split column the line wraps, and left to itself it
-                  wrapped as "Apply in" / "seconds.", breaking the coloured
-                  phrase across two lines and ending the first on a
-                  preposition. Forcing the break at the phrase boundary keeps
-                  "in seconds." whole, which is the half the colour marks. */}
               <h1 className="text-display font-[450] leading-[1.02] tracking-[-0.03em] text-ink">
-                Find the role. <span className="text-brand-ink">Build the packet.</span> Send it with confidence.
+                Apply to jobs <span className="text-brand-ink">in seconds.</span>
               </h1>
               <p className="mx-auto mt-6 max-w-[460px] text-base leading-[1.65] text-muted xl:mx-0">
-                Litos finds relevant jobs, tailors your materials, fills applications, and helps you reach the right people. You review the work.
+                Litos finds you the perfect job, crafts an ATS tailored resume and cover letter, and allows you to review before hitting submit.
               </p>
             </div>
 
@@ -655,7 +638,6 @@ export function CinematicHero() {
               </a>
               <a href="#product" className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full border border-control-border bg-surface px-7 py-3 text-sm font-medium text-ink transition-colors hover:border-ink sm:w-auto">See how Litos works</a>
             </div>
-            <p className="font-mono text-[11px] text-muted">Application filling stays free.</p>
             {/* The mobile QR handoff (MobileSendLink) was REMOVED here
                 2026-07-28. A QR code and a copy-link button inside the hero
                 card, on the first screen, before a phone visitor knows what
