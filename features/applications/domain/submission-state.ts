@@ -50,6 +50,23 @@ export type AttachedDocumentLike = {
   ordered_at?: string | null;
 };
 
+/* THE PROOF KINDS THE LEDGER CAN CARRY, and this list has to hold every one the backend writes.
+ *
+ * It is an allow-list inside a strict validator: an envelope naming a kind that is missing here is
+ * discarded as malformed, `retry_safety` becomes undefined, applicationPacketAuthorityState answers
+ * `uncertain`, and the packet screen refuses the send with "Litos cannot start another employer
+ * attempt until the exact prior submission evidence is verified" - a sentence about evidence that
+ * IS verified, and that no control can clear.
+ *
+ * Measured live 2026-09-09 on Neuralink packet 65586e22. volley-backend #1055 added the three
+ * kinds below and the ledger's own CHECK constraint learned them; this list did not. The server
+ * published {kind: "safe_not_sent", proofKind: "required_field_gate_proven_not_pressed"} - a clean
+ * verdict that nothing was sent - and the browser threw it away and blocked the send.
+ *
+ * The three additions are the withheld-press family: the required-field gate refused the click, the
+ * run's recorded progress never reached the press, or the plan position stopped short of it. All
+ * three mean the same thing the four established kinds mean - the employer has nothing - so
+ * accepting them widens nothing. Everything unlisted is still rejected. */
 export type SubmissionRetrySafetyProofKindLike =
   | "typed_pre_click_stop"
   | "applicant_checked_not_sent"
@@ -57,7 +74,10 @@ export type SubmissionRetrySafetyProofKindLike =
   | "employer_rejected_not_filed"
   | "employer_verification_pending_not_filed"
   | "provider_definitive_rejection"
-  | "extension_cancelled_before_press";
+  | "extension_cancelled_before_press"
+  | "run_progress_proven_not_pressed"
+  | "plan_position_proven_not_pressed"
+  | "required_field_gate_proven_not_pressed";
 
 export type SubmissionRetrySafetyLike =
   | { kind: "no_evidence" }
@@ -104,7 +124,10 @@ function retryProofKind(value: unknown): value is SubmissionRetrySafetyProofKind
     || value === "employer_rejected_not_filed"
     || value === "employer_verification_pending_not_filed"
     || value === "provider_definitive_rejection"
-    || value === "extension_cancelled_before_press";
+    || value === "extension_cancelled_before_press"
+    || value === "run_progress_proven_not_pressed"
+    || value === "plan_position_proven_not_pressed"
+    || value === "required_field_gate_proven_not_pressed";
 }
 
 export function submissionRetrySafetyFromUnknown(value: unknown): SubmissionRetrySafetyLike | null {
