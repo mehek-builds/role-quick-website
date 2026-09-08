@@ -45,12 +45,11 @@ export type LegacyTrialUsage = TrialUsageBase & {
 
 export type LitosPlusTrialUsage = TrialUsageBase & {
   meter_policy: "litos_plus_v2_lifetime";
-  tailored_resumes_used: number;
-  tailored_resumes_limit: number;
-  cover_letters_used: number;
-  cover_letters_limit: number;
-  answer_applications_used: number;
-  answer_applications_limit: number;
+  /* ONE POOL, COUNTING JOBS. Mirrors the backend's TRIAL_LIMITS.generations. A job that needs a
+     tailored resume, a cover letter and application answers spends one of these, not three; the
+     three per-kind pairs this replaced counted actions and are no longer published. */
+  generations_used: number;
+  generations_limit: number;
   outreach_companies_used: number;
   outreach_companies_limit: number;
   company_usage: TrialCompanyUsage[];
@@ -177,12 +176,8 @@ function normalizeTrial(value: unknown): TrialUsage | null {
     };
   }
   const numericMeters = [
-    trial.tailored_resumes_used,
-    trial.tailored_resumes_limit,
-    trial.cover_letters_used,
-    trial.cover_letters_limit,
-    trial.answer_applications_used,
-    trial.answer_applications_limit,
+    trial.generations_used,
+    trial.generations_limit,
     trial.outreach_companies_used,
     trial.outreach_companies_limit,
   ].map(numberOrNull);
@@ -206,14 +201,10 @@ function normalizeTrial(value: unknown): TrialUsage | null {
     starts_at: startsAt,
     ends_at: endsAt,
     active,
-    tailored_resumes_used: numericMeters[0]!,
-    tailored_resumes_limit: numericMeters[1]!,
-    cover_letters_used: numericMeters[2]!,
-    cover_letters_limit: numericMeters[3]!,
-    answer_applications_used: numericMeters[4]!,
-    answer_applications_limit: numericMeters[5]!,
-    outreach_companies_used: numericMeters[6]!,
-    outreach_companies_limit: numericMeters[7]!,
+    generations_used: numericMeters[0]!,
+    generations_limit: numericMeters[1]!,
+    outreach_companies_used: numericMeters[2]!,
+    outreach_companies_limit: numericMeters[3]!,
     company_usage: companyUsage,
   };
 }

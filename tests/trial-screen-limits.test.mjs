@@ -22,11 +22,16 @@ test("the trial screen mirrors the backend's trial limits exactly", async () => 
 
   /* Kept in step with TRIAL_LIMITS in the backend's src/lib/entitlements.ts. Both repos deploy
      independently, so a drift shows up as a failing test rather than as a screen promising five
-     of something the account gets three of. */
+     of something the account gets three of.
+
+     THIS GUARD FAILED AT ITS ONE JOB once, and the shape of that failure is worth keeping in
+     mind: when the backend's per-kind limits were raised from 5 to 10, nobody moved these
+     literals, so the test kept passing against the website's own stale numbers and the screen
+     went on promising five while the account got ten. A mirror test only catches drift in the
+     direction someone remembers to update. The numbers below are one pool of JOBS as of
+     2026-09-08, which is a smaller surface to keep in step than four separate meters were. */
   for (const [key, value] of [
-    ["tailored_resumes", 5],
-    ["cover_letters", 5],
-    ["answer_applications", 5],
+    ["generations", 20],
     ["outreach_companies", 5],
   ]) {
     assert.match(block, new RegExp(`${key}:\\s*${value}\\b`), `TRIAL_INCLUDES.${key} no longer reads ${value}`);

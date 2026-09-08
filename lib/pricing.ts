@@ -23,17 +23,25 @@
 /** Days of Litos+ access at signup. */
 export const TRIAL_DAYS = 7;
 
-/** New Free has no premium-generation allowance. Application filling is unlimited separately. */
+/* WHAT AN ACCOUNT WITH NO PLAN MAY DO. Not an offer and not a tier on sale anywhere: Free is
+   where an account lands by cancelling, and nothing in the product sells it. This is enforcement
+   copy for grandfathered accounts, which is why it survived the 2026-09-08 removal of every Free
+   surface. Application filling is unlimited separately and is not metered here. */
 export const FREE_LIMITS = {
   resumes: 0,
   contacts: 0,
   drafts: 0,
 } as const;
 
+/* ONE GIFT OF 20 JOBS, taken inside the seven days, once per account. A job that needs a tailored
+   resume, a cover letter and application answers spends ONE of the 20, not three.
+
+   These were three separate 5s until 2026-09-08, and the backend had already moved to 10s without
+   them: the exact drift the header above warns about, live for weeks. Contact discovery keeps its
+   own small per-company allowance and is NOT part of the 20, matching paid plans, which do not
+   meter it at all. */
 export const TRIAL_LIMITS = {
-  tailoredResumes: 5,
-  coverLetters: 5,
-  answerApplications: 5,
+  generations: 20,
   outreachCompanies: 5,
   contactsPerCompany: 2,
   draftsPerCompany: 2,
@@ -44,6 +52,8 @@ export const PLUS_LIMITS = { resumes: null, contacts: null, drafts: null } as co
 /** Compatibility name for code deployed before the Litos+ rename. */
 export const PRO_LIMITS = PLUS_LIMITS;
 
-export const PRO_WEEKLY_PRICE = "19.99";
-export const PRO_MONTHLY_PRICE = "39.99";
-export const PLUS_QUARTER_PRICE = "89.99";
+export const PRO_WEEKLY_PRICE = "29.99";
+export const PRO_MONTHLY_PRICE = "59.99";
+export const PLUS_QUARTER_PRICE = "119.99";
+/** The undiscounted quarterly rate the "70% off" badge is struck through against. */
+export const PLUS_QUARTER_LIST_PRICE = "359.99";

@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Button, ButtonLink } from "@/components/app/Button";
+import { Button } from "@/components/app/Button";
 import { ErrorNote, PendingLabel } from "@/components/app/ui";
 import {
   DEFAULT_LITOS_PLUS_PLAN_ID,
-  FREE_FEATURES,
   LITOS_PLUS_PLANS,
   PLUS_FEATURES,
   createLitosPlusCheckout,
@@ -132,72 +131,71 @@ export function PlanCards() {
     }
   }
 
+  /* Named once here so the footnote quotes the same localized figures the card does, rather
+     than a second hardcoded copy of them that a currency switch would silently falsify. */
+  const discounted = (catalog?.plans ?? LITOS_PLUS_PLANS).find((plan) => plan.discountLabel && plan.listTotal) ?? null;
+
   const canPurchase = extensionCheckout
     ? catalog?.checkoutAvailable === true
     : !authenticated || paid || catalog?.checkoutAvailable === true;
 
   return (
     <div>
-      {/* Four columns, one per thing you can actually choose. The terms used to
+      {/* Three columns, one per thing you can actually choose. The terms used to
           sit inside a single Litos+ card as radio rows, which made the page
-          read as two products where there are four prices; a term is not a
-          setting on a plan, it is the plan. The Litos+ feature list repeats in
-          every paid column on purpose: identical lists side by side are the
-          fastest way to show that only the length of access changes. */}
-      <div className="grid items-stretch gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <article className="flex flex-col rounded-card border border-teal/45 bg-teal-soft/35 p-6">
-          <p className="flex min-h-6 items-center font-mono text-label uppercase tracking-[0.08em] text-teal-ink">Free</p>
-          <h2 className="mt-4 min-h-14 text-heading font-[450] text-ink">Fill applications. Track every move.</h2>
-          <div className="mt-5 flex items-end gap-2">
-            <span className="font-mono text-section text-ink">$0</span>
-            <span className="pb-1 font-mono text-machine text-muted">forever</span>
-          </div>
-          <p className="mt-4 min-h-14 font-mono text-machine text-muted">No application limit, in the dashboard or on supported sites.</p>
-          <ButtonLink
-            href={authenticated ? "/dashboard/applications?new=1&intent=fill" : "/login?intent=start-free"}
-            variant="secondary"
-            block
-            className="mt-6 border-teal text-teal-ink"
-          >
-            Start free
-          </ButtonLink>
-          {/* No trial claim sits here any more. Whether a new account opens on a trial
-              depends on the card gate (CARD_GATE_FROM on the backend): with it off a
-              student can finish setup on Free and never start one, so a sentence
-              promising a trial to "new accounts" is only true half the time. The paid
-              columns say what a trial costs and when it renews, which is true always. */}
-          <p className="mt-3 min-h-10 text-center text-label text-muted" />
-          <ul className="mt-6 flex-1 space-y-2.5 text-small text-muted">
-            {FREE_FEATURES.map((feature) => <li key={feature} className="flex gap-2.5"><span aria-hidden="true" className="text-teal-ink">+</span>{feature}</li>)}
-          </ul>
-        </article>
+          read as one product with a setting on it; a term is not a setting on a
+          plan, it is the plan. The Litos+ feature list repeats in every column
+          on purpose: identical lists side by side are the fastest way to show
+          that only the length of access changes.
 
+          THERE IS NO FREE COLUMN, and it is not an oversight. Mehek's call
+          2026-09-08: Free is not something Litos offers here. It is where an
+          account lands by cancelling, which is the same position /start has
+          taken since the card gate went in, so a column selling it on the
+          checkout page contradicted the only other screen that quotes a price.
+          Free still exists as an ACCESS CLASS on the backend and still appears
+          in the in-app upgrade modal's comparison; what is gone is offering it
+          as a choice at the point of sale. */}
+      <div className="grid items-stretch gap-4 md:grid-cols-3">
         {(catalog?.plans ?? LITOS_PLUS_PLANS).map((plan) => {
           const busy = busyPlan === plan.id;
           const preselected = selected === plan.id;
+          /* "Get Started" is the approved label and it is what almost everyone sees. The two
+             exceptions stay, because both name a different destination than the one that
+             phrase promises: a paid account's button opens Account, and a signed-out visitor's
+             opens the trial rather than a charge. */
           const label = paid
             ? "Manage subscription"
             : !authenticated && !extensionCheckout
               ? "Start 7-day trial"
-              : `Continue with ${plan.shortLabel}`;
+              : "Get Started";
           return (
             <article
               key={plan.id}
               aria-label={`Litos+, ${plan.label}`}
               className={`flex flex-col rounded-card border bg-brand-soft/35 p-6 ${plan.mostPopular ? "border-brand-ink" : "border-brand/45"}${preselected ? " ring-1 ring-brand-ink" : ""}`}
             >
-              <div className="flex min-h-6 items-center justify-between gap-2">
+              <div className="flex min-h-6 items-center gap-2">
                 <p className="font-mono text-label uppercase tracking-[0.08em] text-brand-ink">Litos+</p>
-                {plan.mostPopular && <span className="rounded-control bg-brand-soft px-2 py-0.5 font-mono text-label text-brand-ink">Most popular</span>}
+                {plan.mostPopular && <span className="rounded-control bg-brand-ink px-2 py-0.5 font-mono text-label text-surface">Popular</span>}
               </div>
-              <h2 className="mt-4 min-h-14 text-heading font-[450] text-ink">{plan.label}</h2>
-              <div className="mt-5 flex items-end gap-2">
+              <h2 className="mt-4 text-heading font-[450] text-ink">{plan.label}</h2>
+              {/* Who the plan is for, immediately under its name and above the price, which is
+                  the order the approved layout reads in. min-h keeps the four columns' prices on
+                  one line when one audience sentence wraps and another does not. */}
+              <p className="mt-2 min-h-10 text-small text-muted">{plan.audience}</p>
+              <div className="mt-5 flex min-h-10 items-end gap-3">
                 <span className="font-mono text-section text-ink">{plan.total}</span>
-                <span className="pb-1 font-mono text-machine text-muted">{plan.daily}</span>
+                {plan.discountLabel && plan.listTotal ? (
+                  <span className="pb-1 flex flex-col leading-tight">
+                    <span className="font-mono text-machine text-brand-ink">{plan.discountLabel}</span>
+                    <span className="font-mono text-machine text-muted line-through">{plan.listTotal}</span>
+                  </span>
+                ) : (
+                  <span className="pb-1 font-mono text-machine text-muted">{plan.daily}</span>
+                )}
               </div>
-              <p className="mt-4 min-h-14 font-mono text-machine text-muted">
-                {plan.savings ? `Save ${plan.savings}% against the weekly rate.` : "The shortest term, for a search you expect to close fast."}
-              </p>
+              <p className="mt-4 min-h-11 font-mono text-machine text-muted">{plan.applicationsLine}</p>
               <Button
                 type="button"
                 block
@@ -216,6 +214,7 @@ export function PlanCards() {
               <ul className="mt-6 flex-1 space-y-2.5 text-small text-muted">
                 {PLUS_FEATURES.map((feature) => <li key={feature} className="flex gap-2.5"><span aria-hidden="true" className="text-brand-ink">+</span>{feature}</li>)}
               </ul>
+              <p className="mt-6 border-t border-brand/25 pt-5 text-small text-muted">{plan.closer}</p>
             </article>
           );
         })}
@@ -223,7 +222,7 @@ export function PlanCards() {
 
       {error && <div className="mt-5"><ErrorNote message={error} /></div>}
       <p className="mt-5 text-center text-label text-muted">
-        Savings compare each daily rate with the weekly daily rate. {extensionCheckout
+        {discounted ? `${discounted.discountLabel} is against the ${discounted.listTotal} undiscounted ${discounted.label.toLowerCase()} rate. ` : ""}{extensionCheckout
           ? "Stripe opens through the signed-in Litos extension, so the purchase stays with that extension account."
           : "Nothing is charged for 7 days. Cancel any time."}
       </p>

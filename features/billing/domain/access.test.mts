@@ -110,12 +110,8 @@ test("new trial meters are accepted only when the full independent contract is p
     starts_at: "2026-08-10T00:00:00.000Z",
     ends_at: "2026-08-17T00:00:00.000Z",
     active: true,
-    tailored_resumes_used: 1,
-    tailored_resumes_limit: 5,
-    cover_letters_used: 2,
-    cover_letters_limit: 5,
-    answer_applications_used: 3,
-    answer_applications_limit: 5,
+    generations_used: 3,
+    generations_limit: 20,
     outreach_companies_used: 4,
     outreach_companies_limit: 5,
     company_usage: [],
@@ -128,14 +124,14 @@ test("new trial meters are accepted only when the full independent contract is p
   });
   assert.equal(complete?.trial?.meter_policy, "litos_plus_v2_lifetime");
   if (complete?.trial?.meter_policy === "litos_plus_v2_lifetime") {
-    assert.equal(complete.trial.cover_letters_used, 2);
-    assert.equal(complete.trial.answer_applications_used, 3);
+    assert.equal(complete.trial.generations_used, 3);
+    assert.equal(complete.trial.generations_limit, 20);
   }
   const incomplete = normalizeEntitlementSnapshot({
     schema_version: 2,
     access_class: "trial_plus",
     features: {},
-    trial: { ...baseTrial, cover_letters_limit: undefined },
+    trial: { ...baseTrial, generations_limit: undefined },
   });
   assert.equal(incomplete?.trial, null);
 });
