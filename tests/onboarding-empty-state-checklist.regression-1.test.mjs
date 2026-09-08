@@ -76,7 +76,6 @@ test("every shared empty state names a contextual visual", async () => {
     "app/dashboard/applications/page.tsx",
     "app/dashboard/error.tsx",
     "app/dashboard/jobs/page.tsx",
-    "app/dashboard/outreach/page.tsx",
     "app/dashboard/page.tsx",
   ];
 

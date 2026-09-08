@@ -19,7 +19,6 @@ test("every website generation call sends a stable operation id", async () => {
   const [home, applications, outreach, bodyBuilder] = await Promise.all([
     read("app/dashboard/page.tsx"),
     read("app/dashboard/applications/page.tsx"),
-    read("app/dashboard/outreach/page.tsx"),
     read("features/applications/domain/daily-matches.ts"),
   ]);
 

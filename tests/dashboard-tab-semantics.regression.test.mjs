@@ -3,38 +3,6 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const documents = await readFile(new URL("../app/dashboard/documents/page.tsx", import.meta.url), "utf8");
-const network = await readFile(new URL("../app/dashboard/network/page.tsx", import.meta.url), "utf8");
-
-test("Network exposes one keyboard-operable tab interface", () => {
-  assert.match(network, /role="tablist" aria-label="Network sections"/);
-  assert.match(network, /role="tab"[\s\S]{0,180}?id=\{`network-tab-\$\{id\}`\}/);
-  assert.match(network, /aria-selected=\{tab === id\}/);
-  assert.match(network, /aria-controls="network-panel"/);
-  assert.match(network, /tabIndex=\{tab === id \? 0 : -1\}/);
-  assert.match(network, /\["ArrowLeft", "ArrowRight", "Home", "End"\]/);
-  assert.match(network, /tablist\.addEventListener\("click", handleClick\)/);
-  assert.match(network, /tablist\.addEventListener\("keydown", handleKeyDown\)/);
-  assert.match(network, /data-network-tab=\{id\}/);
-  assert.match(network, /id="network-panel" role="tabpanel" aria-labelledby=\{`network-tab-\$\{tab\}`\}/);
-  assert.doesNotMatch(network, /aria-current=\{tab ===/);
-});
-
-test("Network keeps the newest tab intent authoritative across overlapping animated changes", () => {
-  assert.match(network, /const requestedTabRef = useRef<NetworkTab>\("people"\)/);
-  assert.match(network, /const tabTransitionActiveRef = useRef\(false\)/);
-  const chooseTab = network.slice(
-    network.indexOf("  function chooseTab"),
-    network.indexOf("\n\n  useEffect", network.indexOf("  function chooseTab")),
-  );
-  const recordIntent = chooseTab.indexOf("requestedTabRef.current = next");
-  const deferWhileActive = chooseTab.indexOf("if (tabTransitionActiveRef.current) return");
-  const scheduleSelection = chooseTab.indexOf("runDashboardTransition(() => setTab(next))");
-  assert.notEqual(recordIntent, -1, "tab selection must synchronously record the newest intent");
-  assert.ok(deferWhileActive > recordIntent, "an active transition must retain the newer intent without launching an overlap");
-  assert.notEqual(scheduleSelection, -1, "tab selection must retain its View Transition boundary");
-  assert.ok(recordIntent < scheduleSelection, "the newest tab intent must be recorded before the transition is scheduled");
-  assert.match(network, /tabTransitionActiveRef\.current = false;[\s\S]{0,160}?if \(requestedTabRef\.current !== tab\)[\s\S]{0,600}?const next = requestedTabRef\.current;[\s\S]{0,160}?tabTransitionActiveRef\.current = true;[\s\S]{0,160}?setTab\(next\)/);
-});
 
 test("Documents exposes one keyboard-operable tab interface", () => {
   assert.match(documents, /role="tablist"\s+aria-label="Document sections"/);

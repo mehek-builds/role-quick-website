@@ -28,7 +28,6 @@ import {
   SearchIcon,
 } from "@/components/app/NavIcons";
 import { BillingProvider } from "@/components/billing/BillingProvider";
-import { OutreachOperationProvider } from "@/app/dashboard/outreach/operation-owner";
 import { ResumeMutationProvider } from "@/app/dashboard/resume/mutation-controller";
 
 /* One familiar noun per destination. Route paths stay stable while the labels match the page
@@ -38,8 +37,6 @@ const NAV = [
   { href: "/dashboard/jobs", label: "Jobs", Icon: SearchIcon },
   { href: "/dashboard/applications", label: "Applications", Icon: ClipboardIcon },
   { href: "/dashboard/documents", label: "Documents", Icon: DocumentIcon },
-  { href: "/dashboard/network", label: "Network", Icon: PersonIcon },
-  { href: "/dashboard/outreach", label: "Outreach", Icon: MailIcon },
 ];
 
 const MOBILE_NAV = NAV.slice(0, 4);
@@ -307,13 +304,12 @@ export function DashboardShell({
   }
 
   const href = (to: string) => (qaMode ? `${to}?qa=1` : to);
-  const moreActive = ["/dashboard/network", "/dashboard/outreach", "/dashboard/settings"]
+  const moreActive = ["/dashboard/settings"]
     .some((destination) => isActive(destination, pathname));
 
   return (
     <SidebarCollapseContext.Provider value={sidebarCollapse}>
     <BillingProvider>
-    <OutreachOperationProvider>
     <ResumeMutationProvider>
     {/* The rail is a real grid column, not a fixed overlay, so the page's own scrollbar belongs to
         the content and the two never fight over it. Below lg the column collapses and the bottom bar
@@ -450,9 +446,7 @@ export function DashboardShell({
             </div>
             <nav aria-label="More dashboard destinations" className="mt-3 grid gap-2">
               {[
-                { href: "/dashboard/network", label: "Network", Icon: PersonIcon },
-                { href: "/dashboard/outreach", label: "Outreach", Icon: ChatIcon },
-                { href: "/dashboard/settings", label: "Account", Icon: GearIcon },
+                              { href: "/dashboard/settings", label: "Account", Icon: GearIcon },
               ].map((item) => (
                 <Link
                   key={item.href}
@@ -475,7 +469,6 @@ export function DashboardShell({
           references) all drop it once you are logged in; Privacy lives in Account. */}
     </div>
     </ResumeMutationProvider>
-    </OutreachOperationProvider>
     </BillingProvider>
     </SidebarCollapseContext.Provider>
   );
