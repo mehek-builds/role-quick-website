@@ -148,8 +148,8 @@ export default function Terms() {
           </p>
           <p>
             A new account receives a seven-day Litos+ trial without adding a
-            card. The trial includes five tailored resumes, five cover letters,
-            generated answers for five applications, and up to two contacts and
+            card. The trial includes ten tailored resumes, ten cover letters,
+            generated answers for ten applications, and up to two contacts and
             two outreach drafts per company across five companies. Trial
             generation starts only when you choose the relevant action.
           </p>

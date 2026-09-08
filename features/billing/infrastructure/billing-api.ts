@@ -152,6 +152,29 @@ export async function createLitosPlusCheckout(
   return { ...response, checkoutUrl };
 }
 
+/**
+ * START THE SUBSCRIPTION NOW, MID-TRIAL, for an account that spent its trial generations before
+ * its trial days.
+ *
+ * NOT createLitosPlusCheckout. That route answers 409 `already_plus` for any trialing
+ * subscription, and it is right to: a second Stripe checkout against the same customer creates a
+ * second subscription and bills twice. This ends the trial on the subscription that already
+ * exists, so the card on file is charged once.
+ *
+ * `converted` is the server reading Stripe's answer, not the HTTP status. A declined card comes
+ * back 200 with `converted: false` and the real subscription status, so the caller must branch on
+ * the body rather than on the request having succeeded.
+ */
+export async function startLitosPlusSubscriptionNow(): Promise<{
+  converted: boolean;
+  status: string;
+  current_period_end: string | null;
+  error?: string;
+  portal_url?: string;
+}> {
+  return api("/billing/trial/start-now", { method: "POST", body: JSON.stringify({}) });
+}
+
 export async function createPendingBillingAction(input: {
   featureKey: string;
   returnRoute: string;

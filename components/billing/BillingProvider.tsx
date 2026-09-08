@@ -7,6 +7,7 @@ import { operationIdFor, completeOperationId } from "@/lib/operation-id";
 import { isQaRender } from "@/lib/qa-mode";
 import {
   createLitosPlusCheckout,
+  startLitosPlusSubscriptionNow,
   createPendingBillingAction,
   contextualCheckoutAttempt,
   currentBillingReturnRoute,
@@ -239,6 +240,44 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  /**
+   * THE TRIAL THAT RAN OUT OF GENERATIONS BEFORE IT RAN OUT OF DAYS.
+   *
+   * The trial meters generations and the subscription meters time, so an account can spend the
+   * whole allowance on day one with days still on the clock. `checkout` above cannot help: the
+   * server answers 409 `already_plus` for any trialing subscription, correctly, because a second
+   * Stripe checkout on the same customer bills twice. This ends the trial on the subscription that
+   * already exists instead, charging the card on file once.
+   *
+   * A 200 is not a payment. The card can decline, in which case the body carries `converted: false`
+   * and the sentence to show, so the branch is on the body rather than on the request resolving.
+   */
+  async function startSubscriptionNow() {
+    setCheckoutBusy(true);
+    setError(null);
+    try {
+      track("checkout_started", {
+        plan_id: "trial_start_now",
+        ...(request?.feature ? { feature_key: request.feature } : {}),
+        ...(request?.placement ? { placement: request.placement } : {}),
+      });
+      const result = await startLitosPlusSubscriptionNow();
+      if (!result.converted) {
+        setError(result.error ?? "Stripe could not take the payment. Your card was not charged.");
+        setCheckoutBusy(false);
+        return;
+      }
+      /* Re-read entitlements before closing, so the action she was refused is retried against the
+         plan she now has rather than against the cached trial snapshot that just denied it. */
+      await refresh();
+      setCheckoutBusy(false);
+      closeUpgrade();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Your subscription could not be started. Nothing was charged.");
+      setCheckoutBusy(false);
+    }
+  }
+
   const value = useMemo<BillingContextValue>(() => ({
     access,
     catalog,
@@ -262,6 +301,7 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
         onClose={closeUpgrade}
         onRetryCatalog={() => void loadCatalog()}
         onCheckout={(planId) => void checkout(planId)}
+        onStartSubscriptionNow={() => void startSubscriptionNow()}
       />
     </BillingContext.Provider>
   );
