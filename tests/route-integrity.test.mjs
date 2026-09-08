@@ -190,11 +190,28 @@ test("the acquisition funnel routes all exist", () => {
 
 /* ---------- 4. the homepage's primary CTAs actually go somewhere ---------- */
 
+/* The pillar steps the homepage links to, listed by hand for the same reason
+   CRITICAL_ROUTES is: a count derived from the page agrees with whatever the
+   page happens to say, so dropping a pillar would shrink the list it is checked
+   against instead of failing.
+
+   Two, not three, since #593 (2026-09-08) removed the "03 · Emails" pillar
+   section from the homepage. That was a landing-page edit, not a product one:
+   Outreach is still a shipped dashboard feature, /dashboard/outreach still
+   exists, and TrySimulator still honours /try?step=outreach. This list is what
+   the HOMEPAGE links to, not what the product does. Restoring the pillar means
+   adding "outreach" here in the same commit. */
+const PILLAR_STEPS = ["resume", "autofill"];
+
 test("homepage pillar CTAs point at real /try steps", () => {
   const home = readFileSync(join(APP, "page.tsx"), "utf8");
   const steps = [...home.matchAll(/href="\/try\?step=([a-z]+)"/g)].map((m) => m[1]);
 
-  assert.ok(steps.length >= 3, `expected the three pillar CTAs, found ${steps.length}`);
+  assert.deepEqual(
+    steps,
+    PILLAR_STEPS,
+    `the homepage pillar CTAs changed: expected [${PILLAR_STEPS.join(", ")}], found [${steps.join(", ")}]`,
+  );
 
   /* The step names must be ones TrySimulator will actually honour. Its deep-link
      allowlist is the source of truth; a CTA naming a step outside it silently
