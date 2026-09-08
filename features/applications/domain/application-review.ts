@@ -285,7 +285,12 @@ export function submissionPollIsRequired(
      answers for every one of them: only two screens poll on their own account, and everything else
      polls only because the review says the send is unresolved. */
   screen: ReviewScreen | string,
-  review: { unverified_submission?: { resolution?: string | null } | null } | null | undefined,
+  /* An index signature because the real record carries `at`, `cause`, `portal_url` and more, and
+     this rule reads exactly one of its fields. Naming only that one and refusing the rest would
+     make every caller cast. */
+  review: {
+    unverified_submission?: { resolution?: string | null; [field: string]: unknown } | null;
+  } | null | undefined,
 ): boolean {
   if (screen === "submitting" || screen === "portal") return true;
   return Boolean(review?.unverified_submission && !review.unverified_submission.resolution);
