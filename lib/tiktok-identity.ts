@@ -21,63 +21,14 @@ export function normalizeEmailForTikTok(email: string | null | undefined): strin
   return normalized && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(normalized) ? normalized : null;
 }
 
-/* Countries whose national numbers this is willing to complete to +1.
-   address_country is a FREE-TEXT input, so this matches the spellings people
-   actually type rather than an ISO enum. Anything not listed drops the phone,
-   which is the safe direction. */
-const NANP_COUNTRIES = new Set([
-  "US", "USA", "U.S.", "U.S.A.", "UNITED STATES", "UNITED STATES OF AMERICA", "AMERICA",
-  "CA", "CAN", "CANADA",
-]);
-
-function isNanpCountry(country: string | null | undefined): boolean {
-  if (!country) return false;
-  // Strip punctuation and collapse whitespace so "u.s." and "United  States" both land.
-  const cleaned = country.trim().toUpperCase().replace(/\s+/g, " ");
-  return NANP_COUNTRIES.has(cleaned) || NANP_COUNTRIES.has(cleaned.replace(/[.\s]/g, ""));
-}
-
-/**
- * E.164 ("+" then country code then subscriber digits), or null when the country
- * cannot be established.
- *
- * `country` is the applicant's stated country (ApplicationProfile.address_country).
- * A bare national number is only completed when that country is a known NANP one:
- * ten digits is NOT self-evidently American (a London number minus its trunk 0 is
- * also ten digits), and stamping +1 on one yields a hash that can collide with a
- * different real person. A wrong identity is worse than no identity.
- */
-export function normalizePhoneE164ForTikTok(
-  phone: string | null | undefined,
-  country?: string | null,
-): string | null {
-  if (!phone) return null;
-  /* Reject anything not already phone-shaped BEFORE stripping. On the backend the same
-     rule stops an encrypted application_profile.phone (base64 of iv/tag/ciphertext) from
-     having its letters stripped away until the surviving "+" and digits pass the E.164
-     test below, which fabricates a number that gets hashed as a real customer's identity
-     ~2.4% of the time. This copy has no ciphertext to fear -- the API decrypts before it
-     answers -- but the two rules must stay identical or one person hashes two ways. */
-  if (/[A-Za-z/=]/.test(phone)) return null;
-  // "00" is how much of the world writes a leading "+"; treat it as one.
-  const cleaned = phone.replace(/[^\d+]/g, "").replace(/^00(?=\d)/, "+");
-  // A "+" is only meaningful leading the number; embedded ones mean this was not a phone.
-  if (cleaned.lastIndexOf("+") > 0) return null;
-  if (cleaned.startsWith("+")) {
-    const digits = cleaned.slice(1);
-    return /^\d{8,15}$/.test(digits) ? `+${digits}` : null;
-  }
-  /* BOTH bare-national branches are country-gated, and the eleven-digit one has to
-     be: "1" + ten digits is NOT unambiguously NANP. Every mainland-China mobile is
-     exactly eleven digits starting with 1 (13x-19x), so 13812345678 would read as
-     NANP area code 381 and hash as a different real person -- the precise collision
-     this function exists to refuse. Litos's users are international students, so
-     that is a live case, not a hypothetical. */
-  if (!isNanpCountry(country)) return null;
-  if (/^1\d{10}$/.test(cleaned)) return `+${cleaned}`;
-  if (/^\d{10}$/.test(cleaned)) return `+1${cleaned}`;
-  return null;
-}
+/* PHONE IS DELIBERATELY NOT SENT (Mehek's call, 2026-09-08, after two review rounds).
+   The only available phone was ApplicationProfile.phone, the job-application contact
+   number, and gating its "+1" completion on the profile country did not make it safe:
+   address_country says where a student LIVES, not where their number is from. Litos's
+   users are international students in the US, so address_country "United States" plus
+   a home mobile turned 13812345678 into +13812345678 -- a real stranger's US number,
+   structurally valid, undetectable. A missing identifier costs a little match quality;
+   a wrong one attributes a purchase to somebody else. Email carries the matching. */
 
 /* BillingReceipt.interval carries both the canonical cadences and two legacy
    aliases ("weekly"/"monthly"). volley-backend's webhook builds its content_id from

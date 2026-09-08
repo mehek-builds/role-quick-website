@@ -3,9 +3,9 @@
    calls the /api/tiktok-event route instead (see lib/tiktok-client.ts). */
 
 import { createHash } from "node:crypto";
-import { type TikTokServerEventName } from "./tiktok-event-names";
-import { TIKTOK_US_PIXEL_CODE } from "./tiktok-pixel";
-import { normalizeEmailForTikTok, normalizePhoneE164ForTikTok } from "./tiktok-identity";
+import { type TikTokServerEventName } from "./tiktok-event-names.ts";
+import { TIKTOK_US_PIXEL_CODE } from "./tiktok-pixel.ts";
+import { normalizeEmailForTikTok } from "./tiktok-identity.ts";
 
 const TIKTOK_EVENTS_ENDPOINT = "https://business-api.tiktok.com/open_api/v1.3/event/track/";
 const REQUEST_TIMEOUT_MS = 4_000;
@@ -25,16 +25,10 @@ function sha256Hex(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
-export function tiktokUserPayload(input: {
-  email?: string | null;
-  phone?: string | null;
-  country?: string | null;
-}): Record<string, string> {
+export function tiktokUserPayload(input: { email?: string | null }): Record<string, string> {
   const user: Record<string, string> = {};
   const email = normalizeEmailForTikTok(input.email);
   if (email) user.email = sha256Hex(email);
-  const phone = normalizePhoneE164ForTikTok(input.phone, input.country);
-  if (phone) user.phone_number = sha256Hex(phone);
   return user;
 }
 
@@ -43,7 +37,7 @@ export async function sendTikTokServerEvent(input: {
   eventId: string;
   properties?: Record<string, unknown>;
   /** Raw values; normalized and hashed here, never forwarded in the clear. */
-  user?: { email?: string | null; phone?: string | null; country?: string | null };
+  user?: { email?: string | null };
 }): Promise<void> {
   const accessToken = process.env.TIKTOK_ACCESS_TOKEN;
   if (!accessToken) return;

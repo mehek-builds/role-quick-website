@@ -1,12 +1,8 @@
 "use client";
 
-import type { TikTokServerEventName } from "./tiktok-event-names";
-import { TIKTOK_ADS_PIXEL_CODES } from "./tiktok-pixel";
-import {
-  normalizeEmailForTikTok,
-  normalizePhoneE164ForTikTok,
-  tiktokPurchaseContentId,
-} from "./tiktok-identity";
+import type { TikTokServerEventName } from "./tiktok-event-names.ts";
+import { TIKTOK_ADS_PIXEL_CODES } from "./tiktok-pixel.ts";
+import { normalizeEmailForTikTok, tiktokPurchaseContentId } from "./tiktok-identity.ts";
 
 export type { TikTokServerEventName };
 
@@ -28,13 +24,9 @@ export function matchingWithin<T>(promise: Promise<T>, ms = 1200): Promise<T | n
   ]);
 }
 
-/** Raw (unhashed) Advanced Matching identifiers, as held by the signed-in client. */
-export type TikTokAdvancedMatching = {
-  email?: string | null;
-  phone?: string | null;
-  /** Applicant's stated country; only used to complete a bare national phone number. */
-  country?: string | null;
-};
+/** Raw (unhashed) Advanced Matching identifiers, as held by the signed-in client.
+    Email only: see lib/tiktok-identity.ts for why phone is not sent at all. */
+export type TikTokAdvancedMatching = { email?: string | null };
 
 declare global {
   interface Window {
@@ -45,7 +37,7 @@ declare global {
         /* Takes PLAINTEXT and hashes internally. Passing an already-hashed value
            here would be hashed a second time and match nobody, which is why the
            browser path must never reuse the server path's SHA-256 helper. */
-        identify(identifiers: { email?: string; phone_number?: string }): void;
+        identify(identifiers: { email?: string }): void;
       };
     };
   }
@@ -72,7 +64,17 @@ export function sendTikTokEvent(
          in the browser would ship a hashing rule the server could not keep in
          step with. Nothing new is exposed -- this is the signed-in student's own
          address, sent same-origin over HTTPS. */
-      body: JSON.stringify({ event, event_id: eventId, properties, ...(user ? { user } : {}) }),
+      /* Only when there is actually an identifier to carry. `user` is an object even
+         when its email is null, so a bare truthiness check on it put `{"email":null}`
+         on the wire for every unmatched event -- harmless (the route drops it) but it
+         reads like an identifier was sent, which is the confusing thing to see when
+         EMQ later fails to move. */
+      body: JSON.stringify({
+        event,
+        event_id: eventId,
+        properties,
+        ...(user?.email ? { user } : {}),
+      }),
       keepalive: true,
     });
   } catch {
@@ -92,14 +94,13 @@ export function trackTikTokPixelEvent(
 ) {
   try {
     const email = normalizeEmailForTikTok(user?.email) ?? undefined;
-    const phoneNumber = normalizePhoneE164ForTikTok(user?.phone, user?.country) ?? undefined;
     for (const pixelCode of TIKTOK_ADS_PIXEL_CODES) {
       const instance = window.ttq?.instance(pixelCode);
       /* identify() must precede track(): it attaches the identifiers to the
          events that follow it on this instance, so calling it afterwards would
          leave this very Purchase unmatched. Skipped entirely when neither value
          normalized, rather than sent as an empty object. */
-      if (email || phoneNumber) {
+      if (email) {
         /* Its own try/catch, INSIDE the loop. window.ttq can be a partial stub -- a
            consent tool or blocker that defines track() but not identify() -- and the
            optional chain guards `instance`, not `identify`, so a missing or throwing
@@ -107,10 +108,7 @@ export function trackTikTokPixelEvent(
            track(). That would drop the Purchase for both pixels to gain matching on
            neither. Matching is the bonus; the event is the point. */
         try {
-          instance?.identify({
-            ...(email ? { email } : {}),
-            ...(phoneNumber ? { phone_number: phoneNumber } : {}),
-          });
+          instance?.identify({ email });
         } catch {
           /* Fall through to track() unmatched rather than losing the event. */
         }

@@ -8,12 +8,11 @@ import {
   api,
   ApiError,
   createBillingPortal,
-  getApplicationProfile,
   getBillingReceipt,
   type BillingReceipt,
   type Me,
 } from "@/lib/api";
-import { firePurchaseEventOnce, matchingWithin } from "@/lib/tiktok-client";
+import { firePurchaseEventOnce } from "@/lib/tiktok-client";
 import { isSafeBillingPortalUrl } from "@/lib/billing";
 import { retryPremiumActionThroughExtension, verifyExtensionCheckoutReturn } from "@/lib/extension-bridge";
 import {
@@ -328,8 +327,8 @@ export default function BillingReturnPage() {
                checkout succeeded -- this is the one point in the funnel with real
                server-verified proof of payment.
 
-               purchaseSentRef alone only guards one mount: browser back/forward within
-               this tab remounts the page and would re-run this whole branch. The
+               purchaseSentRef guards a remount within this tab (browser back/forward
+               re-runs this whole branch). The
                sessionStorage flag survives that remount (billingReturnContext's own
                entry for this offer lives in sessionStorage too, for hours, so the
                window is real, not theoretical) without relying on TikTok's Events API
@@ -350,17 +349,9 @@ export default function BillingReturnPage() {
                submission still dedupes on TikTok's side by event_id -- unlike
                silently under-reporting every conversion this branch cannot place. */
             if ((storedContext?.returnRoute ?? null) !== "/start") {
-              /* Bounded and non-rejecting, then fired whatever came back. Not gated on
-                 `stopped`: firePurchaseEventOnce touches no React state and dedupes on
-                 sessionStorage, so firing after an unmount is harmless, while skipping
-                 it loses a real conversion. */
-              void matchingWithin(getApplicationProfile()).then((applicationProfile) => {
-                firePurchaseEventOnce(purchaseSentRef, receipt, context, {
-                  email: me.email,
-                  phone: applicationProfile?.phone,
-                  country: applicationProfile?.address_country,
-                });
-              });
+              /* me is already loaded above, so this needs no extra request and cannot
+                 delay the screen. Email is the only identifier sent. */
+              firePurchaseEventOnce(purchaseSentRef, receipt, context, { email: me.email });
             }
           }
           return;

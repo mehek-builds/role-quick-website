@@ -106,13 +106,8 @@ export async function POST(request: NextRequest) {
     typeof value === "string" && value.length > 0 && value.length <= MAX_IDENTIFIER_LENGTH
       ? value
       : null;
-  const user = rawUser
-    ? {
-      email: identifier(rawUser.email),
-      phone: identifier(rawUser.phone),
-      country: identifier(rawUser.country),
-    }
-    : undefined;
+  // Email only; phone is never sent from anywhere (see lib/tiktok-identity.ts).
+  const user = rawUser ? { email: identifier(rawUser.email) } : undefined;
 
   /* after() lets the response return immediately while the outbound TikTok
      call finishes in the background -- every caller (lib/tiktok-client.ts)
@@ -122,7 +117,7 @@ export async function POST(request: NextRequest) {
     event: event as TikTokServerEventName,
     eventId,
     properties,
-    ...(user && (user.email || user.phone) ? { user } : {}),
+    ...(user?.email ? { user } : {}),
   }));
   return NextResponse.json({ ok: true });
 }

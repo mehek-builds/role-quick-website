@@ -168,7 +168,6 @@ async function routeBilling(context, meResponse, {
   let offerCalls = 0;
   let stateCalls = 0;
   let portalCalls = 0;
-  let applicationProfileCalls = 0;
   const unknown = [];
   let reconcileCalls = 0;
   await context.route("**/*", async (route) => {
@@ -215,14 +214,6 @@ async function routeBilling(context, meResponse, {
         reference: "123456789012",
       } });
     }
-    /* Read once, only for the TikTok Advanced Matching phone, and only on the branch
-       that actually fires Purchase. It is counted rather than waved through so this
-       audit still fails if it ever starts firing per poll attempt, or on a cancelled
-       return that must never read the account at all. */
-    if (url.startsWith(BACKEND) && request.method() === "GET" && new URL(url).pathname === "/profile/application") {
-      applicationProfileCalls += 1;
-      return route.fulfill({ json: { phone: "415-555-2671", address_country: "US" } });
-    }
     if (url.startsWith(BACKEND) && new URL(url).pathname === "/v1/meta") {
       return route.fulfill({ json: { product: "litos" } });
     }
@@ -237,7 +228,6 @@ async function routeBilling(context, meResponse, {
     get stateCalls() { return stateCalls; },
     get portalCalls() { return portalCalls; },
     get reconcileCalls() { return reconcileCalls; },
-    get applicationProfileCalls() { return applicationProfileCalls; },
     unknown,
   };
 }
@@ -252,7 +242,6 @@ test("cancelled billing return never reads the account", async () => {
   assert.equal(traffic.offerCalls, 0);
   assert.equal(traffic.stateCalls, 0);
   assert.equal(traffic.reconcileCalls, 0, "a cancelled return must not go asking Stripe anything");
-  assert.equal(traffic.applicationProfileCalls, 0, "a cancelled return has no purchase to match, so it must not read the profile either");
   assert.deepEqual(traffic.unknown, []);
   await context.close();
 });
@@ -278,12 +267,6 @@ test("billing return confirms the exact paid offer and account record", async ()
   /* Once, not per attempt. Reconciling inside the poll would multiply a Stripe
      round trip by the retry count for every returning student. */
   assert.equal(traffic.reconcileCalls, 1);
-  /* At most once, and deliberately NOT awaited before the success screen paints:
-     it is fired after setResult so a slow profile read cannot hold a student who
-     has just paid on the verifying screen. Polled rather than asserted inline
-     because it is now genuinely asynchronous to the render. */
-  for (let attempt = 0; attempt < 50 && traffic.applicationProfileCalls === 0; attempt += 1) await delay(10);
-  assert.equal(traffic.applicationProfileCalls, 1);
   assert.deepEqual(traffic.unknown, []);
   await context.close();
 });

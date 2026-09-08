@@ -40,7 +40,9 @@ test("the verified Stripe return Purchase is routed to the US pixel", async () =
     "identify() must precede track() or Advanced Matching misses this very event",
   );
   /* identify() must not be able to take track() down with it: a partial ttq stub
-     without identify would otherwise drop the Purchase for every pixel. */
+     without identify would otherwise drop the Purchase for every pixel. The
+     behavioural proof of all of this lives in tests/tiktok-advanced-matching.test.mjs;
+     these guards only keep the shape from drifting. */
   assert.match(
     client,
     /try \{\s*\n\s*instance\?\.identify\(/,

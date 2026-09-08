@@ -1,43 +1,31 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  normalizeEmailForTikTok,
-  normalizePhoneE164ForTikTok,
-  tiktokPurchaseContentId,
-} from "../lib/tiktok-identity.ts";
+import { normalizeEmailForTikTok, tiktokPurchaseContentId } from "../lib/tiktok-identity.ts";
 
 /* CROSS-REPO PINNED VECTORS. volley-backend's src/lib/tiktokEvents.ts holds a
-   hand-mirrored copy of these two rules, and its test file asserts this EXACT list.
-   A drift between the repos hashes one person two different ways, which is invisible
-   in production: TikTok accepts anything (code 0 even for a made-up field name) and
-   EMQ only moves over real traffic with a lag. Change one side, change both. */
-test("cross-repo normalization vectors", () => {
-  const cases = [
-    ["+1 (415) 555-2671", null, "+14155552671"],
-    ["415-555-2671", "US", "+14155552671"],
-    ["415-555-2671", "United States", "+14155552671"],
-    ["415-555-2671", "u.s.", "+14155552671"],
-    ["415-555-2671", null, null],
-    ["13812345678", "CN", null],
-    ["13812345678", null, null],
-    ["00971501234567", null, "+971501234567"],
-    ["+44 20 7946 0958", null, "+442079460958"],
-    ["20 7946 0958", "GB", null],
-  ];
-  for (const [phone, country, expected] of cases) {
-    assert.equal(normalizePhoneE164ForTikTok(phone, country), expected, `phone ${phone} / ${country}`);
-  }
+   hand-mirrored copy of this rule and its test file asserts this SAME list. A drift
+   between the repos hashes one person two different ways, which is invisible in
+   production: TikTok accepts anything (code 0 even for a made-up field name) and EMQ
+   only moves over real traffic with a lag. Change one side, change both. */
+test("cross-repo email normalization vectors", () => {
   assert.equal(normalizeEmailForTikTok("  Student@Example.COM "), "student@example.com");
+  assert.equal(normalizeEmailForTikTok("STUDENT+tag@example.co.uk"), "student+tag@example.co.uk");
   assert.equal(normalizeEmailForTikTok("@"), null);
   assert.equal(normalizeEmailForTikTok("a@b"), null);
+  assert.equal(normalizeEmailForTikTok("nope"), null);
+  assert.equal(normalizeEmailForTikTok("   "), null);
+  assert.equal(normalizeEmailForTikTok(null), null);
 });
 
-test("an encrypted-looking value never becomes a phone number", () => {
-  /* The backend reads this field from an encrypted column. Both copies of the rule
-     must refuse ciphertext, or a decrypt that is skipped upstream turns into a
-     fabricated identity reported to TikTok. */
-  assert.equal(normalizePhoneE164ForTikTok("aXU+RNDeixpE2Im9cn6MBzUIZ4kLr86TXS8pXnIdoj1mSSe08o/oOg=="), null);
-  assert.equal(normalizePhoneE164ForTikTok("+rv44eFCdGGCKD4iDghJkuHtV7tsXLapilaheAbDAYVJb3W1Ni63Tg=="), null);
+test("phone normalization is not exported, so no surface can start sending one", async () => {
+  /* Phone was removed after two review rounds. address_country says where a student
+     LIVES, not where their number is from, so an international student in the US had
+     their home mobile completed to a real stranger's structurally-valid +1 number --
+     undetectable, and the wrong person attributed to the purchase. This asserts the
+     capability is GONE rather than merely unused, so bringing it back is a deliberate
+     act with this comment attached to it. */
+  const identity = await import("../lib/tiktok-identity.ts");
+  assert.equal("normalizePhoneE164ForTikTok" in identity, false);
 });
 
 test("content_id canonicalizes the legacy cadence aliases so both reporters agree", () => {

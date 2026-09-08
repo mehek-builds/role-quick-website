@@ -36,7 +36,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
   api,
-  getApplicationProfile,
   getBillingReceipt,
   getNotificationPreferences,
   setNotificationPreferences,
@@ -266,33 +265,26 @@ export function NotificationsStep({
      reference, so TikTok's own dedup collapses the two if both land. */
   const purchaseSentRef = useRef(false);
   useEffect(() => {
-    let cancelled = false;
     /* Receipt carries value/currency and the plan+interval that become content_id;
-       /me and the application profile carry the Advanced Matching identifiers.
-       Only the receipt is load-bearing. The other two are bounded by matchingWithin
-       and cannot delay or lose the event: a plain Promise.all made the Purchase wait
-       on the SLOWEST of three requests, and this screen has a Continue button a
-       student can click immediately, so a hung profile read silently cost the
-       conversion. Deliberately not gated on `cancelled` either -- this fires no state
-       update and dedupes on sessionStorage, so firing after unmount is harmless while
-       skipping it loses a real conversion. */
+       /me carries the Advanced Matching email. Only the receipt is load-bearing, and
+       /me is bounded by matchingWithin so a hung read costs the email rather than the
+       event: this screen has a Continue button a student can click immediately, and an
+       unbounded wait silently cost conversions.
+
+       NO `cancelled` FLAG, deliberately, and its absence is the fix rather than an
+       oversight: this effect updates no state, and firePurchaseEventOnce dedupes on
+       sessionStorage, so completing after an unmount is harmless while abandoning on
+       unmount loses a real conversion. A cleanup that set a flag nothing reads would
+       only imply a guard that is not there. */
     void getBillingReceipt()
       .then(async (receipt) => {
-        const [me, applicationProfile] = await Promise.all([
-          matchingWithin(api<Me>("/me")),
-          matchingWithin(getApplicationProfile()),
-        ]);
-        firePurchaseEventOnce(purchaseSentRef, receipt, undefined, {
-          email: me?.email,
-          phone: applicationProfile?.phone,
-          country: applicationProfile?.address_country,
-        });
+        const me = await matchingWithin(api<Me>("/me"));
+        firePurchaseEventOnce(purchaseSentRef, receipt, undefined, { email: me?.email });
       })
       .catch(() => {
         /* No receipt yet is not an error worth surfacing here: litos-api's
            webhook fallback still reports the purchase either way. */
       });
-    return () => { cancelled = true; };
   }, []);
   return (
     <StartShell step="notifications" title="Want to know when the next one opens?">
