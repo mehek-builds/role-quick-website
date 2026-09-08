@@ -1532,7 +1532,12 @@ async function verifyVisualBaselines() {
   const screenshotNames = (await readdir(ARTIFACT_DIR))
     .filter((name) => name.endsWith(".png"))
     .sort();
-  assert.ok(screenshotNames.length >= 70, `visual evidence is incomplete: only ${screenshotNames.length} screenshots were captured`);
+  /* Floor lowered from 70 to 51 on 2026-09-08, when the 19 network and outreach scenarios went
+     with their features. This is the SECOND copy of this number -- the other is in
+     scripts/update-dashboard-visual-baselines.mjs -- and both have to track the real count. It
+     guards against a run that died partway still being read as evidence, so leaving it at 70
+     would have failed every future run, which is exactly what it just did. */
+  assert.ok(screenshotNames.length >= 51, `visual evidence is incomplete: only ${screenshotNames.length} screenshots were captured`);
 
   // Capture mode deliberately never writes approved evidence. The package update command runs a
   // separate writer only after this entire browser process exits successfully.
