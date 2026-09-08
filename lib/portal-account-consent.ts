@@ -166,7 +166,7 @@ export function portalAccountConsentGrantedOn(
  * Exactly one key, always. The API treats an omitted field as "leave it alone" and an explicit false
  * as a revocation, so a patch that also named a neighbouring permission could revoke one the
  * applicant never touched. Independence is a property of this payload, not of the code that calls
- * it — and it matters more here than anywhere else on the screen, because this is the arm whose
+ * it, and it matters more here than anywhere else on the screen, because this is the arm whose
  * date is the record of an act that created an account in her name.
  */
 export function portalAccountConsentPatch(
