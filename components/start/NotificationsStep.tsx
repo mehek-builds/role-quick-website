@@ -34,7 +34,14 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { getBillingReceipt, getNotificationPreferences, setNotificationPreferences } from "@/lib/api";
+import {
+  api,
+  getApplicationProfile,
+  getBillingReceipt,
+  getNotificationPreferences,
+  setNotificationPreferences,
+  type Me,
+} from "@/lib/api";
 import { disablePush, enablePush, hasPushSubscription, pushSupport } from "@/lib/push";
 import { ErrorNote } from "@/components/app/ui";
 import { LaterLink, PrimaryButton, StartShell } from "./ui";
@@ -260,9 +267,22 @@ export function NotificationsStep({
   const purchaseSentRef = useRef(false);
   useEffect(() => {
     let cancelled = false;
-    void getBillingReceipt()
-      .then((receipt) => {
-        if (!cancelled) firePurchaseEventOnce(purchaseSentRef, receipt);
+    /* Receipt carries value/currency and the plan+interval that become content_id;
+       /me and the application profile carry the Advanced Matching identifiers.
+       Only the receipt is load-bearing -- the other two are settled independently
+       so a failure in either costs match quality, never the Purchase event. */
+    void Promise.all([
+      getBillingReceipt(),
+      api<Me>("/me").catch(() => null),
+      getApplicationProfile().catch(() => null),
+    ])
+      .then(([receipt, me, applicationProfile]) => {
+        if (cancelled) return;
+        firePurchaseEventOnce(purchaseSentRef, receipt, undefined, {
+          email: me?.email,
+          phone: applicationProfile?.phone,
+          country: applicationProfile?.address_country,
+        });
       })
       .catch(() => {
         /* No receipt yet is not an error worth surfacing here: litos-api's

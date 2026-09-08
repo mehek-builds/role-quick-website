@@ -4,7 +4,10 @@ import { TIKTOK_SERVER_EVENTS, type TikTokServerEventName } from "@/lib/tiktok-e
 import { SITE_URL } from "@/lib/config";
 
 const ALLOWED_EVENTS = new Set<TikTokServerEventName>(TIKTOK_SERVER_EVENTS);
-const ALLOWED_PROPERTY_KEYS = new Set(["plan_id", "value", "currency"]);
+const ALLOWED_PROPERTY_KEYS = new Set(["plan_id", "value", "currency", "content_id", "content_type"]);
+/* Long enough for any real address or E.164 number, short enough that this
+   endpoint cannot be used to push bulk data through to TikTok. */
+const MAX_IDENTIFIER_LENGTH = 320;
 
 /* This route has no session/auth of its own -- it exists purely to keep
    TIKTOK_ACCESS_TOKEN off the client, not to gate who can claim a conversion
@@ -60,18 +63,58 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false }, { status: 400 });
   }
 
-  const properties: Record<string, string | number> = {};
+  const properties: Record<string, unknown> = {};
   if (body?.properties && typeof body.properties === "object") {
     for (const key of ALLOWED_PROPERTY_KEYS) {
       const value = (body.properties as Record<string, unknown>)[key];
       if (typeof value === "string" || typeof value === "number") properties[key] = value;
     }
   }
+  /* Built here rather than accepted from the caller: `contents` is the only
+     non-scalar TikTok wants, and rebuilding it from the content_id that already
+     passed the allowlist above keeps this endpoint's "scalars only" contract
+     intact instead of forwarding a client-shaped array wholesale.
+     Both flat content_id and contents[] are sent because TikTok's own surfaces
+     disagree about which one Purchase reads, and it ignores the other silently. */
+  if (typeof properties.content_id === "string") {
+    properties.contents = [{
+      content_id: properties.content_id,
+      content_type: "product",
+      quantity: 1,
+      ...(typeof properties.value === "number" ? { price: properties.value } : {}),
+    }];
+  }
+
+  /* Advanced Matching identifiers arrive raw and are hashed in
+     sendTikTokServerEvent. Read defensively: this route is unauthenticated by
+     design (see above), so anything here is caller-supplied and only ever as
+     trustworthy as the origin check. Over-long values are dropped rather than
+     truncated -- a truncated address hashes to something that matches nobody,
+     which is indistinguishable from a bug when EMQ later fails to move. */
+  const rawUser = body?.user && typeof body.user === "object"
+    ? (body.user as Record<string, unknown>)
+    : null;
+  const identifier = (value: unknown): string | null =>
+    typeof value === "string" && value.length > 0 && value.length <= MAX_IDENTIFIER_LENGTH
+      ? value
+      : null;
+  const user = rawUser
+    ? {
+      email: identifier(rawUser.email),
+      phone: identifier(rawUser.phone),
+      country: identifier(rawUser.country),
+    }
+    : undefined;
 
   /* after() lets the response return immediately while the outbound TikTok
      call finishes in the background -- every caller (lib/tiktok-client.ts)
      fire-and-forgets this route and never reads its response, so there is
      nothing to gain by holding the invocation open for the round trip. */
-  after(() => sendTikTokServerEvent({ event: event as TikTokServerEventName, eventId, properties }));
+  after(() => sendTikTokServerEvent({
+    event: event as TikTokServerEventName,
+    eventId,
+    properties,
+    ...(user && (user.email || user.phone) ? { user } : {}),
+  }));
   return NextResponse.json({ ok: true });
 }

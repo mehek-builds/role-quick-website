@@ -8,6 +8,7 @@ import {
   api,
   ApiError,
   createBillingPortal,
+  getApplicationProfile,
   getBillingReceipt,
   type BillingReceipt,
   type Me,
@@ -236,6 +237,16 @@ export default function BillingReturnPage() {
                not surface-scoped. */
             const receipt = await getBillingReceipt().catch(() => null);
             if (stopped) return;
+            /* DELIBERATELY NO ADVANCED MATCHING ON THIS BRANCH. The website session
+               here can belong to a DIFFERENT account than the extension one that just
+               paid (the whole reason this branch asks the extension to verify itself
+               rather than reading /me), so /me and the application profile would
+               attach the wrong person's email and phone to this purchase. A missing
+               identifier costs match quality; a wrong one corrupts it. litos-api's
+               Stripe-webhook fallback supplies both for this purchase anyway, resolved
+               from Stripe's own customer mapping rather than a browser session.
+               tests/litos-plus-pricing.test.mjs pins this branch shut against any
+               session-identity lookup, so read that guard before adding a fetch here. */
             firePurchaseEventOnce(purchaseSentRef, receipt, context ?? reply.account_id);
             setResult({ kind: "extension_active", actionReady: reply.action_ready === true });
             return;
@@ -305,7 +316,13 @@ export default function BillingReturnPage() {
           verdict === "active"
           && me
         ) {
-          const receipt = await getBillingReceipt().catch(() => null);
+          /* Runs at most once despite sitting in the poll loop: this branch returns
+             immediately below. The application profile is fetched only for the
+             Advanced Matching phone and never gates the receipt or the UI. */
+          const [receipt, applicationProfile] = await Promise.all([
+            getBillingReceipt().catch(() => null),
+            getApplicationProfile().catch(() => null),
+          ]);
           if (!stopped) {
             setResult({ kind: "active", me, receipt });
             /* Fired only after billingReturnVerdict confirms Stripe itself (via
@@ -334,7 +351,13 @@ export default function BillingReturnPage() {
                (receipt.reference, or this offer's context id), so a genuine double
                submission still dedupes on TikTok's side by event_id -- unlike
                silently under-reporting every conversion this branch cannot place. */
-            if ((storedContext?.returnRoute ?? null) !== "/start") firePurchaseEventOnce(purchaseSentRef, receipt, context);
+            if ((storedContext?.returnRoute ?? null) !== "/start") {
+              firePurchaseEventOnce(purchaseSentRef, receipt, context, {
+                email: me.email,
+                phone: applicationProfile?.phone,
+                country: applicationProfile?.address_country,
+              });
+            }
           }
           return;
         }

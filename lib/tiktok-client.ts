@@ -2,8 +2,21 @@
 
 import type { TikTokServerEventName } from "./tiktok-event-names";
 import { TIKTOK_ADS_PIXEL_CODES } from "./tiktok-pixel";
+import {
+  normalizeEmailForTikTok,
+  normalizePhoneE164ForTikTok,
+  tiktokPurchaseContentId,
+} from "./tiktok-identity";
 
 export type { TikTokServerEventName };
+
+/** Raw (unhashed) Advanced Matching identifiers, as held by the signed-in client. */
+export type TikTokAdvancedMatching = {
+  email?: string | null;
+  phone?: string | null;
+  /** Applicant's stated country; only used to complete a bare national phone number. */
+  country?: string | null;
+};
 
 declare global {
   interface Window {
@@ -11,6 +24,10 @@ declare global {
       instance(pixelCode: string): {
         page(): void;
         track(event: TikTokServerEventName, properties?: Record<string, unknown>): void;
+        /* Takes PLAINTEXT and hashes internally. Passing an already-hashed value
+           here would be hashed a second time and match nobody, which is why the
+           browser path must never reuse the server path's SHA-256 helper. */
+        identify(identifiers: { email?: string; phone_number?: string }): void;
       };
     };
   }
@@ -26,12 +43,18 @@ export function sendTikTokEvent(
   event: TikTokServerEventName,
   eventId: string,
   properties?: Record<string, string | number>,
+  user?: TikTokAdvancedMatching,
 ) {
   try {
     void fetch("/api/tiktok-event", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ event, event_id: eventId, properties }),
+      /* Identifiers travel to our OWN route in the clear and are hashed there:
+         the Events API needs a SHA-256 digest we compute ourselves, and doing it
+         in the browser would ship a hashing rule the server could not keep in
+         step with. Nothing new is exposed -- this is the signed-in student's own
+         address, sent same-origin over HTTPS. */
+      body: JSON.stringify({ event, event_id: eventId, properties, ...(user ? { user } : {}) }),
       keepalive: true,
     });
   } catch {
@@ -46,18 +69,38 @@ export function sendTikTokEvent(
 export function trackTikTokPixelEvent(
   event: TikTokServerEventName,
   eventId: string,
-  properties?: Record<string, string | number>,
+  properties?: Record<string, unknown>,
+  user?: TikTokAdvancedMatching,
 ) {
   try {
+    const email = normalizeEmailForTikTok(user?.email) ?? undefined;
+    const phoneNumber = normalizePhoneE164ForTikTok(user?.phone, user?.country) ?? undefined;
     for (const pixelCode of TIKTOK_ADS_PIXEL_CODES) {
-      window.ttq?.instance(pixelCode).track(event, { ...properties, event_id: eventId });
+      const instance = window.ttq?.instance(pixelCode);
+      /* identify() must precede track(): it attaches the identifiers to the
+         events that follow it on this instance, so calling it afterwards would
+         leave this very Purchase unmatched. Skipped entirely when neither value
+         normalized, rather than sent as an empty object. */
+      if (email || phoneNumber) {
+        instance?.identify({
+          ...(email ? { email } : {}),
+          ...(phoneNumber ? { phone_number: phoneNumber } : {}),
+        });
+      }
+      instance?.track(event, { ...properties, event_id: eventId });
     }
   } catch {
     /* analytics must never break the funnel */
   }
 }
 
-type PurchaseReceipt = { reference: string | null; amount_cents: number; currency: string };
+type PurchaseReceipt = {
+  reference: string | null;
+  amount_cents: number;
+  currency: string;
+  plan?: string | null;
+  interval?: string | null;
+};
 
 /* Shared by every place Purchase can fire client-side (app/billing/return/page.tsx's
    website branch, components/start/NotificationsStep.tsx). Keys the sessionStorage
@@ -76,6 +119,10 @@ export function firePurchaseEventOnce(
   purchaseSentRef: { current: boolean },
   receipt: PurchaseReceipt | null,
   fallbackKey?: string,
+  /* Raw identifiers for Event Match Quality. Optional and best-effort by design:
+     every caller fetches them alongside the receipt and passes whatever came
+     back, so a failed lookup costs match quality but never the event itself. */
+  advancedMatching?: TikTokAdvancedMatching,
 ) {
   const dedupeId = receipt?.reference ?? fallbackKey;
   if (!dedupeId) return;
@@ -84,9 +131,28 @@ export function firePurchaseEventOnce(
   purchaseSentRef.current = true;
   window.sessionStorage.setItem(purchaseKey, "1");
   const purchaseEventId = `purchase:${dedupeId}`;
+  const contentId = tiktokPurchaseContentId(receipt?.plan, receipt?.interval);
   const purchaseProperties = receipt
-    ? { value: receipt.amount_cents / 100, currency: receipt.currency }
+    ? {
+      value: receipt.amount_cents / 100,
+      currency: receipt.currency,
+      ...(contentId ? { content_id: contentId, content_type: "product" } : {}),
+    }
     : undefined;
-  sendTikTokEvent("Purchase", purchaseEventId, purchaseProperties);
-  trackTikTokPixelEvent("Purchase", purchaseEventId, purchaseProperties);
+  /* The pixel gets contents[] too, matching what /api/tiktok-event rebuilds for
+     the server copy, so the browser and server reports of one purchase carry the
+     same shape rather than diverging on the field TikTok actually reads. */
+  const pixelProperties = purchaseProperties && contentId
+    ? {
+      ...purchaseProperties,
+      contents: [{
+        content_id: contentId,
+        content_type: "product",
+        quantity: 1,
+        price: receipt!.amount_cents / 100,
+      }],
+    }
+    : purchaseProperties;
+  sendTikTokEvent("Purchase", purchaseEventId, purchaseProperties, advancedMatching);
+  trackTikTokPixelEvent("Purchase", purchaseEventId, pixelProperties, advancedMatching);
 }
