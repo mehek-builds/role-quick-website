@@ -101,9 +101,9 @@ function dashboardReadFixture(key) {
     return {
       checkout_available: true,
       plans: [
-        { plan_id: "litos_plus_week", amount_cents: 1999, checkout_available: true },
-        { plan_id: "litos_plus_month", amount_cents: 3999, checkout_available: true },
-        { plan_id: "litos_plus_quarter", amount_cents: 8999, checkout_available: true },
+        { plan_id: "litos_plus_week", amount_cents: 2999, checkout_available: true },
+        { plan_id: "litos_plus_month", amount_cents: 5999, checkout_available: true },
+        { plan_id: "litos_plus_quarter", amount_cents: 11999, checkout_available: true },
       ],
     };
   }
@@ -207,7 +207,7 @@ async function routeBilling(context, meResponse, {
         provider: "stripe",
         plan: "pro",
         interval: "monthly",
-        amount_cents: 3999,
+        amount_cents: 5999,
         currency: "USD",
         paid_at: "2026-08-14T12:34:00.000Z",
         renews_at: "2026-09-14T12:34:00.000Z",
@@ -253,11 +253,11 @@ test("billing return confirms the exact paid offer and account record", async ()
   const page = await context.newPage();
   await page.goto(`${ORIGIN}/billing/return?context=${OFFER_ID}`);
   await page.getByRole("heading", { name: "You're on Litos+." }).waitFor();
-  await page.getByLabel("Litos+ payment receipt for $39.99").waitFor();
+  await page.getByLabel("Litos+ payment receipt for $59.99").waitFor();
   await page.getByRole("status").getByText("Payment complete").waitFor();
   assert.equal(await page.locator("[data-receipt-stage]").getAttribute("data-receipt-stage"), "complete");
   await page.getByText("Every month", { exact: true }).first().waitFor();
-  await page.getByText("$39.99", { exact: true }).first().waitFor();
+  await page.getByText("$59.99", { exact: true }).first().waitFor();
   await page.getByRole("button", { name: "Open billing portal" }).click();
   for (let attempt = 0; attempt < 50 && traffic.portalCalls === 0; attempt += 1) await delay(10);
   assert.equal(traffic.portalCalls, 1);

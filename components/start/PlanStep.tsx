@@ -60,8 +60,6 @@ export function PlanStep({ onSettled }: { onSettled: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<PlanCatalog | null>(null);
   const plans = catalog?.plans ?? LITOS_PLUS_PLANS;
-  const plan = plans.find((candidate) => candidate.id === selected)
-    ?? plans.find((candidate) => candidate.id === DEFAULT_LITOS_PLUS_PLAN_ID)!;
   const tiktokCheckoutIdsRef = useRef(new Map<string, string>());
 
   useEffect(() => {
@@ -94,17 +92,18 @@ export function PlanStep({ onSettled }: { onSettled: () => void }) {
     return () => { cancelled = true; };
   }, [onSettled]);
 
-  async function checkout() {
+  async function checkout(planId: LitosPlusPlanId) {
+    setSelected(planId);
     setBusy(true);
     setError(null);
     try {
-      track("checkout_started", { plan_id: selected, source: "onboarding", trigger: "start_plan" });
-      const tiktokEventId = operationIdFor(tiktokCheckoutIdsRef.current, selected);
-      sendTikTokEvent("InitiateCheckout", tiktokEventId, { plan_id: selected });
-      trackTikTokPixelEvent("InitiateCheckout", tiktokEventId, { plan_id: selected });
+      track("checkout_started", { plan_id: planId, source: "onboarding", trigger: "start_plan" });
+      const tiktokEventId = operationIdFor(tiktokCheckoutIdsRef.current, planId);
+      sendTikTokEvent("InitiateCheckout", tiktokEventId, { plan_id: planId });
+      trackTikTokPixelEvent("InitiateCheckout", tiktokEventId, { plan_id: planId });
       const access = await getBillingState();
       if (!access?.account_id) throw new Error("Litos could not bind checkout to this account. Refresh and try again.");
-      const session = await createLitosPlusCheckout(selected, {
+      const session = await createLitosPlusCheckout(planId, {
         surface: "website",
         placement: "onboarding",
         trigger: "start_plan",
@@ -117,7 +116,7 @@ export function PlanStep({ onSettled }: { onSettled: () => void }) {
         returnRoute: "/start",
         expiresAt: session.expires_at,
       });
-      completeOperationId(tiktokCheckoutIdsRef.current, selected);
+      completeOperationId(tiktokCheckoutIdsRef.current, planId);
       window.location.assign(session.checkoutUrl);
     } catch (reason) {
       /* A GUEST CANNOT PAY YET, AND THIS IS THE ONLY WAY OUT OF THE PAYMENT GATE.
@@ -155,52 +154,71 @@ export function PlanStep({ onSettled }: { onSettled: () => void }) {
     <StartShell step="plan" title="What happens after the seven days.">
       {error && <div className="mb-4"><ErrorNote message={error} /></div>}
 
+      {/* The same three cards, in the same order and with the same lines, as the pricing page:
+          name, who it is for, price (with the discount pair where there is one), what it buys,
+          the closing sentence, and its own Get Started.
+
+          THE BUTTON IS PER CARD, and that is the point rather than a styling choice. One button
+          under three cards has to name the term it will charge or it is asking for a card
+          without saying what for; a button inside the card it belongs to already answers that
+          by position. Each card also states its own charge sentence for the same reason. */}
       <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
         {plans.map((option) => {
           const on = option.id === selected;
           return (
-            <button
+            <article
               key={option.id}
-              type="button"
-              aria-pressed={on}
-              onClick={() => setSelected(option.id)}
-              className={`flex flex-col gap-0.5 rounded-inner border p-3.5 text-left transition-colors ${
-                on ? "border-brand bg-brand-soft" : "border-border bg-surface hover:border-brand"
+              aria-label={`Litos+, ${option.label}`}
+              className={`flex flex-col rounded-inner border p-3.5 transition-colors ${
+                option.mostPopular ? "border-brand bg-brand-soft" : "border-border bg-surface"
               }`}
             >
-              <span className="text-[13px] text-ink">{option.label}</span>
-              <span className="font-mono text-[17px] tabular-nums text-ink">{option.total}</span>
-              <span className="font-mono text-[11px] text-muted">{option.daily}</span>
-              <span className="mt-1 text-[12px] text-ink">{option.applicationsLine}</span>
-              {on && <span className="mt-0.5 font-mono text-[10px] uppercase tracking-[0.06em] text-brand-ink">Selected</span>}
-            </button>
+              <div className="flex min-h-5 items-center gap-2">
+                <span className="text-[13px] font-medium text-ink">{option.label}</span>
+                {option.mostPopular && (
+                  <span className="rounded-control bg-brand-ink px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.06em] text-surface">Popular</span>
+                )}
+              </div>
+              <p className="mt-1 min-h-9 text-[12px] leading-[1.35] text-muted">{option.audience}</p>
+              <div className="mt-2 flex items-end gap-2">
+                <span className="font-mono text-[17px] tabular-nums text-ink">{option.total}</span>
+                {option.discountLabel && option.listTotal ? (
+                  <span className="flex flex-col leading-tight">
+                    <span className="font-mono text-[10px] text-brand-ink">{option.discountLabel}</span>
+                    <span className="font-mono text-[10px] text-muted line-through">{option.listTotal}</span>
+                  </span>
+                ) : (
+                  <span className="font-mono text-[11px] text-muted">{option.daily}</span>
+                )}
+              </div>
+              <p className="mt-2 min-h-8 text-[12px] text-ink">{option.applicationsLine}</p>
+              <PrimaryButton onClick={() => void checkout(option.id)} disabled={busy}>
+                {busy && on ? <PendingLabel onColor>Opening checkout...</PendingLabel> : "Get Started"}
+              </PrimaryButton>
+              {/* The charge sentence sits with the button that starts it, not one shared line
+                  below three prices, so it can never quote a term other than this card's. */}
+              <p className="mt-2 text-[11px] leading-[1.4] text-muted">
+                Free for seven days, then {option.total} {option.renewal}.
+              </p>
+              <p className="mt-2 min-h-14 flex-1 border-t border-border pt-2 text-[11px] leading-[1.4] text-muted">{option.closer}</p>
+            </article>
           );
         })}
       </div>
-
-      {/* plan.disclosure USED TO SIT HERE and it said "$89.99 today", which stopped being
-          true when the card started a trial instead of a purchase: nothing is taken for
-          seven days. It also contradicted the sentence below it, on the one screen in the
-          product where being wrong about money costs the most. The terms line below says
-          the whole thing correctly -- free for seven days, then the price, cancel before
-          then -- so this is one sentence now rather than two that disagree. */}
 
       {/* WAS a two-row "If you do nothing / You keep / You lose" table promising the
           student unlimited filling, free with no time limit, if they simply did not act.
           That was true when doing nothing meant declining a purchase. It is the opposite
           of true now: the card starts a trial that converts on its own, so doing nothing
           is the path that gets charged. Replaced with the one sentence that matters
-          rather than re-explaining the tiers on the screen that takes the card. */}
+          rather than re-explaining the tiers on the screen that takes the card.
+
+          Each card now carries its own "free for seven days, then X" line, so what is left
+          here is the half that is the same on all three: how to stop it. */}
       <p className="mt-6 text-[13px] leading-6 text-muted">
-        Free for seven days. After that, Litos+ continues at {plan.total} {plan.renewal}.
-        Cancel in Account, in one click, any time before then and you are not charged.
+        Cancel in Account, in one click, any time before the seven days are up and you are not charged.
       </p>
 
-      <div className="mt-7 flex flex-wrap items-center gap-4">
-        <PrimaryButton onClick={() => void checkout()} disabled={busy}>
-          {busy ? <PendingLabel onColor>Opening checkout...</PendingLabel> : `Continue with ${plan.shortLabel}`}
-        </PrimaryButton>
-      </div>
     </StartShell>
   );
 }

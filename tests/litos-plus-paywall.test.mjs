@@ -18,7 +18,9 @@ test("the shared Litos+ modal preserves context and a manual way forward", async
   // before the server catalog loads), not always the static import directly.
   assert.match(modal, /const plans = catalog\?\.plans \?\? LITOS_PLUS_PLANS;/);
   assert.match(modal, /\{plans\.map\(\(candidate\) => \{/);
-  assert.match(modal, /Most popular/);
+  // "Popular" since 2026-09-08, matching the approved plan cards on /pricing and /start.
+  assert.match(modal, /Popular/);
+  assert.doesNotMatch(modal, /Most popular/);
   assert.match(modal, /Current plan: \{accessLabel\(access\)\}/);
   assert.match(modal, /href="\/terms"/);
   assert.match(modal, /href="\/privacy"/);

@@ -317,13 +317,21 @@ export function UpgradeModal({
                       <span className="min-w-0 flex-1">
                         <span className="flex flex-wrap items-center gap-2 text-small font-medium text-ink">
                           {candidate.label}
-                          {candidate.mostPopular && <span className="rounded-control bg-brand-soft px-2 py-0.5 font-mono text-label text-brand-ink">Most popular</span>}
+                          {candidate.mostPopular && <span className="rounded-control bg-brand-ink px-2 py-0.5 font-mono text-label text-surface">Popular</span>}
                         </span>
-                        <span className="mt-0.5 block font-mono text-machine text-muted">{candidate.daily}</span>
+                        <span className="mt-0.5 block text-small text-muted">{candidate.applicationsLine}</span>
                       </span>
                       <span className="text-right">
                         <span className="block font-mono text-machine font-medium text-ink">{candidate.total}</span>
-                        {candidate.savings && <span className="mt-0.5 block font-mono text-label text-brand-ink">Save {candidate.savings}%</span>}
+                        {/* The badge and the struck-through price render as a pair or not at all,
+                            the same rule the plan table enforces: a percentage with nothing to
+                            measure it against is a claim the reader cannot check. */}
+                        {candidate.discountLabel && candidate.listTotal && (
+                          <>
+                            <span className="mt-0.5 block font-mono text-label text-brand-ink">{candidate.discountLabel}</span>
+                            <span className="block font-mono text-label text-muted line-through">{candidate.listTotal}</span>
+                          </>
+                        )}
                       </span>
                     </label>
                   );
@@ -332,7 +340,9 @@ export function UpgradeModal({
 
               <div className="mt-5 border-t border-brand/20 pt-5">
                 <p className="font-mono text-machine text-ink" aria-live="polite">{plan.disclosure}</p>
-                <p className="mt-1 text-label text-muted">Savings compare each daily rate with the weekly daily rate.</p>
+                {plan.discountLabel && plan.listTotal && (
+                  <p className="mt-1 text-label text-muted">{plan.discountLabel} is against the {plan.listTotal} undiscounted {plan.label.toLowerCase()} rate.</p>
+                )}
                 {error && <div className="mt-4"><ErrorNote message={error} /></div>}
                 {!checkoutAvailable && !startNow && !error && (
                   <p className="mt-4 text-small text-muted" role="status">Secure checkout is being checked. No purchase can start until the live catalog matches these terms.</p>

@@ -44,6 +44,8 @@ export const PLUS_LIMITS = { resumes: null, contacts: null, drafts: null } as co
 /** Compatibility name for code deployed before the Litos+ rename. */
 export const PRO_LIMITS = PLUS_LIMITS;
 
-export const PRO_WEEKLY_PRICE = "19.99";
-export const PRO_MONTHLY_PRICE = "39.99";
-export const PLUS_QUARTER_PRICE = "89.99";
+export const PRO_WEEKLY_PRICE = "29.99";
+export const PRO_MONTHLY_PRICE = "59.99";
+export const PLUS_QUARTER_PRICE = "119.99";
+/** The undiscounted quarterly rate the "70% off" badge is struck through against. */
+export const PLUS_QUARTER_LIST_PRICE = "359.99";

@@ -925,6 +925,10 @@ describe("the application sequence, end to end", () => {
        purchase, since nothing is taken for seven days, and it sat directly above a sentence
        saying the opposite.
 
+       2026-09-08: the shared Continue became a Get Started per card, because one button under
+       three prices cannot name the term it charges. What that changes here is the shape of the
+       forward assertion, not its point: every forward control must still be checkout.
+
        So this pins what the screen must SAY -- when the charge lands, how to stop it -- and the
        absence of every exit, rather than any sentence the product no longer means. */
     await page.getByRole("heading", { name: /after the seven days/i }).waitFor({ timeout: 20_000 });
@@ -941,30 +945,36 @@ describe("the application sequence, end to end", () => {
        disappear, which is a wait that cannot fail: rename that class, restyle the loading state, or
        swap the shimmer for a spinner, and querySelector returns null on the first poll, the wait
        passes instantly, and this case is silently reading the loading screen again with nothing
-       red to say so. The plan options carry `aria-pressed` and exist only in the settled branch, so
-       waiting for one to appear says the same thing and fails loudly when its hook moves. It is not
-       among the things asserted below, which read button text. */
-    await page.locator("main button[aria-pressed]").first().waitFor({ timeout: 20_000 });
+       red to say so. Each plan card now carries its own Get Started, and those exist only in the
+       settled branch, so waiting for one to appear says the same thing and fails loudly if the
+       screen stops rendering them. */
+    await page.getByRole("button", { name: "Get Started" }).first().waitFor({ timeout: 20_000 });
 
     const body = await page.locator("main").innerText();
+    /* Each card states its own charge, so this is asserted once per price rather than once for a
+       shared sentence. All three, not just the popular one: a card that shows a price with no
+       charge sentence beside its own button is the exact defect the shared line used to hide. */
+    for (const total of ["$29.99", "$59.99", "$119.99"]) {
+      assert.ok(
+        body.includes(`Free for seven days, then ${total}`),
+        `the paywall must state when the ${total} charge lands`,
+      );
+    }
     assert.match(
       body,
-      /Free for seven days\. After that, Litos\+ continues at/i,
-      "the paywall must state when the charge lands",
-    );
-    assert.match(
-      body,
-      /any time before then and you are not charged/i,
+      /any time before the seven days are up and you are not charged/i,
       "the paywall must state how to stop the charge",
     );
-    assert.doesNotMatch(body, /\$89\.99 today/i, "nothing is charged today, a trial starts");
+    assert.doesNotMatch(body, /\$119\.99 today/i, "nothing is charged today, a trial starts");
     assert.doesNotMatch(body, /Continue on Free/i, "the free escape is the whole point of the gate");
     assert.doesNotMatch(body, /Finish later/i);
 
-    // Exactly one way forward, and it is checkout.
+    /* Three ways forward, one per plan, and every one of them is checkout. The old assertion read
+       "exactly one", which was the same claim about a screen that had one button; what it was
+       ever guarding is that NO control here leaves the gate without paying. */
     const actions = await page.locator("main button, main a").allInnerTexts();
-    const forward = actions.map((t) => t.trim()).filter((t) => /^Continue/i.test(t));
-    assert.deepEqual(forward, ["Continue with 3 months"]);
+    const forward = actions.map((t) => t.trim()).filter((t) => /get started/i.test(t));
+    assert.deepEqual(forward, ["Get Started", "Get Started", "Get Started"]);
   });
 
   /* GOING BACK TO CHANGE AN ANSWER, and coming back to where you were.
@@ -992,7 +1002,7 @@ describe("the application sequence, end to end", () => {
 
     /* Back where they were, which by this point in the suite is the plan screen. The server's own
        answer carries them there, so this is the real step rather than a second override. */
-    await page.getByRole("button", { name: "Continue with 3 months" }).waitFor({ timeout: 15_000 });
+    await page.getByRole("button", { name: "Get Started" }).first().waitFor({ timeout: 15_000 });
     assert.equal(
       acknowledged.length,
       before,
@@ -1004,7 +1014,7 @@ describe("the application sequence, end to end", () => {
    *
    * `plan`'s Continue navigates away to Stripe (checkout()'s own `window.location.assign`), and no
    * browser automation in this harness can complete a real Stripe checkout and be handed back. So
-   * this test does not click "Continue with 3 months" at all - it simulates the ONE THING a
+   * this test does not click any card's "Get Started" at all - it simulates the ONE THING a
    * completed, verified checkout leaves behind for this account: a `plan` acknowledgement. Pushing
    * it into the same `acknowledged` array the stub already reads is standing in for
    * PlanStep.tsx's own `onSettled`, which fires for exactly this reason once `getBillingState()`

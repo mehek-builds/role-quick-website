@@ -10,19 +10,62 @@ import {
 } from "../features/billing/domain/plans.ts";
 import { verifiedPlanCatalog } from "../features/billing/domain/catalog.ts";
 
-test("paid terms use the approved prices, daily rates, savings, and default", () => {
+test("paid terms use the approved prices, daily rates, discount pair, and default", () => {
   assert.equal(DEFAULT_LITOS_PLUS_PLAN_ID, "litos_plus_quarter");
   assert.deepEqual(LITOS_PLUS_PLANS.map((plan) => ({
     id: plan.id,
+    label: plan.label,
     cents: plan.amountCents,
+    total: plan.total,
     daily: plan.daily,
-    savings: plan.savings,
+    list: plan.listTotal,
+    discount: plan.discountLabel,
+    apps: plan.applicationsLine,
     popular: plan.mostPopular,
   })), [
-    { id: "litos_plus_week", cents: 1999, daily: "$2.85/day", savings: null, popular: false },
-    { id: "litos_plus_month", cents: 3999, daily: "$1.33/day", savings: 53, popular: false },
-    { id: "litos_plus_quarter", cents: 8999, daily: "$0.99/day", savings: 65, popular: true },
+    { id: "litos_plus_week", label: "Weekly", cents: 2999, total: "$29.99", daily: "$4.28/day", list: null, discount: null, apps: "50 applications / week", popular: false },
+    { id: "litos_plus_month", label: "Monthly", cents: 5999, total: "$59.99", daily: "$2.00/day", list: null, discount: null, apps: "200 applications / month", popular: false },
+    { id: "litos_plus_quarter", label: "Quarterly", cents: 11999, total: "$119.99", daily: "$1.33/day", list: "$359.99", discount: "70% off", apps: "600 applications / 3 months", popular: true },
   ]);
+});
+
+test("the audience and closing lines are the approved copy, and carry no em dash", () => {
+  assert.deepEqual(LITOS_PLUS_PLANS.map((plan) => plan.audience), [
+    "For light job seekers testing the market.",
+    "For active job seekers ready to move fast.",
+    "For go-getters ready to land their next role.",
+  ]);
+  assert.deepEqual(LITOS_PLUS_PLANS.map((plan) => plan.closer), [
+    "Perfect if you're applying occasionally or exploring new roles.",
+    "Ideal if you're applying weekly and want to stay top of mind with every opportunity.",
+    "Go all in. Apply to more roles, faster, and let Litos handle the busywork.",
+  ]);
+  /* The approved copy's closing line carries an em dash and names a different product. Neither
+     survives into Litos, and neither may creep back in on a later copy edit. */
+  for (const plan of LITOS_PLUS_PLANS) {
+    assert.equal(/[\u2014\u2013]/.test(`${plan.audience} ${plan.closer}`), false, `${plan.id} must not use a dash for punctuation`);
+    assert.equal(/sprout/i.test(`${plan.audience} ${plan.closer}`), false, `${plan.id} must not name another product`);
+  }
+});
+
+test("a struck-through price and a discount badge only ever appear together, in every currency", () => {
+  for (const currency of ["USD", "EUR", "GBP", "ZAR", "CAD", "INR"]) {
+    for (const plan of litosPlusPlansForCurrency(currency)) {
+      assert.equal(
+        (plan.listTotal === null) === (plan.discountLabel === null),
+        true,
+        `${currency} ${plan.id} must show both halves of the discount claim or neither`,
+      );
+      if (plan.listTotal === null) continue;
+      /* The "was" price must be converted with the price it strikes through. A USD $359.99 next
+         to a localized amount reads as a far larger discount than the one being offered. */
+      assert.equal(plan.listTotal.startsWith(plan.total.slice(0, 1)), true, `${currency} ${plan.id} list price must be in the shown currency`);
+      assert.ok(
+        Number(plan.listTotal.replace(/[^0-9.]/g, "")) > Number(plan.total.replace(/[^0-9.]/g, "")),
+        `${currency} ${plan.id} was-price must exceed its now-price`,
+      );
+    }
+  }
 });
 
 test("every non-USD currency converts every plan and keeps the curated USD daily rate untouched", () => {
@@ -38,9 +81,13 @@ test("every non-USD currency converts every plan and keeps the curated USD daily
       assert.match(plan.daily, /\/day$/);
     }
   }
-  // USD is untouched by the conversion path: the curated "$0.99/day" marketing figure for the
-  // quarterly plan, not the "$1.00/day" true division would round to.
-  assert.equal(LITOS_PLUS_PLANS.find((plan) => plan.id === "litos_plus_quarter").daily, "$0.99/day");
+  /* Every USD daily rate is now the honest rounding of its own amount over its own days; the
+     old curated "$0.99/day" quarterly figure went with the old price. Asserted as arithmetic
+     rather than as a literal so a future curated figure has to be a deliberate edit here. */
+  for (const plan of LITOS_PLUS_PLANS) {
+    const days = { litos_plus_week: 7, litos_plus_month: 30, litos_plus_quarter: 90 }[plan.id];
+    assert.equal(plan.daily, `$${(Math.round(plan.amountCents / days) / 100).toFixed(2)}/day`);
+  }
 });
 
 test("verifiedPlanCatalog trusts the server's detected currency but verifies its amounts independently", () => {
@@ -88,6 +135,7 @@ test("the mandatory onboarding payment screen also reads the currency-aware cata
 
 test("trial meters are independent and exact", () => {
   const byFeature = new Map(FEATURE_COMPARISON.map((row) => [row.feature, row]));
+  assert.equal(byFeature.get("New tailored resumes")?.plus, "Shared pool: 50/week, 200/month, or 600/quarter");
   assert.equal(byFeature.get("New tailored resumes")?.trial, "5 successful generations");
   assert.equal(byFeature.get("New cover letters")?.trial, "5 successful generations");
   assert.equal(byFeature.get("New generated application answers")?.trial, "For 5 distinct applications");
@@ -129,7 +177,10 @@ test("extension checkout states the charge and the cancel window, and never prom
   assert.doesNotMatch(cards, /only after a later, explicit purchase/);
   assert.match(cards, /window\.location\.assign\("\/dashboard\/settings#plan"\)/);
   assert.doesNotMatch(cards, /settings\?section=plan/);
-  assert.match(cards, /authenticated \? "\/dashboard\/applications\?new=1&intent=fill"/);
+  /* The "Start free" link went with the Free column on 2026-09-08. What replaces the
+     assertion is the reason the column went: Free must not be offered as a choice at the point
+     of sale, so no control here may route anyone into it. */
+  assert.doesNotMatch(cards, /intent=start-free|Start free/);
   assert.match(cards, /expiresAt: checkout\.expires_at/);
   assert.doesNotMatch(cards, /Date\.now\(\) \+ 30 \* 60 \* 1000/);
 });
@@ -159,7 +210,13 @@ test("every plan is its own column, and the term is not a radio inside one card"
      shared button, which is why the checkout call takes the term as an argument
      rather than reading state that a click has not flushed yet. */
   const cards = await readFile(new URL("../components/pricing/PlanCards.tsx", import.meta.url), "utf8");
-  assert.match(cards, /lg:grid-cols-4/);
+  /* Three columns since 2026-09-08, one per PAID term. The Free column is gone on Mehek's
+     call: Free is where an account lands by cancelling, not a thing sold on the checkout
+     page, and a column offering it there contradicted /start, which has refused to offer it
+     since the card gate went in. */
+  assert.match(cards, /md:grid-cols-3/);
+  assert.doesNotMatch(cards, /grid-cols-4/);
+  assert.doesNotMatch(cards, /FREE_FEATURES/);
   // Currency-aware since the visitor's plan list can come from the verified server catalog
   // (catalog.plans) rather than the static USD fallback; either way it is still one map over
   // one plan array producing one column per plan, which is the property this test pins.
