@@ -10,6 +10,7 @@ import {
   LITOS_PLUS_PLANS,
   PLUS_FEATURES,
   accessLabel,
+  canStartSubscriptionNow,
   type EntitlementSnapshot,
   type LitosPlusPlanId,
   type PlanCatalog,
@@ -122,6 +123,7 @@ export function UpgradeModal({
   onClose,
   onRetryCatalog,
   onCheckout,
+  onStartSubscriptionNow,
 }: {
   open: boolean;
   request: UpgradeRequest | null;
@@ -132,6 +134,7 @@ export function UpgradeModal({
   onClose: () => void;
   onRetryCatalog: () => void;
   onCheckout: (planId: LitosPlusPlanId) => void;
+  onStartSubscriptionNow?: () => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const onCloseRef = useRef(onClose);
@@ -202,8 +205,23 @@ export function UpgradeModal({
   const plan = plans.find((candidate) => candidate.id === selectedPlan)
     ?? plans.find((candidate) => candidate.id === DEFAULT_LITOS_PLUS_PLAN_ID)!;
   const trial = access?.access_class === "trial_plus";
+  /* A TRIAL WITH A LIVE SUBSCRIPTION ALREADY HAS A CARD ON FILE, so the way out is to start that
+     subscription, not to open a second checkout - which the server refuses with `already_plus`
+     anyway, because a second subscription on the same Stripe customer bills twice. Gated on the
+     subscription actually being `trialing` rather than on the access class alone: a trial granted
+     by anything other than a running Stripe subscription has nothing to convert. */
+  const startNow = canStartSubscriptionNow(access) && typeof onStartSubscriptionNow === "function";
+  /* THE PLAN THE CARD IS ALREADY ON, which is not the one selected above. `trial_end=now` bills the
+     subscription's OWN price - the term chosen when the trial started - so quoting the radio
+     selection here would name a number nobody is about to be charged. Falls back to naming no
+     figure at all rather than guessing when the term is one the catalog does not carry. */
+  const startNowPlan = startNow
+    ? plans.find((candidate) => candidate.term === access?.subscription?.term) ?? null
+    : null;
   const checkoutAvailable = catalog?.checkoutAvailable === true;
-  const primaryLabel = trial ? "Choose Litos+" : `Continue with ${plan.shortLabel}`;
+  const primaryLabel = startNow
+    ? "Start my subscription now"
+    : trial ? "Choose Litos+" : `Continue with ${plan.shortLabel}`;
 
   function choose(planId: LitosPlusPlanId) {
     setSelectedPlan(planId);
@@ -316,20 +334,31 @@ export function UpgradeModal({
                 <p className="font-mono text-machine text-ink" aria-live="polite">{plan.disclosure}</p>
                 <p className="mt-1 text-label text-muted">Savings compare each daily rate with the weekly daily rate.</p>
                 {error && <div className="mt-4"><ErrorNote message={error} /></div>}
-                {!checkoutAvailable && !error && (
+                {!checkoutAvailable && !startNow && !error && (
                   <p className="mt-4 text-small text-muted" role="status">Secure checkout is being checked. No purchase can start until the live catalog matches these terms.</p>
+                )}
+                {startNow && (
+                  <p className="mt-4 text-small text-ink" role="status">
+                    You have used every generation included in your trial.{" "}
+                    {startNowPlan
+                      ? `Starting your subscription now ends the trial and charges the card already on your account ${startNowPlan.total} for the ${startNowPlan.shortLabel.toLowerCase()} plan you started on.`
+                      : "Starting your subscription now ends the trial and charges the card already on your account for the plan you started on."}{" "}
+                    The limit lifts as soon as the payment goes through.
+                  </p>
                 )}
                 <div className="mt-5 grid gap-3 sm:grid-cols-[1fr_auto]">
                   <Button
                     type="button"
                     block
-                    disabled={busy || !checkoutAvailable}
+                    disabled={busy || (!startNow && !checkoutAvailable)}
                     aria-busy={busy}
-                    onClick={() => onCheckout(selectedPlan)}
+                    onClick={() => (startNow ? onStartSubscriptionNow!() : onCheckout(selectedPlan))}
                   >
-                    {busy ? <PendingLabel onColor>Opening Stripe</PendingLabel> : primaryLabel}
+                    {busy
+                      ? <PendingLabel onColor>{startNow ? "Starting your subscription" : "Opening Stripe"}</PendingLabel>
+                      : primaryLabel}
                   </Button>
-                  {!checkoutAvailable && (
+                  {!checkoutAvailable && !startNow && (
                     <Button type="button" variant="secondary" onClick={onRetryCatalog}>Try again</Button>
                   )}
                 </div>
