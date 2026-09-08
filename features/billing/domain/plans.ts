@@ -196,15 +196,15 @@ export function litosPlusPlansForCurrency(currency: SupportedCurrency = DEFAULT_
 
 export const LITOS_PLUS_PLANS: readonly LitosPlusPlan[] = litosPlusPlansForCurrency("USD");
 
-export const FREE_FEATURES = [
-  "Unlimited application filling on supported sites",
-  "Unlimited dashboard application filling",
-  "Personalized jobs and one match score",
-  "One main resume and manual uploads",
-  "Application tracking, review, and receipts",
-  "Manual answers and final submission controls",
-] as const;
 
+/* FREE_FEATURES was here and is deliberately gone (2026-09-08). Both of its render sites, the
+   plan-card column and the upgrade modal's comparison, were removed on Mehek's call that Free is
+   not offered alongside a price, which left it an exported list with no caller: exactly the thing
+   somebody re-renders because it is sitting there. FREE_LIMITS in lib/pricing.ts still describes
+   what a free account may actually DO, which is enforcement, not an offer, and stays.
+
+   FEATURE_COMPARISON below has had no render site since before this change and is read only by
+   its own test. Left alone here rather than swept up with it. */
 export const PLUS_FEATURES = [
   "Everything in Free",
   "Full applications built and filled for you: resume, cover letter, and answers (50 a week, 200 a month, or 600 every 3 months)",

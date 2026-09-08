@@ -6,7 +6,6 @@ import { ErrorNote, PendingLabel } from "@/components/app/ui";
 import { useDashboardOverlayExit } from "@/components/app/useDashboardOverlayExit";
 import {
   DEFAULT_LITOS_PLUS_PLAN_ID,
-  FREE_FEATURES,
   LITOS_PLUS_PLANS,
   PLUS_FEATURES,
   accessLabel,
@@ -46,7 +45,7 @@ const COPY: Record<PremiumFeatureKey, UpgradeCopy> = {
   },
   ai_resume_feedback: {
     title: "Review this resume with Litos+",
-    explanation: "Your resume and application filling remain available on Free.",
+    explanation: "Your resume and application filling stay available either way.",
     manualLabel: "Continue without feedback",
   },
   ai_cover_letter_generation: {
@@ -101,12 +100,12 @@ const COPY: Record<PremiumFeatureKey, UpgradeCopy> = {
   },
   hover_generation: {
     title: "Start tailoring from job-card hover with Litos+",
-    explanation: "Free and trial accounts can still choose Tailor resume explicitly. Hover never consumes trial usage.",
+    explanation: "You can still choose Tailor resume explicitly. Hover never consumes trial usage.",
     manualLabel: "Choose it myself",
   },
   automatic_submission: {
     title: "Send an application without asking each time with Litos+",
-    explanation: "Application filling stays free. On Free, you review the form and press the employer's final submit control.",
+    explanation: "Application filling stays unlimited either way. Without this, you review the form and press the employer's final submit control yourself.",
     manualLabel: "Keep manual submission",
   },
 };
@@ -279,9 +278,14 @@ export function UpgradeModal({
 
         <div className="overflow-y-auto px-5 py-6 sm:px-7">
           <div className="grid gap-7 lg:grid-cols-[minmax(0,1.05fr)_minmax(340px,0.95fr)]">
-            <section aria-label="Free and Litos+ comparison" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-              <PlanBenefits title="Free" features={FREE_FEATURES} tone="free" />
-              <PlanBenefits title="Litos+" features={PLUS_FEATURES} tone="plus" />
+            {/* ONE COLUMN, and there is no Free one beside it. Mehek's call 2026-09-08, the same
+                call that took the Free column off the plan cards: Free is where an account lands
+                by cancelling, not a tier offered next to a price. A side-by-side comparison is
+                exactly the shape that offers it, and this modal opens at the moment somebody
+                reaches for a paid feature, which is the worst moment to hand them the other
+                column. What Litos+ includes is still spelled out in full. */}
+            <section aria-label="What Litos+ includes">
+              <PlanBenefits title="Litos+" features={PLUS_FEATURES} />
             </section>
 
             <section className="rounded-card border border-brand/45 bg-brand-soft/55 p-5 sm:p-6">
@@ -395,22 +399,22 @@ export function UpgradeModal({
   );
 }
 
+/* The `tone` prop went with the Free column: there was one caller left and one branch of every
+   ternary it fed, which is a switch with nothing to switch on. */
 function PlanBenefits({
   title,
   features,
-  tone,
 }: {
   title: string;
   features: readonly string[];
-  tone: "free" | "plus";
 }) {
   return (
-    <div className={`rounded-card border p-5 ${tone === "plus" ? "border-brand/45 bg-brand-soft/45" : "border-border bg-surface"}`}>
+    <div className="rounded-card border border-brand/45 bg-brand-soft/45 p-5">
       <h3 className="text-heading font-[450] text-ink">{title}</h3>
       <ul className="mt-4 space-y-3 text-small text-muted">
         {features.map((feature) => (
           <li key={feature} className="flex gap-2.5">
-            <span aria-hidden="true" className={tone === "plus" ? "text-brand-ink" : "text-teal-ink"}>+</span>
+            <span aria-hidden="true" className="text-brand-ink">+</span>
             <span>{feature}</span>
           </li>
         ))}

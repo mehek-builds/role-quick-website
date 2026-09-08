@@ -21,6 +21,15 @@ test("the shared Litos+ modal preserves context and a manual way forward", async
   // "Popular" since 2026-09-08, matching the approved plan cards on /pricing and /start.
   assert.match(modal, /Popular/);
   assert.doesNotMatch(modal, /Most popular/);
+  /* NO FREE COLUMN, and no Free feature list anywhere in this modal. Mehek's call 2026-09-08.
+     The modal opens at the moment somebody reaches for a paid feature, so a Free column beside
+     the terms is offering the alternative at the exact moment it costs the most. Pinned as the
+     absence of the list and of its old side-by-side grid, not merely of the word: the per-feature
+     copy still has to be free to say what stays available when somebody declines. */
+  assert.doesNotMatch(modal, /FREE_FEATURES/);
+  assert.doesNotMatch(modal, /Free and Litos\+ comparison/);
+  assert.doesNotMatch(modal, /title="Free"/);
+  /* Whether they are ON Free is a fact about their own account, not an offer, so this stays. */
   assert.match(modal, /Current plan: \{accessLabel\(access\)\}/);
   assert.match(modal, /href="\/terms"/);
   assert.match(modal, /href="\/privacy"/);
