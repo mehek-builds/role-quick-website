@@ -206,7 +206,10 @@ export const LITOS_PLUS_PLANS: readonly LitosPlusPlan[] = litosPlusPlansForCurre
    FEATURE_COMPARISON below has had no render site since before this change and is read only by
    its own test. Left alone here rather than swept up with it. */
 export const PLUS_FEATURES = [
-  "Everything in Free",
+  /* WAS "Everything in Free", which named a tier Litos no longer offers, on the one screen whose
+     job is to sell the tier it does. It was doing real work -- telling the reader the paid plan
+     is a superset, not a swap -- so it is replaced by the superset itself rather than deleted. */
+  "Everything you can already do: unlimited application filling, job matching, and tracking",
   "Full applications built and filled for you: resume, cover letter, and answers, counted per job (50 a week, 200 a month, or 600 every 3 months)",
   "Resume feedback and saved versions",
   "Hover-started tailoring on job cards",

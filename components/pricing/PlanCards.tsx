@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Button, ButtonLink } from "@/components/app/Button";
+import { Button } from "@/components/app/Button";
 import { ErrorNote, PendingLabel } from "@/components/app/ui";
 import {
   DEFAULT_LITOS_PLUS_PLAN_ID,
