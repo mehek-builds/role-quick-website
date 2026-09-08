@@ -37,7 +37,6 @@ import { track } from "@/lib/analytics";
    one step ahead of the paywall. */
 const TRIAL_INCLUDES = {
   generations: 20,
-  outreach_companies: 5,
 } as const;
 
 /* The student's OWN calendar day, never the UTC one.
@@ -100,10 +99,12 @@ export function TrialStep({ onContinue, sent }: { onContinue: () => void; sent: 
                separate allowances and was the screen's whole promise. A job spends one of these
                whether it needs a resume, a cover letter, answers, or all three. */
             { t: "01", k: "Jobs", v: left(usage?.generations_used, usage?.generations_limit, TRIAL_INCLUDES.generations) },
-            { t: "02", k: "Contact discovery", v: left(usage?.outreach_companies_used, usage?.outreach_companies_limit, TRIAL_INCLUDES.outreach_companies) },
+            /* The contact-discovery row went 2026-09-08 with every other outreach offer. The
+               server still meters and still sends outreach_companies_*, so the snapshot type
+               keeps those fields -- it just is not something a plan advertises any more. */
             /* An end date exists only once the trial has started. Before that this row would be
                asserting a date nobody has set, so it names the length instead. */
-            ...(holdsTrial ? [{ t: "03", k: "Ends", v: endsLabel(access) }] : [{ t: "03", k: "Length", v: "7 days" }]),
+            ...(holdsTrial ? [{ t: "02", k: "Ends", v: endsLabel(access) }] : [{ t: "02", k: "Length", v: "7 days" }]),
           ]}
         />
       </div>

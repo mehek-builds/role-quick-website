@@ -5,6 +5,7 @@ import {
   DEFAULT_LITOS_PLUS_PLAN_ID,
   FEATURE_COMPARISON,
   LITOS_PLUS_PLANS,
+  PLUS_FEATURES,
   litosPlusPlansForCurrency,
   zeroDue,
 } from "../features/billing/domain/plans.ts";
@@ -146,10 +147,24 @@ test("the trial is one pool of jobs, not a meter per document kind", () => {
     assert.equal(byFeature.get(feature)?.plus, "Shared pool of jobs: 50/week, 200/month, or 600/quarter", `${feature} must draw on the shared paid pool`);
   }
   assert.equal(new Set(pooled.map((feature) => byFeature.get(feature)?.trial)).size, 1, "the three kinds must not describe different trial allowances");
-  assert.equal(byFeature.get("Contact discovery")?.trial, "Up to 2 per represented company, up to 5 companies");
-  assert.equal(byFeature.get("Outreach draft generation")?.trial, "Up to 2 per represented company, up to 5 companies");
+  // Two retired claims that must not come back, carried over from the per-kind version of this test.
   assert.equal(FEATURE_COMPARISON.some((row) => /interview-preparation/i.test(row.feature)), false);
   assert.equal(FEATURE_COMPARISON.some((row) => /5 distinct packets|within the 5 packets/i.test(row.trial)), false);
+});
+
+test("no plan surface offers outreach, contact discovery, or networking", () => {
+  /* Mehek's call 2026-09-08: those are not features Litos offers, so nothing that reads as an
+     OFFER may name them. Deliberately scoped to the offer surfaces -- UpgradeModal's per-feature
+     COPY still names them, because that text fires when somebody reaches a gated action, which
+     is a reaction rather than a pitch, and the server still meters them. */
+  const banned = /outreach|recruiter|contact discovery|referral|networking|connected companies|network-overlap/i;
+  for (const feature of PLUS_FEATURES) {
+    assert.equal(banned.test(feature), false, `PLUS_FEATURES still offers: ${feature}`);
+  }
+  for (const row of FEATURE_COMPARISON) {
+    assert.equal(banned.test(row.feature), false, `FEATURE_COMPARISON still lists: ${row.feature}`);
+  }
+  assert.equal(FEATURE_COMPARISON.some((row) => row.tone === "outreach"), false, "the outreach tone has no rows left");
 });
 
 test("server plan catalog requires explicit checkout availability", () => {

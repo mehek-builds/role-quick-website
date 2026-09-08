@@ -37,14 +37,14 @@ export const FREE_LIMITS = {
    resume, a cover letter and application answers spends ONE of the 20, not three.
 
    These were three separate 5s until 2026-09-08, and the backend had already moved to 10s without
-   them: the exact drift the header above warns about, live for weeks. Contact discovery keeps its
-   own small per-company allowance and is NOT part of the 20, matching paid plans, which do not
-   meter it at all. */
+   them: the exact drift the header above warns about, live for weeks.
+
+   The outreach allowances that sat here are gone from the OFFER, not from the server: contact
+   discovery and outreach drafts are still metered per company by entitlements.ts, and the
+   snapshot still publishes outreach_companies_*, but no plan advertises them any more (Mehek's
+   call 2026-09-08). Nothing should quote them to a student. */
 export const TRIAL_LIMITS = {
   generations: 20,
-  outreachCompanies: 5,
-  contactsPerCompany: 2,
-  draftsPerCompany: 2,
 } as const;
 
 /** Paid Litos+ has no user-facing generation quota. Null means unmetered in UI copy. */
