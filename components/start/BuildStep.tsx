@@ -256,17 +256,44 @@ export function BuildStep({
           && (reason.data as { code?: string }).code === "resume_quality_hold";
         consecutiveQualityHolds = qualityHold ? consecutiveQualityHolds + 1 : 0;
         const accountFixable = fixable || profileIncompleteField !== null;
+        /* WHICH field, not just that there was one. A missing name, a missing email and a missing
+           education are fixed in different places, and for a guest the email is not fixable in
+           Account at all. Shared with the track() call below so the funnel event and the on-screen
+           error can never name a different field for the same failure. */
+        const field = reason instanceof BuildPreconditionError ? reason.field : profileIncompleteField;
+        /* A LOW-CARDINALITY CLASSIFICATION, not the message. onboarding_build_failed used to carry
+           only `fixable`, which answers "was this a one-line profile gap" but not what actually
+           failed - so a genuine server error (a resume-generation timeout, a 500) was
+           indistinguishable in PostHog from an entitlement gate or a quality hold, and reading the
+           real cause meant grepping litos-api's deploy logs by hand for the request's timestamp.
+           Matches the same no-free-text posture as api_payload_incomplete above: a status code and
+           a known code string, never reason.message, which can hold arbitrary provider or network
+           text. */
+        const errorCode = profileIncompleteField !== null
+          ? "resume_profile_incomplete"
+          : qualityHold
+            ? "resume_quality_hold"
+            : reason instanceof BuildPreconditionError
+              ? "precondition"
+              : entitlement
+                ? "entitlement_required"
+                : reason instanceof ApiError
+                  ? `api_${reason.status}`
+                  : "unknown";
         setError({
           message: reason instanceof Error ? reason.message : "Litos could not build this application.",
           fixable: accountFixable,
           qualityHold,
-          /* WHICH field, not just that there was one. A missing name, a missing email and a missing
-             education are fixed in different places, and for a guest the email is not fixable in
-             Account at all. */
-          field: reason instanceof BuildPreconditionError ? reason.field : profileIncompleteField,
+          field,
           entitlement,
         });
-        track("onboarding_build_failed", { fixable: accountFixable, entitlement });
+        track("onboarding_build_failed", {
+          fixable: accountFixable,
+          entitlement,
+          qualityHold,
+          errorCode,
+          field: field ?? "none",
+        });
       });
     return () => { cancelled = true; };
     /* `attempt` re-runs the whole sequence for "Read the form again". Safe by construction: every
