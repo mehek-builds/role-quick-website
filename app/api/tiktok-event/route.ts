@@ -5,8 +5,8 @@ import { SITE_URL } from "@/lib/config";
 
 const ALLOWED_EVENTS = new Set<TikTokServerEventName>(TIKTOK_SERVER_EVENTS);
 const ALLOWED_PROPERTY_KEYS = new Set(["plan_id", "value", "currency", "content_id", "content_type"]);
-/* Long enough for any real address or E.164 number, short enough that this
-   endpoint cannot be used to push bulk data through to TikTok. */
+/* Long enough for any real email address, short enough that this endpoint cannot
+   be used to push bulk data through to TikTok. */
 const MAX_IDENTIFIER_LENGTH = 320;
 /* Product ids and currency codes are short; anything longer is not a real one. */
 const MAX_PROPERTY_LENGTH = 200;

@@ -317,10 +317,11 @@ export default function BillingReturnPage() {
         ) {
           const receipt = await getBillingReceipt().catch(() => null);
           if (!stopped) {
-            /* The screen paints on the receipt alone. The profile read below is for
-               the Advanced Matching phone only and is deliberately NOT awaited before
-               this line: a Promise.all here let a slow /profile/application hold a
-               student who has just paid on the verifying screen. */
+            /* The screen paints on the receipt alone, and nothing else is awaited
+               before it. An earlier version fetched the application profile here for a
+               phone number and a Promise.all let that read hold a student who had just
+               paid on the verifying screen; phone is no longer sent at all, so the only
+               identifier is me.email, which is already loaded. */
             setResult({ kind: "active", me, receipt });
             /* Fired only after billingReturnVerdict confirms Stripe itself (via
                reconcileBillingCheckout above), not on a client-side assumption that

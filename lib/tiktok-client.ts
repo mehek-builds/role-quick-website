@@ -10,12 +10,15 @@ export type { TikTokServerEventName };
  * Settle an Advanced Matching lookup without ever letting it gate the thing it
  * decorates. Never rejects, and never outlives `ms`.
  *
- * Both call sites fetch these identifiers next to something load-bearing (the
- * receipt, and on the return page the "you're on Litos+" screen itself). A plain
- * Promise.all made a hung /profile/application able to hold a paying student on a
- * verifying screen, and able to lose the Purchase entirely if they navigated first:
- * api() passes no AbortSignal, so .catch() covers rejection but not latency.
- * Matching is a bonus on top of the event; it must never be able to cost the event.
+ * Used by the onboarding notifications screen, which fetches /me for the Advanced
+ * Matching email next to the receipt the Purchase actually needs. api() passes no
+ * AbortSignal, so a plain await covers rejection but not latency: a hung /me would
+ * hold the Purchase indefinitely on a screen whose Continue button a student can
+ * click immediately. Matching is a bonus on top of the event; it must never be able
+ * to cost the event.
+ *
+ * The billing return page needs no equivalent: its email comes from the /me it has
+ * already loaded, so nothing extra is fetched there.
  */
 export function matchingWithin<T>(promise: Promise<T>, ms = 1200): Promise<T | null> {
   return Promise.race([
