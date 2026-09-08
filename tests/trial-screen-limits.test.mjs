@@ -22,7 +22,9 @@ test("the trial screen mirrors the backend's trial limits exactly", async () => 
 
   /* Kept in step with TRIAL_LIMITS in the backend's src/lib/entitlements.ts. Both repos deploy
      independently, so a drift shows up as a failing test rather than as a screen promising five
-     of something the account gets three of.
+     of something the account gets three of. The outreach allowance left this list on 2026-09-08
+     with every other outreach offer: the server still meters it, but no plan advertises it, so
+     the screen has nothing to keep in step about it.
 
      THIS GUARD FAILED AT ITS ONE JOB once, and the shape of that failure is worth keeping in
      mind: when the backend's per-kind limits were raised from 5 to 10, nobody moved these
@@ -32,7 +34,6 @@ test("the trial screen mirrors the backend's trial limits exactly", async () => 
      2026-09-08, which is a smaller surface to keep in step than four separate meters were. */
   for (const [key, value] of [
     ["generations", 20],
-    ["outreach_companies", 5],
   ]) {
     assert.match(block, new RegExp(`${key}:\\s*${value}\\b`), `TRIAL_INCLUDES.${key} no longer reads ${value}`);
   }

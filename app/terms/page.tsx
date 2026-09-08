@@ -142,17 +142,14 @@ export default function Terms() {
             Litos Free includes unlimited factual application filling on
             supported sites and from the web dashboard. You review the filled
             form and use the employer site&apos;s final submit control. Tailored
-            resumes, generated cover letters and answers, contact discovery,
-            outreach drafts, and sending without being asked each time require trial or
-            Litos+ access.
+            resumes, generated cover letters and answers, and sending without
+            being asked each time require trial or Litos+ access.
           </p>
           <p>
             A new account receives a seven-day Litos+ trial, once per account.
             The trial includes twenty jobs. One job is one generation: building
             a tailored resume, a cover letter and application answers for the
-            same job together count as one of the twenty, not three. It also
-            includes up to two contacts and two outreach drafts per company
-            across five companies, which are separate from the twenty. Trial
+            same job together count as one of the twenty, not three. Trial
             generation starts only when you choose the relevant action, and the
             trial does not carry over: unused jobs end with the seven days.
             Litos does not offer a free plan; after the trial, access continues

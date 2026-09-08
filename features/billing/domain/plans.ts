@@ -213,9 +213,13 @@ export const PLUS_FEATURES = [
   "Full applications built and filled for you: resume, cover letter, and answers, counted per job (50 a week, 200 a month, or 600 every 3 months)",
   "Resume feedback and saved versions",
   "Hover-started tailoring on job cards",
-  "Networking and referral paths",
-  "Recruiter outreach and follow-ups",
-  "Advanced job insights and connected companies",
+  /* NOTHING ABOUT OUTREACH IS SOLD HERE any more, Mehek's call 2026-09-08: recruiter outreach,
+     contact discovery, networking and referral paths, and connected companies are not features
+     Litos offers, so no plan may advertise them. "Advanced job insights" stays, without the
+     "and connected companies" half, which was a network feature wearing an insights label.
+     The per-feature prompts in UpgradeModal's COPY are deliberately untouched: those fire when
+     somebody reaches a gated action, which is a reaction, not an offer. */
+  "Advanced job insights",
   "Opt-in sending without being asked each time",
 ] as const;
 
@@ -224,7 +228,7 @@ export type FeatureComparison = {
   free: string;
   trial: string;
   plus: string;
-  tone?: "fill" | "documents" | "outreach";
+  tone?: "fill" | "documents";
 };
 
 export const FEATURE_COMPARISON: readonly FeatureComparison[] = [
@@ -237,16 +241,12 @@ export const FEATURE_COMPARISON: readonly FeatureComparison[] = [
   { feature: "Application tracker, stages, history, and receipts", free: "Included", trial: "Included", plus: "Included" },
   { feature: "Main resume, experience bank, and reusable profile answers", free: "Included", trial: "Included", plus: "Included", tone: "documents" },
   { feature: "View, edit, copy, download, or delete existing generated work", free: "Included", trial: "Included", plus: "Included", tone: "documents" },
-  { feature: "Email delivery and reply history", free: "Included", trial: "Included", plus: "Included", tone: "outreach" },
   { feature: "Account export, privacy controls, and deletion", free: "Included", trial: "Included", plus: "Included" },
   { feature: "New tailored resumes", free: "Not included", trial: "Part of the 20-job trial", plus: "Shared pool of jobs: 50/week, 200/month, or 600/quarter", tone: "documents" },
   { feature: "New cover letters", free: "Not included", trial: "Part of the 20-job trial", plus: "Shared pool of jobs: 50/week, 200/month, or 600/quarter", tone: "documents" },
   { feature: "New generated application answers", free: "Not included", trial: "Part of the 20-job trial", plus: "Shared pool of jobs: 50/week, 200/month, or 600/quarter", tone: "documents" },
-  { feature: "Contact discovery", free: "Not included", trial: "Up to 2 per represented company, up to 5 companies", plus: "Included, no user-facing quota", tone: "outreach" },
-  { feature: "Outreach draft generation", free: "Not included", trial: "Up to 2 per represented company, up to 5 companies", plus: "Included, no user-facing quota", tone: "outreach" },
   { feature: "Hover-started tailoring", free: "Not included", trial: "Not included, choose Tailor resume", plus: "Included on active paid plans", tone: "documents" },
   { feature: "Send an application without asking each time", free: "Not included", trial: "Included while trial is active", plus: "Included" },
-  { feature: "Network-overlap and job-competition insights", free: "Not included", trial: "Included while trial is active", plus: "Included", tone: "outreach" },
   { feature: "Human-review stops for sensitive or unknown answers", free: "Always enforced", trial: "Always enforced", plus: "Always enforced", tone: "fill" },
 ] as const;
 
