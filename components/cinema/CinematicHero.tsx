@@ -608,6 +608,18 @@ export function CinematicHero() {
               bottom, and lands the actions level with the demo's own send
               button across the gap. */}
           <div className="rq-glass rq-enter mx-auto flex w-full max-w-2xl flex-col justify-center gap-8 px-7 py-10 text-center sm:px-9 sm:py-9 xl:max-w-none xl:justify-between xl:gap-6 xl:px-10 xl:py-12 xl:text-left">
+            {/* Nothing above the fold said what Litos IS: the H1 names a
+                speed and the sub names a mechanism, so a first-time visitor
+                had to infer the category. This is the same line the Chrome
+                Web Store listing already leads with (store-assets-v2 shot 1).
+                It says "job seekers" and must keep saying it: an earlier
+                version narrowed it to "students and new grads", which read
+                as a product nobody else was allowed to use. Students and new
+                grads are one audience Litos serves, not the only one. */}
+            <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-brand-ink">
+                      Free Chrome extension for job seekers, with a full web dashboard.
+            </p>
+
             {/* The middle band: the claim and the one line explaining it,
                 grouped so justify-between treats them as a single object. */}
             <div>

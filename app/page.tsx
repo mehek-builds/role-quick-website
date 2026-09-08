@@ -3,6 +3,7 @@ import {
   ApplicationFormMockup,
   ResumeMatchDemo,
 } from "@/components/Mockups";
+import { OutreachDemo } from "@/components/OutreachDemo";
 import { PacketDemo } from "@/components/PacketDemo";
 import { Reveal } from "@/components/Motion";
 import { CinematicHero } from "@/components/cinema/CinematicHero";
@@ -462,6 +463,83 @@ export default function Home() {
           </div>
         </section>
 
+        {/* Outreach, pinned act: the real draft held over the live film */}
+        <section id="outreach" className="relative scroll-mt-24">
+          <Wash tint="coral" soft />
+          <div className="relative sm:h-[185svh]">
+            <div className="flex min-h-svh items-center px-6 py-24 sm:sticky sm:top-0 sm:py-0">
+            <Reveal>
+              <div className="mx-auto grid w-full max-w-6xl origin-center grid-cols-1 items-center gap-14 sm:scale-[0.92] sm:grid-cols-2">
+                <div className="rq-glass px-7 py-8">
+                  {/* The "Two seconds later" eyebrow was removed 2026-07-28,
+                      with its opposite number in #autofill. Same reason. */}
+                  <PillarChip icon="outreach" bg="bg-coral-soft" tone="text-coral-ink">03 · Emails</PillarChip>
+                  <h2 className="mt-4 text-section font-[450] tracking-[-0.02em] text-ink">
+                    An email to a real person at the company.
+                  </h2>
+                  <p className="mt-4 text-base leading-7 text-muted">
+                    {/* Gmail, and only Gmail, is correct here: the draft is
+                        handed off through a Gmail compose URL (extension
+                        src/lib/gmail.ts). Outlook exists in the product only
+                        for reading a sign-in code, never for drafting, so
+                        naming it here would be a new false claim. */}
+                    We find people who work there, check their email
+                    addresses, and leave a short note in your Gmail that
+                    sounds like you.
+                  </p>
+                  {/* SIMPLIFIED 2026-07-30, with #documents and #autofill, to
+                      chip + heading + a two-line subheading.
+
+                      The four-line list that stood here restated the lead
+                      paragraph rather than adding to it. "We find people who
+                      work there." was a word-for-word repeat of the paragraph's
+                      own first clause, and "We write a short note that sounds
+                      like you" repeated "we write the email". Only two lines in
+                      it were load-bearing, and both are folded into the
+                      paragraph above: address checking, and the draft landing
+                      in your Gmail rather than being sent.
+
+                      What came out, and where it stands now:
+
+                      - "We leave the send button to you" is gone as its own
+                        line. It survives as meaning, not as a promise: a note
+                        LEFT in your Gmail is one you have to send yourself.
+                        /litos-vs-simplify states it outright, under "What
+                        happens at the send button". Emails are never sent
+                        automatically, unlike portal submission, so if this band
+                        ever needs the guarantee back it is a true one.
+                      - "and tell you when we could not" is gone as copy, and
+                        does not need to be copy. OutreachDemo beside this card
+                        IS that claim: it badges contacts VERIFIED / LIKELY,
+                        then shows a NO VERIFIED EMAIL card reading "We couldn't
+                        verify an address for Rina, and we never guess one", and
+                        footers it "GUESSED ADDRESSES: ZERO". The demo also
+                        carries the alumni-first ordering, as an ALUM badge on
+                        the first contact. Shown beats stated, which is why the
+                        paragraph keeps only "check their email addresses" and
+                        lets the demo do the rest. If OutreachDemo is ever
+                        replaced with something that does not show the
+                        unverified path, this paragraph has to take the honesty
+                        half back.
+
+                      REMOVED and not replaced: "People from your school answer
+                      most, so they come first." Alumni-first ordering is real
+                      (personaOrder in the backend's resolve.ts, and
+                      StructuredData.tsx says "alumni first"), but "answer most"
+                      is a response-rate claim and nothing on this site sources
+                      it. It was the last unsourced outcome number in the three
+                      pillars. Do not put it back without the data. */}
+                  <PillarLink href="/try?step=outreach">See it write an email</PillarLink>
+                </div>
+                <div>
+                  <div data-demo><OutreachDemo /></div>
+                </div>
+              </div>
+            </Reveal>
+            </div>
+          </div>
+        </section>
+
         <section id="work-surfaces" className="relative scroll-mt-24">
           <Wash soft />
           <div className="relative mx-auto max-w-6xl px-6 py-32">
@@ -495,7 +573,7 @@ export default function Home() {
                   <p className="mt-4 text-body text-muted">Jobs, documents, applications, network paths, and replies stay connected. Nothing disappears into another spreadsheet.</p>
                   <nav aria-label="Dashboard areas" className="mt-6 flex flex-wrap gap-2 font-mono text-label text-muted">
                     {[
-                      ["Home", "/dashboard"], ["Jobs", "/dashboard/jobs"], ["Applications", "/dashboard/applications"], ["Documents", "/dashboard/documents"], ["Network", "/dashboard/network"],
+                      ["Home", "/dashboard"], ["Jobs", "/dashboard/jobs"], ["Applications", "/dashboard/applications"], ["Documents", "/dashboard/documents"], ["Network", "/dashboard/network"], ["Outreach", "/dashboard/outreach"],
                     ].map(([label, href]) => <a key={label} href={href} className="rounded-control border border-border bg-surface px-3 py-2 hover:border-brand hover:text-brand-ink">{label}</a>)}
                   </nav>
                 </div>
