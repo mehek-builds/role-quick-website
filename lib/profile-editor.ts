@@ -64,8 +64,24 @@ export function parseEditableLines(value: string): string[] {
   return deduplicate(value.split("\n"));
 }
 
+/**
+ * WHETHER A TARGET-ROLE EDIT MAY BE SAVED. There is no upper bound: five is what the parser seeds,
+ * not a limit on what someone may want.
+ *
+ * THIS USED TO READ `roles.length === 5`, and it did far more damage than the rule it was written
+ * for. It runs before the PATCH in the parsed-details editor, so a profile holding any number of
+ * roles other than five made that whole panel unsaveable - name, resume email, school, degree,
+ * GRADUATION DATE, skills, coursework and objective, all refused because of a field none of them
+ * touch. Measured 2026-09-08 on an account carrying seven roles: pressing Save fired no request at
+ * all, and the only clue was a sentence about target roles under a form the applicant was using to
+ * correct a wrong graduation year.
+ *
+ * WHAT STILL HOLDS. A set that already has roles may not be emptied - targeting is what the job
+ * board searches on, and silently clearing it would leave someone with a board that returns
+ * nothing. An account that never had any can still save with none, which is the onboarding case.
+ */
 export function hasCompleteTargetRoleSet(roles: string[], currentRoles: string[]): boolean {
-  return roles.length === 5 || (roles.length === 0 && currentRoles.length === 0);
+  return roles.length > 0 || currentRoles.length === 0;
 }
 
 export function targetRolesChanged(roles: string[], currentRoles: string[]): boolean {

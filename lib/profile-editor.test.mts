@@ -69,6 +69,18 @@ test("an existing target set cannot be silently cleared", () => {
   assert.equal(hasCompleteTargetRoleSet(["One", "Two", "Three", "Four", "Five"], []), true);
 });
 
+/* Five is what the parser seeds, not a limit on what someone may want. The old `roles.length === 5`
+   made the parsed-details panel unsaveable for any profile holding a different number - and that
+   panel is also where the graduation date, school and degree are corrected, so an unrelated field
+   silently blocked every one of them. */
+test("any number of target roles saves, above or below the parser's five", () => {
+  const existing = ["One", "Two", "Three", "Four", "Five"];
+  for (const count of [1, 2, 4, 5, 6, 7, 12]) {
+    const roles = Array.from({ length: count }, (_, index) => `Role ${index + 1}`);
+    assert.equal(hasCompleteTargetRoleSet(roles, existing), true, `${count} roles must save`);
+  }
+});
+
 test("case-only role corrections are saved", () => {
   assert.equal(targetRolesChanged(["Private Equity Associate"], ["Private equity associate"]), true);
   assert.equal(targetRolesChanged(["Private Equity Associate"], ["Private Equity Associate"]), false);
