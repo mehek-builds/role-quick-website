@@ -46,7 +46,7 @@ import { disablePush, enablePush, hasPushSubscription, pushSupport } from "@/lib
 import { ErrorNote } from "@/components/app/ui";
 import { LaterLink, PrimaryButton, StartShell } from "./ui";
 import { track } from "@/lib/analytics";
-import { firePurchaseEventOnce } from "@/lib/tiktok-client";
+import { firePurchaseEventOnce, matchingWithin } from "@/lib/tiktok-client";
 
 type Choice = { strong_match: boolean; employer_reply: boolean; activity_digest: boolean };
 
@@ -269,15 +269,19 @@ export function NotificationsStep({
     let cancelled = false;
     /* Receipt carries value/currency and the plan+interval that become content_id;
        /me and the application profile carry the Advanced Matching identifiers.
-       Only the receipt is load-bearing -- the other two are settled independently
-       so a failure in either costs match quality, never the Purchase event. */
-    void Promise.all([
-      getBillingReceipt(),
-      api<Me>("/me").catch(() => null),
-      getApplicationProfile().catch(() => null),
-    ])
-      .then(([receipt, me, applicationProfile]) => {
-        if (cancelled) return;
+       Only the receipt is load-bearing. The other two are bounded by matchingWithin
+       and cannot delay or lose the event: a plain Promise.all made the Purchase wait
+       on the SLOWEST of three requests, and this screen has a Continue button a
+       student can click immediately, so a hung profile read silently cost the
+       conversion. Deliberately not gated on `cancelled` either -- this fires no state
+       update and dedupes on sessionStorage, so firing after unmount is harmless while
+       skipping it loses a real conversion. */
+    void getBillingReceipt()
+      .then(async (receipt) => {
+        const [me, applicationProfile] = await Promise.all([
+          matchingWithin(api<Me>("/me")),
+          matchingWithin(getApplicationProfile()),
+        ]);
         firePurchaseEventOnce(purchaseSentRef, receipt, undefined, {
           email: me?.email,
           phone: applicationProfile?.phone,

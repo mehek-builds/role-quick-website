@@ -8,6 +8,8 @@ const ALLOWED_PROPERTY_KEYS = new Set(["plan_id", "value", "currency", "content_
 /* Long enough for any real address or E.164 number, short enough that this
    endpoint cannot be used to push bulk data through to TikTok. */
 const MAX_IDENTIFIER_LENGTH = 320;
+/* Product ids and currency codes are short; anything longer is not a real one. */
+const MAX_PROPERTY_LENGTH = 200;
 
 /* This route has no session/auth of its own -- it exists purely to keep
    TIKTOK_ACCESS_TOKEN off the client, not to gate who can claim a conversion
@@ -67,7 +69,13 @@ export async function POST(request: NextRequest) {
   if (body?.properties && typeof body.properties === "object") {
     for (const key of ALLOWED_PROPERTY_KEYS) {
       const value = (body.properties as Record<string, unknown>)[key];
-      if (typeof value === "string" || typeof value === "number") properties[key] = value;
+      /* Strings are length-capped here too, not just the identifiers below. Without
+         this the allowlist bounds WHICH keys pass but not how big they are, and
+         content_id is then duplicated into contents[] a few lines down -- so one
+         request with a multi-megabyte content_id becomes double that outbound to
+         TikTok. Real values are short product ids. */
+      if (typeof value === "string" && value.length <= MAX_PROPERTY_LENGTH) properties[key] = value;
+      else if (typeof value === "number" && Number.isFinite(value)) properties[key] = value;
     }
   }
   /* Built here rather than accepted from the caller: `contents` is the only

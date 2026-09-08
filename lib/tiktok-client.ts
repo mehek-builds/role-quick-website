@@ -10,6 +10,24 @@ import {
 
 export type { TikTokServerEventName };
 
+/**
+ * Settle an Advanced Matching lookup without ever letting it gate the thing it
+ * decorates. Never rejects, and never outlives `ms`.
+ *
+ * Both call sites fetch these identifiers next to something load-bearing (the
+ * receipt, and on the return page the "you're on Litos+" screen itself). A plain
+ * Promise.all made a hung /profile/application able to hold a paying student on a
+ * verifying screen, and able to lose the Purchase entirely if they navigated first:
+ * api() passes no AbortSignal, so .catch() covers rejection but not latency.
+ * Matching is a bonus on top of the event; it must never be able to cost the event.
+ */
+export function matchingWithin<T>(promise: Promise<T>, ms = 1200): Promise<T | null> {
+  return Promise.race([
+    promise.catch(() => null),
+    new Promise<null>((resolve) => window.setTimeout(() => resolve(null), ms)),
+  ]);
+}
+
 /** Raw (unhashed) Advanced Matching identifiers, as held by the signed-in client. */
 export type TikTokAdvancedMatching = {
   email?: string | null;
@@ -82,10 +100,20 @@ export function trackTikTokPixelEvent(
          leave this very Purchase unmatched. Skipped entirely when neither value
          normalized, rather than sent as an empty object. */
       if (email || phoneNumber) {
-        instance?.identify({
-          ...(email ? { email } : {}),
-          ...(phoneNumber ? { phone_number: phoneNumber } : {}),
-        });
+        /* Its own try/catch, INSIDE the loop. window.ttq can be a partial stub -- a
+           consent tool or blocker that defines track() but not identify() -- and the
+           optional chain guards `instance`, not `identify`, so a missing or throwing
+           identify would propagate to the outer catch and abort the loop BEFORE any
+           track(). That would drop the Purchase for both pixels to gain matching on
+           neither. Matching is the bonus; the event is the point. */
+        try {
+          instance?.identify({
+            ...(email ? { email } : {}),
+            ...(phoneNumber ? { phone_number: phoneNumber } : {}),
+          });
+        } catch {
+          /* Fall through to track() unmatched rather than losing the event. */
+        }
       }
       instance?.track(event, { ...properties, event_id: eventId });
     }
