@@ -9,9 +9,10 @@
  * will not equal the one TikTok derived from the same person.
  *
  * Kept in sync BY HAND with volley-backend's src/lib/tiktokEvents.ts
- * (normalizeEmailForTikTok / normalizePhoneE164ForTikTok there): the two repos
- * cannot share a module, and a rule that drifts between them silently splits
- * one person into two unmatched identities.
+ * (normalizeEmailForTikTok there): the two repos cannot share a module, and a
+ * rule that drifts between them silently splits one person into two unmatched
+ * identities. Both repos assert the same pinned vectors so drift fails a test
+ * rather than quietly costing match quality.
  */
 
 export function normalizeEmailForTikTok(email: string | null | undefined): string | null {
