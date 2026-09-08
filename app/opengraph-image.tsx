@@ -32,7 +32,7 @@ async function hanken(): Promise<ArrayBuffer | null> {
 }
 export const contentType = "image/png";
 export const alt =
-  "Litos: tailored resume, filled application, real outreach";
+  "Litos: tailored resume, filled application, sent for you";
 
 export default async function OgImage() {
   const font = await hanken();
@@ -76,7 +76,7 @@ export default async function OgImage() {
             color: "#6b6a64",
           }}
         >
-          It tailors your resume, fills the application, drafts the outreach.
+          It tailors your resume, fills the application, and sends it for you.
         </div>
         <div style={{ marginTop: 56, display: "flex", gap: 10 }}>
           <div style={{ width: 48, height: 5, borderRadius: 999, background: "#6b84e8" }} />

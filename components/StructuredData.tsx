@@ -26,12 +26,11 @@ export function StructuredData({
         operatingSystem: "Chrome",
         installUrl: STORE_URL,
         description:
-          "Litos tailors your resume to the posting, fills out the application, and drafts personalized outreach to a real person at the company. You get the final say.",
+          "Litos tailors your resume to the posting and fills out the application from answers you approved. You get the final say.",
         featureList: [
           "Tailors your resume to the posting you are viewing",
           "Fills the application form from answers you approved",
-          "Finds and verifies contacts, alumni first",
-          "Drafts outreach in your voice and leaves it in Gmail",
+          "Tracks every application, its stage and its receipts",
         ],
       },
       {

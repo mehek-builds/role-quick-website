@@ -68,8 +68,7 @@ export function sanitizeTryPacket(
     (coverage as number) < 0 ||
     (coverage as number) > 100 ||
     typeof fields.university !== "string" ||
-    typeof fields.short_answer !== "string" ||
-    typeof candidate.outreach_opening !== "string"
+    typeof fields.short_answer !== "string"
   ) {
     return null;
   }
@@ -85,6 +84,5 @@ export function sanitizeTryPacket(
         "",
       short_answer: fields.short_answer,
     },
-    outreach_opening: candidate.outreach_opening,
   };
 }

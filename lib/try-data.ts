@@ -66,5 +66,4 @@ export type RealPacket = {
   tailored_bullets: string[];
   ats_coverage: number;
   filled_fields: { university: string; work_authorization: string; short_answer: string };
-  outreach_opening: string;
 };
