@@ -1597,6 +1597,12 @@ export type OnboardingState = {
   automatic_conduct_acceptance_enabled?: boolean;
   automatic_conduct_acceptance_consented_at?: string | null;
   automatic_conduct_acceptance_consent_version?: string | null;
+  /* The employer-account grant. Optional for the same deploy-order reason as every field above it,
+     and ABSENT IS NOT FALSE: see portalAccountConsentCompletion. `_enabled` is the VERSION-CHECKED
+     VERDICT the server sends, never a value to re-derive from the date or the version. */
+  automatic_account_creation_enabled?: boolean;
+  automatic_account_creation_consented_at?: string | null;
+  automatic_account_creation_consent_version?: string | null;
 };
 
 export type RoleType = "internship" | "co-op" | "new-grad" | "full-time" | "contract" | "apprenticeship" | "fellowship";
@@ -1863,6 +1869,10 @@ export type AutomationSettings = {
      and version. Never send false for a column the server did not report. */
   automatic_consent_acceptance_enabled?: boolean;
   automatic_conduct_acceptance_enabled?: boolean;
+  /* Omitted means "leave it alone" and an explicit false is a revocation that clears the grant date
+     and version. Never send false for a column the server did not report - and on this permission
+     least of all, because its date is the record of an act that created an account in her name. */
+  automatic_account_creation_enabled?: boolean;
 };
 
 /** What both write routes answer with. `automatic_captcha_enabled` here is the VERSION-CHECKED
@@ -1875,6 +1885,7 @@ export type AutomationSettingsResponse = AutomationSettings & {
      server exactly as GET /onboarding/state sends them. */
   automatic_consent_acceptance_consented_at?: string | null;
   automatic_conduct_acceptance_consented_at?: string | null;
+  automatic_account_creation_consented_at?: string | null;
 };
 
 export function completeOnboarding(settings: AutomationSettings) {
