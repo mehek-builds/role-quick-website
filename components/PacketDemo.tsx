@@ -109,18 +109,6 @@ const ARTIFACTS: {
     hover: "hover:bg-teal-soft/60",
     target: "autofill",
   },
-  {
-    t: "19:42:16",
-    label: "Email written",
-    sub: "To Priya Nair · USC alum",
-    working: "Writing the email",
-    orb: "shaping",
-    action: "Open",
-    thread: "bg-coral",
-    ink: "text-coral-ink",
-    hover: "hover:bg-coral-soft/60",
-    target: "outreach",
-  },
 ];
 
 

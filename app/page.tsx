@@ -499,17 +499,18 @@ export default function Home() {
                 <div>
                   <p className="font-mono text-label uppercase tracking-[0.08em] text-brand-ink">Litos dashboard</p>
                   <h2 className="mt-4 text-section font-[450] text-ink">See the whole search.</h2>
-                  <p className="mt-4 text-body text-muted">Jobs, documents, applications, network paths, and replies stay connected. Nothing disappears into another spreadsheet.</p>
+                  <p className="mt-4 text-body text-muted">Jobs, documents and applications stay connected. Nothing disappears into another spreadsheet.</p>
                   <nav aria-label="Dashboard areas" className="mt-6 flex flex-wrap gap-2 font-mono text-label text-muted">
                     {[
-                      ["Home", "/dashboard"], ["Jobs", "/dashboard/jobs"], ["Applications", "/dashboard/applications"], ["Documents", "/dashboard/documents"], ["Network", "/dashboard/network"], ["Outreach", "/dashboard/outreach"],
+                      ["Home", "/dashboard"], ["Jobs", "/dashboard/jobs"], ["Applications", "/dashboard/applications"], ["Documents", "/dashboard/documents"],
                     ].map(([label, href]) => <a key={label} href={href} className="rounded-control border border-border bg-surface px-3 py-2 hover:border-brand hover:text-brand-ink">{label}</a>)}
                   </nav>
                 </div>
-                <div className="overflow-hidden rounded-card border border-border bg-surface p-2 shadow-overlay">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src="/product/dashboard-emails.png" alt="The real Litos dashboard showing tracked outreach and replies" className="h-auto w-full rounded-inner" />
-                </div>
+                {/* The screenshot here was dashboard-emails.png, whose own alt text sold
+                    "tracked outreach and replies". Removed with the feature rather than swapped:
+                    there is no capture of a surviving dashboard page to put in its place, and an
+                    honest gap beats a picture of something Litos no longer does. Worth replacing
+                    with a real capture of Applications or Documents. */}
               </div>
             </Reveal>
           </div>
@@ -585,10 +586,10 @@ export default function Home() {
             screenshots (extension on a job page, the contacts panel, the
             dashboard Emails page), and it drew the made-it / shot-it line for
             the whole page. It was the homepage's only real-screenshot
-            evidence. RealCaptures in components/RealCaptures.tsx is now
-            unreferenced and was LEFT IN PLACE, not deleted, so restoring this
-            is a two-line change. The three PNGs under public/product/ stay
-            regardless: /login and CinematicHero.tsx still use them.
+            evidence. RealCaptures was deleted on 2026-09-08 with the outreach
+            removal: two of its three shots were the contacts panel and the
+            Emails page, so what was left could not carry the section. Restoring
+            it now needs new captures of surfaces that still exist.
 
             #dashboard was "The rest of it lives in your dashboard." plus the
             Jobs / Applications / Interviews cards. It was the only place the

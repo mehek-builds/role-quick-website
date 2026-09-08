@@ -48,7 +48,6 @@ function code(path) {
 const PLACEMENTS = [
   { band: "momentum", file: "app/dashboard/page.tsx", child: "Funnel" },
   { band: "tracker-summary", file: "app/dashboard/page.tsx", child: "OverviewColumn" },
-  { band: "outreach-summary", file: "app/dashboard/page.tsx", child: "OverviewColumn" },
   { band: "tracker-board", file: "app/dashboard/applications/page.tsx", child: "Board" },
   { band: "resume-health", file: "app/dashboard/applications/page.tsx", child: "ResumeHealth" },
 ];

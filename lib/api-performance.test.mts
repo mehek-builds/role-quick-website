@@ -141,7 +141,7 @@ test("the homepage performance fallbacks remain scoped and cancellable", async (
   assert.match(hero, /if \(cancelled\) return/);
   assert.match(hero, /cancelled = true/);
   assert.match(hero, /if \(initRaf\) cancelAnimationFrame\(initRaf\)/);
-  assert.doesNotMatch(hero, /<img[\s\S]*dashboard-emails\.png/);
+  assert.doesNotMatch(hero, /<img[\s\S]*extension-job\.png/);
 
   assert.match(progress, /requestAnimationFrame\(paint\)/);
   assert.match(progress, /cancelAnimationFrame\(raf\)/);
@@ -152,6 +152,6 @@ test("the homepage performance fallbacks remain scoped and cancellable", async (
   );
   assert.match(
     reducedMotionBlock,
-    /\.rq-cine-still-product\s*\{[\s\S]*background-image:\s*url\("\/product\/dashboard-emails\.png"\)/,
+    /\.rq-cine-still-product\s*\{[\s\S]*background-image:\s*url\("\/product\/extension-job\.png"\)/,
   );
 });

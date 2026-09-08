@@ -282,8 +282,3 @@ test("premium action handlers fail closed while entitlements are unresolved", as
   assert.match(autopilot, /!enabled && premiumLoading/);
 });
 
-test("the public dashboard area makes Network discoverable before sign-in", async () => {
-  const home = await read("app/page.tsx");
-  assert.match(home, /\["Network", "\/dashboard\/network"\]/);
-  assert.match(home, /network paths/);
-});

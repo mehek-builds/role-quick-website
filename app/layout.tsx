@@ -19,11 +19,11 @@ const azeretMono = Azeret_Mono({
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: `${PRODUCT_NAME}: tailored resume, filled application, real outreach`,
+    default: `${PRODUCT_NAME}: tailored resume, filled application, sent for you`,
     template: `%s: ${PRODUCT_NAME}`,
   },
   description:
-    `${PRODUCT_NAME} tailors your resume to the posting, fills out the entire application across Lever, Greenhouse, Ashby, Workday, and LinkedIn, and drafts personalized outreach to a real recruiter or alum. Review the job and edited resume side by side, answer only the extra questions, then submit from your dashboard.`,
+    `${PRODUCT_NAME} tailors your resume to the posting and fills out the entire application across Lever, Greenhouse, Ashby, Workday, and LinkedIn. Review the job and edited resume side by side, answer only the extra questions, then submit from your dashboard.`,
 };
 
 const TIKTOK_PIXEL_SCRIPT = `

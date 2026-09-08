@@ -48,7 +48,6 @@ export default function LitosVsSimplify() {
     ["Application form coverage", "Greenhouse, Lever, Ashby, Workday, and LinkedIn", "Workday, Lever, Greenhouse, and thousands of other boards"],
     ["Tailored resume", "Rebuilds a resume for the posting", "Offers resume customization tools"],
     ["Application sending", "Off by default; opt-in sending includes a 15-second stop window in the extension", "Designed for broad application autofill"],
-    ["Outreach", "Drafts outreach for the user to send", "Not the deciding capability documented in the sources used for this page"],
     ["Published install base", "Not published", "Publishes extension and job-seeker counts"],
   ] as const;
   return (
