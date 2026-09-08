@@ -59,13 +59,8 @@ const PACKET_SCHEMA = {
       required: ["university", "work_authorization", "short_answer"],
       additionalProperties: false,
     },
-    outreach_opening: {
-      type: "string",
-      description:
-        "The first two sentences of a warm outreach email to someone on this team, in the candidate's voice, grounded only in the resume. No greeting line.",
-    },
   },
-  required: ["tailored_bullets", "ats_coverage", "filled_fields", "outreach_opening"],
+  required: ["tailored_bullets", "ats_coverage", "filled_fields"],
   additionalProperties: false,
 } as const;
 
