@@ -256,6 +256,46 @@ export type ReviewScreen = "review" | "submitting" | "portal" | "submitted";
  * statuses always return to review, including when a fill run reports `questions_ready` after the
  * caller has already moved to the progress screen.
  */
+/**
+ * WHICH SCREENS HAVE TO KEEP ASKING THE SERVER WHAT HAPPENED.
+ *
+ * The submission poll is not only how the screen stays current. It is the ONLY thing that drives
+ * the backend's outcome-recovery queue: GET /applications/:id/submission calls
+ * recoverUnverifiedSubmission for any packet whose next check is due, and nothing else does. That
+ * queue is what turns "Litos pressed Send and could not read a confirmation" into either a receipt
+ * or `unresolved` - and `unresolved` is the state that finally shows the applicant the one control
+ * that can release the packet, "It is not there".
+ *
+ * MEASURED 2026-09-08 on Mehek's two Neuralink packets (65586e22, 63df5520, greenhouse). Both sat
+ * at outcome_recovery `{state: "pending", checks: 2}` with next_check_at NINETY MINUTES in the
+ * past. Opening each packet, waiting, and pressing "View status" advanced nothing, and no
+ * /submission request reached the server at all: the poll was gated on
+ * ["submitting", "portal"], and a packet parked on an unresolved send renders the review screen.
+ * So the queue could never reach its third check, the state could never become `unresolved`, and
+ * the release control could never appear. Neither Litos nor the applicant could move it. The two
+ * packets were locked permanently, and the screen said "Litos checks the original application
+ * attempt for an employer confirmation automatically" while making no such check.
+ *
+ * So an unresolved send keeps its poll wherever it is shown. It is expressed as a rule about the
+ * REVIEW rather than about the screen, because the screen is the thing that turned out to be the
+ * wrong question: any surface showing a packet in this state owes it the same request.
+ */
+export function submissionPollIsRequired(
+  /* The page's own screen union is wider than ReviewScreen (it has "questions" too), and this rule
+     answers for every one of them: only two screens poll on their own account, and everything else
+     polls only because the review says the send is unresolved. */
+  screen: ReviewScreen | string,
+  /* An index signature because the real record carries `at`, `cause`, `portal_url` and more, and
+     this rule reads exactly one of its fields. Naming only that one and refusing the rest would
+     make every caller cast. */
+  review: {
+    unverified_submission?: { resolution?: string | null; [field: string]: unknown } | null;
+  } | null | undefined,
+): boolean {
+  if (screen === "submitting" || screen === "portal") return true;
+  return Boolean(review?.unverified_submission && !review.unverified_submission.resolution);
+}
+
 export function screenForStatus(status: ReviewStatus | string | undefined, fallback: ReviewScreen): ReviewScreen {
   if (status === "submitted") return "submitted";
   if (status === "needs_attention" || status === "ready_for_final_approval" || status === "failed" || status === "awaiting_security_code") return "portal";
