@@ -509,12 +509,14 @@ before(async () => {
           starts_at: new Date().toISOString(),
           ends_at: new Date(Date.now() + 7 * 86_400_000).toISOString(),
           active: true,
-          tailored_resumes_used: 1,
-          tailored_resumes_limit: 5,
-          cover_letters_used: 0,
-          cover_letters_limit: 5,
-          answer_applications_used: 0,
-          answer_applications_limit: 5,
+          /* ONE POOL OF JOBS since 2026-09-08. Serving the old per-kind shape here is not a
+             harmless stale fixture: normalizeEntitlementSnapshot requires every meter it
+             publishes, so a snapshot missing generations_used/limit parses to a null trial,
+             holdsTrial goes false, and the screen honestly renders its no-trial branch. That is
+             how this fixture failed -- as a 20-second wait for row 03's "Ends", which only
+             appears when a trial is actually held. */
+          generations_used: 1,
+          generations_limit: 20,
           outreach_companies_used: 0,
           outreach_companies_limit: 5,
           company_usage: [],
@@ -866,7 +868,7 @@ describe("the application sequence, end to end", () => {
      * Every assertion below reads a value that arrives from getBillingState(), which TrialStep
      * fires on mount and does not block its first paint on. Before it resolves the screen is
      * honestly in its other state: `holdsTrial` is false, so the meters print what the seven days
-     * INCLUDE (5, 5, 5, 5), row 05 names the length instead of an end date, and the line reads
+     * INCLUDE (20 jobs, 5 companies), row 03 names the length instead of an end date, and the line reads
      * "Nothing is charged for the first seven days." Reading innerText the instant test 06's
      * heading appeared raced that fetch, and on a loaded CI runner the fetch lost: main went red on
      * `/Tailored resumes\s*\n?\s*4/` against a receipt showing 5, which is not a wrong number but
@@ -881,7 +883,7 @@ describe("the application sequence, end to end", () => {
      * made the assertion on it unfalsifiable: the wait guaranteed the very thing the assert was
      * written to catch, so a regression to the wrong branch would have surfaced as a bare 20-second
      * locator timeout instead of as "the trial line is wrong".
-     * Row 05's key is the honest signal. It reads "Ends" only when `holdsTrial` is true and
+     * Row 03's key is the honest signal. It reads "Ends" only when `holdsTrial` is true and
      * "Length" until then, and nothing below reads it, so it says the snapshot has landed without
      * standing in for any assertion. Anchored, so it cannot match a longer word ending in it. */
     await page.getByText(/^Ends$/i).waitFor({ timeout: 20_000 });
@@ -889,8 +891,11 @@ describe("the application sequence, end to end", () => {
     const body = await page.locator("main").innerText();
     assert.match(body, /A gift, on us/i);
     assert.match(body, /days of Litos\+/i);
-    // 5 limit minus the 1 the build used. Printing 5 here would be a number the account does not have.
-    assert.match(body, /Tailored resumes\s*\n?\s*4/i);
+    /* 20 jobs minus the 1 the build spent. One row, not three: a job that needs a resume, a
+       cover letter and answers spends one of the 20, so printing a separate resume meter would
+       describe a trial the account does not have. */
+    assert.match(body, /Jobs\s*\n?\s*19/i);
+    assert.doesNotMatch(body, /Tailored resumes/i);
     /* THIS ACCOUNT HOLDS A TRIAL, so the screen may say so. The line used to be unconditional and
        read "Nothing to confirm. Already on your account." for everyone, which stopped being true
        the moment the trial became a Stripe subscription rather than a signup grant: a real new
