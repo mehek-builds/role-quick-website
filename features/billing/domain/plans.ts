@@ -207,7 +207,7 @@ export const LITOS_PLUS_PLANS: readonly LitosPlusPlan[] = litosPlusPlansForCurre
    its own test. Left alone here rather than swept up with it. */
 export const PLUS_FEATURES = [
   "Everything in Free",
-  "Full applications built and filled for you: resume, cover letter, and answers (50 a week, 200 a month, or 600 every 3 months)",
+  "Full applications built and filled for you: resume, cover letter, and answers, counted per job (50 a week, 200 a month, or 600 every 3 months)",
   "Resume feedback and saved versions",
   "Hover-started tailoring on job cards",
   "Networking and referral paths",
@@ -236,9 +236,9 @@ export const FEATURE_COMPARISON: readonly FeatureComparison[] = [
   { feature: "View, edit, copy, download, or delete existing generated work", free: "Included", trial: "Included", plus: "Included", tone: "documents" },
   { feature: "Email delivery and reply history", free: "Included", trial: "Included", plus: "Included", tone: "outreach" },
   { feature: "Account export, privacy controls, and deletion", free: "Included", trial: "Included", plus: "Included" },
-  { feature: "New tailored resumes", free: "Not included", trial: "5 successful generations", plus: "Shared pool: 50/week, 200/month, or 600/quarter", tone: "documents" },
-  { feature: "New cover letters", free: "Not included", trial: "5 successful generations", plus: "Shared pool: 50/week, 200/month, or 600/quarter", tone: "documents" },
-  { feature: "New generated application answers", free: "Not included", trial: "For 5 distinct applications", plus: "Shared pool: 50/week, 200/month, or 600/quarter", tone: "documents" },
+  { feature: "New tailored resumes", free: "Not included", trial: "Part of the 20-job trial", plus: "Shared pool of jobs: 50/week, 200/month, or 600/quarter", tone: "documents" },
+  { feature: "New cover letters", free: "Not included", trial: "Part of the 20-job trial", plus: "Shared pool of jobs: 50/week, 200/month, or 600/quarter", tone: "documents" },
+  { feature: "New generated application answers", free: "Not included", trial: "Part of the 20-job trial", plus: "Shared pool of jobs: 50/week, 200/month, or 600/quarter", tone: "documents" },
   { feature: "Contact discovery", free: "Not included", trial: "Up to 2 per represented company, up to 5 companies", plus: "Included, no user-facing quota", tone: "outreach" },
   { feature: "Outreach draft generation", free: "Not included", trial: "Up to 2 per represented company, up to 5 companies", plus: "Included, no user-facing quota", tone: "outreach" },
   { feature: "Hover-started tailoring", free: "Not included", trial: "Not included, choose Tailor resume", plus: "Included on active paid plans", tone: "documents" },

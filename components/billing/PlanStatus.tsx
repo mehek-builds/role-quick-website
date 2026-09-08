@@ -49,9 +49,10 @@ export function PlanStatus({ compact = false, showAction = true }: { compact?: b
           <p className="mt-1 text-small text-muted">{body}</p>
           {v2Trial && !compact && (
             <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 font-mono text-label text-muted" aria-label="Trial usage">
-              <span>{v2Trial.tailored_resumes_used} of {v2Trial.tailored_resumes_limit} tailored resumes used</span>
-              <span>{v2Trial.cover_letters_used} of {v2Trial.cover_letters_limit} cover letters used</span>
-              <span>{v2Trial.answer_applications_used} of {v2Trial.answer_applications_limit} answer applications used</span>
+              {/* ONE LINE, counting jobs. Three lines counting resumes, cover letters and
+                  answers described a trial with three separate allowances, which is not the
+                  product: one job spends one of these however many of the three it needs. */}
+              <span>{v2Trial.generations_used} of {v2Trial.generations_limit} jobs used</span>
               <span>{v2Trial.outreach_companies_used} of {v2Trial.outreach_companies_limit} outreach companies used</span>
             </div>
           )}

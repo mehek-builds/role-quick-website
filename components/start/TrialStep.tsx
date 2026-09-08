@@ -36,9 +36,7 @@ import { track } from "@/lib/analytics";
    so a change on that side shows up as a failure here rather than as a wrong number on the screen
    one step ahead of the paywall. */
 const TRIAL_INCLUDES = {
-  tailored_resumes: 5,
-  cover_letters: 5,
-  answer_applications: 5,
+  generations: 20,
   outreach_companies: 5,
 } as const;
 
@@ -98,13 +96,14 @@ export function TrialStep({ onContinue, sent }: { onContinue: () => void; sent: 
       <div className="mt-6">
         <Receipt
           rows={[
-            { t: "01", k: "Tailored resumes", v: left(usage?.tailored_resumes_used, usage?.tailored_resumes_limit, TRIAL_INCLUDES.tailored_resumes) },
-            { t: "02", k: "Cover letters", v: left(usage?.cover_letters_used, usage?.cover_letters_limit, TRIAL_INCLUDES.cover_letters) },
-            { t: "03", k: "Application answers", v: left(usage?.answer_applications_used, usage?.answer_applications_limit, TRIAL_INCLUDES.answer_applications) },
-            { t: "04", k: "Contact discovery", v: left(usage?.outreach_companies_used, usage?.outreach_companies_limit, TRIAL_INCLUDES.outreach_companies) },
+            /* ONE ROW FOR THE POOL. It used to be three, one per kind, which read as three
+               separate allowances and was the screen's whole promise. A job spends one of these
+               whether it needs a resume, a cover letter, answers, or all three. */
+            { t: "01", k: "Jobs", v: left(usage?.generations_used, usage?.generations_limit, TRIAL_INCLUDES.generations) },
+            { t: "02", k: "Contact discovery", v: left(usage?.outreach_companies_used, usage?.outreach_companies_limit, TRIAL_INCLUDES.outreach_companies) },
             /* An end date exists only once the trial has started. Before that this row would be
                asserting a date nobody has set, so it names the length instead. */
-            ...(holdsTrial ? [{ t: "05", k: "Ends", v: endsLabel(access) }] : [{ t: "05", k: "Length", v: "7 days" }]),
+            ...(holdsTrial ? [{ t: "03", k: "Ends", v: endsLabel(access) }] : [{ t: "03", k: "Length", v: "7 days" }]),
           ]}
         />
       </div>

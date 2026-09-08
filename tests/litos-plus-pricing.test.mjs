@@ -133,12 +133,19 @@ test("the mandatory onboarding payment screen also reads the currency-aware cata
   assert.match(step, /\{plans\.map\(\(option\) => \{/);
 });
 
-test("trial meters are independent and exact", () => {
+test("the trial is one pool of jobs, not a meter per document kind", () => {
+  /* WAS "trial meters are independent and exact", pinning three separate 5s. They were never
+     independent from the student's point of view and they are one pool now: a job that needs a
+     resume, a cover letter and answers spends ONE of the 20. Pinned as identical strings across
+     the three rows precisely because a future edit that makes one of them differ would be
+     reintroducing the per-kind meter this replaced. */
   const byFeature = new Map(FEATURE_COMPARISON.map((row) => [row.feature, row]));
-  assert.equal(byFeature.get("New tailored resumes")?.plus, "Shared pool: 50/week, 200/month, or 600/quarter");
-  assert.equal(byFeature.get("New tailored resumes")?.trial, "5 successful generations");
-  assert.equal(byFeature.get("New cover letters")?.trial, "5 successful generations");
-  assert.equal(byFeature.get("New generated application answers")?.trial, "For 5 distinct applications");
+  const pooled = ["New tailored resumes", "New cover letters", "New generated application answers"];
+  for (const feature of pooled) {
+    assert.equal(byFeature.get(feature)?.trial, "Part of the 20-job trial", `${feature} must draw on the shared trial pool`);
+    assert.equal(byFeature.get(feature)?.plus, "Shared pool of jobs: 50/week, 200/month, or 600/quarter", `${feature} must draw on the shared paid pool`);
+  }
+  assert.equal(new Set(pooled.map((feature) => byFeature.get(feature)?.trial)).size, 1, "the three kinds must not describe different trial allowances");
   assert.equal(byFeature.get("Contact discovery")?.trial, "Up to 2 per represented company, up to 5 companies");
   assert.equal(byFeature.get("Outreach draft generation")?.trial, "Up to 2 per represented company, up to 5 companies");
   assert.equal(FEATURE_COMPARISON.some((row) => /interview-preparation/i.test(row.feature)), false);

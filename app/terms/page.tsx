@@ -147,14 +147,22 @@ export default function Terms() {
             Litos+ access.
           </p>
           <p>
-            A new account receives a seven-day Litos+ trial without adding a
-            card. The trial includes ten tailored resumes, ten cover letters,
-            generated answers for ten applications, and up to two contacts and
-            two outreach drafts per company across five companies. Trial
-            generation starts only when you choose the relevant action.
+            A new account receives a seven-day Litos+ trial, once per account.
+            The trial includes twenty jobs. One job is one generation: building
+            a tailored resume, a cover letter and application answers for the
+            same job together count as one of the twenty, not three. It also
+            includes up to two contacts and two outreach drafts per company
+            across five companies, which are separate from the twenty. Trial
+            generation starts only when you choose the relevant action, and the
+            trial does not carry over: unused jobs end with the seven days.
+            Litos does not offer a free plan; after the trial, access continues
+            only on a paid subscription.
           </p>
           <p>
-            Litos+ costs $29.99 for one week, $59.99 for one month, or $119.99
+            Litos+ includes fifty jobs a week, two hundred a month, or six
+            hundred every three months, counted the same way as the trial: one
+            job is one generation however many documents it needs. Litos+ costs
+            $29.99 for one week, $59.99 for one month, or $119.99
             for three months. The three-month price is a promotional rate
             reduced from an undiscounted $359.99, advertised as 70% off, and it
             renews at $119.99 unless that promotion is withdrawn and you are
