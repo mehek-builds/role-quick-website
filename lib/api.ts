@@ -957,6 +957,15 @@ export type ApplicationQuestionMetadataBlocker = {
 /** One question from GET /postings/:jobId/questions that needs the applicant. */
 export type PostingPrescriptQuestion = {
   question: string;
+  /**
+   * What to SHOW, when the employer's control handed discovery its own DOM around the question.
+   *
+   * Lever's location typeahead arrives as `current location ✱ location location-input` - the label,
+   * the required marker, and the input's own name and class. `question` stays the identity an answer
+   * carries once it leaves this screen (answerKey, and the `question` posted to /onboarding/answers),
+   * so only the rendering uses this.
+   */
+  display_question?: string;
   input_type: string;
   options: string[] | null;
   /** False means the option inventory is partial and must not be presented as complete. */
