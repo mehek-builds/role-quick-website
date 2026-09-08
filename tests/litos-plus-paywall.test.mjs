@@ -59,11 +59,12 @@ test("paywall telemetry uses the authenticated server event contract", async () 
 });
 
 test("authoritative exhausted-meter denials bypass cached trial feature grants", async () => {
-  const [provider, paywall, applications, outreach, home] = await Promise.all([
+  /* Outreach was a fourth surface here until 2026-09-08. The invariant is unchanged and still
+     covered by applications and home; there is simply one fewer place that can break it. */
+  const [provider, paywall, applications, home] = await Promise.all([
     read("components/billing/BillingProvider.tsx"),
     read("features/billing/domain/paywall.ts"),
     read("app/dashboard/applications/page.tsx"),
-    read("app/dashboard/outreach/page.tsx"),
     read("app/dashboard/page.tsx"),
   ]);
 
@@ -75,8 +76,6 @@ test("authoritative exhausted-meter denials bypass cached trial feature grants",
     "ai_resume_tailoring",
     "ai_cover_letter_generation",
     "ai_application_answer_generation",
-    "contact_discovery",
-    "outreach_email_generation",
   ]) {
     assert.match(paywall, new RegExp(`"${feature}"`));
   }
@@ -84,10 +83,6 @@ test("authoritative exhausted-meter denials bypass cached trial feature grants",
   assert.equal((applications.match(/\{ source: "server_denial", trigger \}/g) ?? []).length, 2);
   assert.match(applications, /isStructuredUpgradeDenial\(reason, "ai_resume_tailoring"\)/);
   assert.match(applications, /isStructuredUpgradeDenial\(reason, "ai_cover_letter_generation"\)/);
-  assert.equal((outreach.match(/\{ source: "server_denial", trigger: upgradeTrigger \}/g) ?? []).length, 2);
-  assert.equal((outreach.match(/const upgradeTrigger = event\.currentTarget;/g) ?? []).length, 2);
-  assert.match(outreach, /isStructuredUpgradeDenial\(reason, "contact_discovery"\)/);
-  assert.match(outreach, /isStructuredUpgradeDenial\(reason, "outreach_email_generation"\)/);
   assert.match(home, /isStructuredUpgradeDenial\(reason, "ai_resume_tailoring"\)[\s\S]*source: "server_denial",[\s\S]*trigger: homeUpgradeFocusTarget\(jobId, upgradeTrigger\)/);
 });
 
@@ -229,23 +224,6 @@ test("paid hover and sending without another prompt use separate server features
   assert.match(settings, /feature: "automatic_submission"/);
 });
 
-test("network ownership controls stay available when discovery is locked", async () => {
-  const network = await read("app/dashboard/network/page.tsx");
-  assert.match(network, /if \(networkAccess === false \|\| status\?\.connected === false\) \{[\s\S]{0,260}?setPeople\(\[\]\);/);
-  assert.match(network, /if \(networkAccess === false \|\| status\?\.connected === false\) \{[\s\S]{0,260}?setCompanies\(\[\]\);/);
-  assert.match(network, /if \(networkAccess !== true \|\| status\?\.connected !== true\) return/);
-  assert.doesNotMatch(network, /if \(!premium \|\| status\?\.connected === false\)/);
-  assert.match(network, /tab === "linkedin"/);
-  assert.match(network, /\/network\/linkedin\/import\/preview/);
-  assert.match(network, /\/network\/linkedin\/import\/commit/);
-  assert.match(network, /\/network\/linkedin\/disconnect/);
-  assert.match(network, /\/network\/linkedin\/data/);
-  assert.match(network, /Disconnect stops future use/);
-  assert.match(network, /retained_people_count/);
-  assert.match(network, /setPeople\(\[\]\);[\s\S]*setCompanies\(\[\]\);/);
-  assert.match(network, /Delete imported data/);
-});
-
 test("recruiter visibility stays out of the production Account UI until it is functional", async () => {
   const settings = await read("app/dashboard/settings/page.tsx");
   assert.doesNotMatch(settings, /\/account\/recruiter-visibility/);
@@ -254,11 +232,10 @@ test("recruiter visibility stays out of the production Account UI until it is fu
 });
 
 test("checkout return restores context only after an explicit consume", async () => {
-  const [provider, billingReturn, applications, outreach] = await Promise.all([
+  const [provider, billingReturn, applications] = await Promise.all([
     read("components/billing/BillingProvider.tsx"),
     read("app/billing/return/page.tsx"),
     read("app/dashboard/applications/page.tsx"),
-    read("app/dashboard/outreach/page.tsx"),
   ]);
   assert.match(provider, /createPendingBillingAction/);
   assert.match(billingReturn, /readPendingBillingAction/);
@@ -267,8 +244,6 @@ test("checkout return restores context only after an explicit consume", async ()
   assert.doesNotMatch(billingReturn, /\/resume\/generate|\/draft|\/resolve/);
   assert.match(applications, /rememberCheckoutDraft/);
   assert.match(applications, /checkout_action/);
-  assert.match(outreach, /rememberOutreachCheckoutState/);
-  assert.match(outreach, /checkout_action/);
 });
 
 test("a missing local checkout context does not by itself fail the return as a wrong account", async () => {
@@ -307,48 +282,3 @@ test("premium action handlers fail closed while entitlements are unresolved", as
   assert.match(autopilot, /!enabled && premiumLoading/);
 });
 
-test("resolved contacts and drafts share the exact company domain", async () => {
-  const [outreach, provider, billingApi] = await Promise.all([
-    read("app/dashboard/outreach/page.tsx"),
-    read("components/billing/BillingProvider.tsx"),
-    read("features/billing/infrastructure/billing-api.ts"),
-  ]);
-  assert.match(outreach, /api<\{ contacts\?: ResolvedContact\[\] \}>\("\/resolve"/);
-  assert.match(outreach, /setCompanyDomain\(resolved\.contact\.company_domain\)/);
-  assert.match(outreach, /company_domain: requestedCompanyDomain\.trim\(\)/);
-  assert.match(outreach, /domain: request\.companyDomain/);
-  assert.equal((outreach.match(/company_domain: request\.companyDomain/g) ?? []).length, 3);
-  assert.match(outreach, /company_scope_conflict|company domain you enter to keep contact and draft usage together/i);
-  assert.match(outreach, /api<\{ application: \{ id: string \} \}>\("\/applications"/);
-  assert.equal((outreach.match(/application_id: canonicalApplicationId/g) ?? []).length, 3);
-  assert.match(outreach, /draft_type: request\.draftType/);
-  for (const draftType of ["first_note", "follow_up", "thank_you", "referral_ask", "offer_stage"]) {
-    assert.match(outreach, new RegExp(`\\["${draftType}",`));
-  }
-  assert.match(outreach, /contactTitle/);
-  assert.match(outreach, /title: request\.contactTitle/);
-  assert.match(outreach, /contactId: canonicalContactId/);
-  assert.match(provider, /contactId: request\.contactId/);
-  assert.match(billingApi, /contact_id: input\.contactId/);
-});
-
-test("durable outreach drafts survive reload and remain editable", async () => {
-  const outreach = await read("app/dashboard/outreach/page.tsx");
-  assert.match(outreach, /api<\{ drafts\?: DurableOutreachDraft\[\] \}>\("\/drafts\?limit=100"/);
-  assert.match(outreach, /durableDraft: saved/);
-  assert.match(outreach, /editSavedDraft\(e\.durableDraft!, event\.currentTarget\)/);
-  assert.match(outreach, /`\/drafts\/\$\{encodeURIComponent\(request\.editingDraftId\)\}`/);
-  assert.match(outreach, /method: "PATCH"/);
-  assert.match(outreach, /"Save changes"/);
-  assert.match(outreach, /api<DurableOutreachDraft>\("\/drafts\/manual"/);
-  assert.match(outreach, /generation_source: "ai_generated" \| "user_written"/);
-  assert.match(outreach, /contact_email: request\.contactEmail \|\| null/);
-  assert.match(outreach, /saved\.contact\.email \?\? saved\.contact_email/);
-  assert.match(outreach, /"Save draft"/);
-});
-
-test("the public dashboard area makes Network discoverable before sign-in", async () => {
-  const home = await read("app/page.tsx");
-  assert.match(home, /\["Network", "\/dashboard\/network"\]/);
-  assert.match(home, /network paths/);
-});

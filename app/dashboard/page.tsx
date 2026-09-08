@@ -11,7 +11,6 @@ import {
   type GeneratedResume,
   type Me,
   type MonitoredJob,
-  type OutreachEvent,
   type ParsedProfile,
   type Targeting,
 } from "@/lib/api";
@@ -222,35 +221,6 @@ function qaPacketFor(job: MonitoredJob): GeneratedResume {
 
 const QA_PACKETS: GeneratedResume[] = QA_JOBS.slice(0, 1).map(qaPacketFor);
 
-const QA_OUTREACH: OutreachEvent[] = [
-  {
-    id: "qa-outreach-1",
-    channel: "gmail",
-    subject: "Fellow Trojan interested in Acme",
-    draft_text: "Hi Jordan, fellow Trojan here, and interested in Acme's product engineering work.",
-    sent_at: new Date().toISOString(),
-    opened_at: null,
-    replied_at: new Date().toISOString(),
-    bounced: false,
-    follow_up_count: 0,
-    status: "replied",
-    contact: { id: "qa-contact-1", full_name: "Jordan Lee", title: "Product Engineer", company_domain: "acme.com" },
-  },
-  {
-    id: "qa-outreach-2",
-    channel: "gmail",
-    subject: "Stripe engineering, quick question",
-    draft_text: "Hi Sam, I would value your perspective on how Stripe's engineering teams are structured.",
-    sent_at: new Date(Date.now() - 86_400_000).toISOString(),
-    opened_at: null,
-    replied_at: null,
-    bounced: false,
-    follow_up_count: 0,
-    status: "sent",
-    contact: { id: "qa-contact-2", full_name: "Sam Chen", title: "Software Engineer", company_domain: "stripe.com" },
-  },
-];
-
 export default function Home() {
   const { canUse, openUpgrade } = useBilling();
   const [me, setMe] = useState<Me | null>(null);
@@ -262,7 +232,6 @@ export default function Home() {
   const [identity, setIdentity] = useState<ProfileIdentity | null>(null);
   const [applicationProfile, setApplicationProfile] = useState<ApplicationProfile | null>(null);
   const [packets, setPackets] = useState<GeneratedResume[]>([]);
-  const [outreach, setOutreach] = useState<OutreachEvent[]>([]);
   /* Starts false, not null, and stays false unless /onboarding/state says otherwise. The prewarm
      below reads it, and "we do not know yet" must not build anything. */
   const [autoSubmitEnabled, setAutoSubmitEnabled] = useState(false);
@@ -313,7 +282,6 @@ export default function Home() {
         setIdentity({ full_name: "John Doe", email: "qa@trylitos.com" });
         setApplicationProfile({});
         setPackets(QA_PACKETS);
-        setOutreach(QA_OUTREACH);
       });
       return;
     }
@@ -329,7 +297,6 @@ export default function Home() {
         setIdentity(initial.identity);
         setApplicationProfile(initial.applicationProfile);
         setPackets(initial.packets);
-        setOutreach(initial.outreach);
         setAutoSubmitEnabled(initial.autoSubmitEnabled);
       })
       .catch((reason) => {
@@ -449,11 +416,6 @@ export default function Home() {
   /* Each summary block gates on its own total, so a student with emails but no applications is
      not shown a row of application zeros to prove it (and vice versa). */
   const applicationTotal = applicationSummary.ready + applicationSummary.submitted + applicationSummary.needsAction;
-  const outreachSummary = useMemo(() => ({
-    drafted: outreach.filter((event) => event.status === "drafted").length,
-    sent: outreach.filter((event) => ["sent", "replied"].includes(event.status)).length,
-    replied: outreach.filter((event) => event.status === "replied").length,
-  }), [outreach]);
   /* THE REVIEW DRAWER AND ITS SUBMISSION MACHINERY LIVED HERE. Deleted, not moved: reviewing a
      packet happens on ONE screen now, /dashboard/applications, and the Review button on a card is
      a link to it.
@@ -833,21 +795,6 @@ export default function Home() {
                 detail: "Continue where Litos stopped",
                 href: "/dashboard/applications?state=action",
               } : undefined}
-            />
-            </SectionBoundary>
-          )}
-          {outreach.length > 0 && (
-            <SectionBoundary band="outreach-summary" title="Outreach">
-            <OverviewColumn
-              id="outreach-summary"
-              title="Outreach"
-              href="/dashboard/outreach"
-              tone="emails"
-              metrics={[
-                { label: "Drafted", value: outreachSummary.drafted, href: "/dashboard/outreach" },
-                { label: "Sent", value: outreachSummary.sent, href: "/dashboard/outreach" },
-                { label: "Replied", value: outreachSummary.replied, href: "/dashboard/outreach" },
-              ]}
             />
             </SectionBoundary>
           )}

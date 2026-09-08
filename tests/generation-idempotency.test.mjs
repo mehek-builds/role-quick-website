@@ -16,10 +16,12 @@ test("one exact generation action reuses its UUID until success", () => {
 });
 
 test("every website generation call sends a stable operation id", async () => {
-  const [home, applications, outreach, bodyBuilder] = await Promise.all([
+  /* The outreach page was a fourth surface here and its read was removed with it. The
+     destructure had already gone one name past the array, which is why this failed with an
+     undefined path rather than a missing file. */
+  const [home, applications, bodyBuilder] = await Promise.all([
     read("app/dashboard/page.tsx"),
     read("app/dashboard/applications/page.tsx"),
-    read("app/dashboard/outreach/page.tsx"),
     read("features/applications/domain/daily-matches.ts"),
   ]);
 
@@ -30,8 +32,4 @@ test("every website generation call sends a stable operation id", async () => {
   assert.match(applications, /operation_id: operationId,[\s\S]*initiation: "explicit_click"/);
   assert.match(applications, /operationIdFor\(coverLetterOperationIds\.current, operationKey\)/);
   assert.match(applications, /\/cover-letter`, \{[\s\S]*operation_id: operationId,[\s\S]*options\.jdText/);
-  assert.match(outreach, /operationIdFor\(operationOwner\.draftOperationIds, operationKey\)/);
-  assert.match(outreach, /operation_id: operationId/);
-  assert.match(outreach, /operationIdFor\(operationOwner\.contactOperationIds, operationKey\)/);
-  assert.doesNotMatch(outreach, /operation_id: crypto\.randomUUID\(\)/);
 });

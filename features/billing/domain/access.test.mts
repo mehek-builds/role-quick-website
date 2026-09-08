@@ -28,9 +28,8 @@ test("rolling fallback preserves original Free access and exact usage", () => {
   assert.equal(snapshot.access_class, "free_grandfathered");
   assert.equal(featureAccess(snapshot, "ai_resume_tailoring"), true);
   assert.equal(featureAccess(snapshot, "ai_cover_letter_generation"), true);
-  assert.equal(featureAccess(snapshot, "contact_discovery"), true);
-  assert.equal(featureAccess(snapshot, "outreach_email_generation"), true);
-  assert.equal(featureAccess(snapshot, "networking_discovery"), false);
+  /* The three outreach keys asserted here went with the feature on 2026-09-08. The legacy
+     grandfathered path they were exercising is unchanged; it simply has fewer keys to grant. */
   assert.equal(featureAccess(snapshot, "automatic_submission"), false);
   assert.equal(featureAccess(snapshot, "hover_generation"), false);
   assert.deepEqual(snapshot.legacy_usage, {

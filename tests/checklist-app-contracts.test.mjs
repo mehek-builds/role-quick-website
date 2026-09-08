@@ -72,7 +72,6 @@ test("every upload surface refuses files through the one shared gate", () => {
     "app/dashboard/resume/page.tsx",
     "components/app/TranscriptModal.tsx",
     "app/dashboard/applications/page.tsx",
-    "app/dashboard/network/page.tsx",
   ]) {
     const source = read(surface);
     assert.match(source, /validateApplicationDocument\(/, `${surface} bypasses the shared upload gate`);

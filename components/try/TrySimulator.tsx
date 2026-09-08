@@ -7,7 +7,6 @@ import {
   CANNED_FIELDS,
   CANNED_FIELDS_FILLED_TOTAL,
   CANNED_FIELDS_TOTAL,
-  CANNED_OUTREACH,
   CANNED_POSTING,
   CANNED_RESUME,
   type RealPacket,
@@ -30,8 +29,8 @@ import { MobileSendLink } from "@/components/MobileSendLink";
    canon) and real (paste or upload your resume). A failed real trial stays
    on the visitor's resume path and never substitutes John's information. */
 
-type Step = "chooser" | "resume" | "autofill" | "outreach" | "done";
-const STEP_ORDER: Step[] = ["chooser", "resume", "autofill", "outreach", "done"];
+type Step = "chooser" | "resume" | "autofill" | "done";
+const STEP_ORDER: Step[] = ["chooser", "resume", "autofill", "done"];
 
 const WORK_AUTHORIZATION_ANSWERS = ["Yes", "No"] as const;
 const SPONSORSHIP_ANSWERS = ["No", "Yes", "Not sure"] as const;
@@ -53,9 +52,9 @@ export function TrySimulator({
   initialStep?: string;
   jobs: TryJobCard[];
 }) {
-  /* Deep links (/try?step=resume|autofill|outreach) land in canned mode
+  /* Deep links (/try?step=resume|autofill) land in canned mode
      with prior steps completed - the real path is chooser-only. */
-  const deepLink = (["resume", "autofill", "outreach"] as const).find(
+  const deepLink = (["resume", "autofill"] as const).find(
     (s) => s === initialStep,
   );
   const [step, setStep] = useState<Step>(deepLink ?? "chooser");
@@ -209,13 +208,11 @@ export function TrySimulator({
     stamp(step);
     const NEXT: Record<string, Step> = {
       resume: "autofill",
-      autofill: "outreach",
-      outreach: "done",
+      autofill: "done",
     };
     const HOLD: Record<string, number> = {
       resume: 1300,
       autofill: 1700,
-      outreach: 1500,
     };
     const id = setTimeout(() => {
       const next = NEXT[step];
@@ -238,9 +235,6 @@ export function TrySimulator({
 
   const bullets = packet?.tailored_bullets ?? CANNED_RESUME.bullets;
   const coverage = packet?.ats_coverage ?? CANNED_RESUME.atsCoverage;
-  const outreachBody = packet
-    ? `${packet.outreach_opening} …`
-    : CANNED_OUTREACH.body;
 
   /* The simulated job page IS the posting you're cycling (Mehek, 2026-07-08:
      the back-and-forth lives on the job page itself). While browsing (before a
@@ -362,9 +356,6 @@ export function TrySimulator({
                     active={step === "autofill"}
                   />
                 )}
-                {after(step, "autofill") && (
-                  <OutreachArtifact body={outreachBody} real={mode === "real"} />
-                )}
               </div>
             )}
           </div>
@@ -430,7 +421,7 @@ export function TrySimulator({
 
                 {step !== "chooser" && step !== "done" && (
                   <>
-                    <ReceiptRows step={step} stamps={stamps} mode={mode} />
+                    <ReceiptRows step={step} stamps={stamps} />
                     <p className="flex items-center justify-center gap-1.5 pt-0.5 text-center font-mono text-[10px] uppercase tracking-[0.08em] text-muted">
                       <ThinkingOrb state="working" size={20} />
                       Making your application
@@ -908,19 +899,18 @@ function KeywordClarificationDialog({
   );
 }
 
+/* `mode` is gone from here: its only use was choosing between "Email opened" and "Email
+   written" for the outreach row, which went with the feature on 2026-09-08. */
 function ReceiptRows({
   step,
   stamps,
-  mode,
 }: {
   step: Step;
   stamps: Partial<Record<Step, string>>;
-  mode: "canned" | "real";
 }) {
   const rows = [
     { key: "resume" as Step, label: "Resume rewritten", thread: "bg-brand", orb: "composing" as const },
     { key: "autofill" as Step, label: "Application filled", thread: "bg-teal", orb: "solving" as const },
-    { key: "outreach" as Step, label: mode === "real" ? "Email opened" : "Email written", thread: "bg-coral", orb: "shaping" as const },
   ];
   return (
     <div className="space-y-1">
@@ -1188,20 +1178,3 @@ function FormArtifact({
   );
 }
 
-function OutreachArtifact({ body, real }: { body: string; real: boolean }) {
-  return (
-    <ArtifactShell
-      eyebrow={real ? "Your email · first lines" : `To ${CANNED_OUTREACH.to}`}
-      chip={real ? "In your voice" : `~${CANNED_OUTREACH.words} words · in your voice`}
-      chipClass="bg-coral-soft text-coral-ink"
-    >
-      {!real && (
-        <p className="mt-2 text-[13px] font-medium text-ink">{CANNED_OUTREACH.subject}</p>
-      )}
-      <p className="mt-1.5 text-[12.5px] leading-5 text-muted">{body}</p>
-      <p className="mt-2.5 font-mono text-[10px] uppercase tracking-[0.05em] text-muted">
-        This is a draft. You press send.
-      </p>
-    </ArtifactShell>
-  );
-}

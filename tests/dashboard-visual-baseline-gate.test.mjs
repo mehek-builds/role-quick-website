@@ -23,7 +23,16 @@ test("visual baseline approval runs only after a successful browser process", ()
   );
   assert.match(browserSource, /if \(CAPTURE_VISUAL_BASELINES\) return;/);
   assert.doesNotMatch(browserSource, /if \(CAPTURE_VISUAL_BASELINES\)[\s\S]{0,300}(?:writeFile|toFile)/);
-  assert.match(updaterSource, /screenshotNames\.length >= 70/);
+  /* Floor lowered from 70 to 51 on 2026-09-08 when the 19 network and outreach scenarios
+     went with their features. It guards against a capture run dying early, so it has to track
+     the real count: left at 70 it would refuse every capture from here on. */
+  assert.match(updaterSource, /screenshotNames\.length >= 51/);
+  /* THE FLOOR LIVES IN TWO FILES and only one of them was updated when the network and outreach
+     scenarios were deleted, so the spec's copy failed the whole browser job on a run where every
+     comparison had passed. Pinned as equal rather than as two literals: whichever number is
+     right, both files have to agree on it. */
+  const floorOf = (source) => source.match(/screenshotNames\.length >= (\d+)/)?.[1];
+  assert.equal(floorOf(browserSource), floorOf(updaterSource), "the capture floor disagrees between the spec and the updater");
 });
 
 test("visual evidence uses an approved baseline from the rendering platform", async () => {

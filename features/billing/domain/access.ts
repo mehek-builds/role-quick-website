@@ -14,11 +14,6 @@ export type PremiumFeatureKey =
   | "ai_cover_letter_generation"
   | "ai_application_answer_generation"
   | "saved_generated_versions"
-  | "contact_discovery"
-  | "outreach_email_generation"
-  | "networking_discovery"
-  | "referral_paths"
-  | "connected_companies"
   | "advanced_job_insights"
   | "recruiter_visibility"
   | "hover_generation"
@@ -131,11 +126,6 @@ const PREMIUM_FEATURES: readonly PremiumFeatureKey[] = [
   "ai_cover_letter_generation",
   "ai_application_answer_generation",
   "saved_generated_versions",
-  "contact_discovery",
-  "outreach_email_generation",
-  "networking_discovery",
-  "referral_paths",
-  "connected_companies",
   "advanced_job_insights",
   "recruiter_visibility",
   "hover_generation",
@@ -305,9 +295,7 @@ export function legacySnapshotFromMe(me: Me): EntitlementSnapshot {
     "ai_cover_letter_generation",
     "ai_application_answer_generation",
     "saved_generated_versions",
-    "contact_discovery",
-    "outreach_email_generation",
-  ]);
+      ]);
   const features = Object.fromEntries(PREMIUM_FEATURES.map((feature) => {
     if (feature === "hover_generation") return [feature, paid];
     if (paid || trialActive) return [feature, true];

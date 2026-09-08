@@ -63,31 +63,6 @@ const COPY: Record<PremiumFeatureKey, UpgradeCopy> = {
     explanation: "Every version you already made stays available.",
     manualLabel: "Keep this version",
   },
-  contact_discovery: {
-    title: "Find people with Litos+",
-    explanation: "You can still add a contact manually.",
-    manualLabel: "Add contact manually",
-  },
-  outreach_email_generation: {
-    title: "Draft this email with Litos+",
-    explanation: "Your contacts and saved messages remain available.",
-    manualLabel: "Write it myself",
-  },
-  networking_discovery: {
-    title: "Find referral paths with Litos+",
-    explanation: "Import LinkedIn connections only when you choose. Litos never sends a LinkedIn message for you.",
-    manualLabel: "Not now",
-  },
-  referral_paths: {
-    title: "Find referral paths with Litos+",
-    explanation: "Your imported contacts remain yours and can be deleted at any time.",
-    manualLabel: "Not now",
-  },
-  connected_companies: {
-    title: "See where you already have a path in",
-    explanation: "Litos+ matches your approved network data to companies with open roles.",
-    manualLabel: "Continue",
-  },
   advanced_job_insights: {
     title: "See more context for this job",
     explanation: "Basic job facts and your match score remain free.",

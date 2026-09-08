@@ -24,7 +24,6 @@ const CONTRACT_EXCLUDED_FILES = new Set([
   "components/FlowDemo.tsx",
   "components/HeroBackdrop.tsx",
   "components/Mockups.tsx",
-  "components/OutreachDemo.tsx",
   "components/PacketDemo.tsx",
   "components/PacketViewer.tsx",
   "components/RealCaptures.tsx",

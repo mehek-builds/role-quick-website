@@ -610,7 +610,10 @@ dialog.rq-dashboard-dialog-exit::backdrop {
       display: block;
     }
     .rq-cine-still-product {
-      background-image: url("/product/dashboard-emails.png");
+      /* Was dashboard-emails.png until 2026-09-08. It is decorative and behind a 72%
+         white wash, but it was still a photograph of the Emails page, which no longer
+         exists. extension-job.png shows a surviving surface. */
+      background-image: url("/product/extension-job.png");
       background-position: top center;
       background-repeat: no-repeat;
       background-size: contain;

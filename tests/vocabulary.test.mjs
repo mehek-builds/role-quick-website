@@ -28,7 +28,7 @@ describe("Litos vocabulary", () => {
     );
   });
 
-  test("the three steps carry one name each", () => {
+  test("the two steps carry one name each", () => {
     const home = readFileSync("app/page.tsx", "utf8");
     const film = readFileSync("components/cinema/CinematicHero.tsx", "utf8");
     /* The film chapters and the section chips are two separate copies of the
@@ -44,10 +44,13 @@ describe("Litos vocabulary", () => {
        other third listing of the step names ever comes back, add it here. */
     assert.match(film, /01 · Resume/, 'film should name step 1 "Resume"');
     assert.match(film, /02 · Forms/, 'film should name step 2 "Forms"');
-    assert.match(film, /03 · Emails/, 'film should name step 3 "Emails"');
     assert.match(home, /01 · Resume/, 'the section chips should name step 1 "Resume"');
     assert.match(home, /02 · Forms/, 'the section chips should name step 2 "Forms"');
-    assert.match(home, /03 · Emails/, 'the section chips should name step 3 "Emails"');
+    /* Step 3 was "Emails" until 2026-09-08 and went with the outreach feature. The drift guard
+       is the point of this test and it still holds over the two steps that remain: the film and
+       the section chips must not disagree about what Litos does. */
+    assert.doesNotMatch(film, /· Emails/, "the film still names a retired Emails step");
+    assert.doesNotMatch(home, /· Emails/, "the section chips still name a retired Emails step");
   });
 
   test("the audience is named one way", () => {

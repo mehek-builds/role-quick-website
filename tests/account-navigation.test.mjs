@@ -30,8 +30,9 @@ test("job search and account settings share one tabbed account destination", asy
   assert.match(layout, /const shouldRestoreFocus = moreCloseTimer\.current !== null\s*\|\| moreDialogRef\.current\.contains\(document\.activeElement\)/);
   assert.match(layout, /\.dashboard-shell aside \[aria-current="page"\], \.dashboard-shell aside nav a\[href\^="\/dashboard"\]/);
   assert.match(layout, /role="dialog"/);
-  assert.match(layout, /href: "\/dashboard\/network", label: "Network"/);
-  assert.match(layout, /href: "\/dashboard\/outreach", label: "Outreach"/);
+  /* Network and Outreach left NAV on 2026-09-08 with the features. NAV is exactly four
+     entries now, so MOBILE_NAV's slice is the whole list and More holds only Account. */
+  assert.match(layout, /href: "\/dashboard\/settings", label: "Account"/);
   assert.match(layout, /href: "\/dashboard\/settings", label: "Account"/);
   assert.match(layout, /event\.key === "Escape"/);
   assert.match(layout, /moreButtonRef\.current\?\.focus\(\)/);

@@ -8,8 +8,6 @@ export const METERED_UPGRADE_FEATURES = [
   "ai_resume_tailoring",
   "ai_cover_letter_generation",
   "ai_application_answer_generation",
-  "contact_discovery",
-  "outreach_email_generation",
 ] as const satisfies readonly PremiumFeatureKey[];
 
 export type UpgradeOpenSource = "proactive" | "server_denial" | "plan_management";

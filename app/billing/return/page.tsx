@@ -199,9 +199,10 @@ export default function BillingReturnPage() {
     const nonce = nonceFromUrl || storedContext?.actionNonce || null;
     const fallbackRoute = context === "tailor_resume"
       ? "/dashboard/applications?new=1"
-      : context === "outreach_draft"
-        ? "/dashboard/outreach"
-        : context === "automatic_submission"
+      /* `outreach_draft` can still arrive from a checkout opened before the feature was removed
+         on 2026-09-08, so it is mapped rather than dropped: a returning student lands on the
+         dashboard instead of a route that no longer exists. */
+      : context === "automatic_submission"
           ? "/dashboard/settings#automation"
           : storedContext?.returnRoute ?? "/dashboard";
     queueMicrotask(() => {

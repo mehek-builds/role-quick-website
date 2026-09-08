@@ -131,8 +131,8 @@ test("revision guards retain the exclusive resume mutation boundary across tab a
   assert.match(mutationController, /const \[entries, setEntries\] = useState<ExperienceEntry\[\] \| null>\(null\)/);
   assert.match(mutationController, /const \[savedEntriesJson, setSavedEntriesJson\] = useState\(""\)/);
   assert.match(mutationController, /if \(!controller\) throw new Error\("useResumeMutationController must be used within ResumeMutationProvider"\)/);
-  assert.match(dashboardShell, /<BillingProvider>[\s\S]*<OutreachOperationProvider>[\s\S]*<ResumeMutationProvider>/);
-  assert.match(dashboardShell, /<main[^>]*>\{children\}<\/main>[\s\S]*<\/ResumeMutationProvider>[\s\S]*<\/OutreachOperationProvider>/);
+  assert.match(dashboardShell, /<BillingProvider>[\s\S]*<ResumeMutationProvider>/);
+  assert.match(dashboardShell, /<main[^>]*>\{children\}<\/main>[\s\S]*<\/ResumeMutationProvider>/);
   assert.doesNotMatch(documents, /ResumeMutationProvider/);
   assert.match(documents, /<MotionPanel key=\{tab \?\? "loading"\}/);
   assert.match(source, /const mutations = useResumeMutationController\(\)/);

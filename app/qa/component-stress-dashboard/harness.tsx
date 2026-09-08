@@ -898,7 +898,6 @@ function Gallery({ qaKey }: { qaKey: string | null }) {
             {[
               "/dashboard/documents",
               "/dashboard/resume",
-              "/dashboard/network",
               "/dashboard/settings",
             ].map((href) => (
               <li key={href}><code className="rounded-inner bg-surface-alt px-3 py-2 text-machine text-ink">{href}</code></li>

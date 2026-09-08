@@ -632,21 +632,6 @@ const DURABLE_DRAFT_FIXTURE = {
   },
 };
 
-const OUTREACH_CHECKOUT_FIXTURE = {
-  applicationId: "fixture-application-notion",
-  contactName: "Priya Sharma",
-  contactTitle: "Recruiter",
-  contactEmail: "priya@example.invalid",
-  company: "Notion",
-  companyDomain: "notion.so",
-  targetRole: "Product Design Intern",
-  subject: "Restored outreach note",
-  draft: "This note was restored after checkout.",
-  draftType: "first_note",
-  editingDraftId: null,
-  resolvedContacts: null,
-  selectedContact: null,
-};
 
 const RESUME_BANK_FIXTURE = {
   entries: [{
@@ -1547,7 +1532,12 @@ async function verifyVisualBaselines() {
   const screenshotNames = (await readdir(ARTIFACT_DIR))
     .filter((name) => name.endsWith(".png"))
     .sort();
-  assert.ok(screenshotNames.length >= 70, `visual evidence is incomplete: only ${screenshotNames.length} screenshots were captured`);
+  /* Floor lowered from 70 to 51 on 2026-09-08, when the 19 network and outreach scenarios went
+     with their features. This is the SECOND copy of this number -- the other is in
+     scripts/update-dashboard-visual-baselines.mjs -- and both have to track the real count. It
+     guards against a run that died partway still being read as evidence, so leaving it at 70
+     would have failed every future run, which is exactly what it just did. */
+  assert.ok(screenshotNames.length >= 51, `visual evidence is incomplete: only ${screenshotNames.length} screenshots were captured`);
 
   // Capture mode deliberately never writes approved evidence. The package update command runs a
   // separate writer only after this entire browser process exits successfully.
@@ -1914,32 +1904,6 @@ async function assertSelectedTabVisible(tablist, label) {
   );
 }
 
-async function assertOutreachTrayReachable(page, label) {
-  const result = await page.locator("[data-outreach-terminal-actions]").evaluate((content) => {
-    const tray = content.parentElement;
-    const save = [...content.querySelectorAll("button")].find((button) => /^Save (draft|changes)$/.test(button.textContent?.trim() ?? ""));
-    const dashboardNav = document.querySelector('nav[aria-label="Dashboard"]');
-    if (!(tray instanceof HTMLElement) || !(save instanceof HTMLButtonElement)) return null;
-    const trayRect = tray.getBoundingClientRect();
-    const saveRect = save.getBoundingClientRect();
-    const navStyle = dashboardNav ? getComputedStyle(dashboardNav) : null;
-    const navRect = navStyle && navStyle.display !== "none" ? dashboardNav.getBoundingClientRect() : null;
-    const hitTarget = document.elementFromPoint(saveRect.left + saveRect.width / 2, saveRect.top + saveRect.height / 2);
-    return {
-      tray: trayRect.toJSON(),
-      save: saveRect.toJSON(),
-      safeBottom: navRect?.top ?? window.innerHeight,
-      viewportHeight: window.innerHeight,
-      hitInsideSave: hitTarget === save || save.contains(hitTarget),
-      primaryBackground: getComputedStyle(save).backgroundColor,
-    };
-  });
-  assert.ok(result, `${label} has no terminal save action`);
-  assert.ok(result.tray.top >= -1 && result.tray.bottom <= result.safeBottom + 1, `${label} tray is outside its safe viewport: ${JSON.stringify(result)}`);
-  assert.ok(result.save.top >= result.tray.top - 1 && result.save.bottom <= result.tray.bottom + 1, `${label} save action escaped its tray: ${JSON.stringify(result)}`);
-  assert.equal(result.hitInsideSave, true, `${label} save action is visually covered: ${JSON.stringify(result)}`);
-  assert.notEqual(result.primaryBackground, "rgba(0, 0, 0, 0)", `${label} save action lost its primary fill`);
-}
 
 async function scrollTablistToEnd(tablist) {
   await tablist.evaluate((list) => {
@@ -2386,12 +2350,16 @@ test("native dashboard dialogs retain their top layer through exit and restore f
     documentsFixture: { documents: [STORED_DOCUMENT_FIXTURE] },
   });
   try {
-    await page.goto(`${ORIGIN}/dashboard/network`, { waitUntil: "domcontentloaded" });
+    /* Opened from Home's PlanStatus since 2026-09-08. This used to reach the dialog through the
+       Network page's own trigger; Network is gone, and what this test is actually about is the
+       dialog's top layer and focus restore, not the surface that opened it. Home's trigger asks
+       for ai_resume_tailoring, hence the different dialog name below. */
+    await page.goto(`${ORIGIN}/dashboard`, { waitUntil: "domcontentloaded" });
     const upgradeTrigger = page.getByRole("button", { name: "See Litos+", exact: true });
     await upgradeTrigger.waitFor({ state: "visible" });
     await upgradeTrigger.evaluate((node) => node.setAttribute("data-focus-probe", "upgrade-trigger"));
     await upgradeTrigger.click();
-    const upgradeDialog = page.getByRole("dialog", { name: /Find referral paths with Litos\+/ });
+    const upgradeDialog = page.getByRole("dialog", { name: /Tailor this resume with Litos\+/ });
     await upgradeDialog.waitFor({ state: "visible" });
     await upgradeDialog.evaluate((node) => node.setAttribute("data-overlay-probe", "upgrade"));
     await finishDashboardAnimations(page);
@@ -2555,262 +2523,10 @@ test("reduced motion closes hand-built and native overlays without retained anim
   }
 });
 
-test("Outreach panel handoff is sequential and restores focus", async () => {
-  const { context, page, state } = await newDashboardPage({ viewport: { width: 1280, height: 900 } });
-  try {
-    await page.goto(`${QA_ORIGIN}/dashboard/outreach?qa=1`, { waitUntil: "domcontentloaded" });
-    const start = page.getByRole("button", { name: "Start outreach" });
-    await start.waitFor({ state: "visible" });
-    await finishDashboardAnimations(page);
-    await startAnimationLog(page);
-    await start.click();
-    await page.waitForFunction(() => (window.__dashboardVisualAnimationLog ?? []).some((sample) => sample.name === "rq-dashboard-panel-enter"));
-    await page.waitForFunction(() => document.activeElement?.id === "outreach-composer-title");
-    await finishDashboardAnimations(page);
-    const samples = await stopAnimationLog(page);
-    const exit = samples.find((sample) => sample.name === "rq-dashboard-panel-exit");
-    const enter = samples.find((sample) => sample.name === "rq-dashboard-panel-enter");
-    assert.ok(exit, `missing panel exit animation: ${JSON.stringify(samples)}`);
-    assert.ok(enter, `missing panel entry animation: ${JSON.stringify(samples)}`);
-    assert.ok(
-      enter.delay >= exit.duration,
-      `incoming panel starts before the outgoing panel completes: ${JSON.stringify({ exit, enter })}`,
-    );
-    await assertOutreachTrayReachable(page, "Outreach composer at 1280px");
-    await capturePass(page, "outreach-composer-sequential");
-    await resizeForCapture(page, 390, 844);
-    await assertOutreachTrayReachable(page, "Outreach composer at 390px");
-    await capturePass(page, "outreach-composer-mobile");
-    await assertContained(page, "Outreach composer at 390px");
-    await resizeForCapture(page, 1280, 900);
-    const close = page.getByRole("button", { name: "Close", exact: true });
-    await close.focus();
-    await page.keyboard.press("Enter");
-    await page.waitForFunction(() => document.activeElement?.id === "outreach-start-button");
-    await assertContained(page, "Outreach at 1280px");
-    assertNoPageErrors(state, "Outreach");
-  } finally {
-    await context.close();
-  }
-});
 
-test("editing a durable Outreach draft restores focus to its exact Edit button", async () => {
-  const { context, page, state } = await newDashboardPage({ viewport: { width: 1280, height: 900 } });
-  try {
-    await page.goto(`${ORIGIN}/dashboard/outreach`, { waitUntil: "domcontentloaded" });
-    await page.getByText(`Subject: ${DURABLE_DRAFT_FIXTURE.subject}`, { exact: true }).waitFor({ state: "visible", timeout: 5_000 }).catch(async (reason) => {
-      const diagnostic = await page.locator("main").innerText().catch(() => "main missing");
-      assert.fail(`Durable draft did not render: ${reason.message}\n${diagnostic.slice(0, 2_000)}`);
-    });
-    const edit = page.getByRole("button", { name: "Edit", exact: true });
-    await edit.evaluate((node) => node.setAttribute("data-focus-probe", "durable-draft-edit"));
-    await edit.click();
-    const draft = page.locator("#outreach-draft-body");
-    await page.waitForFunction(() => document.activeElement?.id === "outreach-draft-body");
-    assert.equal(await draft.inputValue(), DURABLE_DRAFT_FIXTURE.body);
 
-    const subject = page.getByLabel("Subject", { exact: true });
-    await subject.fill("The value sent by the old save");
-    await draft.fill("The old save must not overwrite the editor.");
-    const heldSave = state.holdNextOutreachSave();
-    await page.getByRole("button", { name: "Save changes", exact: true }).click();
-    await heldSave.started;
-    await subject.fill("The newer subject stays here");
-    await draft.fill("The newer message stays here after the old response settles.");
-    await capturePass(page, "outreach-saved-draft-newer-edit-during-save");
-    heldSave.release();
-    await heldSave.settled;
-    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-    assert.equal(await subject.inputValue(), "The newer subject stays here");
-    assert.equal(await draft.inputValue(), "The newer message stays here after the old response settles.");
-    assert.equal(
-      await page.locator("#outreach-composer").getByRole("alert").count(),
-      0,
-      "a retired Outreach save published a stale composer error",
-    );
 
-    await capturePass(page, "outreach-saved-draft-edit-focus");
-    await resizeForCapture(page, 390, 844);
-    await capturePass(page, "outreach-saved-draft-mobile");
-    await assertContained(page, "Saved Outreach composer at 390px");
-    await resizeForCapture(page, 1280, 900);
-    await page.getByRole("button", { name: "Close", exact: true }).click();
-    await page.waitForFunction((draftId) => {
-      const trigger = document.getElementById(`outreach-draft-edit-${encodeURIComponent(draftId)}`);
-      return trigger !== null && document.activeElement === trigger;
-    }, DURABLE_DRAFT_FIXTURE.draft_id);
-    await assertContained(page, "Outreach after closing a saved draft");
-    assertNoPageErrors(state, "Saved Outreach draft focus");
-  } finally {
-    await context.close();
-  }
-});
 
-test("Outreach save ownership survives route remounts without overlap or stale replacement", async () => {
-  const { context, page, state } = await newDashboardPage({
-    viewport: { width: 1280, height: 900 },
-    outreachRaceFixtures: true,
-  });
-  const leaveAndReturn = async () => {
-    await page.getByRole("link", { name: "Home", exact: true }).click();
-    await page.waitForURL(`${ORIGIN}/dashboard`, { waitUntil: "domcontentloaded" });
-    await page.getByRole("link", { name: "Outreach", exact: true }).click();
-    await page.waitForURL(`${ORIGIN}/dashboard/outreach`, { waitUntil: "domcontentloaded" });
-  };
-  try {
-    await page.goto(`${ORIGIN}/dashboard/outreach`, { waitUntil: "domcontentloaded" });
-    await page.getByText(`Subject: ${DURABLE_DRAFT_FIXTURE.subject}`, { exact: true }).waitFor({ state: "visible" });
-    await page.getByRole("button", { name: "Edit", exact: true }).click();
-    const originalSubject = "The first PATCH remains serialized";
-    const originalBody = "The first PATCH may settle, but it cannot overwrite the remounted editor.";
-    await page.getByLabel("Subject", { exact: true }).fill(originalSubject);
-    await page.locator("#outreach-draft-body").fill(originalBody);
-
-    const heldPatch = state.holdNextOutreachSave();
-    await page.getByRole("button", { name: "Save changes", exact: true }).click();
-    await heldPatch.started;
-    await leaveAndReturn();
-    await page.getByText(`Subject: ${DURABLE_DRAFT_FIXTURE.subject}`, { exact: true }).waitFor({ state: "visible" });
-    await page.getByRole("button", { name: "Edit", exact: true }).click();
-    const newestSubject = "The newest PATCH wins after remount";
-    const newestBody = "This is the newest saved body after the durable lock releases.";
-    await page.getByLabel("Subject", { exact: true }).fill(newestSubject);
-    await page.locator("#outreach-draft-body").fill(newestBody);
-    const heldPatchButton = page.getByRole("button", { name: /Saving draft/ });
-    assert.equal(await heldPatchButton.isDisabled(), true, "the remounted page exposed a second PATCH");
-    assert.equal(state.outreachSaveWrites.length, 1);
-    await capturePass(page, "outreach-held-patch-route-remount");
-
-    heldPatch.release();
-    await heldPatch.settled;
-    const nextPatch = page.getByRole("button", { name: "Save changes", exact: true });
-    await nextPatch.waitFor({ state: "visible" });
-    await page.waitForFunction(() => {
-      const button = [...document.querySelectorAll("button")]
-        .find((node) => node.textContent?.trim() === "Save changes");
-      return button instanceof HTMLButtonElement && !button.disabled;
-    });
-    assert.equal(await page.getByLabel("Subject", { exact: true }).inputValue(), newestSubject);
-    assert.equal(await page.locator("#outreach-draft-body").inputValue(), newestBody);
-    const secondPatchResponse = page.waitForResponse((response) =>
-      response.request().method() === "PATCH" && /\/drafts\/[^/]+$/.test(new URL(response.url()).pathname),
-    );
-    await nextPatch.click();
-    await secondPatchResponse;
-    assert.equal(state.outreachSaveWrites.length, 2);
-    assert.equal(state.outreachSaveWrites.at(-1).subject, newestSubject);
-    assert.equal(state.outreachSaveWrites.at(-1).body, newestBody);
-    assert.equal(state.outreachServerDraft.subject, newestSubject);
-    assert.equal(state.outreachServerDraft.body, newestBody);
-
-    await leaveAndReturn();
-    await page.getByRole("button", { name: "Start outreach", exact: true }).click();
-    const fillManualDraft = async (subject, body) => {
-      await page.getByLabel("Name", { exact: true }).fill("Jordan Lee");
-      await page.getByLabel("Contact title", { exact: true }).fill("Product Engineer");
-      await page.getByLabel("Email", { exact: true }).fill("jordan@acme.example");
-      await page.getByLabel("Company", { exact: true }).fill("Acme Labs");
-      await page.getByLabel("Company domain", { exact: true }).fill("acme.example");
-      await page.getByLabel("Role you want", { exact: true }).fill("Product Engineer");
-      await page.getByLabel("Subject", { exact: true }).fill(subject);
-      await page.locator("#outreach-draft-body").fill(body);
-    };
-    const firstManualSubject = "The first manual save stays serialized";
-    const firstManualBody = "This first manual POST is intentionally held across navigation.";
-    await fillManualDraft(firstManualSubject, firstManualBody);
-    const heldManual = state.holdNextOutreachManualSave();
-    await page.getByRole("button", { name: "Save draft", exact: true }).click();
-    await heldManual.started;
-    await leaveAndReturn();
-    await page.getByRole("button", { name: "Start outreach", exact: true }).click();
-    const newestManualSubject = "The newest manual draft wins";
-    const newestManualBody = "This is the final manual body after the remounted page takes ownership.";
-    await fillManualDraft(newestManualSubject, newestManualBody);
-    assert.equal(await page.getByRole("button", { name: /Saving draft/ }).isDisabled(), true);
-    assert.equal(state.outreachManualSaveWrites.length, 1);
-    assert.equal(state.outreachApplicationWrites.length, 1, "the held manual save should create one canonical application");
-    await capturePass(page, "outreach-held-manual-save-route-remount");
-
-    heldManual.release();
-    await heldManual.settled;
-    const nextManualSave = page.getByRole("button", { name: "Save draft", exact: true });
-    await page.waitForFunction(() => {
-      const button = [...document.querySelectorAll("button")]
-        .find((node) => node.textContent?.trim() === "Save draft");
-      return button instanceof HTMLButtonElement && !button.disabled;
-    });
-    const secondManualResponse = page.waitForResponse((response) =>
-      response.request().method() === "POST" && new URL(response.url()).pathname === "/drafts/manual",
-    );
-    await nextManualSave.click();
-    await secondManualResponse;
-    assert.equal(state.outreachManualSaveWrites.length, 2);
-    assert.equal(state.outreachManualSaveWrites.at(-1).subject, newestManualSubject);
-    assert.equal(state.outreachManualSaveWrites.at(-1).body, newestManualBody);
-    assert.equal(state.outreachServerDraft.subject, newestManualSubject);
-    assert.equal(state.outreachServerDraft.body, newestManualBody);
-    assert.equal(state.outreachApplicationWrites.length, 1, "canonical application ownership was lost on remount");
-    assert.equal(state.maxConcurrentOutreachSaves, 1, "Outreach PATCH and manual POST work overlapped across a route remount");
-    assertNoPageErrors(state, "Outreach durable route ownership");
-  } finally {
-    await context.close();
-  }
-});
-
-test("Outreach checkout restoration focuses the reopened composer", async () => {
-  const { context, page, state } = await newDashboardPage({ viewport: { width: 1280, height: 900 } });
-  try {
-    await page.addInitScript((fixture) => {
-      window.sessionStorage.setItem("litos_outreach_checkout_state_v1", JSON.stringify(fixture));
-    }, OUTREACH_CHECKOUT_FIXTURE);
-    await page.goto(`${ORIGIN}/dashboard/outreach?checkout_action=write_outreach`, { waitUntil: "domcontentloaded" });
-    await page.getByRole("heading", { name: "A note you choose to send." }).waitFor({ state: "visible" });
-    await page.waitForFunction(() => document.activeElement?.id === "outreach-composer-title");
-    assert.equal(await page.locator("#outreach-draft-body").inputValue(), OUTREACH_CHECKOUT_FIXTURE.draft);
-    await capturePass(page, "outreach-checkout-restored-focus");
-    await assertContained(page, "Outreach after checkout restoration");
-    assertNoPageErrors(state, "Outreach checkout restoration");
-  } finally {
-    await context.close();
-  }
-});
-
-test("Outreach restores focus to the async control after a server-denied upgrade", async () => {
-  const { context, page, state } = await newDashboardPage({
-    viewport: { width: 1280, height: 900 },
-    denyOutreachContacts: true,
-  });
-  try {
-    await page.goto(`${ORIGIN}/dashboard/outreach`, { waitUntil: "domcontentloaded" });
-    await page.getByRole("button", { name: "Start outreach", exact: true }).click();
-    await page.getByLabel("Company", { exact: true }).fill("Acme Labs");
-    await page.getByLabel("Company domain", { exact: true }).fill("acme.com");
-    await page.getByLabel("Role you want", { exact: true }).fill("Product Engineer");
-
-    const trigger = page.getByRole("button", { name: "Find contacts", exact: true });
-    await trigger.evaluate((node) => node.setAttribute("data-focus-probe", "outreach-contact-upgrade"));
-    await trigger.click();
-    await page.waitForFunction(() => {
-      const node = document.querySelector('[data-focus-probe="outreach-contact-upgrade"]');
-      return node instanceof HTMLButtonElement && node.disabled;
-    });
-
-    const dialog = page.getByRole("dialog", { name: /Find people with Litos\+/ });
-    await dialog.waitFor({ state: "visible" });
-    await dialog.evaluate((node) => node.setAttribute("data-overlay-probe", "outreach-upgrade"));
-    await finishDashboardAnimations(page);
-    await resetPageScroll(page, { blurActive: false });
-    await capturePass(page, "outreach-server-denial-upgrade-open");
-    await armOverlayExitCapture(page, 'dialog[data-overlay-probe="outreach-upgrade"]', { nativeBackdrop: true });
-    await dialog.getByRole("button", { name: "Close Litos+ options" }).click();
-    await assertRetainedOverlayExit(page, "Outreach server-denial upgrade");
-    await dialog.waitFor({ state: "detached" });
-    await page.waitForFunction(() => document.activeElement?.getAttribute("data-focus-probe") === "outreach-contact-upgrade");
-    assertNoPageErrors(state, "Outreach server-denial upgrade");
-  } finally {
-    await context.close();
-  }
-});
 
 test("mobile More exit stays opaque, inert, and restores focus", async () => {
   const { context, page, state } = await newDashboardPage({ viewport: { width: 390, height: 844 } });
@@ -4320,127 +4036,7 @@ test("Application selection, close, and stale history resolve as one task state"
   }
 });
 
-test("Outreach serializes contact discovery, generation, and save work through one application", async () => {
-  const { context, page, state } = await newDashboardPage({
-    viewport: { width: 1280, height: 900 },
-    outreachRaceFixtures: true,
-  });
-  try {
-    await page.goto(`${ORIGIN}/dashboard/outreach`, { waitUntil: "domcontentloaded" });
-    await page.getByRole("button", { name: "Start outreach", exact: true }).click();
-    await page.getByLabel("Name", { exact: true }).fill("Jordan Lee");
-    await page.getByLabel("Contact title", { exact: true }).fill("Product Engineer");
-    await page.getByLabel("Company", { exact: true }).fill("Acme Labs");
-    await page.getByLabel("Company domain", { exact: true }).fill("acme.example");
-    await page.getByLabel("Role you want", { exact: true }).fill("Product Engineer");
-    await page.getByLabel("Subject", { exact: true }).fill("A careful introduction");
-    await page.locator("#outreach-draft-body").fill("This message should stay on one application record.");
 
-    const findContacts = page.getByRole("button", { name: "Find contacts", exact: true });
-    const generateDraft = page.getByRole("button", { name: "Draft with Litos+", exact: true });
-    const saveDraft = page.getByRole("button", { name: "Save draft", exact: true });
-    await findContacts.evaluate((node) => node.setAttribute("data-outreach-operation", "contact"));
-    await generateDraft.evaluate((node) => node.setAttribute("data-outreach-operation", "draft"));
-
-    const heldContact = state.holdNextOutreachContact();
-    await page.evaluate(() => {
-      document.querySelector('[data-outreach-operation="contact"]')?.click();
-      document.querySelector('[data-outreach-operation="draft"]')?.click();
-    });
-    await heldContact.started;
-    assert.equal(state.outreachApplicationWrites.length, 1, "parallel composer controls created more than one application");
-    assert.equal(await generateDraft.isDisabled(), true, "draft generation remained available during contact discovery");
-    assert.equal(await saveDraft.isDisabled(), true, "manual save remained available during contact discovery");
-    await capturePass(page, "outreach-contact-operation-locked");
-    heldContact.release();
-    await heldContact.settled;
-    await page.getByRole("button", { name: /Ada Acme/ }).waitFor({ state: "visible" });
-
-    const heldDraft = state.holdNextOutreachDraft();
-    await findContacts.evaluate((node) => node.setAttribute("data-outreach-operation", "contact"));
-    await generateDraft.evaluate((node) => node.setAttribute("data-outreach-operation", "draft"));
-    await page.evaluate(() => {
-      document.querySelector('[data-outreach-operation="draft"]')?.click();
-      document.querySelector('[data-outreach-operation="contact"]')?.click();
-    });
-    await heldDraft.started;
-    assert.equal(state.outreachApplicationWrites.length, 1, "draft generation created a second application for the same composer");
-    assert.equal(await findContacts.isDisabled(), true, "contact discovery remained available during draft generation");
-    heldDraft.release();
-    await heldDraft.settled;
-    await page.getByLabel("Subject", { exact: true }).waitFor({ state: "visible" });
-    assertNoPageErrors(state, "Outreach serialized operations");
-  } finally {
-    await context.close();
-  }
-});
-
-test("Outreach ignores contact and draft responses after their composer scope changes", async () => {
-  const { context, page, state } = await newDashboardPage({
-    viewport: { width: 1280, height: 900 },
-    outreachRaceFixtures: true,
-  });
-  try {
-    await page.goto(`${ORIGIN}/dashboard/outreach`, { waitUntil: "domcontentloaded" });
-    await page.getByRole("button", { name: "Start outreach", exact: true }).click();
-    const company = page.getByLabel("Company", { exact: true });
-    const domain = page.getByLabel("Company domain", { exact: true });
-    const role = page.getByLabel("Role you want", { exact: true });
-    await company.fill("Acme Labs");
-    await domain.fill("acme.example");
-    await role.fill("Product Engineer");
-
-    const staleContact = state.holdNextOutreachContact();
-    await page.getByRole("button", { name: "Find contacts", exact: true }).click();
-    await staleContact.started;
-    await company.fill("Globex Labs");
-    await domain.fill("globex.example");
-    assert.equal(
-      await page.getByRole("button", { name: /Finding contacts/ }).isDisabled(),
-      true,
-      "editing released the held contact operation before its server work settled",
-    );
-    staleContact.release();
-    await staleContact.settled;
-    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-    assert.equal(await page.getByRole("button", { name: /Ada Acme/ }).count(), 0, "the stale Acme contact replaced the current Globex result");
-    await page.getByRole("button", { name: "Find contacts", exact: true }).click();
-    await page.getByRole("button", { name: /Grace Globex/ }).waitFor({ state: "visible" });
-    assert.equal(await page.getByRole("button", { name: /Grace Globex/ }).count(), 1);
-
-    await page.getByLabel("Name", { exact: true }).fill("Jordan Lee");
-    await page.getByLabel("Contact title", { exact: true }).fill("Product Engineer");
-    await company.fill("Acme Draft Company");
-    await domain.fill("acme-draft.example");
-    const staleDraft = state.holdNextOutreachDraft();
-    await page.getByRole("button", { name: "Draft with Litos+", exact: true }).click();
-    await staleDraft.started;
-    await company.fill("Globex Draft Company");
-    await domain.fill("globex-draft.example");
-    assert.equal(
-      await page.getByRole("button", { name: /Writing draft/ }).isDisabled(),
-      true,
-      "editing released the held draft operation before its server work settled",
-    );
-    staleDraft.release();
-    await staleDraft.settled;
-    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-    assert.notEqual(await page.getByLabel("Subject", { exact: true }).inputValue(), "Acme introduction");
-    await page.getByRole("button", { name: "Draft with Litos+", exact: true }).click();
-    await page.waitForFunction(() => {
-      const subject = document.querySelector('input[value="Globex introduction"]');
-      const draft = document.getElementById("outreach-draft-body");
-      return subject !== null && draft?.value === "This is the current Globex draft.";
-    });
-    assert.equal(await page.getByLabel("Subject", { exact: true }).inputValue(), "Globex introduction");
-    assert.equal(await page.locator("#outreach-draft-body").inputValue(), "This is the current Globex draft.");
-    await resetPageScroll(page);
-    await capturePass(page, "outreach-current-scope-wins-stale-responses");
-    assertNoPageErrors(state, "Outreach stale request protection");
-  } finally {
-    await context.close();
-  }
-});
 
 test("Jobs remains scannable on desktop and the narrowest supported dashboard width", async () => {
   const { context, page, state } = await newDashboardPage({ viewport: { width: 1280, height: 900 } });
@@ -4663,9 +4259,10 @@ test("a delayed entitlement denial cannot outlive its initiating route", async (
     await tailor.click();
     await heldDenial.started;
 
-    await page.locator('aside a[href="/dashboard/network"]').click();
-    await page.waitForURL(`${ORIGIN}/dashboard/network`, { waitUntil: "domcontentloaded" });
-    await page.getByRole("heading", { name: "Network", exact: true }).waitFor({ state: "visible" });
+    /* Any route that is not Home proves this; it was Network until 2026-09-08. */
+    await page.locator('aside a[href="/dashboard/documents"]').click();
+    await page.waitForURL(`${ORIGIN}/dashboard/documents`, { waitUntil: "domcontentloaded" });
+    await page.getByRole("heading", { name: "Documents", exact: true }).waitFor({ state: "visible" });
 
     const denialResponse = page.waitForResponse((response) => (
       response.url() === `${BACKEND_ORIGIN}/resume/generate`
@@ -4683,10 +4280,12 @@ test("a delayed entitlement denial cannot outlive its initiating route", async (
       0,
       "a Home denial opened the persistent paywall after Home unmounted",
     );
-    assert.equal(new URL(page.url()).pathname, "/dashboard/network");
-    await page.getByRole("heading", { name: "No imported people yet", exact: true }).waitFor({ state: "visible" });
+    assert.equal(new URL(page.url()).pathname, "/dashboard/documents");
     await finishDashboardAnimations(page);
-    await capturePass(page, "network-after-retired-home-denial");
+    /* The screenshot here was `network-after-retired-home-denial`, and it is deliberately not
+       replaced with a Documents equivalent: what this test proves is the assertion above, that a
+       Home denial does not open the paywall once Home has unmounted. A new baseline would need
+       capturing on both platforms to add no evidence the assertions do not already carry. */
     assertNoPageErrors(state, "Route-scoped entitlement denial");
   } finally {
     await context.close();
@@ -4980,208 +4579,8 @@ test("Resume upload ownership and its parsed profile survive Documents tab and r
   }
 });
 
-test("Network distinguishes a request failure from empty data and retries", async () => {
-  const { context, page, state } = await newDashboardPage({
-    viewport: { width: 320, height: 780 },
-    failNetworkOnce: true,
-  });
-  try {
-    await page.goto(`${ORIGIN}/dashboard/network`, { waitUntil: "domcontentloaded" });
-    const failure = page.getByRole("heading", { name: "Could not check your network" });
-    await failure.waitFor({ state: "visible" });
-    assert.equal(await page.getByRole("heading", { name: "No imported people yet" }).count(), 0);
-    await capturePass(page, "network-320-status-error");
-    await failure.locator("xpath=..").getByRole("button", { name: "Try again" }).click();
-    await failure.waitFor({ state: "detached" });
-    await page.getByRole("heading", { name: "No imported people yet" }).waitFor({ state: "visible" });
-    assert.equal(await page.evaluate(() => document.activeElement?.id), "network-panel");
-    assert.equal(state.networkStatusReads, 2);
 
-    const tablist = page.getByRole("tablist", { name: "Network sections" });
-    await assertEveryTabControlsLivePanel(tablist, "Network");
-    await page.getByRole("button", { name: "Import connections", exact: true }).click();
-    await page.waitForFunction(() => {
-      const node = document.getElementById("network-tab-linkedin");
-      return node?.getAttribute("aria-selected") === "true" && document.activeElement === node;
-    });
-    const fileInput = page.locator('input[type="file"][accept*="csv"]');
-    assert.equal(await fileInput.evaluate((node) => node.hidden), true, "the programmatic CSV input remained exposed to keyboard or accessibility navigation");
-    const consent = page.getByRole("checkbox", { name: /I consent to Litos processing/ });
-    const chooseFile = page.getByRole("button", { name: "Choose Connections.csv", exact: true });
-    await chooseFile.focus();
-    await chooseFile.press("Shift+Tab");
-    assert.equal(await consent.evaluate((node) => document.activeElement === node), true, "the hidden CSV input became an invisible keyboard stop");
-    await fileInput.setInputFiles({
-      name: "Connections.csv",
-      mimeType: "text/csv",
-      buffer: Buffer.from("First Name,Last Name,Company\nAda,Lovelace,Acme\n"),
-    });
-    await consent.check();
-    await page.getByRole("button", { name: "Preview import", exact: true }).click();
-    await page.getByText("2 accepted · 0 rejected", { exact: true }).waitFor({ state: "visible" });
-    await consent.uncheck();
-    await page.getByText("2 accepted · 0 rejected", { exact: true }).waitFor({ state: "detached" });
-    await consent.check();
-    const stalePreview = state.holdNextNetworkPreview();
-    await page.getByRole("button", { name: "Preview import", exact: true }).click();
-    await stalePreview.started;
-    await consent.uncheck();
-    stalePreview.release();
-    await stalePreview.settled;
-    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-    assert.equal(await page.getByText("2 accepted · 0 rejected", { exact: true }).count(), 0, "a stale CSV preview reappeared after consent was revoked");
-    assert.equal(state.networkCommitWrites, 0, "revoking visible consent still committed the CSV import");
 
-    await consent.check();
-    await page.getByRole("button", { name: "Preview import", exact: true }).click();
-    await page.getByText("2 accepted · 0 rejected", { exact: true }).waitFor({ state: "visible" });
-    const heldCommit = state.holdNextNetworkCommit();
-    await page.getByRole("button", { name: "Import accepted rows", exact: true }).click();
-    await heldCommit.started;
-    const importCard = page.locator('[data-network-operation="commit"]');
-    await importCard.waitFor({ state: "visible" });
-    assert.equal(await importCard.getAttribute("aria-busy"), "true");
-    assert.equal(await consent.isDisabled(), true, "consent could be revoked while its import commit was active");
-    assert.equal(await fileInput.isDisabled(), true, "the CSV could be replaced while its import commit was active");
-    assert.equal(await chooseFile.isDisabled(), true, "the visible file chooser remained active during commit");
-    await importCard.evaluate(async (node) => {
-      document.documentElement.style.scrollBehavior = "auto";
-      node.scrollIntoView({ behavior: "instant", block: "center", inline: "nearest" });
-      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    });
-    await waitForStableGeometry(importCard, "Network import lock");
-    await capturePass(page, "network-320-commit-locked");
-    heldCommit.release();
-    await heldCommit.settled;
-    await page.getByRole("heading", { name: "2 imported people", exact: true }).waitFor({ state: "visible" });
-    assert.equal(state.networkCommitWrites, 1, "the held import did not settle exactly once");
-
-    const people = tablist.getByRole("tab", { name: "People" });
-    const companies = tablist.getByRole("tab", { name: "Companies" });
-    const linkedin = tablist.getByRole("tab", { name: "LinkedIn" });
-    await page.evaluate(() => {
-      window.__networkTabIntentLog = [];
-      const list = document.querySelector('[role="tablist"][aria-label="Network sections"]');
-      list?.addEventListener("keydown", (event) => {
-        window.__networkTabIntentLog.push({
-          type: "keydown",
-          key: event.key,
-          target: event.target?.id ?? null,
-          active: document.activeElement?.id ?? null,
-        });
-      }, true);
-      const recordSelection = () => window.__networkTabIntentLog.push({
-        type: "selection",
-        selected: document.querySelector('[role="tab"][aria-selected="true"]')?.id ?? null,
-        active: document.activeElement?.id ?? null,
-      });
-      window.__networkTabIntentObserver = new MutationObserver(recordSelection);
-      window.__networkTabIntentObserver.observe(list, { subtree: true, attributes: true, attributeFilter: ["aria-selected"] });
-      recordSelection();
-    });
-    await people.click();
-    await companies.click();
-    await page.waitForFunction(() => {
-      const node = document.getElementById("network-tab-companies");
-      return node?.getAttribute("aria-selected") === "true" && document.activeElement === node;
-    }, null, { timeout: 5_000 });
-    await linkedin.click();
-    await page.waitForFunction(() => document.getElementById("network-tab-linkedin")?.getAttribute("aria-selected") === "true");
-    await people.click();
-    await people.focus();
-    await people.press("ArrowRight");
-    await page.waitForFunction(() => {
-      const node = document.getElementById("network-tab-companies");
-      return node?.getAttribute("aria-selected") === "true" && document.activeElement === node;
-    }, null, { timeout: 5_000 }).catch(async (reason) => {
-      const diagnostic = await page.evaluate(() => ({
-        activeId: document.activeElement?.id ?? null,
-        tabs: [...document.querySelectorAll('[role="tab"]')].map((node) => ({
-          id: node.id,
-          selected: node.getAttribute("aria-selected"),
-          tabIndex: node.getAttribute("tabindex"),
-        })),
-        panelLabelledBy: document.getElementById("network-panel")?.getAttribute("aria-labelledby") ?? null,
-        intentLog: window.__networkTabIntentLog ?? [],
-      }));
-      assert.fail(`newest Network tab intent did not settle: ${reason.message}; ${JSON.stringify(diagnostic)}`);
-    });
-    await assert.doesNotReject(companies.evaluate((node) => {
-      if (node.getAttribute("aria-selected") !== "true") throw new Error("Companies was not selected");
-      if (document.activeElement !== node) throw new Error("keyboard tab movement did not move focus");
-      const panel = document.getElementById(node.getAttribute("aria-controls"));
-      if (!panel || panel.getAttribute("aria-labelledby") !== node.id) throw new Error("selected tab does not label its panel");
-    }));
-    await capturePass(page, "network-320-error-recovered");
-    await assertContained(page, "Network at 320px");
-    assertNoPageErrors(state, "Network");
-  } finally {
-    await context.close();
-  }
-});
-
-test("Network retained-data action moves focus to the selected LinkedIn tab", async () => {
-  const { context, page, state } = await newDashboardPage({
-    viewport: { width: 320, height: 780 },
-    networkStatusFixture: {
-      connected: false,
-      source: "csv",
-      data_use_active: false,
-      imported_people_count: 0,
-      retained_people_count: 3,
-      imported_at: "2026-08-23T10:00:00Z",
-    },
-  });
-  try {
-    await page.goto(`${ORIGIN}/dashboard/network`, { waitUntil: "domcontentloaded" });
-    await page.getByRole("heading", { name: "Network use is disconnected" }).waitFor({ state: "visible" });
-    await capturePass(page, "network-320-retained-data");
-    await page.getByRole("button", { name: "Review retained data", exact: true }).click();
-    const linkedin = page.getByRole("tab", { name: "LinkedIn" });
-    await page.waitForFunction(() => {
-      const node = document.getElementById("network-tab-linkedin");
-      return node?.getAttribute("aria-selected") === "true" && document.activeElement === node;
-    });
-    assert.equal(await linkedin.getAttribute("aria-selected"), "true");
-    await capturePass(page, "network-320-retained-data-linkedin");
-    assertNoPageErrors(state, "Network retained data focus");
-  } finally {
-    await context.close();
-  }
-});
-
-test("Network announces unknown billing access and recovers through retry", async () => {
-  const { context, page, state } = await newDashboardPage({
-    viewport: { width: 1280, height: 900 },
-    failBillingAccessOnce: true,
-  });
-  try {
-    await page.goto(`${ORIGIN}/dashboard/network`, { waitUntil: "domcontentloaded" });
-    const failure = page.getByRole("heading", { name: "Could not check your plan access" });
-    await failure.waitFor({ state: "visible" });
-    const alert = page.getByRole("alert").filter({ has: failure });
-    assert.equal(await alert.count(), 1, "unknown billing access was not announced");
-    assert.equal(await page.getByRole("heading", { name: "No imported people yet" }).count(), 0);
-    assert.equal(await page.locator("#network-panel .rq-shimmer").count(), 0, "billing failure remained an indefinite shimmer");
-    assert.equal(state.billingStateReads, 1);
-    assert.ok(state.billingMeFailures >= 1, "legacy /me access resolution was not exercised");
-    await capturePass(page, "network-plan-access-error");
-
-    await alert.getByRole("button", { name: "Try again" }).click();
-    await failure.waitFor({ state: "detached" });
-    await page.getByRole("heading", { name: "No imported people yet" }).waitFor({ state: "visible" });
-    assert.equal(await page.evaluate(() => document.activeElement?.id), "network-panel");
-    assert.equal(state.billingStateReads, 2);
-    assert.equal(state.billingRecovered, true);
-    const tablist = page.getByRole("tablist", { name: "Network sections" });
-    await assertEveryTabControlsLivePanel(tablist, "Network after billing recovery");
-    await finishDashboardAnimations(page);
-    await capturePass(page, "network-billing-access-recovered");
-    assertNoPageErrors(state, "Network billing recovery");
-  } finally {
-    await context.close();
-  }
-});
 
 test("Account tabs advertise overflow and Automation scans as three surfaces", async () => {
   const { context, page, state } = await newDashboardPage({
@@ -5267,12 +4666,11 @@ test("reduced motion is static and 640px reflow stays contained", async () => {
     reducedMotion: "reduce",
   });
   try {
-    await page.goto(`${QA_ORIGIN}/dashboard/outreach?qa=1`, { waitUntil: "domcontentloaded" });
+    /* The Outreach half of this walk went with the feature on 2026-09-08. What it added was a
+       second surface for the same two claims -- reduced motion runs no dashboard animation, and
+       the 640px reflow stays contained -- both of which the Home half below still makes. */
+    await page.goto(`${QA_ORIGIN}/dashboard?qa=1`, { waitUntil: "domcontentloaded" });
     assert.equal(await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches), true);
-    await startAnimationLog(page);
-    await page.getByRole("button", { name: "Start outreach" }).click();
-    await page.getByRole("heading", { name: "A note you choose to send." }).waitFor({ state: "visible" });
-    await assertNoLoggedDashboardMotion(page, "Outreach panel entry");
     const motion = await page.evaluate(() => ({
       scrollBehavior: getComputedStyle(document.documentElement).scrollBehavior,
       dashboardAnimations: document.getAnimations()
@@ -5281,9 +4679,6 @@ test("reduced motion is static and 640px reflow stays contained", async () => {
     }));
     assert.equal(motion.scrollBehavior, "auto");
     assert.deepEqual(motion.dashboardAnimations, []);
-    await assertContained(page, "Outreach at the 640px reflow viewport");
-
-    await page.goto(`${QA_ORIGIN}/dashboard?qa=1`, { waitUntil: "domcontentloaded" });
     const reducedSkip = page.locator('button[aria-label^="Skip "]').first();
     await reducedSkip.waitFor({ state: "visible" });
     const reducedSkipName = await reducedSkip.getAttribute("aria-label");

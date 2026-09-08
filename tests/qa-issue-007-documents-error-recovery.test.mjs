@@ -111,7 +111,7 @@ test("resume upload, bank save, and parsed-profile save cannot replace each othe
   assert.match(mutationBoundary, /const \[parsedProfileEditing, setParsedProfileEditing\] = useState\(false\)/);
   assert.match(mutationBoundary, /const parsedProfileDraftRevisionRef = useRef\(0\)/);
   assert.match(mutationBoundary, /const \[entries, setEntries\] = useState<ExperienceEntry\[\] \| null>\(null\)/);
-  assert.match(dashboardShell, /<OutreachOperationProvider>[\s\S]*<ResumeMutationProvider>/);
+  assert.match(dashboardShell, /<ResumeMutationProvider>/);
   assert.match(dashboardShell, /<main[^>]*>\{children\}<\/main>[\s\S]*<\/ResumeMutationProvider>/);
   assert.doesNotMatch(documents, /ResumeMutationProvider/);
   assert.match(documents, /<MotionPanel key=\{tab \?\? "loading"\}/);
