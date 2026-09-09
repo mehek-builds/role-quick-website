@@ -1,206 +1,206 @@
 {
   "account-320-overflow.png": {
-    "height": 780,
-    "width": 320
+    "width": 320,
+    "height": 780
   },
   "account-640-tab-overflow-cue.png": {
-    "height": 900,
-    "width": 640
+    "width": 640,
+    "height": 900
   },
   "account-automation-density.png": {
-    "height": 900,
-    "width": 1280
+    "width": 1280,
+    "height": 900
   },
   "account-native-dialog-history-focus.png": {
-    "height": 900,
-    "width": 1280
+    "width": 1280,
+    "height": 900
   },
   "account-plan-tab-motion.png": {
-    "height": 900,
-    "width": 1280
+    "width": 1280,
+    "height": 900
   },
   "account-tabs-640-to-320.png": {
-    "height": 780,
-    "width": 320
+    "width": 320,
+    "height": 780
   },
   "account-upgrade-history-focus-fallback.png": {
-    "height": 900,
-    "width": 1280
+    "width": 1280,
+    "height": 900
   },
   "application-packet-overlay-mobile.png": {
-    "height": 844,
-    "width": 390
+    "width": 390,
+    "height": 844
   },
   "application-packet-overlay-open.png": {
-    "height": 900,
-    "width": 1280
+    "width": 1280,
+    "height": 900
   },
   "applications-320-landing.png": {
-    "height": 780,
-    "width": 320
+    "width": 320,
+    "height": 780
   },
   "applications-320-task.png": {
-    "height": 780,
-    "width": 320
+    "width": 320,
+    "height": 780
   },
   "applications-close-focus-landing.png": {
-    "height": 900,
-    "width": 1280
+    "width": 1280,
+    "height": 900
   },
   "applications-delayed-denial-upgrade.png": {
-    "height": 900,
-    "width": 1280
+    "width": 1280,
+    "height": 900
   },
   "applications-needs-input-desktop.png": {
-    "height": 900,
-    "width": 1280
+    "width": 1280,
+    "height": 900
   },
   "applications-needs-input-mobile.png": {
-    "height": 844,
-    "width": 390
+    "width": 390,
+    "height": 844
   },
   "applications-packet-switch-atomic.png": {
-    "height": 900,
-    "width": 1280
+    "width": 1280,
+    "height": 900
   },
   "applications-reduced-motion-focus.png": {
-    "height": 900,
-    "width": 640
+    "width": 640,
+    "height": 900
   },
   "applications-task-question-handoff.png": {
-    "height": 900,
-    "width": 1280
+    "width": 1280,
+    "height": 900
   },
   "delete-account-dialog-mobile.png": {
-    "height": 844,
-    "width": 390
+    "width": 390,
+    "height": 844
   },
   "delete-account-dialog-open.png": {
-    "height": 900,
-    "width": 1280
+    "width": 1280,
+    "height": 900
   },
   "documents-320-attachments-deeplink.png": {
-    "height": 780,
-    "width": 320
+    "width": 320,
+    "height": 780
   },
   "documents-320-error-recovered-tabs.png": {
-    "height": 780,
-    "width": 320
+    "width": 320,
+    "height": 780
   },
   "documents-320-work-history-error.png": {
-    "height": 780,
-    "width": 320
+    "width": 320,
+    "height": 780
   },
   "documents-320-work-history-recovered.png": {
-    "height": 780,
-    "width": 320
+    "width": 320,
+    "height": 780
   },
   "documents-640-tab-overflow-cue.png": {
-    "height": 900,
-    "width": 640
+    "width": 640,
+    "height": 900
   },
   "documents-tabs-640-to-320.png": {
-    "height": 780,
-    "width": 320
+    "width": 320,
+    "height": 780
   },
   "home-action-hierarchy.png": {
-    "height": 1000,
-    "width": 1440
+    "width": 1440,
+    "height": 1000
   },
   "home-delayed-denial-upgrade.png": {
-    "height": 900,
-    "width": 1280
+    "width": 1280,
+    "height": 900
   },
   "home-skip-status.png": {
-    "height": 1000,
-    "width": 1440
+    "width": 1440,
+    "height": 1000
   },
   "home-undo-restored.png": {
-    "height": 1000,
-    "width": 1440
+    "width": 1440,
+    "height": 1000
   },
   "jobs-320.png": {
-    "height": 780,
-    "width": 320
+    "width": 320,
+    "height": 780
   },
   "jobs-desktop.png": {
-    "height": 900,
-    "width": 1280
+    "width": 1280,
+    "height": 900
   },
   "more-sheet-open.png": {
-    "height": 844,
-    "width": 390
+    "width": 390,
+    "height": 844
   },
   "reduced-motion-640-reflow.png": {
-    "height": 900,
-    "width": 640
+    "width": 640,
+    "height": 900
   },
   "reduced-motion-application-packet-static.png": {
-    "height": 900,
-    "width": 1280
+    "width": 1280,
+    "height": 900
   },
   "remove-document-dialog-mobile.png": {
-    "height": 844,
-    "width": 390
+    "width": 390,
+    "height": 844
   },
   "remove-document-dialog-open.png": {
-    "height": 900,
-    "width": 1280
+    "width": 1280,
+    "height": 900
   },
   "resume-held-profile-save-tab-remount.png": {
-    "height": 900,
-    "width": 1280
+    "width": 1280,
+    "height": 900
   },
   "resume-held-save-tab-remount.png": {
-    "height": 900,
-    "width": 1280
+    "width": 1280,
+    "height": 900
   },
   "resume-held-upload-route-remount.png": {
-    "height": 900,
-    "width": 1280
+    "width": 1280,
+    "height": 900
   },
   "resume-held-upload-tab-remount.png": {
-    "height": 900,
-    "width": 1280
+    "width": 1280,
+    "height": 900
   },
   "resume-newer-edits-survive-held-saves.png": {
-    "height": 900,
-    "width": 1280
+    "width": 1280,
+    "height": 900
   },
   "resume-upload-settled-after-tab-remount.png": {
-    "height": 900,
-    "width": 1280
+    "width": 1280,
+    "height": 900
   },
   "transcript-official-request.png": {
-    "height": 900,
-    "width": 1280
+    "width": 1280,
+    "height": 900
   },
   "transcript-official-to-upload-focus.png": {
-    "height": 900,
-    "width": 1280
+    "width": 1280,
+    "height": 900
   },
   "transcript-overlay-mobile.png": {
-    "height": 844,
-    "width": 390
+    "width": 390,
+    "height": 844
   },
   "transcript-overlay-open.png": {
-    "height": 900,
-    "width": 1280
+    "width": 1280,
+    "height": 900
   },
   "transcript-upload-failure-focus.png": {
-    "height": 900,
-    "width": 1280
+    "width": 1280,
+    "height": 900
   },
   "transcript-upload-success-focus.png": {
-    "height": 900,
-    "width": 1280
+    "width": 1280,
+    "height": 900
   },
   "upgrade-dialog-mobile.png": {
-    "height": 844,
-    "width": 390
+    "width": 390,
+    "height": 844
   },
   "upgrade-dialog-open.png": {
-    "height": 900,
-    "width": 1280
+    "width": 1280,
+    "height": 900
   }
 }
