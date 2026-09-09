@@ -658,9 +658,12 @@ export function CinematicHero() {
                 card, on the first screen, before a phone visitor knows what
                 Litos is. The mobile primary CTA above is "Get started", which
                 works on a phone, and /install still carries the handoff for
-                anyone who wants the link. MobileSendLink itself stays: /try's
-                DonePanel uses it, at the point someone has actually seen the
-                product work. */}
+                anyone who wants the link.
+
+                /try's DonePanel dropped it too on 2026-09-09, for the sharper
+                version of the same reason: it rendered mobile-only, so nobody
+                who saw that QR could scan it. No product surface renders
+                MobileSendLink now. */}
             {/* The privacy caption that used to sit here (collection, no-sale,
                 deletion) moved into the refusal trio in #faq, app/page.tsx.
                 Mehek's call 2026-07-28: two body blocks of near-equal length

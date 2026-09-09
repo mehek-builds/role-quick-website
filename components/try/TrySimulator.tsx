@@ -20,7 +20,6 @@ import {
 } from "@/lib/try-keyword-clarifications";
 import { ThinkingOrb } from "thinking-orbs";
 import { PendingLabel } from "@/components/app/ui";
-import { MobileSendLink } from "@/components/MobileSendLink";
 
 /* /try - the drive-it-yourself demo (design doc 2026-07-08).
    The visitor clicks the extension's real verbs: Detect -> Generate ->
@@ -1006,8 +1005,24 @@ function DonePanel({ mode }: { mode: "canned" | "real" }) {
       {/* Was the store link. Under the one-place rule the install ask is now
           the #packet button on the landing page only; the simulator ends on the
           account, which is also the thing that keeps the resume this panel just
-          built. MobileSendLink stays: a phone that does want the extension
-          still needs the handoff to a desktop. */}
+          built.
+
+          MOBILESENDLINK WAS REMOVED HERE 2026-09-09, for the reason the hero
+          already removed it on 2026-07-28. This block rendered `sm:hidden`, so
+          every person who ever saw its QR code was holding the device drawing
+          it, and nobody can scan their own screen. Under it, "Copy install
+          link" pointed at /install, which redirects to the Chrome Web Store: a
+          desktop-only destination offered exclusively to phones. The line above
+          both, "Litos installs on a laptop", was the real cost, telling a
+          visitor who had just watched the demo work that they needed a
+          different device to use it, at the moment they were most likely to
+          start.
+
+          The dashboard is the product on a phone (it is asserted at 375px by
+          tests/e2e/narrow-viewport-actions.spec.mjs), and onboarding now takes
+          a photo of a resume, so a phone visitor needs no laptop at all. The
+          extension handoff belongs after signup, where the account exists to
+          carry it, not in front of the ask. */}
       <a
         href="/login"
         onClick={() => track("signin_click", { source: "try" })}
@@ -1015,7 +1030,10 @@ function DonePanel({ mode }: { mode: "canned" | "real" }) {
       >
         Get started, it&apos;s free
       </a>
-      <MobileSendLink source="try" className="sm:hidden" />
+      <p className="text-center text-[11px] leading-5 text-muted sm:hidden">
+        Works right here on your phone. Snap a photo of your resume and Litos
+        reads it.
+      </p>
     </div>
   );
 }

@@ -63,7 +63,7 @@ export function formatDocumentBytes(bytes: number): string {
    collapses into the stated limit and would read as a refusal of an allowed file. */
 const CAP_AS_FORMATTED = formatDocumentBytes(MAX_APPLICATION_DOCUMENT_BYTES);
 
-export type ApplicationDocumentAccept = "pdf" | "pdf-or-docx" | "pdf-or-txt" | "csv";
+export type ApplicationDocumentAccept = "pdf" | "pdf-or-docx" | "pdf-or-txt" | "csv" | "resume-or-photo";
 
 /** The options one upload surface hands the gate: which formats, and its own refusal sentences. */
 export type ApplicationDocumentGate = {
@@ -73,6 +73,40 @@ export type ApplicationDocumentGate = {
 };
 
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+/* What a phone hands back, INCLUDING HEIC, which is what an iPhone stores by default.
+ *
+ * HEIC is admitted here even though no model the API calls can read it, because this gate is not
+ * the last word on a photo: lib/resume-photo.ts re-encodes every capture to JPEG before it
+ * uploads, and Safari decodes HEIC natively, so on the device that produces HEIC the conversion
+ * simply works. Refusing it here instead would refuse an iPhone user's own photo library for a
+ * format their browser can convert, and would make that module's HEIC handling unreachable.
+ *
+ * A browser that cannot decode it fails in the re-encode instead, which is the right place: that
+ * failure knows it is a photo and can say "take a new one", where this gate could only say the
+ * file type was wrong. */
+const PHOTO_EXTENSION = /\.(jpe?g|png|webp|heic|heif)$/i;
+
+/* Any image media type, not a list of subtypes, and it must stay in step with isPhotoUpload in
+   lib/resume-photo.ts: these two decide "is this a photo" for the same file moments apart, and a
+   file this one refused while that one claimed would be refused for a reason no student could act
+   on. That divergence is exactly what made HEIC unreachable in the first version of this. */
+function looksLikePhoto(file: Pick<File, "name" | "type">): boolean {
+  return file.type.startsWith("image/") || PHOTO_EXTENSION.test(file.name);
+}
+
+/**
+ * The ceiling on a photo BEFORE it is re-encoded, which is a different number from the upload cap
+ * and exists for a different reason.
+ *
+ * MAX_APPLICATION_DOCUMENT_BYTES governs what may cross the network; a capture is re-encoded well
+ * under it (lib/resume-photo.ts) and so must never be measured against it while still raw, or the
+ * shrink that would have fixed it is refused before it can run. What this bounds instead is the
+ * decode: the browser expands the file to width x height x 4 bytes to draw it, so the guard is
+ * against a tab that hangs or dies on a deliberately enormous image. Set at the API's own multipart
+ * limit, comfortably above any real phone capture.
+ */
+export const MAX_RESUME_PHOTO_SOURCE_BYTES = 10_000_000;
 
 /**
  * One spelling per accept kind for the file input's `accept` attribute, so the picker's filter and
@@ -88,7 +122,19 @@ export const APPLICATION_DOCUMENT_ACCEPT_ATTRIBUTE: Record<ApplicationDocumentAc
   "pdf-or-docx": `application/pdf,.pdf,${DOCX_MIME},.docx`,
   "pdf-or-txt": "application/pdf,.pdf,text/plain,.txt",
   csv: "text/csv,.csv",
+  "resume-or-photo": `application/pdf,.pdf,${DOCX_MIME},.docx,image/*,.jpg,.jpeg,.png,.webp,.heic,.heif`,
 };
+
+/* The camera control's own attribute. Not the one above: a picker that offers PDFs alongside the
+ * camera is the file picker again, and the whole point of that button is that it opens straight
+ * into the camera. Paired with capture="environment" at the call site, which is what makes iOS and
+ * Android open the rear camera rather than the photo library.
+ *
+ * The wildcard rather than a list of concrete types, which is the documented shape for a capture
+ * input: iOS decides the format of what it hands back (HEIC on some configurations, JPEG on
+ * others), and an enumerated accept can make it refuse its own capture. The re-encode normalizes
+ * whatever arrives, so being permissive here costs nothing. */
+export const RESUME_PHOTO_CAPTURE_ACCEPT_ATTRIBUTE = "image/*";
 
 /**
  * The remedy sentence for an oversize resume-shaped document, shared by the surfaces that show it
@@ -101,15 +147,19 @@ export const OVERSIZE_DOCUMENT_HINT = 'Export a smaller file (most editors have 
    The server checks again, so this is only about telling her before an upload she waited through. */
 function matchesAccept(file: Pick<File, "name" | "type">, accept: ApplicationDocumentAccept): boolean {
   const isPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
+  const isDocx = file.type === DOCX_MIME || /\.docx$/i.test(file.name);
+  const isPhoto = looksLikePhoto(file);
   switch (accept) {
     case "pdf":
       return isPdf;
     case "pdf-or-docx":
-      return isPdf || file.type === DOCX_MIME || /\.docx$/i.test(file.name);
+      return isPdf || isDocx;
     case "pdf-or-txt":
       return isPdf || file.type === "text/plain" || /\.txt$/i.test(file.name);
     case "csv":
       return file.type === "text/csv" || /\.csv$/i.test(file.name);
+    case "resume-or-photo":
+      return isPdf || isDocx || isPhoto;
   }
 }
 

@@ -4,6 +4,8 @@ import {
   APPLICATION_DOCUMENT_ACCEPT_ATTRIBUTE,
   APPLICATION_DOCUMENT_SIZE_LIMIT_LABEL,
   MAX_APPLICATION_DOCUMENT_BYTES,
+  MAX_RESUME_PHOTO_SOURCE_BYTES,
+  RESUME_PHOTO_CAPTURE_ACCEPT_ATTRIBUTE,
   formatDocumentBytes,
   validateApplicationDocument,
   type ApplicationDocumentAccept,
@@ -117,4 +119,71 @@ test("every file the picker's accept filter offers is a file the gate admits", (
       );
     }
   }
+});
+
+test("the resume step admits a photograph alongside a document", () => {
+  const ok = (file: { name: string; type: string }) =>
+    assert.equal(
+      validateApplicationDocument({ ...file, size: 1_000 }, { accept: "resume-or-photo", typeMessage: "no" }),
+      null,
+    );
+  const no = (file: { name: string; type: string }) =>
+    assert.equal(
+      validateApplicationDocument({ ...file, size: 1_000 }, { accept: "resume-or-photo", typeMessage: "no" }),
+      "no",
+    );
+
+  /* What a camera capture actually arrives as, including the Android pickers that send a generic
+     or empty type and leave only the extension to go on. */
+  ok({ name: "resume-photo.jpg", type: "image/jpeg" });
+  ok({ name: "IMG_0421.JPEG", type: "" });
+  ok({ name: "scan.png", type: "image/png" });
+  ok({ name: "shot.bin", type: "image/webp" });
+  /* The documents this step already took keep working. */
+  ok({ name: "resume.pdf", type: "" });
+  ok({ name: "resume.docx", type: "" });
+
+  /* HEIC IS ADMITTED, and that is the fix for a real defect: an earlier version refused it here,
+     which made the HEIC conversion in lib/resume-photo.ts unreachable and refused an iPhone user's
+     own photo library for a format Safari converts natively. A browser that cannot decode it fails
+     in the re-encode instead, where the message can say "take a new one". */
+  ok({ name: "IMG_0421.heic", type: "image/heic" });
+  ok({ name: "IMG_0421.HEIF", type: "" });
+  /* Any image subtype, because the re-encode is the arbiter of what is readable, not this list. */
+  ok({ name: "capture", type: "image/avif" });
+
+  no({ name: "resume.txt", type: "text/plain" });
+  no({ name: "clip.mp4", type: "video/mp4" });
+});
+
+test("the camera attribute offers photos only, and nothing it offers is refused", () => {
+  /* Deliberately narrower than the resume-or-photo attribute: an accept list carrying PDFs would
+     make the capture control open a file picker on some browsers, which is the one thing that
+     button must never do. The wildcard is on purpose - iOS picks the format of its own capture,
+     and an enumerated list can make it refuse what it just took. */
+  assert.doesNotMatch(RESUME_PHOTO_CAPTURE_ACCEPT_ATTRIBUTE, /pdf|docx/i);
+  assert.match(RESUME_PHOTO_CAPTURE_ACCEPT_ATTRIBUTE, /^image\//);
+  /* Whatever the camera hands back under that wildcard has to clear the gate, or the button opens
+     a camera whose output the next line refuses. */
+  for (const type of ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"]) {
+    assert.equal(
+      validateApplicationDocument({ name: "capture", type, size: 1_000 }, { accept: "resume-or-photo", typeMessage: "refused" }),
+      null,
+      `${type} can come back from the camera but the gate refuses it`,
+    );
+  }
+});
+
+test("a raw camera capture is bounded for decoding, not by the upload cap", () => {
+  /* THE REGRESSION THIS PINS: the first version measured the raw capture against
+     MAX_APPLICATION_DOCUMENT_BYTES before re-encoding it, so an ordinary 9 MB phone photo was
+     refused with "export a smaller file" and the downscale that would have made it ~400 KB never
+     ran. The upload cap belongs to the re-encoded file; what the raw file gets is a much higher
+     ceiling that only exists to stop a decode large enough to hang the tab. */
+  assert.ok(
+    MAX_RESUME_PHOTO_SOURCE_BYTES > MAX_APPLICATION_DOCUMENT_BYTES,
+    "a raw capture routinely exceeds the upload cap, so its own ceiling must be higher",
+  );
+  /* A 9 MB capture is a normal phone photo, not an abuse case. */
+  assert.ok(9_000_000 < MAX_RESUME_PHOTO_SOURCE_BYTES);
 });
