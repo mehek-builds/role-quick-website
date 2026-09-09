@@ -5751,7 +5751,16 @@ function Applications() {
         </div>
       )}
       {notice && <p role="status" className="rounded-inner bg-positive-soft px-4 py-3 text-sm text-positive">{notice}</p>}
-      {showNewApplication && (
+      {/* A job-started application never shows its four boxes while it builds.
+          "Start application" on Home carries the company, the role, the URL and the posting text
+          with it, so the composer would be a filled-in form the student did not ask to see, sitting
+          under a spinner for the twenty-odd seconds the resume takes. This is the same posting they
+          pressed on, held on screen in the same two-pane shape the finished comparison uses, so the
+          screen does not change layout underneath them when the resume lands. The composer still
+          renders for every draft a student typed themselves: their boxes are theirs to keep. */}
+      {showNewApplication && creating === "tailor" && newApplication.jobId && newApplication.jobDescription.trim() ? (
+        <TailoringInProgress draft={newApplication} />
+      ) : showNewApplication && (
         <NewApplicationPanel
           value={newApplication}
           onChange={applyDraftEdit}
@@ -6985,6 +6994,66 @@ function CanonicalApplicationDetail({
 
 function packetTimestamp(packet: GeneratedResume): string {
   return packet.spec._review?.updated_at ?? packet.created_at ?? "";
+}
+
+/**
+ * The posting, on screen, while its resume is being written.
+ *
+ * Two panes at the same widths the review screen uses, so the JD does not move when the comparison
+ * replaces this. The right pane says what is happening in words rather than a bare spinner: a
+ * student who pressed "Start application" is owed the reason their screen is busy, and the wait is
+ * long enough (a model call, then a check of it) that "Tailoring" alone reads as a hang.
+ *
+ * No colour code here, deliberately. The colours on the review screen mean "this requirement is
+ * answered by this bullet", and nothing has been matched yet: painting them now would be a claim
+ * made before the evidence exists.
+ */
+function TailoringInProgress({ draft }: { draft: NewApplicationDraft }) {
+  return (
+    <div>
+      <div className="rounded-card border border-border bg-surface-alt px-5 py-3">
+        <p className="truncate text-sm font-medium text-ink">
+          {draft.role || "This role"} · {draft.company || "This company"}
+        </p>
+        <p className="mt-0.5 text-[11px] text-muted">
+          Litos is writing a resume for this posting. The comparison opens here as soon as it lands.
+        </p>
+      </div>
+      <div className="mt-4 grid gap-4 xl:grid-cols-2">
+        <section className="flex min-h-0 flex-col rounded-card border border-border bg-surface">
+          <p className="border-b border-border px-5 py-2.5 font-mono text-[11px] uppercase tracking-[0.08em] text-muted">
+            Job description
+          </p>
+          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 xl:max-h-[calc(100vh-15.5rem)]">
+            <p className="prose-copy whitespace-pre-line text-sm leading-6 text-ink">{draft.jobDescription}</p>
+          </div>
+        </section>
+        <section className="flex min-h-0 flex-col rounded-card border border-border bg-surface">
+          <p className="border-b border-border px-5 py-2.5 font-mono text-[11px] uppercase tracking-[0.08em] text-muted">
+            Your resume for this job
+          </p>
+          <div className="min-h-0 flex-1 px-5 py-4">
+            <p className="text-sm text-muted">
+              <PendingLabel state="composing">Writing your resume against this posting</PendingLabel>
+            </p>
+            <p className="mt-3 text-sm leading-6 text-muted">
+              Every bullet is taken from your own resume and rewritten to answer what this posting asks
+              for. Nothing is invented. When it is done, it appears here beside the posting with the
+              requirements it covers marked in both.
+            </p>
+            {/* Placeholder lines, not a spinner in a box: they show the shape of what is coming, and
+                they are aria-hidden because the two sentences above already say it in words. Six
+                grey bars read aloud say nothing at all. */}
+            <div aria-hidden="true" className="mt-5 space-y-2.5">
+              {[92, 78, 85, 64, 88, 71].map((width, index) => (
+                <div key={index} className="h-2.5 rounded-full bg-surface-alt" style={{ width: `${width}%` }} />
+              ))}
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  );
 }
 
 function NewApplicationPanel({

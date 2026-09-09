@@ -502,8 +502,12 @@ test("overview keeps three application states and sends matches to the review sc
   assert.doesNotMatch(overview, /<Link href=\{reviewHref\}/);
   assert.match(overview, /href=\{`\$\{packetAction\.href\}&intent=apply`\}/);
   assert.match(overview, /\/dashboard\/applications\?application=\$\{packet\.id\}/);
-  assert.match(overview, /\{status === "failed" \? "Try tailoring again" : "Tailor resume"\}/);
-  assert.match(overview, /intent=fill[\s\S]{0,250}>Fill application<\/Link>/);
+  /* ONE action per card. "Tailor resume" beside "Fill application" made the student name the step
+     before they had seen it; both are now the single "Start application", which opens the tailoring
+     screen and hands the fill and the send to it in order. */
+  assert.match(overview, /\{status === "failed" \? "Try again" : "Start application"\}/);
+  assert.match(overview, /href=\{`\/dashboard\/applications\?job=\$\{job\.id\}&intent=tailor`\}/);
+  assert.doesNotMatch(shippedCode(overview), /"Tailor resume"|>Fill application<\/Link>/);
 
   /* Home is a launcher, not an approval surface. The card may prepare a packet, but a ready packet
      must open Tracker so the student sees the exact resume, answers, PDF and filled preview before
@@ -517,7 +521,6 @@ test("overview keeps three application states and sends matches to the review sc
   assert.doesNotMatch(shipped, /\/submission\/approve/);
   assert.doesNotMatch(shipped, /\/submit-request/);
   assert.doesNotMatch(shipped, /async function submitApplication/);
-  assert.match(overview, /\{status === "failed" \? "Try tailoring again" : "Tailor resume"\}/);
   assert.match(overview, /<PendingLabel>Getting ready<\/PendingLabel>/);
   // Home is a three-card window over a variable daily set. Submitting the first three must reveal
   // later matches, not complete the day while a fourth match is still waiting.

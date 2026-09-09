@@ -101,8 +101,11 @@ test("delayed dashboard denials retain their activation target or a stable local
   assert.match(provider, /candidate\.focus\(\{ preventScroll: true \}\)[\s\S]*document\.activeElement === candidate/);
   assert.match(provider, /const trigger = triggerRef\.current;[\s\S]*restoreUpgradeFocus\(trigger\)/);
 
-  assert.match(home, /const upgradeTrigger = event\.currentTarget;[\s\S]*onPrepare\(upgradeTrigger\)/);
-  assert.match(home, /onPrepare=\{\(upgradeTrigger\) => void preparePacket\(job\.id, "explicit_click", upgradeTrigger\)\}/);
+  /* Home's card no longer starts a generation, so it no longer raises a paywall of its own: its one
+     action is a link to the tailoring screen, and that screen owns the denial and the focus restore
+     asserted below. Paid hover can still be denied here, so the focus target itself stays pinned. */
+  assert.doesNotMatch(home, /onPrepare|onRetry/);
+  assert.match(home, /onHoverPrepare=\{\(\) => void preparePacket\(job\.id, "hover_prewarm"\)\}/);
   assert.match(home, /if \(trigger\?\.isConnected\) return trigger;[\s\S]*data-dashboard-job-focus-id[\s\S]*getElementById\("matches-heading"\)/);
   assert.match(home, /tabIndex=\{-1\}[\s\S]*data-dashboard-job-focus-id=\{job\.id\}/);
   assert.match(home, /id="matches-heading" tabIndex=\{-1\}/);
