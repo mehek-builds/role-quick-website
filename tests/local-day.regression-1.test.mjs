@@ -92,15 +92,24 @@ describe("submitted-today and today are the same timezone", () => {
  * dashboard's own three keys were reverted to the UTC slice, which means it was guarding the fix
  * and not the bug. These are source-text assertions against app/dashboard/page.tsx because that
  * file is a client component the node runner cannot load. tests/home-match-window.test.mjs already
- * reads and regex-matches the same file for the same reason. */
+ * reads and regex-matches the same file for the same reason.
+ *
+ * The dismissal key moved out of this file into lib/dismissal.ts once the Jobs list needed the same
+ * "skip" as Home (see tests/jobs-start-skip.test.mjs), so its own local-day check now runs against
+ * that module; Home is checked for importing it rather than declaring it, so a future inline
+ * reintroduction (which would drift the two screens' skip lists apart again) still has nowhere to
+ * hide the UTC slice this file used to catch here directly. */
 describe("the dashboard's day keys are the local day", () => {
   const homeUrl = new URL("../app/dashboard/page.tsx", import.meta.url);
+  const dismissalUrl = new URL("../lib/dismissal.ts", import.meta.url);
 
   test("all three keys derive from localDayKey", async () => {
     const home = readFileSync(homeUrl, "utf8");
+    const dismissal = readFileSync(dismissalUrl, "utf8");
 
     // "Skipped for today" has to survive until the student's own midnight.
-    assert.match(home, /litos-dismissed-\$\{localDayKey\(\)\}/);
+    assert.match(dismissal, /litos-dismissed-\$\{localDayKey\(\)\}/);
+    assert.match(home, /import \{ dailyDismissalKey, readDismissed \} from "@\/lib\/dismissal";/);
     // The build-ahead lock rotates with the day it belongs to.
     assert.match(home, /litos-prewarm-\$\{localDayKey\(\)\}-\$\{jobId\}/);
     // Feeds submittedToday, and through it dayQueueFinished.
@@ -108,10 +117,12 @@ describe("the dashboard's day keys are the local day", () => {
     assert.match(home, /import \{ localDayKey \} from "@\/lib\/local-day";/);
   });
 
-  test("no UTC day survives in the file", () => {
+  test("no UTC day survives in the dashboard file or the dismissal module", () => {
     const home = readFileSync(homeUrl, "utf8");
+    const dismissal = readFileSync(dismissalUrl, "utf8");
 
     assert.doesNotMatch(home, /toISOString\(\)\.slice\(0, ?10\)/);
+    assert.doesNotMatch(dismissal, /toISOString\(\)\.slice\(0, ?10\)/);
   });
 });
 

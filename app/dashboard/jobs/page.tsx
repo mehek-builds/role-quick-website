@@ -14,6 +14,7 @@ import { AutopilotLockNote, AutopilotToggle, useAutopilot } from "@/components/a
 import { EMPLOYMENT_TYPES, formatPay, jobTypeLabel } from "@/features/jobs";
 import { trackZeroResultJobSearch } from "@/lib/job-search-demand-client";
 import { useBilling } from "@/components/billing/BillingProvider";
+import { dailyDismissalKey, readDismissed } from "@/lib/dismissal";
 
 const RECENT_SEARCHES_KEY = "litos_recent_job_title_searches";
 
@@ -82,6 +83,10 @@ function hasServerMatchScores(jobs: MonitoredJob[] | null): boolean {
 export default function JobsPage() {
   const { canUse, openUpgrade } = useBilling();
   const [jobs, setJobs] = useState<MonitoredJob[] | null>(null);
+  /* Skip is Home's same-day dismissal, read from the identical key so a job hidden on one screen
+     stays hidden on the other today and comes back for both tomorrow: two separate "not interested"
+     lists for the same posting would disagree with each other by design. */
+  const [dismissed, setDismissed] = useState<string[]>([]);
   const [ranked, setRanked] = useState(false);
   const [query, setQuery] = useState("");
   const [location, setLocation] = useState("");
@@ -127,6 +132,46 @@ export default function JobsPage() {
       queueMicrotask(() => setRecentSearches([]));
     }
   }, []);
+
+  useEffect(() => {
+    queueMicrotask(() => setDismissed(readDismissed(dailyDismissalKey())));
+  }, []);
+
+  const visibleJobs = useMemo(
+    () => (jobs ?? []).filter((job) => !dismissed.includes(job.id)),
+    [jobs, dismissed],
+  );
+
+  /* Undefined means no skip is pending a focus move; null means the skipped row had no neighbour
+     left, so the heading is next; a string is the job whose Skip button should receive focus. Skip
+     unmounts the pressed button, and the browser's own fallback for that is the document body, not
+     a nearby control: a keyboard student who skips a row and finds focus silently at the top of the
+     page would have to start tabbing over from scratch. */
+  const skipFocusTargetRef = useRef<string | null | undefined>(undefined);
+
+  function dismiss(jobId: string) {
+    /* Restricted to rows that actually carry a Skip button: an Applied row renders a status, not a
+       control, so landing the lookup on its id would find nothing in the DOM and silently strand
+       focus at document.body, exactly the drop this ref exists to prevent. */
+    const skippable = visibleJobs.filter((job) => !isJobApplied(job, applications));
+    const index = skippable.findIndex((job) => job.id === jobId);
+    const remaining = skippable.filter((job) => job.id !== jobId);
+    skipFocusTargetRef.current = remaining[index]?.id ?? remaining[index - 1]?.id ?? null;
+    const next = [...new Set([...dismissed, jobId])];
+    setDismissed(next);
+    window.localStorage.setItem(dailyDismissalKey(), JSON.stringify(next));
+  }
+
+  useEffect(() => {
+    if (skipFocusTargetRef.current === undefined) return;
+    const targetId = skipFocusTargetRef.current;
+    skipFocusTargetRef.current = undefined;
+    const target = targetId === null
+      ? document.getElementById("jobs-heading")
+      : [...document.querySelectorAll<HTMLButtonElement>("[data-jobs-skip-id]")]
+        .find((button) => button.dataset.jobsSkipId === targetId) ?? null;
+    target?.focus({ preventScroll: true });
+  }, [visibleJobs]);
   /* The filters a response must have been fetched under to be allowed into the list. A plain
      counter was not enough: the filter effect and loadMore both read the same counter, so neither
      could tell the other's response apart from its own, and a load-more that finished after a
@@ -275,7 +320,10 @@ export default function JobsPage() {
     }
   }, [employmentType, hasMore, jobs, loadingMore, location, query, remoteOnly]);
 
-  const newToday = useMemo(() => (jobs ? countNewToday(jobs) : 0), [jobs]);
+  /* visibleJobs, not the raw fetch: a skipped role is not "new today" any more than it is
+     "loaded", and the header pill disagreeing with the list and the count below it is the exact
+     divergence Skip was built to avoid everywhere else on this page. */
+  const newToday = useMemo(() => countNewToday(visibleJobs), [visibleJobs]);
   const rankedByResume = useMemo(() => hasServerMatchScores(jobs), [jobs]);
   /* One reading of "what is narrowing this list", shared by the branch and by the sentence, so the
      two can never name different filters. See features/jobs/domain/job-filters.ts. */
@@ -323,7 +371,7 @@ export default function JobsPage() {
           <p className="font-mono text-label uppercase tracking-[0.08em] text-faint">Jobs</p>
           {/* The headline is the ordering. It only claims to be about fit when the list actually
               was ranked against a resume, which is why it is not a constant. */}
-          <h1 className="mt-1.5 text-section font-normal leading-[1.15] tracking-[-0.02em] text-ink">
+          <h1 id="jobs-heading" tabIndex={-1} className="mt-1.5 text-section font-normal leading-[1.15] tracking-[-0.02em] text-ink outline-none">
             {ranked ? "Top matches for you." : "Latest jobs."}
           </h1>
         </div>
@@ -445,6 +493,28 @@ export default function JobsPage() {
             </ButtonLink>
           )}
         </EmptyState>
+      ) : visibleJobs.length === 0 ? (
+        /* Every loaded role is skipped for today, not gone: the count below would still say
+           "N roles loaded" with an empty list under it if this fell through to the map below, which
+           reads as a broken board rather than a caught-up one. Skips come back tomorrow. The same
+           pool-exhausted sentence the normal list footer prints still belongs here: a board that is
+           both fully skipped AND out of pages should say a larger pool exists to search or filter
+           into, not just "nothing more to load". */
+        <EmptyState
+          title="You've skipped every role loaded"
+          body={
+            !hasMore && poolExhausted
+              ? "Skipped roles come back tomorrow. More roles exist than Litos ranks at once, so search or filter to rank a different set."
+              : "Skipped roles come back tomorrow. Load more or adjust your filters to see something new today."
+          }
+          visual="jobs"
+        >
+          {hasMore && (
+            <Button type="button" onClick={() => void loadMore()} disabled={loadingMore} variant="secondary">
+              {loadingMore ? "Loading..." : "Show more roles"}
+            </Button>
+          )}
+        </EmptyState>
       ) : (
         <>
           {/* grid-cols-1 is load-bearing, not decoration. A bare `grid` leaves the single column
@@ -457,16 +527,18 @@ export default function JobsPage() {
               longer be argued wider than the list, so the truncation inside the row does its job
               instead of the page scrolling sideways. */}
           <ul className="grid grid-cols-1 gap-3">
-            {jobs.map((job) => (
+            {visibleJobs.map((job) => (
               <li key={job.id}>
-                <JobRow job={job} application={jobApplicationFor(job, applications)} applied={isJobApplied(job, applications)} match={badgeMatchFor(job, matches[job.id])} />
+                <JobRow job={job} application={jobApplicationFor(job, applications)} applied={isJobApplied(job, applications)} match={badgeMatchFor(job, matches[job.id])} onDismiss={() => dismiss(job.id)} />
               </li>
             ))}
           </ul>
 
-          {/* Name the loaded pool and the score family that actually drives its ordering. */}
+          {/* Name the loaded pool and the score family that actually drives its ordering. Counts
+              the visible list, not the raw fetch: a skip should shrink this number the same way it
+              shrinks the list above it, or the two would disagree about how many roles are here. */}
           <p className="pt-1 text-center text-xs text-muted">
-            {jobs.length} role{jobs.length === 1 ? "" : "s"} loaded
+            {visibleJobs.length} role{visibleJobs.length === 1 ? "" : "s"} loaded
             {hasMore ? ", more to load" : ""}
             {ranked
               ? rankedByResume
@@ -507,7 +579,7 @@ export default function JobsPage() {
  * obvious thing in the world to click, and giving the row two side-by-side buttons made the student
  * choose between them before they had read the role.
  */
-function JobRow({ job, application, applied, match }: { job: MonitoredJob; application: JobApplicationMatch | null; applied: boolean; match: BadgeMatch | null | undefined }) {
+function JobRow({ job, application, applied, match, onDismiss }: { job: MonitoredJob; application: JobApplicationMatch | null; applied: boolean; match: BadgeMatch | null | undefined; onDismiss: () => void }) {
   const place = [job.location, job.remote && !/remote/i.test(job.location ?? "") ? "Remote" : null]
     .filter(Boolean)
     .join(" · ");
@@ -567,20 +639,39 @@ function JobRow({ job, application, applied, match }: { job: MonitoredJob; appli
           </svg>
           Applied
         </span>
-      ) : application ? (
-        <Link
-          href={jobApplicationHref(application)}
-          className="inline-flex min-h-11 shrink-0 basis-full items-center justify-center rounded-control border border-control-border bg-surface px-6 text-sm font-medium text-ink transition-colors hover:border-ink sm:basis-auto"
-        >
-          {jobApplicationActionLabel(application)}
-        </Link>
       ) : (
-        <Link
-          href={`/dashboard/applications?job=${job.id}&intent=fill`}
-          className="inline-flex min-h-11 shrink-0 basis-full items-center justify-center rounded-control bg-action px-6 text-sm font-medium text-action-ink transition-colors hover:bg-brand-ink sm:basis-auto"
-        >
-          Fill application
-        </Link>
+        /* Skip beside the one action, the same pairing Home offers on every card that has not
+           been sent yet. It never appears once a row is Applied: there is nothing left here to
+           decide against. */
+        <div className="flex shrink-0 basis-full items-center justify-end gap-2 sm:basis-auto">
+          <button
+            type="button"
+            data-jobs-skip-id={job.id}
+            onClick={onDismiss}
+            aria-label={`Skip ${job.title} at ${job.company_name}`}
+            className="min-h-11 px-3 text-sm font-medium text-muted transition-colors hover:text-ink"
+          >
+            Skip
+          </button>
+          {application ? (
+            <Link
+              href={jobApplicationHref(application)}
+              className="inline-flex min-h-11 items-center justify-center rounded-control border border-control-border bg-surface px-6 text-sm font-medium text-ink transition-colors hover:border-ink"
+            >
+              {jobApplicationActionLabel(application)}
+            </Link>
+          ) : (
+            /* intent=tailor, not intent=fill: the same door Home's "Start" opens, so a fresh
+               posting reaches the coloured resume-to-JD comparison before it is filled anywhere,
+               regardless of which screen it was started from. */
+            <Link
+              href={`/dashboard/applications?job=${job.id}&intent=tailor`}
+              className="inline-flex min-h-11 items-center justify-center rounded-control bg-action px-6 text-sm font-medium text-action-ink transition-colors hover:bg-brand-ink"
+            >
+              Start
+            </Link>
+          )}
+        </div>
       )}
     </Card>
   );

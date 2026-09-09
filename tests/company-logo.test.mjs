@@ -106,7 +106,7 @@ test("the request never carries the dashboard URL with it", async () => {
 
 test("the Home recommendation card leads with the company logo", async () => {
   const home = await readFile(homeUrl, "utf8");
-  const card = home.slice(home.indexOf("function JobMatchCard"), home.indexOf("function dailyDismissalKey"));
+  const card = home.slice(home.indexOf("function JobMatchCard"), home.indexOf("function prewarmLockKey"));
 
   assert.match(card, /<CompanyLogo company=\{job\.company_name\} boardUrl=\{job\.career_url\} \/>/);
   assert.ok(
