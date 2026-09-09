@@ -134,6 +134,23 @@ const BILLING_STATE_FIXTURE = {
   },
 };
 
+/* The one fixture that turns paid hover generation on.
+   Home's card action is a link now, so the only thing on that page that can still START a
+   generation - and therefore the only thing that can still be refused by the paywall there - is a
+   paid account's hover. The two delayed-denial cases below drive it deliberately; every other
+   scenario keeps hover off so that moving the mouse across a card cannot spend a generation
+   mid-screenshot. */
+const HOVER_GENERATION_BILLING_STATE_FIXTURE = {
+  ...BILLING_STATE_FIXTURE,
+  entitlement: {
+    ...BILLING_STATE_FIXTURE.entitlement,
+    features: {
+      ...BILLING_STATE_FIXTURE.entitlement.features,
+      hover_generation: true,
+    },
+  },
+};
+
 const LOCKED_BILLING_STATE_FIXTURE = {
   ...BILLING_STATE_FIXTURE,
   entitlement: {
@@ -4070,7 +4087,7 @@ test("Home keeps one state-aware page CTA above the job actions", async () => {
       /* A card whose job already has a packet prints that packet's own action words (Finish
          application / Review and fill), so the primary is found by its intent href first and the
          no-packet label second. */
-      const cardCta = card?.querySelector('a[href*="intent=apply"], a[aria-label^="Fill an application for"]');
+      const cardCta = card?.querySelector('a[href*="intent=apply"], a[aria-label^="Start an application for"]');
       if (!card || !pageCta || !cardCta) return null;
       const buttonRect = button.getBoundingClientRect();
       const cardRect = card.getBoundingClientRect();
@@ -4127,6 +4144,75 @@ test("Home keeps one state-aware page CTA above the job actions", async () => {
   }
 });
 
+/* THE WALK THE SINGLE CARD ACTION OPENS.
+ *
+ * "Start application" replaced "Tailor resume" beside "Fill application", and the promise it makes
+ * is not only that there is one control: it is that pressing it puts the student in front of the
+ * posting with the resume already being written against it. Both halves are asserted here, because
+ * the half that would rot silently is the second one - the link could keep working while the screen
+ * behind it went back to showing a filled-in four-box form under a spinner.
+ *
+ * The generation is held open on purpose. What this case is about is the screen DURING the wait,
+ * which is the part a student sees for twenty-odd seconds and the part no unit test can see. */
+test("Start application opens the posting with the resume already being written", async () => {
+  const { context, page, state } = await newDashboardPage({
+    viewport: { width: 1280, height: 900 },
+    bootstrapFixture: HOME_BOOTSTRAP_FIXTURE,
+    jobFixture: HOME_JOB_FIXTURE,
+    /* The applications screen reads /profile directly rather than through the bootstrap, and
+       refuses to generate without a name and a resume email on it. Without this the walk dies
+       before /resume/generate is ever called, which reads as a hang rather than as a failure. */
+    profileFixture: {
+      ...STUB["/profile"],
+      full_name: "Fixture Student",
+      resume_email: "fixture@example.invalid",
+    },
+  });
+  try {
+    await page.goto(`${ORIGIN}/dashboard`, { waitUntil: "domcontentloaded" });
+    const start = page.getByRole("link", {
+      name: `Start an application for ${HOME_JOB_FIXTURE.title} at ${HOME_JOB_FIXTURE.company_name}`,
+      exact: true,
+    });
+    await start.waitFor({ state: "visible" });
+    // One action beside Skip. The two old controls are gone from the card, not merely renamed.
+    assert.equal(await page.getByRole("link", { name: /^Fill an application for/ }).count(), 0);
+    assert.equal(await page.getByRole("button", { name: /^Tailor a resume for/ }).count(), 0);
+
+    const generated = state.holdNextResumeGenerate({
+      status: 500,
+      body: { error: "fixture stopped after proving the tailoring started on arrival" },
+    });
+    await start.click();
+    await page.waitForURL((url) => (
+      url.searchParams.get("job") === HOME_JOB_FIXTURE.id
+      && url.searchParams.get("intent") === "tailor"
+    ), { waitUntil: "domcontentloaded" });
+
+    /* No second press. The card's link is the whole ask; the screen it opens starts the work. */
+    await generated.started;
+    assert.equal(state.resumeGenerationWrites.length, 1);
+    assert.equal(state.resumeGenerationWrites[0].jd_text, HOME_JOB_FIXTURE.description);
+    assert.equal(state.resumeGenerationWrites[0].initiation, "explicit_click");
+
+    // The posting is on screen while it builds, and the composer's boxes are not.
+    await page.getByText("Writing your resume against this posting", { exact: true }).waitFor({ state: "visible" });
+    await page.getByText(HOME_JOB_FIXTURE.description.slice(0, 40), { exact: false }).first().waitFor({ state: "visible" });
+    assert.equal(await page.getByRole("heading", { name: "Fill an application.", exact: true }).count(), 0);
+    assert.equal(await page.getByLabel("Job URL").count(), 0);
+
+    /* And when the build fails, the boxes come back carrying the reason, rather than the progress
+       pane sitting there forever with nothing behind it. */
+    generated.release();
+    await generated.settled;
+    await page.getByRole("alert").filter({ hasText: "fixture stopped after proving the tailoring started on arrival" }).waitFor({ state: "visible" });
+    await page.getByRole("heading", { name: "Fill an application.", exact: true }).waitFor({ state: "visible" });
+    assertNoPageErrors(state, "Start application walk");
+  } finally {
+    await context.close();
+  }
+});
+
 test("delayed resume denials restore focus after the initiating control changes", async () => {
   const denial = {
     status: 402,
@@ -4140,17 +4226,23 @@ test("delayed resume denials restore focus after the initiating control changes"
   const home = await newDashboardPage({
     viewport: { width: 1280, height: 900 },
     bootstrapFixture: HOME_BOOTSTRAP_FIXTURE,
+    billingStateFixture: HOVER_GENERATION_BILLING_STATE_FIXTURE,
     jobFixture: HOME_JOB_FIXTURE,
   });
   try {
     await home.page.goto(`${ORIGIN}/dashboard`, { waitUntil: "domcontentloaded" });
-    const tailor = home.page.getByRole("button", {
-      name: `Tailor a resume for ${HOME_JOB_FIXTURE.title} at ${HOME_JOB_FIXTURE.company_name}`,
+    /* Hover, not a click. Home's card action became a single "Start application" LINK to the
+       tailoring screen, so nothing a student presses here starts a generation any more. Paid hover
+       still does, and it passes no trigger element at all, which makes this the strictest version of
+       the case: the dialog opens with nothing to return focus to and has to fall back to the job
+       heading on its own. */
+    const start = home.page.getByRole("link", {
+      name: `Start an application for ${HOME_JOB_FIXTURE.title} at ${HOME_JOB_FIXTURE.company_name}`,
       exact: true,
     });
-    await tailor.waitFor({ state: "visible" });
+    await start.waitFor({ state: "visible" });
     const homeDenial = home.state.holdNextResumeGenerate(denial);
-    await tailor.click();
+    await start.hover();
     await homeDenial.started;
     await home.page.getByText("Getting ready", { exact: true }).last().waitFor({ state: "visible" });
     homeDenial.release();
@@ -4246,17 +4338,19 @@ test("a delayed entitlement denial cannot outlive its initiating route", async (
   const { context, page, state } = await newDashboardPage({
     viewport: { width: 1280, height: 900 },
     bootstrapFixture: HOME_BOOTSTRAP_FIXTURE,
+    billingStateFixture: HOVER_GENERATION_BILLING_STATE_FIXTURE,
     jobFixture: HOME_JOB_FIXTURE,
   });
   try {
     await page.goto(`${ORIGIN}/dashboard`, { waitUntil: "domcontentloaded" });
-    const tailor = page.getByRole("button", {
-      name: `Tailor a resume for ${HOME_JOB_FIXTURE.title} at ${HOME_JOB_FIXTURE.company_name}`,
+    /* Paid hover is what still starts a generation from Home; see the case above. */
+    const start = page.getByRole("link", {
+      name: `Start an application for ${HOME_JOB_FIXTURE.title} at ${HOME_JOB_FIXTURE.company_name}`,
       exact: true,
     });
-    await tailor.waitFor({ state: "visible" });
+    await start.waitFor({ state: "visible" });
     const heldDenial = state.holdNextResumeGenerate(denial);
-    await tailor.click();
+    await start.hover();
     await heldDenial.started;
 
     /* Any route that is not Home proves this; it was Network until 2026-09-08. */

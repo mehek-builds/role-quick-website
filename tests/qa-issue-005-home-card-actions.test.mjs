@@ -13,9 +13,11 @@ test("Home leads with the pipeline action and keeps one secondary action inside 
     source,
     /className="mt-auto flex flex-wrap items-center justify-end gap-2 pt-4"/,
   );
+  /* intent=tailor, not intent=fill: the card's one action opens the tailoring screen, which is
+     where the resume is written against the posting and where the fill and the send follow. */
   assert.match(
     source,
-    /href=\{`\/dashboard\/applications\?job=\$\{job\.id\}&intent=fill`\}[^>]+border-brand bg-surface/,
+    /href=\{`\/dashboard\/applications\?job=\$\{job\.id\}&intent=tailor`\}/,
   );
   assert.doesNotMatch(source, /<Link href=\{reviewHref\}/);
 });

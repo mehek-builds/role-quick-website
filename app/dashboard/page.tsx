@@ -684,14 +684,6 @@ export default function Home() {
     };
   }
 
-  /* Retry is the same request, not a nudge to the prewarm loop. It used to clear the lock and bump
-     a counter so the effect would re-run, which does nothing at all for the students who never had
-     that effect running in the first place. */
-  function retryPreparation(jobId: string, upgradeTrigger: HTMLElement | null) {
-    releasePrewarmLock(jobId);
-    void preparePacket(jobId, "explicit_click", upgradeTrigger);
-  }
-
   /* Saved targeting only, and only the parts the "Change what you want" link below can edit. This
      used to fall through to profile.target_roles when no titles were saved, so the header claimed
      one thing while the feed underneath ranked by the saved categories. See targetingHeadline for
@@ -860,9 +852,7 @@ export default function Home() {
               tailoringAccess={qaMode ? true : tailoringAccess}
               hoverGenerationEnabled={canUse("hover_generation") === true}
               onDismiss={() => dismiss(job.id)}
-              onPrepare={(upgradeTrigger) => void preparePacket(job.id, "explicit_click", upgradeTrigger)}
               onHoverPrepare={() => void preparePacket(job.id, "hover_prewarm")}
-              onRetry={(upgradeTrigger) => retryPreparation(job.id, upgradeTrigger)}
             />
           ))}
         </div>
@@ -1011,9 +1001,7 @@ function JobMatchCard({
   hoverGenerationEnabled,
   canPrepare,
   onDismiss,
-  onPrepare,
   onHoverPrepare,
-  onRetry,
 }: {
   job: RankedJob;
   match: JobMatch | null | undefined;
@@ -1028,9 +1016,7 @@ function JobMatchCard({
   hoverGenerationEnabled: boolean;
   canPrepare: boolean;
   onDismiss: () => void;
-  onPrepare: (upgradeTrigger: HTMLButtonElement) => void;
   onHoverPrepare: () => void;
-  onRetry: (upgradeTrigger: HTMLButtonElement) => void;
 }) {
   const status = packetAction ? (packetAction.stopped ? "needs-you" : "ready") : preparing ? "preparing" : preparationFailed ? "failed" : "idle";
   return (
@@ -1099,7 +1085,16 @@ function JobMatchCard({
           <p className="mt-3 line-clamp-2 text-label text-warn">{preparationError}</p>
         )}
 
-        {/* Only one state here has nothing to click, and it is the one where a request really is
+        {/* ONE action, never two.
+
+            This card used to print "Tailor resume" beside "Fill application", which made a student
+            choose between two names for one thing before either had happened: tailoring is the first
+            step of applying, and filling without it skips the resume this product exists to write.
+            "Start application" is that single door. It opens the applications screen with
+            intent=tailor, which builds the tailored resume with the posting on screen beside it, then
+            hands over the coloured comparison, the fill and the send in that order.
+
+            Only one state here has nothing to click, and it is the one where a request really is
             in flight. The chip and this slot use one name for each state, so a card never says
             two things at once. */}
         <div className="mt-auto flex flex-wrap items-center justify-end gap-2 pt-4">
@@ -1110,7 +1105,12 @@ function JobMatchCard({
             <span className="flex min-h-11 items-center px-3 text-sm text-muted">
               <PendingLabel>Getting ready</PendingLabel>
             </span>
-          ) : packetAction ? null : tailoringAccess === null ? (
+          ) : packetAction ? (
+            /* One packet, one action. The destination owns the full review and next human step, so
+               a second control here only makes the student choose between two links to the same
+               application. */
+            <Link href={`${packetAction.href}&intent=apply`} aria-label={`${packetAction.label}: ${job.title} at ${job.company_name}`} className="flex min-h-11 items-center rounded-full border border-brand bg-surface px-5 text-center text-sm font-medium text-brand-ink transition-colors hover:bg-brand-soft">{packetAction.label}</Link>
+          ) : tailoringAccess === null ? (
             <span className="flex min-h-11 items-center px-3 text-sm text-muted">
               <PendingLabel>Checking plan</PendingLabel>
             </span>
@@ -1121,26 +1121,26 @@ function JobMatchCard({
               Complete profile
             </Link>
           ) : (
-            <button
-              type="button"
-              onClick={(event) => {
-                const upgradeTrigger = event.currentTarget;
-                if (status === "failed") onRetry(upgradeTrigger);
-                else onPrepare(upgradeTrigger);
-              }}
-              aria-label={`${status === "failed" ? "Try tailoring again for" : "Tailor a resume for"} ${job.title} at ${job.company_name}`}
-              className="flex min-h-11 items-center rounded-full border border-brand bg-surface px-4 text-center text-sm font-medium text-brand-ink transition-colors hover:bg-brand-soft"
+            /* A link, not a button, because the work now happens on the screen it opens: the press
+               no longer starts a generation here and leaves the student watching a card. The failed
+               label is the same control under a different word, since the reason above it already
+               said what stopped. */
+            <Link
+              href={`/dashboard/applications?job=${job.id}&intent=tailor`}
+              /* The press claims the day-scoped build lock even though the build happens on the next
+                 screen, because the lock is what stops one job being built twice and paying for it
+                 twice. The background prewarm loop skips any job whose lock is held, and it can
+                 otherwise reach this job in two ways the old button could not: in the few hundred
+                 milliseconds between this press and the next screen's request, and again on every
+                 return to Home while the screen it opened is still working. The lock ages out on its
+                 own after ten minutes, so a press that never navigates costs nothing but a skipped
+                 prewarm. */
+              onClick={() => claimPrewarmLock(job.id)}
+              aria-label={`${status === "failed" ? "Try this application again" : "Start an application"} for ${job.title} at ${job.company_name}`}
+              className="flex min-h-11 items-center rounded-full border border-brand bg-surface px-5 text-center text-sm font-medium text-brand-ink transition-colors hover:bg-brand-soft"
             >
-              {status === "failed" ? "Try tailoring again" : "Tailor resume"}
-            </button>
-          )}
-          {packetAction ? (
-            /* One packet, one action. The destination owns the full review and next human step, so
-               a second Review control here only makes the student choose between two links to the
-               same application. */
-            <Link href={`${packetAction.href}&intent=apply`} aria-label={`${packetAction.label}: ${job.title} at ${job.company_name}`} className="flex min-h-11 items-center rounded-full border border-brand bg-surface px-5 text-center text-sm font-medium text-brand-ink transition-colors hover:bg-brand-soft">{packetAction.label}</Link>
-          ) : (
-            <Link href={`/dashboard/applications?job=${job.id}&intent=fill`} aria-label={`Fill an application for ${job.title} at ${job.company_name}`} className="flex min-h-11 items-center rounded-full border border-brand bg-surface px-5 text-center text-sm font-medium text-brand-ink transition-colors hover:bg-brand-soft">Fill application</Link>
+              {status === "failed" ? "Try again" : "Start application"}
+            </Link>
           )}
         </div>
       </div>

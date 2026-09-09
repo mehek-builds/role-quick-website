@@ -17,11 +17,16 @@ test("a card with no packet offers a control that starts one", async () => {
   const home = await readFile(homeUrl, "utf8");
 
   assert.match(home, /async function preparePacket\([\s\S]*?jobId: string,[\s\S]*?initiation: ResumeGenerationInitiation,[\s\S]*?upgradeTrigger: HTMLElement \| null = null/);
-  assert.match(home, /onPrepare=\{\(upgradeTrigger\) => void preparePacket\(job\.id, "explicit_click", upgradeTrigger\)\}/);
-  // The idle branch is a real button carrying the handler, not text.
-  assert.match(home, /onClick=\{\(event\) => \{\s*const upgradeTrigger = event\.currentTarget;\s*if \(status === "failed"\) onRetry\(upgradeTrigger\);\s*else onPrepare\(upgradeTrigger\);/);
-  assert.match(home, /\{status === "failed" \? "Try tailoring again" : "Tailor resume"\}/);
-  assert.match(home, /intent=fill[\s\S]{0,250}>Fill application<\/Link>/);
+  /* The asking is now ONE control, and it opens the screen that does the work rather than starting
+     a generation the student then watches from a card. "Tailor resume" beside "Fill application"
+     made them name a step before seeing it; tailoring is the first step of applying, so the two
+     collapsed into "Start application", and the screen it opens owns the resume, the coloured
+     comparison against the posting, the fill and the send in that order. */
+  assert.match(home, /href=\{`\/dashboard\/applications\?job=\$\{job\.id\}&intent=tailor`\}/);
+  assert.match(home, /\{status === "failed" \? "Try again" : "Start application"\}/);
+  assert.match(home, /aria-label=\{`\$\{status === "failed" \? "Try this application again" : "Start an application"\} for \$\{job\.title\} at \$\{job\.company_name\}`\}/);
+  // One action beside Skip, so a card can never grow a second word for the same thing again.
+  assert.doesNotMatch(home, /onPrepare|onRetry/);
 });
 
 test("the five card states stay distinct and only one claims work is happening", async () => {
@@ -44,17 +49,27 @@ test("the five card states stay distinct and only one claims work is happening",
   assert.match(home, /status === "preparing" \? \(\s*<span[^>]*>\s*<PendingLabel>Getting ready<\/PendingLabel>/);
 });
 
-test("retry reissues the request instead of nudging a loop that may not be running", async () => {
+test("a paused card retries through the same control, not a second one", async () => {
   const home = await readFile(homeUrl, "utf8");
 
-  assert.match(home, /function retryPreparation\(jobId: string, upgradeTrigger: HTMLElement \| null\) \{[\s\S]*?void preparePacket\(jobId, "explicit_click", upgradeTrigger\);/);
+  /* Retry used to be its own handler reissuing the generation from Home. There is no generation to
+     reissue here any more: the paused card is the same single link under a different word, and the
+     screen it opens builds the resume and reports its own failure beside the control that caused
+     it. The reason for the pause is still printed on the card, so "Try again" is never the only
+     thing a student is told. */
+  assert.match(home, /status === "failed" && preparationError && \([\s\S]*?text-warn">\{preparationError\}/);
+  assert.match(home, /\{status === "failed" \? "Try again" : "Start application"\}/);
+  assert.doesNotMatch(home, /function retryPreparation/);
   // The old retry bumped a counter so the prewarm effect would re-run. That effect returns early
   // for every student without automatic submission, so retry did nothing at all for them.
   assert.doesNotMatch(home, /setPrewarmRetry/);
   assert.doesNotMatch(home, /prewarmRetry/);
 });
 
-test("explicit and paid-hover tailoring share one lock so a job is never built twice", async () => {
+/* Home no longer generates from a click, so the lock's remaining job is keeping paid hover and the
+   background prewarm loop from building one job twice. Every piece of it is still pinned: hover is
+   the one path on this page that can still spend a generation. */
+test("paid hover and background tailoring share one lock so a job is never built twice", async () => {
   const home = await readFile(homeUrl, "utf8");
 
   assert.match(home, /function claimPrewarmLock\(jobId: string\): void/);
@@ -67,7 +82,6 @@ test("explicit and paid-hover tailoring share one lock so a job is never built t
   assert.match(home, /preparingJobs\.includes\(jobId\) \|\| \(!qaMode && prewarmLockHeld\(jobId\)\)/);
   assert.match(home, /async function preparePacket[\s\S]*?claimPrewarmLock\(jobId\);/);
   assert.match(home, /\} finally \{\s*releasePrewarmLock\(jobId\);/);
-  assert.match(home, /function retryPreparation\(jobId: string, upgradeTrigger: HTMLElement \| null\) \{\s*releasePrewarmLock\(jobId\);/);
 });
 
 test("the in-flight mark is always cleared", async () => {
@@ -105,7 +119,6 @@ test("only paid opt-in accounts generate from hover or background work", async (
   assert.doesNotMatch(home, /autoSubmitEnabled \? rankedJobs\.slice/);
   assert.match(home, /resumeGenerationBody\(completeJob, identity, applicationProfile, "hover_prewarm", operationId\)/);
   assert.match(home, /resumeGenerationBody\(completeJob, identity, applicationProfile, initiation, operationId\)/);
-  assert.match(home, /onPrepare=\{\(upgradeTrigger\) => void preparePacket\(job\.id, "explicit_click", upgradeTrigger\)\}/);
   assert.match(home, /onHoverPrepare=\{\(\) => void preparePacket\(job\.id, "hover_prewarm"\)\}/);
 });
 
@@ -121,7 +134,6 @@ test("every website resume generation request declares its initiation", async ()
   );
   assert.match(home, /resumeGenerationBody\(completeJob, identity, applicationProfile, "hover_prewarm", operationId\)/);
   assert.match(home, /resumeGenerationBody\(completeJob, identity, applicationProfile, initiation, operationId\)/);
-  assert.match(home, /onPrepare=\{\(upgradeTrigger\) => void preparePacket\(job\.id, "explicit_click", upgradeTrigger\)\}/);
   assert.match(home, /onHoverPrepare=\{\(\) => void preparePacket\(job\.id, "hover_prewarm"\)\}/);
   assert.match(applications, /"\/resume\/generate", \{[\s\S]*?initiation: "explicit_click"/);
 });
