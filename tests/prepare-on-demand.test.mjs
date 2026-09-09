@@ -23,7 +23,7 @@ test("a card with no packet offers a control that starts one", async () => {
      collapsed into "Start application", and the screen it opens owns the resume, the coloured
      comparison against the posting, the fill and the send in that order. */
   assert.match(home, /href=\{`\/dashboard\/applications\?job=\$\{job\.id\}&intent=tailor`\}/);
-  assert.match(home, /\{status === "failed" \? "Try again" : "Start application"\}/);
+  assert.match(home, /\{status === "failed" \? "Try again" : "Start"\}/);
   assert.match(home, /aria-label=\{`\$\{status === "failed" \? "Try this application again" : "Start an application"\} for \$\{job\.title\} at \$\{job\.company_name\}`\}/);
   // One action beside Skip, so a card can never grow a second word for the same thing again.
   assert.doesNotMatch(home, /onPrepare|onRetry/);
@@ -58,7 +58,7 @@ test("a paused card retries through the same control, not a second one", async (
      it. The reason for the pause is still printed on the card, so "Try again" is never the only
      thing a student is told. */
   assert.match(home, /status === "failed" && preparationError && \([\s\S]*?text-warn">\{preparationError\}/);
-  assert.match(home, /\{status === "failed" \? "Try again" : "Start application"\}/);
+  assert.match(home, /\{status === "failed" \? "Try again" : "Start"\}/);
   assert.doesNotMatch(home, /function retryPreparation/);
   // The old retry bumped a counter so the prewarm effect would re-run. That effect returns early
   // for every student without automatic submission, so retry did nothing at all for them.
