@@ -1,4 +1,4 @@
-import type { JobsPage } from "@/lib/api";
+import type { JobsPage, Targeting } from "@/lib/api";
 
 /**
  * Fixture rows for `/dashboard/jobs?qa=1`, matching the pattern the Applications page already uses.
@@ -229,3 +229,24 @@ export function qaJobsPage(): JobsPage {
 export const QA_APPLIED: Array<{ id: string; job_id: string | null; company: string; role: string; stage: string }> = [
   { id: "qa-application-1", job_id: "qa-1", company: "Ramp", role: "Product Analyst", stage: "applied" },
 ];
+
+/**
+ * The fixture account's saved targeting, matching Home's QA_TARGETING. Only `locations` matters to
+ * this page today: it feeds jobRowPlace's narrowing (see app/dashboard/jobs/page.tsx). None of the
+ * rows above are multi-office, so narrowing has nothing to remove and every rendered row is
+ * unaffected - narrowPostingLocation returns a single-office string untouched. That keeps this
+ * fixture's pixels identical to the approved visual baselines (tests/visual-baselines/dashboard/)
+ * while still exercising the real getTargeting() -> jobRowPlace wiring end to end. The narrowing
+ * itself, including a genuinely multi-office posting, is covered directly by
+ * features/jobs/domain/job-rows.test.mts, which is not screenshotted and so has no baseline to
+ * keep in sync.
+ */
+export const QA_TARGETING: Targeting = {
+  categories: ["Software engineering", "Product engineering"],
+  titles: ["Software Engineer", "Product Engineer"],
+  role_types: ["internship", "new-grad"],
+  locations: ["San Francisco", "New York"],
+  remote_only: false,
+  primary_period: "Summer 2027",
+  backup_period: null,
+};

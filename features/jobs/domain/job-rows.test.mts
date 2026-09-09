@@ -1,6 +1,6 @@
 import test, { describe } from "node:test";
 import assert from "node:assert/strict";
-import { applicationKey, buildAppliedIndex, companyDomain, companyDomainForRow, countNewToday, isAppliedStage, isJobApplied, jobApplicationActionLabel, jobApplicationDetailHref, jobApplicationFor, jobApplicationHref } from "./job-rows.ts";
+import { applicationKey, buildAppliedIndex, companyDomain, companyDomainForRow, countNewToday, isAppliedStage, isJobApplied, jobApplicationActionLabel, jobApplicationDetailHref, jobApplicationFor, jobApplicationHref, jobRowPlace } from "./job-rows.ts";
 import { isQaRenderFor } from "../../../lib/qa-mode.ts";
 
 describe("companyDomain", () => {
@@ -368,6 +368,59 @@ describe("countNewToday", () => {
 
   test("an unparseable timestamp is not counted", () => {
     assert.equal(countNewToday([job("nonsense")]), 0);
+  });
+});
+
+describe("jobRowPlace", () => {
+  const MULTI_OFFICE = "Austin, Texas, United States; South San Francisco, California, United States";
+
+  test("narrows a multi-office posting to the office the student asked for", () => {
+    assert.equal(
+      jobRowPlace({ location: MULTI_OFFICE, remote: false }, ["South San Francisco"]),
+      "South San Francisco, California, United States",
+    );
+  });
+
+  test("falls back to the full field when no saved location narrows it", () => {
+    assert.equal(jobRowPlace({ location: MULTI_OFFICE, remote: false }, []), MULTI_OFFICE);
+    assert.equal(jobRowPlace({ location: MULTI_OFFICE, remote: false }, ["Chicago"]), MULTI_OFFICE);
+  });
+
+  test("a single-office posting is unaffected", () => {
+    assert.equal(jobRowPlace({ location: "New York, NY", remote: false }, []), "New York, NY");
+  });
+
+  test("Remote is appended when the posting is remote-eligible and the narrowed text does not already say so", () => {
+    assert.equal(jobRowPlace({ location: "New York, NY", remote: true }, []), "New York, NY · Remote");
+    assert.equal(jobRowPlace({ location: null, remote: true }, []), "Remote");
+  });
+
+  test("no double 'Remote' when the raw location already says it", () => {
+    assert.equal(jobRowPlace({ location: "Remote", remote: true }, []), "Remote");
+  });
+
+  test("the suffix reads the NARROWED text, not the raw location", () => {
+    // Narrowing can drop a "Remote" segment the employer wrote when Remote is not itself a saved
+    // preference. Testing the RAW string for "remote" would still find it in text the row no longer
+    // shows and wrongly suppress the suffix, hiding the one indicator that segment left behind on a
+    // genuinely remote-eligible posting - the exact bug caught on Home's JobMatchCard.
+    const withRemoteOffice = "Austin, Texas, United States; Remote";
+    assert.equal(
+      jobRowPlace({ location: withRemoteOffice, remote: true }, ["Austin"]),
+      "Austin, Texas, United States · Remote",
+      "Remote was dropped from the shown text by narrowing, so the suffix must add it back",
+    );
+    // Remote itself named as a preference keeps the Remote segment, and the suffix stays silent
+    // because the narrowed text already carries the word.
+    assert.equal(
+      jobRowPlace({ location: withRemoteOffice, remote: true }, ["Remote"]),
+      "Remote",
+    );
+  });
+
+  test("empty and blank locations never print a bare separator", () => {
+    assert.equal(jobRowPlace({ location: null, remote: false }, []), "");
+    assert.equal(jobRowPlace({ location: "", remote: false }, []), "");
   });
 });
 
