@@ -2367,12 +2367,13 @@ test("native dashboard dialogs retain their top layer through exit and restore f
     documentsFixture: { documents: [STORED_DOCUMENT_FIXTURE] },
   });
   try {
-    /* Opened from Home's PlanStatus since 2026-09-08. This used to reach the dialog through the
-       Network page's own trigger; Network is gone, and what this test is actually about is the
-       dialog's top layer and focus restore, not the surface that opened it. Home's trigger asks
-       for ai_resume_tailoring, hence the different dialog name below. */
-    await page.goto(`${ORIGIN}/dashboard`, { waitUntil: "domcontentloaded" });
-    const upgradeTrigger = page.getByRole("button", { name: "See Litos+", exact: true });
+    /* Opened from Settings' plan tab since 2026-09-09, when Home's PlanStatus banner was removed.
+       This used to reach the dialog through the Network page's own trigger, then Home's PlanStatus;
+       both are gone, and what this test is actually about is the dialog's top layer and focus
+       restore, not the surface that opened it. This trigger asks for ai_resume_tailoring too, hence
+       the same dialog name below. */
+    await page.goto(`${ORIGIN}/dashboard/settings#plan`, { waitUntil: "domcontentloaded" });
+    const upgradeTrigger = page.getByRole("button", { name: "Choose Litos+", exact: true });
     await upgradeTrigger.waitFor({ state: "visible" });
     await upgradeTrigger.evaluate((node) => node.setAttribute("data-focus-probe", "upgrade-trigger"));
     await upgradeTrigger.click();

@@ -350,7 +350,7 @@ export function jobApplicationActionLabel(application: JobApplicationMatch): str
      send workflow, and the two labels below could not tell that apart from a run that genuinely
      stopped. The three statuses above prove work exists and keep their own words; this branch only
      catches the ones that never could. */
-  if (application.started === false) return "Start application";
+  if (application.started === false) return "Start";
   /* "Finish", not "Fix": these rows are healthy applications waiting on one human step, and an
      error verb on the only visible control made the whole board read as broken. */
   if (["needs_attention", "failed"].includes(application.submissionStatus ?? "")) return "Finish application";
