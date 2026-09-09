@@ -1034,46 +1034,13 @@ function DonePanel({ mode }: { mode: "canned" | "real" }) {
       >
         Get started, it&apos;s free
       </a>
-      {/* THE SCAN DOOR, in the slot the QR handoff used to occupy, and a control rather than the
-          caption that first replaced it. A sentence in muted 11px was doing the QR's job badly:
-          it described a capability at the moment the visitor was deciding, where the block it
-          replaced at least offered something to press.
-
-          Phone only, and honestly so. `capture` is what opens a camera, and it does nothing on a
-          desktop browser, so this button would promise a scan that the next screen cannot offer.
-          A desktop visitor gets the ask above, which is true on every device. */}
-      {/* Plain /login, not an intent parameter. An earlier draft passed `intent=scan`, which
-          nothing reads: /login handles only `litos-plus`, and onboarding derives its step from the
-          server on purpose rather than from a cursor a link can set. A parameter with no handler
-          reads to the next person like routing that exists somewhere, so it is worse than absent.
-          The distinction this button carries is a measurement, and try_scan_cta_click is where it
-          lives. The camera itself is one step in, on the resume screen, which is deliberate: the
-          roles question comes first so the flow does not ask for a file before asking what someone
-          is looking for. */}
-      <a
-        href="/login"
-        onClick={() => track("try_scan_cta_click", { source: "try" })}
-        className="flex w-full items-center justify-center gap-2 rounded-full border border-control-border bg-surface px-5 py-2.5 text-center text-sm font-medium text-ink transition-colors hover:border-ink sm:hidden"
-      >
-        <TryCameraGlyph />
-        Scan your resume to get started
-      </a>
-      <p className="text-center text-[11px] leading-5 text-muted sm:hidden">
-        No laptop needed. Photograph the page and Litos reads it.
-      </p>
+      {/* ONE ASK, and the panel ends here. A scan button and a supporting line sat under this
+          button for part of 2026-09-09 (Mehek's call to remove them the same day): the demo ends
+          on a decision, and a second control beside the primary one splits it while saying
+          something the visitor can just as easily meet on the next screen. The camera is still
+          there, one step into onboarding, where it is the thing being offered rather than a
+          promise made in advance. */}
     </div>
-  );
-}
-
-/* Matches the glyph on the onboarding capture control, so the button a visitor presses here and
-   the one they meet after signing up read as the same door. Drawn rather than imported: this file
-   carries no icon set, and one outline is not worth a dependency. */
-function TryCameraGlyph() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M3 8.5A1.5 1.5 0 0 1 4.5 7h2.2l1.1-1.8A1 1 0 0 1 8.7 4.7h6.6a1 1 0 0 1 .9.5L17.3 7h2.2A1.5 1.5 0 0 1 21 8.5v9A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5z" />
-      <circle cx="12" cy="13" r="3.4" />
-    </svg>
   );
 }
 
