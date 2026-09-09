@@ -1139,7 +1139,7 @@ function JobMatchCard({
               aria-label={`${status === "failed" ? "Try this application again" : "Start an application"} for ${job.title} at ${job.company_name}`}
               className="flex min-h-11 items-center rounded-full border border-brand bg-surface px-5 text-center text-sm font-medium text-brand-ink transition-colors hover:bg-brand-soft"
             >
-              {status === "failed" ? "Try again" : "Start application"}
+              {status === "failed" ? "Try again" : "Start"}
             </Link>
           )}
         </div>

@@ -505,7 +505,7 @@ test("overview keeps three application states and sends matches to the review sc
   /* ONE action per card. "Tailor resume" beside "Fill application" made the student name the step
      before they had seen it; both are now the single "Start application", which opens the tailoring
      screen and hands the fill and the send to it in order. */
-  assert.match(overview, /\{status === "failed" \? "Try again" : "Start application"\}/);
+  assert.match(overview, /\{status === "failed" \? "Try again" : "Start"\}/);
   assert.match(overview, /href=\{`\/dashboard\/applications\?job=\$\{job\.id\}&intent=tailor`\}/);
   assert.doesNotMatch(shippedCode(overview), /"Tailor resume"|>Fill application<\/Link>/);
 
