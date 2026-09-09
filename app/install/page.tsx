@@ -5,9 +5,12 @@ import { useSearchParams } from "next/navigation";
 import { STORE_URL } from "@/lib/config";
 import { track } from "@/lib/analytics";
 
-/* Tracked install redirect. The mobile send-link QR encodes /install?src=qr:
-   a phone can't observe its own QR being scanned, so the desktop-side landing
-   here is what counts the scan (design doc 2026-07-08). */
+/* Tracked install redirect (design doc 2026-07-08). It was built to count QR
+   scans, which a phone cannot observe on its own screen; that QR is gone
+   (MobileSendLink, deleted 2026-09-09), so ?src=qr no longer has a producer.
+   The route stays because it is still the off-site store fallback: billing's
+   return page links here as "Extension help", and anyone who saved or shared
+   the old link still lands on it. `src` now records whoever sent them. */
 function InstallRedirect() {
   const params = useSearchParams();
   useEffect(() => {

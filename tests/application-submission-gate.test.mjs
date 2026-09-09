@@ -99,7 +99,7 @@ test("saved answers honor standing consent while recovery remains in the dashboa
   // The button was "Prepare application" and the bar under it ran to nineteen words about
   // "automation permission". Both were rewritten in the 2026-07-26 UX pass; the gate they
   // describe is unchanged, so the assertions follow the new wording.
-  assert.match(dashboard, /"Review and fill"/);
+  assert.match(dashboard, /"Fill the application"/);
   assert.match(dashboard, /review\?\.status === "ready_for_final_approval"[\s\S]{0,100}"Review and send"/);
   assert.match(dashboard, /"Approve packet and fill form"/);
   assert.match(dashboard, /Litos fills the form with your saved answers and this resume/);
@@ -505,7 +505,7 @@ test("overview keeps three application states and sends matches to the review sc
   /* ONE action per card. "Tailor resume" beside "Fill application" made the student name the step
      before they had seen it; both are now the single "Start application", which opens the tailoring
      screen and hands the fill and the send to it in order. */
-  assert.match(overview, /\{status === "failed" \? "Try again" : "Start application"\}/);
+  assert.match(overview, /\{status === "failed" \? "Try again" : "Start"\}/);
   assert.match(overview, /href=\{`\/dashboard\/applications\?job=\$\{job\.id\}&intent=tailor`\}/);
   assert.doesNotMatch(shippedCode(overview), /"Tailor resume"|>Fill application<\/Link>/);
 

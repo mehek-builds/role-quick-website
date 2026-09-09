@@ -2367,12 +2367,13 @@ test("native dashboard dialogs retain their top layer through exit and restore f
     documentsFixture: { documents: [STORED_DOCUMENT_FIXTURE] },
   });
   try {
-    /* Opened from Home's PlanStatus since 2026-09-08. This used to reach the dialog through the
-       Network page's own trigger; Network is gone, and what this test is actually about is the
-       dialog's top layer and focus restore, not the surface that opened it. Home's trigger asks
-       for ai_resume_tailoring, hence the different dialog name below. */
-    await page.goto(`${ORIGIN}/dashboard`, { waitUntil: "domcontentloaded" });
-    const upgradeTrigger = page.getByRole("button", { name: "See Litos+", exact: true });
+    /* Opened from Settings' plan tab since 2026-09-09, when Home's PlanStatus banner was removed.
+       This used to reach the dialog through the Network page's own trigger, then Home's PlanStatus;
+       both are gone, and what this test is actually about is the dialog's top layer and focus
+       restore, not the surface that opened it. This trigger asks for ai_resume_tailoring too, hence
+       the same dialog name below. */
+    await page.goto(`${ORIGIN}/dashboard/settings#plan`, { waitUntil: "domcontentloaded" });
+    const upgradeTrigger = page.getByRole("button", { name: "Choose Litos+", exact: true });
     await upgradeTrigger.waitFor({ state: "visible" });
     await upgradeTrigger.evaluate((node) => node.setAttribute("data-focus-probe", "upgrade-trigger"));
     await upgradeTrigger.click();
@@ -2988,7 +2989,7 @@ test("A completed six-answer session yields to a new operational blocker after f
     await reviewApplication.waitFor({ state: "visible", timeout: 10_000 });
     assert.equal(await page.getByText("6 of 6", { exact: true }).count(), 1);
     await reviewApplication.click();
-    await page.getByRole("button", { name: "Review and fill", exact: true }).click();
+    await page.getByRole("button", { name: "Fill the application", exact: true }).click();
     await page.getByText("Exact audited PDF loaded, 1 page.", { exact: true }).waitFor({ state: "visible", timeout: 25_000 });
     await page.getByRole("button", { name: "Approve packet and fill form", exact: true }).click();
 
@@ -4085,7 +4086,7 @@ test("Home keeps one state-aware page CTA above the job actions", async () => {
       const pageCta = [...document.querySelectorAll('main a[href="/dashboard/applications?state=ready"]')]
         .find((link) => link.textContent?.includes("ready application"));
       /* A card whose job already has a packet prints that packet's own action words (Finish
-         application / Review and fill), so the primary is found by its intent href first and the
+         application / Fill the application), so the primary is found by its intent href first and the
          no-packet label second. */
       const cardCta = card?.querySelector('a[href*="intent=apply"], a[aria-label^="Start an application for"]');
       if (!card || !pageCta || !cardCta) return null;

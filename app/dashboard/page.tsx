@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ensureExtensionSession } from "@/lib/extension-bridge";
+import { narrowPostingLocation } from "@/lib/posting-location";
 import {
   api,
   getToken,
@@ -48,7 +49,6 @@ import { targetingHeadline } from "@/lib/periods";
 import { userFacingError } from "@/lib/user-facing-error";
 import { waitingApplications } from "@/lib/captcha-queue";
 import { WaitingOnYou } from "@/components/app/WaitingOnYou";
-import { PlanStatus } from "@/components/billing/PlanStatus";
 import { useBilling } from "@/components/billing/BillingProvider";
 import { isStructuredUpgradeDenial } from "@/features/billing";
 import { completeOperationId, operationIdFor } from "@/lib/operation-id";
@@ -793,8 +793,6 @@ export default function Home() {
         </div>
       </section>
 
-      <PlanStatus compact />
-
       <section aria-labelledby="matches-heading" className="space-y-3">
         <div className="flex items-end justify-between gap-4">
           <div>
@@ -853,6 +851,7 @@ export default function Home() {
               hoverGenerationEnabled={canUse("hover_generation") === true}
               onDismiss={() => dismiss(job.id)}
               onHoverPrepare={() => void preparePacket(job.id, "hover_prewarm")}
+              preferredLocations={targeting?.locations ?? []}
             />
           ))}
         </div>
@@ -1002,6 +1001,7 @@ function JobMatchCard({
   canPrepare,
   onDismiss,
   onHoverPrepare,
+  preferredLocations,
 }: {
   job: RankedJob;
   match: JobMatch | null | undefined;
@@ -1017,6 +1017,9 @@ function JobMatchCard({
   canPrepare: boolean;
   onDismiss: () => void;
   onHoverPrepare: () => void;
+  /** The account's saved targeting locations, for narrowing a multi-office posting's location line
+      down to the offices the student actually asked for. See lib/posting-location.ts. */
+  preferredLocations: readonly string[];
 }) {
   const status = packetAction ? (packetAction.stopped ? "needs-you" : "ready") : preparing ? "preparing" : preparationFailed ? "failed" : "idle";
   return (
@@ -1071,8 +1074,19 @@ function JobMatchCard({
           {job.title}
         </h2>
         <p className="mt-1 truncate text-small text-muted">
-          {job.location ?? (job.remote ? "Remote" : "Location not listed")}
-          {job.remote && !/remote/i.test(job.location ?? "") ? " · Remote" : ""}
+          {/* The suffix reads the NARROWED text, not the raw `job.location`: narrowing can drop a
+              "Remote" segment the employer wrote (it is only kept when the student named Remote as
+              a preference), and checking the raw string afterward would then find "remote" in text
+              the card no longer shows, suppressing the one indicator that segment left behind. */}
+          {(() => {
+            const shown = narrowPostingLocation(job.location, preferredLocations);
+            return (
+              <>
+                {shown ?? (job.remote ? "Remote" : "Location not listed")}
+                {job.remote && !/remote/i.test(shown ?? "") ? " · Remote" : ""}
+              </>
+            );
+          })()}
         </p>
         <PayLine job={job} />
         {/* The preference-fit line ("You asked for ...") used to sit here. It repeated the saved
@@ -1139,7 +1153,7 @@ function JobMatchCard({
               aria-label={`${status === "failed" ? "Try this application again" : "Start an application"} for ${job.title} at ${job.company_name}`}
               className="flex min-h-11 items-center rounded-full border border-brand bg-surface px-5 text-center text-sm font-medium text-brand-ink transition-colors hover:bg-brand-soft"
             >
-              {status === "failed" ? "Try again" : "Start application"}
+              {status === "failed" ? "Try again" : "Start"}
             </Link>
           )}
         </div>

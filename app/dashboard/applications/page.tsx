@@ -1022,7 +1022,7 @@ function Applications() {
   const [screen, setScreen] = useState<Screen>("review");
   /* The route the applicant chose, available synchronously to a poll that started on the prior
      screen. React state alone is one render behind the click: a submission fetch begun on portal
-     can resolve after Review and fill moves to review, see the old portal closure, and route the
+     can resolve after "Fill the application" moves to review, see the old portal closure, and route the
      applicant straight back to the same blocker card. Every screen write goes through
      moveToScreen, so this ref and the rendered state have one writer and cannot drift. */
   const screenRef = useRef<Screen>("review");
@@ -1836,7 +1836,7 @@ function Applications() {
     try {
       const currentAudit = await api<PacketAuditResponse>(`/applications/${requestedId}/packet-audit`, { method: "POST" });
       const refreshed = revalidateAcknowledgedPacketEvidence(currentEvidence, requestedId, currentAudit, Date.now());
-      /* Review and fill clears this exact evidence before navigating. A revalidation that began
+      /* "Fill the application" clears this exact evidence before navigating. A revalidation that began
          before that click must not install its answer after the click, even though the selected
          application id still matches. Identity covers a newer audit on the same application, and
          screenRef covers deliberate navigation away from the poll-owned screens. */
@@ -2038,7 +2038,7 @@ function Applications() {
        dropped. */
     const terminal = result.review.status === "submitted" || result.review.status === "failed";
     if (approveInFlight.current !== null && !terminal) return;
-    /* The fetch may have started before Review and fill left the portal. Keep its canonical data
+    /* The fetch may have started before "Fill the application" left the portal. Keep its canonical data
        updates above, but do not let its old needs_attention status reverse the applicant's newer
        navigation. A receipt remains authoritative even if it arrives after she changed screens. */
     const pollMayRoute = screenRef.current === "submitting"
@@ -3173,7 +3173,7 @@ function Applications() {
   const reviewPrimaryLabel = !activePacketEvidence
     ? review?.status === "ready_for_final_approval"
       ? "Review and send"
-      : "Review and fill"
+      : "Fill the application"
     : packetEvidenceNeedsFreshAudit
       ? "Audit again"
       : !exactPacketPdfReady
@@ -7772,7 +7772,7 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, metad
               >
                 {metadataRefreshNeedsPacketReview
                   ? "Review packet first"
-                  : refreshingMetadata ? "Reviewing and filling..." : "Review and fill again"}
+                  : refreshingMetadata ? "Filling the application..." : "Fill the application again"}
               </Button>
               <p id="question-metadata-refresh-help" className="text-small leading-6 text-muted">
                 {metadataRefreshDisabled
@@ -8496,8 +8496,8 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
      differ (posting migrations, a portal_url repaired after the fact), and while an unverified send
      is open, "the exact page this stopped on" is the only one that answers her question. */
   /* `portal_supported: true` is the server's answer that this packet belongs to a family Litos can
-     fill itself. A managed run may still stop without a surviving browser session. Review and fill
-     starts a fresh managed run from the exact packet and saved answers. */
+     fill itself. A managed run may still stop without a surviving browser session. "Fill the
+     application" starts a fresh managed run from the exact packet and saved answers. */
   const staysInsideLitos = review.portal_supported === true;
   const canFinishInDashboard = Boolean(handoffUrl);
   const rowDashboardPrimary = canFinishInDashboard;
@@ -8975,7 +8975,7 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
                             ? "Review packet first"
                             : questionMetadataRefreshing
                               ? <PendingLabel onColor>Reading company form...</PendingLabel>
-                              : "Review and fill again"}
+                              : "Fill the application again"}
                         </Button>
                         <p className="text-label leading-5 text-muted">
                           Litos never turns an unread employer field into a guessed text box.
@@ -9027,7 +9027,7 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
          * a yes/no. The screen stated a requirement and offered nothing that could meet it.
          *
          * SUPPRESSING THE REST IS STILL RIGHT. Litos may already have reached this employer, so
-         * Try again and Review and fill wait for her answer rather than risk a second application.
+         * Try again and "Fill the application" wait for her answer rather than risk a second application.
          * A document row is the one outstanding row whose control sends nothing at all: it writes
          * `spec._documents` and the file goes nowhere until a send she presses. See
          * isDocumentChecklistItem for the distinction, held in one place so this list and the

@@ -19,7 +19,7 @@ const applications = await readFile(new URL("../app/dashboard/applications/page.
 
 test("a matched job offers exactly one action, and it opens the tailoring screen", () => {
   assert.match(home, /href=\{`\/dashboard\/applications\?job=\$\{job\.id\}&intent=tailor`\}/);
-  assert.match(home, /\{status === "failed" \? "Try again" : "Start application"\}/);
+  assert.match(home, /\{status === "failed" \? "Try again" : "Start"\}/);
 
   // Neither of the two old words survives anywhere the student can read them.
   const shipped = home.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");

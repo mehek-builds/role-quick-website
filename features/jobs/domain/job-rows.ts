@@ -342,7 +342,7 @@ export function jobApplicationActionLabel(application: JobApplicationMatch): str
   if (application.submissionStatus === "awaiting_security_code") return "Enter code";
   if (application.submissionStatus === "ready_for_final_approval") return "Review and send";
   if (["resume_ready", "questions_ready", "ready_to_submit"].includes(application.submissionStatus ?? "")) {
-    return "Review and fill";
+    return "Fill the application";
   }
   /* NOTHING HAS BEEN BEGUN, so nothing can be finished or continued. Every row and card on Jobs and
      Home offered "Finish application" over postings the student had never opened (measured
@@ -350,7 +350,7 @@ export function jobApplicationActionLabel(application: JobApplicationMatch): str
      send workflow, and the two labels below could not tell that apart from a run that genuinely
      stopped. The three statuses above prove work exists and keep their own words; this branch only
      catches the ones that never could. */
-  if (application.started === false) return "Start application";
+  if (application.started === false) return "Start";
   /* "Finish", not "Fix": these rows are healthy applications waiting on one human step, and an
      error verb on the only visible control made the whole board read as broken. */
   if (["needs_attention", "failed"].includes(application.submissionStatus ?? "")) return "Finish application";

@@ -89,7 +89,7 @@ test("the page imports the shared decision instead of re-deriving it from the wi
   assert.match(pageSource, /import \{[^}]*resumeContactStaleNotice[^}]*\} from "@\/features\/applications"/);
 });
 
-/* THE TWO SCREENS, ONE DECISION. The packet review screen (View exact PDF / Review and fill / Edit
+/* THE TWO SCREENS, ONE DECISION. The packet review screen (View exact PDF / Fill the application / Edit
  * resume) computes it off `selectedSubmission`; the Review-and-send screen's own checklist
  * (SubmissionScreen) computes it off its own `submission` prop. Two calls are expected and correct -
  * each screen owns its own data - but both call the SAME function, which is the property this test

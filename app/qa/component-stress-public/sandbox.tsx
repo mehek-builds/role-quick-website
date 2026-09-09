@@ -14,7 +14,6 @@ import {
   ShimmerRows,
 } from "@/components/app/ui";
 import { InstallLink } from "@/components/InstallLink";
-import { MobileSendLink } from "@/components/MobileSendLink";
 import { SignInLink } from "@/components/SignInLink";
 import { SiteFooter } from "@/components/SiteFooter";
 import { QuestionsStep } from "@/components/start/QuestionsStep";
@@ -334,10 +333,6 @@ function PublicLinkMatrix() {
             {LONG_TEXT}
           </InstallLink>
         </div>
-      </Scenario>
-
-      <Scenario id="mobile-send-link" title="Mobile install handoff" note="Use a browser clipboard stub to exercise success and permission denial.">
-        <MobileSendLink source="qa-component-stress" />
       </Scenario>
     </div>
   );

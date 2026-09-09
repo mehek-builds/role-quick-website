@@ -31,7 +31,6 @@ const CONTRACT_EXCLUDED_FILES = new Set([
 
 const RAW_COLOR_EXCLUDED_FILES = new Set([
   ...CONTRACT_EXCLUDED_FILES,
-  "components/MobileSendLink.tsx",
   "components/try/TrySimulator.tsx",
 ]);
 
@@ -89,11 +88,9 @@ test("action text and control boundaries meet WCAG contrast contracts", async ()
 
 test("shared buttons use accessible action tokens and a narrow danger variant", async () => {
   const source = await readFile(path.join(ROOT, "components/app/Button.tsx"), "utf8");
-  const mobileSendLink = await readFile(path.join(ROOT, "components/MobileSendLink.tsx"), "utf8");
   assert.match(source, /primary:\s*"[^"]*bg-action[^"]*text-action-ink/);
   assert.match(source, /danger:\s*"[^"]*bg-danger[^"]*text-white/);
   assert.match(source, /secondary:\s*"[^"]*border-control-border/);
-  assert.match(mobileSendLink, /Copy install link[\s\S]*?border-control-border|border-control-border[\s\S]*?Copy install link/);
 });
 
 test("production UI does not use low-contrast brand blue for small action text", async () => {
