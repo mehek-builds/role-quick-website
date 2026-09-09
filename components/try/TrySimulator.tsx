@@ -1022,7 +1022,11 @@ function DonePanel({ mode }: { mode: "canned" | "real" }) {
           tests/e2e/narrow-viewport-actions.spec.mjs), and onboarding now takes
           a photo of a resume, so a phone visitor needs no laptop at all. The
           extension handoff belongs after signup, where the account exists to
-          carry it, not in front of the ask. */}
+          carry it, not in front of the ask.
+
+          This was the component's last caller, so components/MobileSendLink.tsx
+          itself was deleted on 2026-09-09 along with its send_link_submit
+          event. */}
       <a
         href="/login"
         onClick={() => track("signin_click", { source: "try" })}
