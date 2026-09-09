@@ -949,7 +949,21 @@ test("the walk: every step in order, each one advancing the rail by one", async 
 
     /* ── Step 2, Your resume ───────────────────────────────────────────────*/
     visited.push(await screen("Your resume"));
-    await page.locator("input[type=file]").setInputFiles({
+
+    /* THE CAMERA DOOR, asserted on its attributes rather than its button, because the button is
+       sm:hidden and this walk runs wide: a phone photographs the resume and finishes setup on the
+       device it was taken with, which is the whole point of the control. `capture` is what makes a
+       phone open the rear camera instead of the photo library, so losing that attribute would
+       silently turn this back into a second file picker. */
+    const camera = page.locator("input[type=file][capture]");
+    assert.equal(await camera.count(), 1, "the resume step lost its camera capture input");
+    assert.equal(await camera.getAttribute("capture"), "environment");
+    assert.match(await camera.getAttribute("accept"), /^image\//);
+
+    /* :not([capture]) IS LOAD-BEARING, not tidiness. This screen carries two file inputs now, the
+       document picker and the camera above, so a bare input[type=file] is a strict-mode violation
+       that fails the whole walk. Pick the one this step is actually exercising. */
+    await page.locator("input[type=file]:not([capture])").setInputFiles({
       name: "fixture-resume.pdf",
       mimeType: "application/pdf",
       buffer: Buffer.from("%PDF-1.4 fixture, never parsed: the backend is stubbed"),

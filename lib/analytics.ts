@@ -53,6 +53,11 @@ type OnboardingEvent =
   | "onboarding_base_chosen"
   | "recent_experience_enrichment_added"
   | "recent_experience_enrichment_skipped"
+  /* The camera door on the resume step, which only exists on a phone. Counted at the open rather
+     than at the upload because the two questions are different: whether a student reaches for it
+     at all (does the ad's traffic want this?) and, against onboarding_step_done, whether a
+     photographed resume finishes setup as often as an uploaded one. */
+  | "resume_photo_capture_open"
   // The metrics ask on the base step. Added and skipped are tracked apart because they answer
   // different questions: whether students have the numbers, and whether the ask is worth its place.
   | "base_resume_metrics_added"

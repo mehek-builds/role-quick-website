@@ -18,10 +18,14 @@ import {
 import {
   APPLICATION_DOCUMENT_ACCEPT_ATTRIBUTE,
   APPLICATION_DOCUMENT_SIZE_LIMIT_LABEL,
+  MAX_RESUME_PHOTO_SOURCE_BYTES,
   OVERSIZE_DOCUMENT_HINT,
+  RESUME_PHOTO_CAPTURE_ACCEPT_ATTRIBUTE,
   formatDocumentBytes,
   validateApplicationDocument,
 } from "@/lib/document-size";
+import { isPhotoUpload, prepareResumePhoto } from "@/lib/resume-photo";
+import { track } from "@/lib/analytics";
 import { captchaConsentedAt, captchaConsentCompletion, captchaConsentGranted } from "@/lib/captcha-consent";
 import { CaptchaConsentControl } from "@/components/app/CaptchaConsentControl";
 import { ConsentAcknowledgementControl } from "@/components/app/ConsentAcknowledgementControl";
@@ -779,26 +783,70 @@ export function ResumeStep({
   /* Measured, not decorated. See the receipt comment below. */
   const [parseSeconds, setParseSeconds] = useState<number | null | undefined>(undefined);
   const inputRef = useRef<HTMLInputElement>(null);
+  /* A second input, not a second `accept` on the first: `capture` is what makes a phone open the
+     camera instead of the photo library, and an input carrying it would turn "Choose a file" into
+     a camera button on mobile. Two inputs is how one screen offers both doors. */
+  const cameraRef = useRef<HTMLInputElement>(null);
   const [showSaved, setShowSaved] = useState(() => !!savedProfile);
 
-  async function upload(f: File) {
+  async function upload(chosen: File) {
     if (busy) return;
     /* The shared gate (document-size.ts): the check happens before any bytes move, because past
-       the cap the platform rejects the body as an unreadable 413. */
-    const problem = validateApplicationDocument(f, {
-      accept: "pdf-or-docx",
-      typeMessage: "Use a PDF or DOCX file.",
-      oversizeHint: OVERSIZE_DOCUMENT_HINT,
-    });
-    if (problem) {
-      setError(problem);
+       the cap the platform rejects the body as an unreadable 413.
+
+       A PHOTO IS NOT SIZED HERE, and that ordering is the whole point. What the camera hands back
+       is routinely 8-12 MB, and the re-encode below turns that into a few hundred KB; measuring
+       the raw capture against the 4 MB upload cap would refuse the exact files this feature was
+       built to accept, and refuse them with "export a smaller file", advice that means nothing to
+       someone holding a camera. The cap is enforced on the re-encoded file instead, inside
+       prepareResumePhoto. The raw ceiling below is a different guard for a different failure: a
+       decode large enough to hang the tab. */
+    const photo = isPhotoUpload(chosen);
+    if (photo && chosen.size > MAX_RESUME_PHOTO_SOURCE_BYTES) {
+      setError("That photo is too large to open. Take a new one and try again.");
       return;
     }
+    if (!photo) {
+      const problem = validateApplicationDocument(chosen, {
+        accept: "resume-or-photo",
+        typeMessage: "Use a PDF or DOCX file, or a photo of your resume.",
+        oversizeHint: OVERSIZE_DOCUMENT_HINT,
+      });
+      if (problem) {
+        setError(problem);
+        return;
+      }
+    }
     setError(null);
-    setFile(f);
+    setFile(chosen);
     setBusy(true);
     let advancedCleanly = false;
     try {
+      /* Straightened, downscaled and re-encoded before it moves: see lib/resume-photo.ts for why
+         all three matter to whether the model can read the page. */
+      let f = chosen;
+      if (photo) {
+        const prepared = await prepareResumePhoto(chosen);
+        if (!prepared.ok) {
+          setError(
+            prepared.reason === "too_large"
+              ? "That photo is too large to send even after shrinking it. Take a new one and try again."
+              /* A browser that cannot decode the format at all, which in practice means a HEIC
+                 outside Safari. Naming the format is the difference between a student retaking
+                 the photo (which produces a JPEG, and works) and one concluding the feature is
+                 broken. */
+              : /\.(heic|heif)$/i.test(chosen.name) || chosen.type.includes("hei")
+                ? "That photo is in HEIC format, which this browser cannot open. Take a new one with the camera button, or upload a PDF instead."
+                : "That photo could not be opened. Take a new one with the camera button, or upload a PDF instead.",
+          );
+          setFile(null);
+          setBusy(false);
+          if (inputRef.current) inputRef.current.value = "";
+          if (cameraRef.current) cameraRef.current.value = "";
+          return;
+        }
+        f = prepared.file;
+      }
       const measured = await measureElapsed(() => uploadResume(f));
       const result = measured.value;
       setParseSeconds(measured.seconds);
@@ -826,7 +874,10 @@ export function ResumeStep({
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not read that resume.");
       setFile(null);
+      /* Both inputs, or retaking the same photo after a failure fires no change event and the
+         button goes dead. */
       if (inputRef.current) inputRef.current.value = "";
+      if (cameraRef.current) cameraRef.current.value = "";
     } finally {
       if (!advancedCleanly) setBusy(false);
     }
@@ -1002,7 +1053,7 @@ export function ResumeStep({
             {/* Label removed 2026-07-28: the button below it said "Choose a
                 file" and the step title says "Start with your resume." */}
             <p className="shrink-0 text-right font-mono text-xs text-muted">
-              PDF or DOCX<br />{APPLICATION_DOCUMENT_SIZE_LIMIT_LABEL} max
+              PDF, DOCX or a photo<br />{APPLICATION_DOCUMENT_SIZE_LIMIT_LABEL} max
             </p>
           </>
         )}
@@ -1010,7 +1061,24 @@ export function ResumeStep({
       <input
         ref={inputRef}
         type="file"
-        accept={APPLICATION_DOCUMENT_ACCEPT_ATTRIBUTE["pdf-or-docx"]}
+        accept={APPLICATION_DOCUMENT_ACCEPT_ATTRIBUTE["resume-or-photo"]}
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          e.target.value = "";
+          if (f) void upload(f);
+        }}
+      />
+      {/* capture="environment" is the whole feature: it opens the rear camera directly rather than
+          the photo library, so a student whose resume is open on a laptop can photograph the screen
+          and finish setup on the phone she is already holding. On a desktop browser the attribute is
+          ignored and this degrades to a picture picker, which is why the control below is hidden
+          there rather than offered as a webcam scan nobody wants. */}
+      <input
+        ref={cameraRef}
+        type="file"
+        accept={RESUME_PHOTO_CAPTURE_ACCEPT_ATTRIBUTE}
+        capture="environment"
         className="hidden"
         onChange={(e) => {
           const f = e.target.files?.[0];
@@ -1019,17 +1087,44 @@ export function ResumeStep({
         }}
       />
 
-      <div className="mt-6 flex items-center gap-3">
+      <div className="mt-6 flex flex-wrap items-center gap-3">
         <PrimaryButton onClick={() => {
           if (inputRef.current) inputRef.current.value = "";
           inputRef.current?.click();
         }} disabled={busy}>
           {busy ? <PendingLabel onColor>Reading...</PendingLabel> : "Choose a file"}
         </PrimaryButton>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => {
+            track("resume_photo_capture_open", { source: "start" });
+            if (cameraRef.current) cameraRef.current.value = "";
+            cameraRef.current?.click();
+          }}
+          className="inline-flex min-h-11 items-center gap-2 rounded-full border border-control-border bg-surface px-5 py-2.5 text-sm font-medium text-ink transition-colors hover:border-ink disabled:cursor-not-allowed disabled:opacity-50 sm:hidden"
+        >
+          <CameraGlyph />
+          Scan with camera
+        </button>
         <LaterLink onClick={onLater} />
       </div>
+      <p className="mt-3 text-xs leading-5 text-muted sm:hidden">
+        Resume open on your laptop? Photograph the screen and finish here.
+      </p>
 
     </StartShell>
+  );
+}
+
+/* Drawn rather than imported: this file carries no icon set, and one 14px outline is not worth a
+   dependency. aria-hidden because the button already says what it does. */
+function CameraGlyph() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 8.5A1.5 1.5 0 0 1 4.5 7h2.2l1.1-1.8A1 1 0 0 1 8.7 4.7h6.6a1 1 0 0 1 .9.5L17.3 7h2.2A1.5 1.5 0 0 1 21 8.5v9A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5z" />
+      <circle cx="12" cy="13" r="3.4" />
+    </svg>
   );
 }
 
