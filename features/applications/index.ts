@@ -15,6 +15,7 @@ export * from "./domain/dependent-questions";
 export * from "./domain/duplicate-postings";
 export * from "./domain/education-drift";
 export * from "./domain/employer-action-refusal";
+export * from "./domain/failed-run-sentence";
 export * from "./domain/jd-display";
 export * from "./domain/match-model";
 export * from "./domain/packet-audit-acknowledgement";

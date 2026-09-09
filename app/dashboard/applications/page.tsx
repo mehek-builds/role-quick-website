@@ -36,6 +36,7 @@ import { applicationFilterFromSearch, applicationFilterHeading, cleanJdCapture, 
 import { nextPreferredReadyPacket, packetMatchesJob } from "@/features/applications";
 import { REVIEW_ANSWERS_FROZEN_NOTICE, REVIEW_ANSWERS_REOPEN_NOTICE, REVIEW_ANSWERS_REOPEN_REFUSED, auditAnswerWrite, reviewAnswerEditRoute, reviewAnswersNeedSave, saveReviewAnswers, type ReviewAnswerSaveResponse } from "@/features/applications";
 import { saveAttentionAcknowledgement, type AttentionAcknowledgementResponse } from "@/features/applications";
+import { failedRunSentence } from "@/features/applications";
 import { duplicateBadge, duplicatePostingMarks, duplicatePostingNote } from "@/features/applications";
 import { isHttpsJobUrl, missingApplicationFields, type ApplicationDraftField } from "@/features/applications";
 import { COVER_LETTER_WAIT_MS, HANDOFF_CLOCK_TICK_MS, coverLetterBlocks, coverLetterGate, documentsFromSpecMarks, handoffWindowExpired, nextCoverLetterValue, nextSubmissionState, publishSubmissionEnvelope, reconcilePacketEvidenceAfterResumeRegeneration, reconcilePacketEvidenceWithSubmission, resumeContactRefreshBlockedReason, resumeContactStaleNotice, submissionAfterPacketAudit, submissionCoverLetterField, submissionReviewPacketIdentity, submissionSnapshotIsOlder, type ResumeContactStaleLike } from "@/features/applications";
@@ -8925,7 +8926,7 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
                 {review.status === "failed"
                   ? failedPacketAuditStale
                     ? "The exact company form changed. Review the current packet before Litos tries again."
-                    : userFacingError(review.submission_error, "Try again in a minute.")
+                    : failedRunSentence(review)
                   : awaitingSecurityCode
                     ? "This one is with the employer already. It needs the code they emailed before it counts as filed."
                     : "Check the preview, then send."}
