@@ -17,8 +17,7 @@ type TryEvent =
      and is still the store's number, but it is now earned only by the one
      button that sits under the demo, so the two are no longer measuring the
      same click under different names. */
-  | "signin_click"
-  | "send_link_submit";
+  | "signin_click";
 
 /* Onboarding funnel (/start).
  *
