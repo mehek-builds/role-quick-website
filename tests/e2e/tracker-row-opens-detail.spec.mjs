@@ -1025,7 +1025,7 @@ browserTest("Continue to send opens a packet when hydration finishes on its alre
 
     await continueButton.click();
 
-    await page.getByRole("button", { name: "Review and fill", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("button", { name: "Fill the application", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     assert.equal(new URL(page.url()).searchParams.get("application"), HYDRATED_READY.id, "the packet workspace and URL diverged");
     assert.equal(await continueButton.count(), 0, "the canonical summary stayed open after the explicit handoff");
     assert.deepEqual(pageErrors, []);

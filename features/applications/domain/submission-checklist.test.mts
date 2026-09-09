@@ -115,11 +115,11 @@ test("a stale packet is repaired inside Litos rather than assigned to the compan
 
   assert.equal(items.length, 1);
   assert.equal(items[0]?.actionKind, "restart");
-  assert.equal(items[0]?.action, "Review and fill");
+  assert.equal(items[0]?.action, "Fill the application");
   assert.equal(items[0]?.acknowledgeable, undefined, "an in-dashboard repair must not ask for an external attestation");
   assert.deepEqual(checklistRowControl(items[0]!, {}), {
     element: "restart",
-    label: "Review and fill",
+    label: "Fill the application",
     name: `Review the current packet and restart this application in Litos: ${label}`,
   });
 });

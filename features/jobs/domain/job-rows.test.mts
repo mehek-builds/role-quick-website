@@ -201,7 +201,7 @@ describe("buildAppliedIndex / isJobApplied", () => {
          the student has not opened. */
       started: true,
     });
-    assert.equal(jobApplicationActionLabel(application!), "Review and fill");
+    assert.equal(jobApplicationActionLabel(application!), "Fill the application");
     assert.equal(
       jobApplicationHref(application!),
       "/dashboard/applications?application=packet-ready&intent=apply",
@@ -223,9 +223,9 @@ describe("buildAppliedIndex / isJobApplied", () => {
     });
     assert.equal(jobApplicationActionLabel(match("awaiting_security_code")), "Enter code");
     assert.equal(jobApplicationActionLabel(match("needs_attention")), "Finish application");
-    assert.equal(jobApplicationActionLabel(match("resume_ready")), "Review and fill");
-    assert.equal(jobApplicationActionLabel(match("questions_ready")), "Review and fill");
-    assert.equal(jobApplicationActionLabel(match("ready_to_submit")), "Review and fill");
+    assert.equal(jobApplicationActionLabel(match("resume_ready")), "Fill the application");
+    assert.equal(jobApplicationActionLabel(match("questions_ready")), "Fill the application");
+    assert.equal(jobApplicationActionLabel(match("ready_to_submit")), "Fill the application");
     assert.equal(jobApplicationActionLabel(match("ready_for_final_approval")), "Review and send");
     assert.equal(jobApplicationActionLabel(match("filling")), "Continue application");
   });

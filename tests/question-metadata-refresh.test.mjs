@@ -49,7 +49,7 @@ test("the metadata recovery action is explicit, accessible, and stays beside its
   );
 
   assert.ok(metadata.length > 0, "could not isolate the metadata blocker panel");
-  assert.match(metadata, /"Review and fill again"/);
+  assert.match(metadata, /"Fill the application again"/);
   assert.match(metadata, /Litos opens the employer form, reads its current fields, and fills only your saved answers\./);
   assert.match(metadata, /disabled=\{refreshingMetadata \|\| metadataRefreshDisabled\}/);
   assert.match(metadata, /aria-busy=\{refreshingMetadata\}/);

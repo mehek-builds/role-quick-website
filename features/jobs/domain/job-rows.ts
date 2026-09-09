@@ -342,7 +342,7 @@ export function jobApplicationActionLabel(application: JobApplicationMatch): str
   if (application.submissionStatus === "awaiting_security_code") return "Enter code";
   if (application.submissionStatus === "ready_for_final_approval") return "Review and send";
   if (["resume_ready", "questions_ready", "ready_to_submit"].includes(application.submissionStatus ?? "")) {
-    return "Review and fill";
+    return "Fill the application";
   }
   /* NOTHING HAS BEEN BEGUN, so nothing can be finished or continued. Every row and card on Jobs and
      Home offered "Finish application" over postings the student had never opened (measured
