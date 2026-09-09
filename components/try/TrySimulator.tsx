@@ -35,6 +35,16 @@ const STEP_ORDER: Step[] = ["chooser", "resume", "autofill", "done"];
 const WORK_AUTHORIZATION_ANSWERS = ["Yes", "No"] as const;
 const SPONSORSHIP_ANSWERS = ["No", "Yes", "Not sure"] as const;
 
+/* Resume-build split view (canned path): one bullet lands every
+   BULLET_REVEAL_MS, each paired with a color that also marks the phrase it
+   answers in the JD on the other side. */
+const BULLET_REVEAL_MS = 620;
+const BULLET_COLORS = [
+  { dot: "bg-brand", mark: "bg-brand/20 text-brand-ink ring-1 ring-brand/40", markDone: "bg-brand/10 text-brand-ink" },
+  { dot: "bg-teal", mark: "bg-teal/20 text-ink ring-1 ring-teal/40", markDone: "bg-teal/10 text-ink" },
+  { dot: "bg-coral", mark: "bg-coral/20 text-ink ring-1 ring-coral/40", markDone: "bg-coral/10 text-ink" },
+] as const;
+
 type PendingClarificationTrial = {
   resume: string;
   website: string;
@@ -68,6 +78,12 @@ export function TrySimulator({
   const [pasteOpen, setPasteOpen] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [filledCount, setFilledCount] = useState(deepLink && after(deepLink, "resume") ? CANNED_FIELDS.length : 0);
+  /* Bullets revealed so far in the canned resume-build split view (see
+     ResumeBuildSplit below). Starts fully revealed on a deep link that lands
+     past "resume", same convention as filledCount above. */
+  const [revealCount, setRevealCount] = useState(
+    deepLink && after(deepLink, "resume") ? CANNED_RESUME.bullets.length : 0,
+  );
   const [elapsed, setElapsed] = useState(0);
   const t0 = useRef<number | null>(null);
   const [stamps, setStamps] = useState<Partial<Record<Step, string>>>({});
@@ -210,8 +226,15 @@ export function TrySimulator({
       resume: "autofill",
       autofill: "done",
     };
+    /* The canned "resume" hold has to fit the whole bullet-by-bullet reveal
+       (see the revealCount effect below) plus a beat to let the last one
+       settle, or the split view gets cut off mid-build. */
+    const resumeHold =
+      mode === "canned"
+        ? CANNED_RESUME.bullets.length * BULLET_REVEAL_MS + 500
+        : 1300;
     const HOLD: Record<string, number> = {
-      resume: 1300,
+      resume: resumeHold,
       autofill: 1700,
     };
     const id = setTimeout(() => {
@@ -232,6 +255,21 @@ export function TrySimulator({
     );
     return () => clearInterval(id);
   }, [step, filledCount]);
+
+  /* Bullet-by-bullet resume reveal, canned path only (real packets arrive
+     whole from the API, with no per-bullet JD phrase to sync against).
+     revealCount's useState initializer above already starts it at 0 (or, on
+     a deep link past "resume", fully revealed) - step only ever advances
+     forward through this component's lifetime, so there is no case where
+     this effect re-fires needing a reset. */
+  useEffect(() => {
+    if (mode !== "canned" || step !== "resume") return;
+    const total = CANNED_RESUME.bullets.length;
+    const id = setInterval(() => {
+      setRevealCount((n) => Math.min(n + 1, total));
+    }, BULLET_REVEAL_MS);
+    return () => clearInterval(id);
+  }, [mode, step]);
 
   const bullets = packet?.tailored_bullets ?? CANNED_RESUME.bullets;
   const coverage = packet?.ats_coverage ?? CANNED_RESUME.atsCoverage;
@@ -341,6 +379,14 @@ export function TrySimulator({
               <div data-sample>
                 <PostingBody jd={showReal ? realJob?.jd : undefined} />
               </div>
+            ) : mode === "canned" && step === "resume" ? (
+              <ResumeBuildSplit
+                jd={CANNED_POSTING.jd}
+                bullets={CANNED_RESUME.bullets}
+                highlights={CANNED_RESUME.bulletHighlights}
+                coverage={coverage}
+                revealCount={revealCount}
+              />
             ) : (
               <div className="mt-5 space-y-4">
                 <ResumeArtifact
@@ -1076,6 +1122,141 @@ function ArtifactShell({
         </span>
       </div>
       {children}
+    </div>
+  );
+}
+
+/* The JD paragraph text, with the phrase each not-yet-landed/landed/landing
+   bullet answers lit up in that bullet's color - mirrors ResumeBuildSplit's
+   bullet list below. Phrases must appear verbatim in `text` (see
+   CANNED_POSTING.jd / CANNED_RESUME.bulletHighlights in lib/try-data.ts). */
+function HighlightedParagraph({
+  text,
+  highlights,
+}: {
+  text: string;
+  highlights: { phrase: string; className: string }[];
+}) {
+  const active = highlights.filter((h) => h.phrase && text.includes(h.phrase));
+  if (active.length === 0) return <p>{text}</p>;
+  const escaped = active.map((h) => h.phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const parts = text.split(new RegExp(`(${escaped.join("|")})`, "g"));
+  return (
+    <p>
+      {parts.map((part, i) => {
+        const hit = active.find((h) => h.phrase === part);
+        /* A phrase whose bullet hasn't landed yet gets no className - render
+           it as plain text, not a bare <mark>, since browsers apply their own
+           default yellow background to <mark> regardless of our classes. */
+        return hit && hit.className ? (
+          <mark key={i} className={`rounded px-0.5 transition-colors duration-500 motion-reduce:transition-none ${hit.className}`}>
+            {part}
+          </mark>
+        ) : (
+          <span key={i}>{part}</span>
+        );
+      })}
+    </p>
+  );
+}
+
+/* The live resume-build view for the canned "Watch it on John's" path: the
+   JD stays on screen (left) instead of being swapped out for the receipt, and
+   the resume builds bullet by bullet (right) with a line tracking progress
+   down the page. Each bullet's color also marks the line of the JD it
+   answers, so a visitor can see the two update together, the way the real
+   dashboard does it. Only used for step === "resume" in canned mode; once
+   that step ends this collapses back into the plain ResumeArtifact card. */
+function ResumeBuildSplit({
+  jd,
+  bullets,
+  highlights,
+  coverage,
+  revealCount,
+}: {
+  jd: string;
+  bullets: string[];
+  highlights: string[];
+  coverage: number;
+  revealCount: number;
+}) {
+  /* One state per bullet, derived once from revealCount, and shared by the
+     JD marks and the resume dots below - they used to compute landed/
+     landingNow separately and could drift out of sync on a future edit. */
+  const bulletStates = bullets.map((_, i) => ({
+    color: BULLET_COLORS[i % BULLET_COLORS.length],
+    landed: i < revealCount,
+    landingNow: i === revealCount - 1,
+  }));
+  const jdHighlights = highlights.map((phrase, i) => {
+    const { color, landed, landingNow } = bulletStates[i];
+    return {
+      phrase,
+      className: landingNow ? color.mark : landed && !landingNow ? color.markDone : "",
+    };
+  });
+  const paragraphs = jd.split(/\n{2,}/);
+
+  return (
+    <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2">
+      <div className="max-h-[360px] overflow-y-auto pr-1 text-[13px] leading-6 text-muted md:max-h-[420px]">
+        <div className="space-y-3">
+          {paragraphs.map((para, i) => (
+            <HighlightedParagraph key={i} text={para.trim()} highlights={jdHighlights} />
+          ))}
+        </div>
+      </div>
+
+      <ArtifactShell
+        eyebrow={CANNED_RESUME.filename}
+        chip={`ATS coverage ${coverage}%`}
+        chipClass="bg-brand-soft text-brand-ink"
+        active
+      >
+        <p className="mt-2 text-[13px] font-semibold text-ink">
+          {CANNED_RESUME.name}
+          <span className="ml-2 font-normal text-muted">{CANNED_RESUME.line}</span>
+        </p>
+        <div className="relative mt-3 pl-4">
+          {/* Track + the line that travels down as bullets land. */}
+          <span className="absolute left-1 top-1 bottom-1 w-0.5 rounded-full bg-border" />
+          <span
+            className="absolute left-1 top-1 w-0.5 rounded-full bg-brand transition-all duration-500 ease-out motion-reduce:transition-none"
+            style={{ height: `${(Math.min(revealCount, bullets.length) / bullets.length) * 100}%` }}
+          />
+          <ul className="space-y-3">
+            {bullets.map((b, i) => {
+              const { color, landed, landingNow } = bulletStates[i];
+              return (
+                <li key={b} className="flex gap-2 text-[12.5px] leading-5">
+                  <span
+                    className={`mt-[5px] h-2 w-2 shrink-0 rounded-full transition-colors duration-300 ${
+                      landed ? color.dot : "bg-border"
+                    }`}
+                  />
+                  {landed ? (
+                    <span
+                      className={`text-ink transition-opacity duration-300 ${
+                        landingNow ? "animate-pulse motion-reduce:animate-none" : ""
+                      }`}
+                    >
+                      {b}
+                    </span>
+                  ) : (
+                    <span className="h-3.5 w-full rounded-full bg-surface-alt" />
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+        {revealCount < bullets.length && (
+          <p className="mt-3 flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.08em] text-muted">
+            <ThinkingOrb state="composing" size={20} />
+            Writing your resume
+          </p>
+        )}
+      </ArtifactShell>
     </div>
   );
 }
