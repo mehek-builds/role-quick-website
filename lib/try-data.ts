@@ -13,6 +13,16 @@ export const CANNED_POSTING = {
   company: "Notion",
   location: "San Francisco",
   title: "Software Engineer",
+  /* Written to contain one clean, literal phrase per CANNED_RESUME bullet
+     (see bulletHighlights below) so the /try resume-build view can highlight
+     the line of the JD each bullet is answering, in sync with the bullet
+     appearing on the resume. Keep the phrases below copied verbatim from here
+     if this text ever changes. */
+  jd: `Notion is looking for a Software Engineer to help us build the tools millions of people use to think, plan, and work together. You'll work across our real-time collaboration stack, where every keystroke has to sync instantly and correctly across every collaborator's screen, even when connections drop.
+
+You'll also help shape the core editing experience: our block-based document model powers everything from a single note to a full database, and you'll extend it in React and TypeScript to ship the block types our users are asking for.
+
+As Notion scales, page load time matters more than ever. You'll dig into our Postgres query patterns and read paths to keep pages loading fast for teams with thousands of documents.`,
 };
 
 /* The canon artifacts, matching the film props and PacketDemo rows. */
@@ -26,6 +36,15 @@ export const CANNED_RESUME = {
     "Rebuilt the club-portal editor on CRDTs; sync conflicts fell to zero across 1,200 users.",
     "Shipped a block-based notes feature in React + TypeScript, mirroring Notion's data model.",
     "Cut page-load p95 from 2.1s to 640ms by moving reads onto a Postgres materialized view.",
+  ],
+  /* One phrase per bullet above, in order, copied verbatim from CANNED_POSTING.jd.
+     Powers the /try resume-build split view: as each bullet lands on the
+     resume, this is the phrase that lights up in the job description on the
+     other side, so a visitor can see which line of the JD it answers. */
+  bulletHighlights: [
+    "every keystroke has to sync instantly and correctly across every collaborator's screen",
+    "extend it in React and TypeScript to ship the block types our users are asking for",
+    "Postgres query patterns and read paths to keep pages loading fast",
   ],
 };
 
