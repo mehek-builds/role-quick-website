@@ -166,7 +166,7 @@ export function isDocumentChecklistItem(item: SubmissionChecklistItem): boolean 
  * not act on it.
  *
  * SUPPRESSING THE SENDING CONTROLS IS RIGHT AND IS NOT WHAT THIS CHANGES. While Litos may already
- * have reached the employer, Try again and Review and fill could send a second application, so they
+ * have reached the employer, Try again and "Fill the application" could send a second application, so they
  * correctly wait for her yes/no. A document row cannot: see isDocumentChecklistItem. It is also work
  * she owes on BOTH answers - "not there" means the next run needs the file, and "found it there"
  * ends the application and takes the row away with it - so hiding it buys nothing and costs her the
@@ -382,7 +382,7 @@ function isCaptchaChecklistText(value: string): boolean {
  * The first live instance was a Workable application whose packet changed after the applicant had
  * reviewed it. The checklist treated every free-form attention sentence as work on the company
  * page, so it rendered both an Open page link and a checkbox saying she handled it there. Neither
- * could repair the stale packet. The existing Review and fill path can: it stores reviewed answers,
+ * could repair the stale packet. The existing "Fill the application" path can: it stores reviewed answers,
  * takes a fresh audit, and starts the managed fill again. Keep that recovery attached to the row
  * that names the stop so this class of audit failure never sends the applicant out of Litos.
  */
@@ -836,8 +836,8 @@ function documentAskItems(
         id: `document-stored-${ask.kind}`,
         label: `Your ${ask.kind} is saved in Litos`,
         detail: stored
-          ? `${stored}. Review and fill again so Litos can attach it to the employer's form.`
-          : "Review and fill again so Litos can attach it to the employer's form.",
+          ? `${stored}. Fill the application again so Litos can attach it to the employer's form.`
+          : "Fill the application again so Litos can attach it to the employer's form.",
         action: "Manage file",
         actionKind: "attach" as const,
         documentKind: ask.kind,
@@ -1020,7 +1020,7 @@ export function humanInputItems(
       id: `blocker-${keyFor(blocker)}`,
       label: rewriteUsable ? rewrite.label : dashboardOnlyBlockerLabel(blocker),
       ...(restartInLitos
-        ? { ...(rewriteUsable ? { detail: rewrite.detail } : {}), action: "Review and fill", actionKind: "restart" as const }
+        ? { ...(rewriteUsable ? { detail: rewrite.detail } : {}), action: "Fill the application", actionKind: "restart" as const }
         : { detail: "Litos could not finish this required step in the dashboard. The application remains paused here." }),
       subject: blockerSubject(blocker),
     });
@@ -1750,7 +1750,7 @@ export function metadataRefreshOutranksStandingAttention(
  *   route is metadata_refresh, and the applicant's acknowledged exact-packet audit survived the
  *   save, so metadataRefreshOutranksStandingAttention holds and the attention screen provably leads
  *   with the launch panel (the binding SubmissionScreen resolves through that same decision). The
- *   save lands there, where "Review and fill again" is on screen.
+ *   save lands there, where "Fill the application again" is on screen.
  * - "status": everything else keeps the exact status routing the save has always had, including
  *   every fail-closed arm of the launch decision: no acknowledged audit, a captcha or document row,
  *   an unresolved stall, an open unverified submission, or a non-attention status.

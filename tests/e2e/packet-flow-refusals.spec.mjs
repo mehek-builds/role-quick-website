@@ -88,7 +88,7 @@ test.after(async () => {
 
 /* The two entry points into the audited flow. READY approves a filled form; FILL is the packet
    the live 2026-08-20 dead button was measured on, where the same primary control reads
-   "Review and fill" and then "Approve packet and fill form". */
+   "Fill the application" and then "Approve packet and fill form". */
 const READY = RESUMES.find((r) => r.spec?._review?.status === "ready_for_final_approval");
 const FILL = RESUMES.find((r) => r.spec?._review?.status === "resume_ready");
 assert.ok(READY, "the fixture must contain a ready_for_final_approval packet");
@@ -302,7 +302,7 @@ async function openAuditedFlow(packet, { ackResponse = null, submitResponse = nu
   const page = await context.newPage();
   await page.goto(`${ORIGIN}/dashboard/applications?application=${packet.id}&intent=apply`, { waitUntil: "domcontentloaded" });
   const prepared = packet.spec._review.status === "ready_for_final_approval";
-  const firstLabel = prepared ? "Review and send" : "Review and fill";
+  const firstLabel = prepared ? "Review and send" : "Fill the application";
   const first = page.getByRole("button", { name: firstLabel, exact: true });
   await first.waitFor({ state: "visible", timeout: 25_000 });
   await first.click();
@@ -549,7 +549,7 @@ browserTest("a pre-send verification refusal disables the send and offers one re
   assert.equal(body.role, FILL.job_context.role);
   assert.equal(counts.submit, 1, "the rebuild must not send anything");
   /* The new packet's own review, with its own send available again. */
-  await page.getByRole("button", { name: "Review and fill", exact: true })
+  await page.getByRole("button", { name: "Fill the application", exact: true })
     .waitFor({ state: "visible", timeout: 20_000 });
   assert.equal(await page.getByRole("alert").filter({ hasText: PRE_SEND_ERROR }).count(), 0);
   await context.close();

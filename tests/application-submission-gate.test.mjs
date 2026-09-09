@@ -99,7 +99,7 @@ test("saved answers honor standing consent while recovery remains in the dashboa
   // The button was "Prepare application" and the bar under it ran to nineteen words about
   // "automation permission". Both were rewritten in the 2026-07-26 UX pass; the gate they
   // describe is unchanged, so the assertions follow the new wording.
-  assert.match(dashboard, /"Review and fill"/);
+  assert.match(dashboard, /"Fill the application"/);
   assert.match(dashboard, /review\?\.status === "ready_for_final_approval"[\s\S]{0,100}"Review and send"/);
   assert.match(dashboard, /"Approve packet and fill form"/);
   assert.match(dashboard, /Litos fills the form with your saved answers and this resume/);

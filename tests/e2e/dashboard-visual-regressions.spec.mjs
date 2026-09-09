@@ -2988,7 +2988,7 @@ test("A completed six-answer session yields to a new operational blocker after f
     await reviewApplication.waitFor({ state: "visible", timeout: 10_000 });
     assert.equal(await page.getByText("6 of 6", { exact: true }).count(), 1);
     await reviewApplication.click();
-    await page.getByRole("button", { name: "Review and fill", exact: true }).click();
+    await page.getByRole("button", { name: "Fill the application", exact: true }).click();
     await page.getByText("Exact audited PDF loaded, 1 page.", { exact: true }).waitFor({ state: "visible", timeout: 25_000 });
     await page.getByRole("button", { name: "Approve packet and fill form", exact: true }).click();
 
@@ -4085,7 +4085,7 @@ test("Home keeps one state-aware page CTA above the job actions", async () => {
       const pageCta = [...document.querySelectorAll('main a[href="/dashboard/applications?state=ready"]')]
         .find((link) => link.textContent?.includes("ready application"));
       /* A card whose job already has a packet prints that packet's own action words (Finish
-         application / Review and fill), so the primary is found by its intent href first and the
+         application / Fill the application), so the primary is found by its intent href first and the
          no-packet label second. */
       const cardCta = card?.querySelector('a[href*="intent=apply"], a[aria-label^="Start an application for"]');
       if (!card || !pageCta || !cardCta) return null;
