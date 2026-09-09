@@ -58,6 +58,10 @@ type OnboardingEvent =
      at all (does the ad's traffic want this?) and, against onboarding_step_done, whether a
      photographed resume finishes setup as often as an uploaded one. */
   | "resume_photo_capture_open"
+  /* The scan ask at the end of /try, which is the same door one screen earlier. Distinct from
+     signin_click on purpose: both land on /login, so collapsing them would hide which promise the
+     visitor actually accepted, and that is the question the ad spend is asking. */
+  | "try_scan_cta_click"
   // The metrics ask on the base step. Added and skipped are tracked apart because they answer
   // different questions: whether students have the numbers, and whether the ask is worth its place.
   | "base_resume_metrics_added"
