@@ -1038,8 +1038,16 @@ function DonePanel({ mode }: { mode: "canned" | "real" }) {
           Phone only, and honestly so. `capture` is what opens a camera, and it does nothing on a
           desktop browser, so this button would promise a scan that the next screen cannot offer.
           A desktop visitor gets the ask above, which is true on every device. */}
+      {/* Plain /login, not an intent parameter. An earlier draft passed `intent=scan`, which
+          nothing reads: /login handles only `litos-plus`, and onboarding derives its step from the
+          server on purpose rather than from a cursor a link can set. A parameter with no handler
+          reads to the next person like routing that exists somewhere, so it is worse than absent.
+          The distinction this button carries is a measurement, and try_scan_cta_click is where it
+          lives. The camera itself is one step in, on the resume screen, which is deliberate: the
+          roles question comes first so the flow does not ask for a file before asking what someone
+          is looking for. */}
       <a
-        href="/login?intent=scan"
+        href="/login"
         onClick={() => track("try_scan_cta_click", { source: "try" })}
         className="flex w-full items-center justify-center gap-2 rounded-full border border-control-border bg-surface px-5 py-2.5 text-center text-sm font-medium text-ink transition-colors hover:border-ink sm:hidden"
       >
