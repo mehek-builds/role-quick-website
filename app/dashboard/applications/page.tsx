@@ -6641,7 +6641,13 @@ function Applications() {
             {review.portal_supported === false
               ? <p className="text-sm text-ink">Litos cannot fill this company&rsquo;s form in the dashboard yet. Your packet is ready, but this application stays paused here.</p>
               : <p className="hidden text-sm text-ink sm:block">Litos fills the form with your saved answers and this resume.</p>}
-            <div className="flex gap-2">
+            <div className="flex flex-wrap justify-end gap-2">
+              {selectedSubmission && review.questions.length > 0
+                && reviewAnswerEditRoute(selectedSubmission.review) !== "frozen" && (
+                <Button type="button" variant="secondary" onClick={() => reviewPortalQuestions()} disabled={reviewPrimaryBusy}>
+                  Edit saved answers
+                </Button>
+              )}
               {(activePacketEvidence?.response.pdf.download_url ?? selected.download_url) && (activePacketEvidence?.response.pdf.download_url ?? selected.download_url) !== "#" && <a href={activePacketEvidence?.response.pdf.download_url ?? selected.download_url} className="rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink">View exact PDF</a>}
               {review.portal_supported !== false && <Button onClick={reviewPrimaryAction} disabled={reviewPrimaryDisabled} className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">
                   {reviewPrimaryBusy
