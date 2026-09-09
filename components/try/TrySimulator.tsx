@@ -1027,12 +1027,17 @@ function DonePanel({ mode }: { mode: "canned" | "real" }) {
           This was the component's last caller, so components/MobileSendLink.tsx
           itself was deleted on 2026-09-09 along with its send_link_submit
           event. */}
+      {/* "Try Now. It's Free" here only, and deliberately not the label anywhere else. The header
+          pill, the hero and the footer still say "Get started"; the two plan buttons say "Get
+          Started" because they open Stripe, and a free claim on those would be contradicted by the
+          next screen. This is the one place a visitor has just watched the product work on
+          somebody else's resume, so the ask is to go do it with their own. */}
       <a
         href="/login"
         onClick={() => track("signin_click", { source: "try" })}
         className="block w-full rounded-full bg-action px-5 py-2.5 text-center text-sm font-medium text-action-ink transition-colors hover:bg-brand-ink"
       >
-        Get started, it&apos;s free
+        Try Now. It&apos;s Free
       </a>
       {/* ONE ASK, and the panel ends here. A scan button and a supporting line sat under this
           button for part of 2026-09-09 (Mehek's call to remove them the same day): the demo ends
