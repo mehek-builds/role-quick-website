@@ -73,7 +73,7 @@ test("an unsupported portal replaces the send control with a paused dashboard st
   // The send control is behind the capability check, and no employer-page action takes its place.
   assert.match(
     dashboard,
-    /review\.portal_supported === false[\s\S]{0,900}application stays paused here[\s\S]{0,900}review\.portal_supported !== false && <Button/,
+    /review\.portal_supported === false[^]*?application stays paused here(?:(?!<\/TerminalActionBar>)[^])*?review\.portal_supported !== false && <Button onClick=\{reviewPrimaryAction\}/,
   );
   assert.doesNotMatch(dashboard, /Open the company page/);
   assert.match(dashboard, /const reviewPrimaryLabel[\s\S]{0,500}"Approve packet and fill form"/);
