@@ -48,7 +48,6 @@ import { targetingHeadline } from "@/lib/periods";
 import { userFacingError } from "@/lib/user-facing-error";
 import { waitingApplications } from "@/lib/captcha-queue";
 import { WaitingOnYou } from "@/components/app/WaitingOnYou";
-import { PlanStatus } from "@/components/billing/PlanStatus";
 import { useBilling } from "@/components/billing/BillingProvider";
 import { isStructuredUpgradeDenial } from "@/features/billing";
 import { completeOperationId, operationIdFor } from "@/lib/operation-id";
@@ -792,8 +791,6 @@ export default function Home() {
           )}
         </div>
       </section>
-
-      <PlanStatus compact />
 
       <section aria-labelledby="matches-heading" className="space-y-3">
         <div className="flex items-end justify-between gap-4">
