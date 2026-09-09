@@ -1,4 +1,5 @@
 import type { MonitoredJob } from "@/lib/api";
+import { narrowPostingLocation } from "../../../lib/posting-location.ts";
 
 /* The pure logic behind a row on the jobs list.
  *
@@ -397,4 +398,30 @@ export function countNewToday(jobs: Pick<MonitoredJob, "first_seen_at">[]): numb
     // NaN fails this comparison, so a row we cannot date is never counted as new.
     return seen >= midnight.getTime();
   }).length;
+}
+
+/**
+ * The place line for one row on the jobs list: the offices the student asked for, out of however
+ * many the employer packed into one location field, plus a Remote suffix when the posting is
+ * remote-eligible.
+ *
+ * This board is a targeting-personalized, ranked view (it carries match_score, preference_score
+ * and a ranked pool, same as Home), not a neutral "browse everything" board, so a posting open at
+ * several offices gets the same narrowing Home's JobMatchCard does: narrowPostingLocation cuts the
+ * raw field down to just the offices matching `preferredLocations`, falling back to the full string
+ * when nothing narrows it. See lib/posting-location.ts.
+ *
+ * The Remote suffix is tested against the NARROWED text, never the raw location. Narrowing can drop
+ * a "Remote" segment the employer wrote (kept only when Remote is itself a saved preference), and
+ * checking the raw string afterward would find "remote" in text the row no longer shows, silently
+ * suppressing the one indicator that segment left behind. Home's JobMatchCard had exactly this bug.
+ */
+export function jobRowPlace(
+  job: Pick<MonitoredJob, "location" | "remote">,
+  preferredLocations: readonly string[],
+): string {
+  const shown = narrowPostingLocation(job.location, preferredLocations);
+  return [shown, job.remote && !/remote/i.test(shown ?? "") ? "Remote" : null]
+    .filter(Boolean)
+    .join(" · ");
 }

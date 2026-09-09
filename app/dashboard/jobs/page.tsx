@@ -3,11 +3,11 @@
 import { Button, ButtonLink } from "@/components/app/Button";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { api, type JobsPage, type MonitoredJob } from "@/lib/api";
+import { api, getTargeting, type JobsPage, type MonitoredJob, type Targeting } from "@/lib/api";
 import { fetchBoard, useJobMatchScores, MATCH_WEIGHTING_NOTE, SCORE_BATCH, type JobMatch } from "@/features/applications";
 import { CompanyLogo } from "@/components/app/CompanyLogo";
 import { sponsorshipEvidenceLabel, sponsorshipEvidenceTitle } from "@/lib/sponsorship-evidence";
-import { activeJobFilters, buildJobApplicationIndex, countNewToday, emptyJobsBody, isJobApplied, jobApplicationActionLabel, jobApplicationDetailHref, jobApplicationFor, jobApplicationHref, type JobApplicationIndex, type JobApplicationMatch } from "@/features/jobs";
+import { activeJobFilters, buildJobApplicationIndex, countNewToday, emptyJobsBody, isJobApplied, jobApplicationActionLabel, jobApplicationDetailHref, jobApplicationFor, jobApplicationHref, jobRowPlace, type JobApplicationIndex, type JobApplicationMatch } from "@/features/jobs";
 import { isQaRender } from "@/lib/qa-mode";
 import { Card, DataErrorState, EmptyState, ErrorNote, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
 import { AutopilotLockNote, AutopilotToggle, useAutopilot } from "@/components/app/Autopilot";
@@ -108,6 +108,13 @@ export default function JobsPage() {
   /* Null until the board answers. An empty index would mean "you have applied to nothing", which is
      a different claim from "we do not know yet". */
   const [applications, setApplications] = useState<JobApplicationIndex | null>(null);
+  /* The account's saved targeting locations, straight off GET /profile/targeting. Jobs is not a
+     neutral "browse everything" board - it carries match_score, preference_score and a ranked pool,
+     same as Home - so a posting open at several offices gets the same narrowing Home's JobMatchCard
+     does: see jobRowPlace / lib/posting-location.ts. Until this answers, jobRowPlace gets an empty
+     list, which narrows nothing and prints the posting's full location, exactly like Home before its
+     own targeting fetch resolves. */
+  const [targeting, setTargeting] = useState<Targeting | null>(null);
   /* Null while we work out whether this is a QA render, so neither branch fires a request first. */
   const [qaMode, setQaMode] = useState<boolean | null>(null);
   /* Send-without-asking. The setting is server-side and shared with Account and the tracker; this
@@ -207,7 +214,7 @@ export default function JobsPage() {
       return;
     }
     let cancelled = false;
-    void import("./qa-data").then(({ qaJobsPage, QA_APPLIED }) => {
+    void import("./qa-data").then(({ qaJobsPage, QA_APPLIED, QA_TARGETING }) => {
       if (cancelled) return;
       const page = qaJobsPage();
       setJobs(page.jobs);
@@ -217,6 +224,7 @@ export default function JobsPage() {
       setPoolExhausted(page.pool_exhausted ?? false);
       setMinimumMatchScore(page.minimum_match_score ?? null);
       setApplications(buildJobApplicationIndex(QA_APPLIED));
+      setTargeting(QA_TARGETING);
     });
     return () => {
       cancelled = true;
@@ -283,6 +291,24 @@ export default function JobsPage() {
       .then(({ cards }) => {
         if (cancelled) return;
         setApplications(buildJobApplicationIndex(cards));
+      })
+      .catch(() => null);
+    return () => {
+      cancelled = true;
+    };
+  }, [qaMode]);
+
+  /* Saved targeting locations, for narrowing a multi-office posting's location line the same way
+     Home does. Fetched once, not per filter change: it is a fact about the account, not about the
+     search. A failure leaves it null, and every row falls back to printing the full location, which
+     is what jobRowPlace already does for an account with no saved locations at all. */
+  useEffect(() => {
+    if (qaMode !== false) return;
+    let cancelled = false;
+    void getTargeting()
+      .then((result) => {
+        if (cancelled) return;
+        setTargeting(result);
       })
       .catch(() => null);
     return () => {
@@ -529,7 +555,7 @@ export default function JobsPage() {
           <ul className="grid grid-cols-1 gap-3">
             {visibleJobs.map((job) => (
               <li key={job.id}>
-                <JobRow job={job} application={jobApplicationFor(job, applications)} applied={isJobApplied(job, applications)} match={badgeMatchFor(job, matches[job.id])} onDismiss={() => dismiss(job.id)} />
+                <JobRow job={job} application={jobApplicationFor(job, applications)} applied={isJobApplied(job, applications)} match={badgeMatchFor(job, matches[job.id])} preferredLocations={targeting?.locations ?? []} onDismiss={() => dismiss(job.id)} />
               </li>
             ))}
           </ul>
@@ -579,10 +605,24 @@ export default function JobsPage() {
  * obvious thing in the world to click, and giving the row two side-by-side buttons made the student
  * choose between them before they had read the role.
  */
-function JobRow({ job, application, applied, match, onDismiss }: { job: MonitoredJob; application: JobApplicationMatch | null; applied: boolean; match: BadgeMatch | null | undefined; onDismiss: () => void }) {
-  const place = [job.location, job.remote && !/remote/i.test(job.location ?? "") ? "Remote" : null]
-    .filter(Boolean)
-    .join(" · ");
+function JobRow({
+  job,
+  application,
+  applied,
+  match,
+  preferredLocations,
+  onDismiss,
+}: {
+  job: MonitoredJob;
+  application: JobApplicationMatch | null;
+  applied: boolean;
+  match: BadgeMatch | null | undefined;
+  /** The account's saved targeting locations, for narrowing a multi-office posting's location line
+      down to the offices the student actually asked for. See lib/posting-location.ts. */
+  preferredLocations: readonly string[];
+  onDismiss: () => void;
+}) {
+  const place = jobRowPlace(job, preferredLocations);
   const pay = formatPay(job);
   const type = jobTypeLabel(job.employment_type);
   const detail = (

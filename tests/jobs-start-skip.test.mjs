@@ -175,7 +175,7 @@ describe("Jobs' unsent row offers Skip beside the same tailoring door Home's Sta
   test("JobRow accepts onDismiss and the caller wires it per row", () => {
     assert.match(
       code(jobsPage),
-      /<JobRow job=\{job\} application=\{jobApplicationFor\(job, applications\)\} applied=\{isJobApplied\(job, applications\)\} match=\{badgeMatchFor\(job, matches\[job\.id\]\)\} onDismiss=\{\(\) => dismiss\(job\.id\)\}\s*\/>/,
+      /<JobRow job=\{job\} application=\{jobApplicationFor\(job, applications\)\} applied=\{isJobApplied\(job, applications\)\} match=\{badgeMatchFor\(job, matches\[job\.id\]\)\} preferredLocations=\{targeting\?\.locations \?\? \[\]\} onDismiss=\{\(\) => dismiss\(job\.id\)\}\s*\/>/,
     );
   });
 });
