@@ -44,6 +44,7 @@ import {
 } from "@/features/applications";
 import { formatPay, jobApplicationActionLabel, jobTypeLabel, type JobApplicationMatch, type PayFacts } from "@/features/jobs";
 import { homePrimaryAction, loadDashboardInitialState } from "@/features/dashboard";
+import { dailyDismissalKey, readDismissed } from "@/lib/dismissal";
 import { localDayKey } from "@/lib/local-day";
 import { targetingHeadline } from "@/lib/periods";
 import { userFacingError } from "@/lib/user-facing-error";
@@ -1160,27 +1161,6 @@ function JobMatchCard({
       </div>
     </Card>
   );
-}
-
-/* Keyed on the LOCAL day, so "Skipped for today" lasts until the student's own midnight.
- *
- * No legacy read of the old UTC-dated key. Where the two disagree (the hours between local and UTC
- * midnight) a student can see one day's skip list reset once, and that is the whole cost: the list
- * is same-day only, it holds nothing but "not this one", and re-skipping is one click on a card
- * that is already on screen. A fallback read would have to merge two keys, decide which one wins
- * when both exist, and then be deleted later anyway. That is more moving parts, permanently, to
- * avoid one cheap click, once. Take the reset. */
-function dailyDismissalKey(): string {
-  return `litos-dismissed-${localDayKey()}`;
-}
-
-function readDismissed(key: string): string[] {
-  try {
-    const value = JSON.parse(window.localStorage.getItem(key) ?? "[]");
-    return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
-  } catch {
-    return [];
-  }
 }
 
 function prewarmLockKey(jobId: string): string {
