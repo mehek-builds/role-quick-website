@@ -363,9 +363,18 @@ export function TrySimulator({
         </div>
 
         {/* Page area: the job posting fills the tab; the popup floats over the
-            top-right (anchored to the toolbar icon) like a real extension. */}
-        <div className="relative bg-white">
-          <div className="relative min-h-[420px] p-6 sm:p-7 lg:pr-[392px]">
+            top-right (anchored to the toolbar icon) like a real extension.
+            Below lg the popup and page area just stack in DOM order, so on
+            mobile - where all our traffic actually lands (TikTok/Instagram,
+            measured 2026-09-10: the CTA sat 1.9 screens down, matching a
+            near-zero bounce rate on /try) - the popup with its two buttons
+            is reordered to render BEFORE the full job posting text, so a
+            phone visitor sees something to press without scrolling past a
+            wall of JD copy first. `order-none` at lg restores DOM order,
+            which doesn't matter there anyway since the popup is
+            lg:absolute and ignores flex order regardless. */}
+        <div className="relative flex flex-col bg-white lg:block">
+          <div className="relative order-2 min-h-[420px] p-6 sm:p-7 lg:order-none lg:pr-[392px]">
             {canCycle && (
               <RoundArrow dir={-1} onClick={() => cycle(-1)} side="left" />
             )}
@@ -406,7 +415,7 @@ export function TrySimulator({
           </div>
 
           {/* The real extension popup, anchored under its toolbar icon. */}
-          <div className="border-t border-border p-3 sm:p-4 lg:absolute lg:right-3 lg:top-2 lg:w-[366px] lg:border-t-0 lg:p-0">
+          <div className="order-1 border-b border-border p-3 sm:p-4 lg:order-none lg:absolute lg:right-3 lg:top-2 lg:w-[366px] lg:border-b-0 lg:p-0">
             <div className="relative rounded-[14px] border border-border bg-white shadow-[0_12px_40px_-12px_rgba(18,18,15,0.3)]">
               {/* caret pointing up to the toolbar icon */}
               <span className="absolute -top-1.5 right-6 hidden h-3 w-3 rotate-45 rounded-[3px] border-l border-t border-border bg-white lg:block" />

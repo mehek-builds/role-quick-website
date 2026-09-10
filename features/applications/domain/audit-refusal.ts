@@ -23,11 +23,22 @@ const AUTOPILOT_CANNOT_CLEAR = new Set([
      regenerate, which is a different screen and a different act. */
   "PACKET_PDF_INVALID",
   "PACKET_RESUME_EXPIRED",
+  /* The send guard found the packet's coursework had drifted from the current uploaded resume and
+     rebuilt it from that source in place (student-outreach-backend applications.ts
+     rebuildCourseworkOnlyPacketFromCurrentSource, 409 COURSEWORK_PACKET_REBUILT). The refreshed
+     packet prints a coursework block she has not seen, so an unattended acknowledge would forge her
+     review of it. Park it and let the dashboard re-audit and route her to the fresh review. */
+  "COURSEWORK_PACKET_REBUILT",
 ]);
 
 const REVIEW_RECOVERY_REQUIRED = new Set([
   "PACKET_AUDIT_STALE",
   "PACKET_AUDIT_ACK_REQUIRED",
+  /* The rebuild already persisted a new PDF server-side and self-verified it carries no remaining
+     drift, so recovery re-audits that exact packet and opens a fresh unacknowledged review, the
+     same path a stale packet takes. Without this the coded 409 fell through to a dead refusal
+     banner on the restart screen and the application could never reach the fill again. */
+  "COURSEWORK_PACKET_REBUILT",
 ]);
 
 /* Historical rows predate structured refusal codes and persisted one of these values directly in
