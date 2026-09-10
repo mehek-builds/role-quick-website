@@ -25,9 +25,11 @@ test("every path that receives a review routes the screen from it", async () => 
   // poll can be reporting the status from before that approve. An in-flight poll can also land
   // after the applicant deliberately leaves portal for review. Both guards must sit before the
   // route, and the navigation guard must read the synchronous ref rather than stale React state.
+  // The span between the route decision and the move is PROXIMITY, not a length budget: the
+  // delivery of a retained refusal sits inside it, stamped with the application it refused.
   assert.match(
     dashboard,
-    /\/applications\/\$\{requestedId\}\/submission`[\s\S]{0,10000}if \(approveInFlight\.current !== null && !terminal\) return;[\s\S]{0,800}const pollMayRoute = screenRef\.current === "submitting"[\s\S]{0,240}if \(!pollMayRoute\) return;\s*\n\s*const nextScreen = screenForStatus\(result\.review\.status, "submitting"\);[\s\S]{0,1400}moveToScreen\(nextScreen\);/,
+    /\/applications\/\$\{requestedId\}\/submission`[\s\S]{0,10000}if \(approveInFlight\.current !== null && !terminal\) return;[\s\S]{0,800}const pollMayRoute = screenRef\.current === "submitting"[\s\S]{0,240}if \(!pollMayRoute\) return;\s*\n\s*const nextScreen = screenForStatus\(result\.review\.status, "submitting"\);[\s\S]{0,2000}moveToScreen\(nextScreen\);/,
   );
   // The exception to the exception. A stalled approve never rejects (no AbortController in
   // lib/api.ts), so suppressing every poll route would strand the student on the spinner with the

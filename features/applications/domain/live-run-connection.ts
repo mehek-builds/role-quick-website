@@ -96,7 +96,29 @@ export function liveRunFailureKind(reason: unknown): LiveRunFailureKind {
   return TRANSIENT_HTTP_STATUSES.has(status) ? "transient" : "definitive";
 }
 
+/**
+ * A SERVER SENTENCE STILL OWED, AND THE APPLICATION IT IS ABOUT.
+ *
+ * The id is not decoration. This state lives on the page, not on a packet, and the applicant may
+ * switch applications inside the very window this module holds the view open for: a 429 refusing
+ * application A's send, then a click into application B, whose entry screen is a routable "portal".
+ * Without the id the poll's delivery site would print A's refusal as B's banner, which is the
+ * cross-application leak every sibling refusal in the page already carries an id to prevent
+ * (metadataRefreshError, resumeContactRefreshError, sendRefusal, packetRevalidationRefusal).
+ */
+export type LiveRunRetainedRefusal = {
+  readonly applicationId: string;
+  readonly message: string;
+};
+
 export type LiveRunConnection = {
+  /**
+   * Whose run this outage is about, or null when there is no outage and nothing owed.
+   *
+   * The caller compares it before rendering a notice or a banner, so a blink measured on one
+   * application cannot describe the screen of another.
+   */
+  readonly applicationId: string | null;
   /** Consecutive failures. Reset by any success, which is what makes the window a run of failures. */
   readonly consecutiveFailures: number;
   /** When the current run of failures began, so the window measures the OUTAGE, not the last tick. */
@@ -114,53 +136,73 @@ export type LiveRunConnection = {
    * is the dead-button class this file's siblings exist for, rebuilt out of the fix for the
    * opposite defect.
    *
-   * So a failure that carried a STATUS parks its message here, and the heal deliberately does not
-   * clear it. Anything the API did not write leaves this null: there is no sentence to keep.
+   * So a failure that carried a STATUS parks its message here, stamped with the application it
+   * refused, and the heal deliberately does not clear it. Anything the API did not write leaves this
+   * null: there is no sentence to keep.
    */
-  readonly retainedMessage: string | null;
+  readonly retained: LiveRunRetainedRefusal | null;
 };
 
 export const IDLE_LIVE_RUN_CONNECTION: LiveRunConnection = {
+  applicationId: null,
   consecutiveFailures: 0,
   firstFailureAtMs: null,
   kind: null,
   message: null,
-  retainedMessage: null,
+  retained: null,
 };
 
 /** Identity-stable, so a clean tick does not re-render the live view on every one of them. */
 export function liveRunConnectionAfterSuccess(current: LiveRunConnection): LiveRunConnection {
   if (current.consecutiveFailures === 0 && current.kind === null) return current;
-  /* The run of failures is over; the server's sentence about the refused request is not. */
-  return current.retainedMessage === null
+  /* The run of failures is over; the server's sentence about the refused request is not. The id
+     comes off the retained refusal rather than off the finished outage, so the surviving state
+     names exactly the application still owed a sentence. */
+  return current.retained === null
     ? IDLE_LIVE_RUN_CONNECTION
-    : { ...IDLE_LIVE_RUN_CONNECTION, retainedMessage: current.retainedMessage };
+    : { ...IDLE_LIVE_RUN_CONNECTION, applicationId: current.retained.applicationId, retained: current.retained };
 }
 
 export function liveRunConnectionAfterFailure(
   current: LiveRunConnection,
+  applicationId: string,
   reason: unknown,
   nowMs: number,
   message: string,
 ): LiveRunConnection {
+  /* A failure on a DIFFERENT application is a different outage, and the previous one's retained
+     sentence is not this application's to carry. Starting from idle is what stops a run of failures
+     measured on A from lending its exhausted window - or its refusal - to B. */
+  const base = current.applicationId === applicationId ? current : IDLE_LIVE_RUN_CONNECTION;
   return {
-    consecutiveFailures: current.consecutiveFailures + 1,
-    firstFailureAtMs: current.firstFailureAtMs ?? nowMs,
+    applicationId,
+    consecutiveFailures: base.consecutiveFailures + 1,
+    firstFailureAtMs: base.firstFailureAtMs ?? nowMs,
     kind: liveRunFailureKind(reason),
     message,
     /* A later status-less blink must not erase the sentence an earlier 429 or 503 wrote. */
-    retainedMessage: liveRunFailureStatus(reason) === null ? current.retainedMessage : message,
+    retained: liveRunFailureStatus(reason) === null ? base.retained : { applicationId, message },
   };
 }
 
-/** The server-chosen sentence still owed to the applicant, or null. */
-export function liveRunRetainedRefusal(state: LiveRunConnection): string | null {
-  return state.retainedMessage;
+/** The server-chosen sentence still owed to the applicant, stamped with its application, or null. */
+export function liveRunRetainedRefusal(state: LiveRunConnection): LiveRunRetainedRefusal | null {
+  return state.retained;
+}
+
+/**
+ * Whether this state has anything to say about the application on screen.
+ *
+ * The notice and the banner both read it. An outage measured while application A was open says
+ * nothing about B, and "Reconnecting to Litos..." rendered on B's screen is a claim about B.
+ */
+export function liveRunConnectionIsFor(state: LiveRunConnection, applicationId: string | null): boolean {
+  return applicationId !== null && state.applicationId === applicationId;
 }
 
 /** Called once the sentence has actually been put on screen, so it is not repeated forever. */
 export function liveRunConnectionAfterRetainedDelivery(state: LiveRunConnection): LiveRunConnection {
-  return state.retainedMessage === null ? state : { ...state, retainedMessage: null };
+  return state.retained === null ? state : { ...state, retained: null };
 }
 
 export type LiveRunConnectionView =

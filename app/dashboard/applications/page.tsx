@@ -86,7 +86,7 @@ import { acknowledgePacketAudit, acknowledgePacketEvidence, packetQuestionsSnaps
 import { useBilling } from "@/components/billing/BillingProvider";
 import { isStructuredUpgradeDenial } from "@/features/billing";
 import { completeOperationId, operationIdFor } from "@/lib/operation-id";
-import { IDLE_LIVE_RUN_CONNECTION, LIVE_RUN_RECONNECTING_NOTICE, liveRunConnectionAfterFailure, liveRunConnectionAfterRetainedDelivery, liveRunConnectionAfterSuccess, liveRunConnectionView, liveRunPollDelayMs, liveRunRetainedRefusal, liveRunViewSurvivesFailure, RUN_IN_FLIGHT_REFUSAL, type LiveRunConnection } from "@/features/applications";
+import { IDLE_LIVE_RUN_CONNECTION, LIVE_RUN_RECONNECTING_NOTICE, liveRunConnectionAfterFailure, liveRunConnectionAfterRetainedDelivery, liveRunConnectionAfterSuccess, liveRunConnectionIsFor, liveRunConnectionView, liveRunPollDelayMs, liveRunRetainedRefusal, liveRunViewSurvivesFailure, RUN_IN_FLIGHT_REFUSAL, type LiveRunConnection } from "@/features/applications";
 import { applicationPacketAuthorityState, awaitingUnverifiedSubmissionResolution, employerActionRefusalMessage, SERVER_RUN_IN_FLIGHT_STATUSES, confirmedProjectionForPacket, managedPrepareAuthorityEnvelopeFromUnknown, managedPrepareAuthorityMatchesPacket, quarantinedSubmissionAuthority, reviewClaimsSubmissionSent, reviewForSubmissionProjection, submissionAuthorityEnvelopeFromUnknown, submissionMutationResponseMatchesApplication, submissionProjectionIsConfirmed, unverifiedRecoveryStatus, type UnverifiedRecoveryStatus } from "@/features/applications";
 import { useSidebarCollapse } from "@/app/dashboard/dashboard-shell";
 
@@ -1144,8 +1144,12 @@ function Applications() {
     /* Only ever WRITES the banner, never clears it. A blink during a standing packet-revalidation
        refusal must not wipe the server's sentence for a minute; the next clean tick owns the
        clearing, exactly as it did before. And this is still the poll's channel, so `error` - a
-       refusal to something the applicant pressed - outranks it at the render. */
-    if (view.tone === "error") setPollError(view.message);
+       refusal to something the applicant pressed - outranks it at the render.
+
+       Scoped to the application on screen, for the same reason the delivery site below is: an
+       exhausted window measured on the packet she has since left must not paint its sentence over
+       the packet she is looking at now. */
+    if (view.tone === "error" && liveRunConnectionIsFor(next, selectedIdRef.current)) setPollError(view.message);
     return next;
   }, []);
   /* Taking the next state as an argument, because the send's catch has to ASK what that state
@@ -1153,10 +1157,23 @@ function Applications() {
      may be taken off a live run, and a definitive refusal must reach the review screen through the
      ordinary path rather than being parked in this accumulator. */
   const publishLiveConnectionFailure = useCallback(
-    (reason: unknown, message: string) =>
-      commitLiveConnectionFailure(liveRunConnectionAfterFailure(liveConnectionRef.current, reason, Date.now(), message)),
+    (applicationId: string, reason: unknown, message: string) =>
+      commitLiveConnectionFailure(
+        liveRunConnectionAfterFailure(liveConnectionRef.current, applicationId, reason, Date.now(), message),
+      ),
     [commitLiveConnectionFailure],
   );
+  /* LEAVING AN APPLICATION RETIRES ITS OUTAGE, and this is the half the id alone cannot do.
+     The accumulator is page-level: it outlives the packet it was measured on. The id keeps a stale
+     sentence from being PRINTED on another application, and this keeps it from being carried at
+     all - so a run of failures on A does not lend B a half-exhausted reconnect window, and A's
+     undelivered 429 does not sit in the ref waiting for a screen that will never come. Every entry
+     into and exit from an application calls it, exactly as packetRevalidationRefusal is cleared. */
+  const resetLiveConnection = useCallback(() => {
+    if (liveConnectionRef.current === IDLE_LIVE_RUN_CONNECTION) return;
+    liveConnectionRef.current = IDLE_LIVE_RUN_CONNECTION;
+    setLiveConnection(IDLE_LIVE_RUN_CONNECTION);
+  }, []);
   const [transportReconciliation, setTransportReconciliation] = useState<{ applicationId: string; message: string } | null>(null);
   /* The one poll failure that must OUTLIVE the tick that raised it, and the last silent member of
      the dead-button class ("a dead button with no console error is a swallowed 409 in the network
@@ -1562,6 +1579,8 @@ function Applications() {
       selectedIdRef.current = null;
       editorRevisionRef.current += 1;
       packetCoverLetterEditorRevisionRef.current += 1;
+      /* Leaving the legacy packet entirely. Its outage, and any sentence it still owed, go with it. */
+      resetLiveConnection();
       runDashboardTransition(() => {
         setSelectedId(null);
         commitCanonicalSelection(canonical);
@@ -1592,6 +1611,10 @@ function Applications() {
        the sentence described evidence this entry no longer holds, and left in the ref it would
        re-pin itself onto the banner at the next poll tick. */
     packetRevalidationRefusal.current = null;
+    /* And the live-run accumulator with it, for the same reason one line up. It is page-level, so a
+       429 retained while application A was open would otherwise ride into B and be delivered as B's
+       banner on B's first poll tick, and A's half-spent reconnect window would count against B. */
+    resetLiveConnection();
     /* A ready packet still has one mandatory stop before the employer send: the posting, exact
        resume, evidence colours and gap list. Routing it straight to the portal screen is how the
        Cresta packet reached Send it without that audit. The packet and this route commit in the
@@ -1650,7 +1673,7 @@ function Applications() {
       setNotice(null);
       moveToScreen(packetEntryScreen(selectedReview));
     });
-  }, [clearPrescriptState, commitCanonicalSelection, moveToScreen, qaMode, setSubmission]);
+  }, [clearPrescriptState, commitCanonicalSelection, moveToScreen, qaMode, resetLiveConnection, setSubmission]);
 
   /* User navigation writes local state and route state as one action. The local write makes the
      switch feel immediate; the URL makes reload, sharing, and browser history reopen the same
@@ -1804,6 +1827,9 @@ function Applications() {
     resumeEditSaveApplicationRef.current = null;
     editorRevisionRef.current += 1;
     packetCoverLetterEditorRevisionRef.current += 1;
+    /* No application is open after this, so nothing on screen can be the subject of a retained
+       refusal or a reconnect notice. Left standing, both would reappear on the next packet. */
+    resetLiveConnection();
     const commitReset = () => {
       setPendingJob(null);
       setOpeningApplicationId(null);
@@ -1829,7 +1855,7 @@ function Applications() {
        reset to a transition lane would violate that before-paint guarantee. */
     if (options.animate === false) commitReset();
     else runDashboardTransition(commitReset);
-  }, [commitCanonicalSelection, setSubmission]);
+  }, [commitCanonicalSelection, resetLiveConnection, setSubmission]);
 
   const closeApplication = useCallback(() => {
     const selectedPacketId = selectedIdRef.current;
@@ -2148,11 +2174,16 @@ function Applications() {
        Not on the way to a receipt: a submitted run answers the question by itself. */
     if (nextScreen !== "submitting" && nextScreen !== "submitted") {
       const retained = liveRunRetainedRefusal(liveConnectionRef.current);
-      if (retained) {
+      /* AND IT MUST BE THIS APPLICATION'S SENTENCE. The accumulator is page-level and the applicant
+         can switch packets inside the very window this holds the view open for: a 429 refusing A's
+         send, then a click into B, whose entry screen is a routable "portal" and whose first poll
+         tick lands right here. Unstamped, A's refusal printed as B's banner. Every sibling refusal
+         in this file carries an id for the same reason. */
+      if (retained && retained.applicationId === requestedId) {
         const delivered = liveRunConnectionAfterRetainedDelivery(liveConnectionRef.current);
         liveConnectionRef.current = delivered;
         setLiveConnection(delivered);
-        setPollError(retained);
+        setPollError(retained.message);
       }
     }
     moveToScreen(nextScreen);
@@ -2264,6 +2295,7 @@ function Applications() {
            status it chose. Measured 2026-09-10, see live-run-connection.ts. */
         if (!cancelled) {
           publishLiveConnectionFailure(
+            selectedId,
             reason,
             reason instanceof Error ? reason.message : "We lost sight of the form. Reload the page to check.",
           );
@@ -2294,7 +2326,7 @@ function Applications() {
       document.removeEventListener("visibilitychange", onVisibility);
       if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, [qaMode, refreshSubmission, pollRequired, selectedId]);
+  }, [qaMode, refreshSubmission, pollRequired, publishLiveConnectionFailure, selectedId]);
 
   useEffect(() => {
     const bootstrapGeneration = ++applicationBootstrapGenerationRef.current;
@@ -4609,6 +4641,12 @@ function Applications() {
     setError(null);
     setSendRefusal(null);
     setPreSendVerification(null);
+    /* A NEW SEND STARTS THE CONNECTION'S STORY OVER TOO. Whatever the last attempt accumulated -
+       another application's outage, or this one's own undelivered 429 from a press she has since
+       retried - is about a round trip that is over. Carrying it forward would let the previous
+       attempt's sentence land on this one's route back, and would start this run inside an already
+       half-exhausted reconnect window. */
+    resetLiveConnection();
     track("application_submission_requested", {
       source: qaMode ? "qa" : options.source ?? (options.restart ? "restart" : "review"),
     });
@@ -4723,7 +4761,7 @@ function Applications() {
          the hourly limiter or a 503 from the shutdown gate is a sentence the applicant reads
          instead of a silently re-armed send. Only a status-less rejection leaves nothing behind,
          because there is nothing the server said. */
-      const nextLiveConnection = liveRunConnectionAfterFailure(liveConnectionRef.current, reason, Date.now(), message);
+      const nextLiveConnection = liveRunConnectionAfterFailure(liveConnectionRef.current, applicationId, reason, Date.now(), message);
       if (options.failureScreen === undefined && liveRunViewSurvivesFailure(nextLiveConnection)) {
         commitLiveConnectionFailure(nextLiveConnection);
         return;
@@ -5834,7 +5872,8 @@ function Applications() {
      cannot disagree with the banner: publishLiveConnectionFailure writes `pollError` at exactly the
      moment the reconnect window is exhausted, so a standing transient with no banner beside it IS
      the reconnecting case. A definitive refusal never reaches here - it goes straight to red. */
-  const liveConnectionNotice = liveConnection.consecutiveFailures > 0
+  const liveConnectionNotice = liveRunConnectionIsFor(liveConnection, selectedId)
+    && liveConnection.consecutiveFailures > 0
     && liveConnection.kind === "transient"
     && !visiblePageError
     && !visiblePollError

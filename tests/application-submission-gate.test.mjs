@@ -274,7 +274,9 @@ test("a zero-question server packet retires stale local questions without overwr
   /* The route is now bound to a name before it is taken - a retained server refusal is published
      between the guard and the move - so the guard is asserted against that binding rather than
      against the call, and the call is asserted to use it. */
-  assert.match(refresh, /const pollMayRoute = screenRef\.current === "submitting"[\s\S]{0,180}result\.review\.status === "submitted";[\s\S]{0,100}if \(!pollMayRoute\) return;\s*\n\s*const nextScreen = screenForStatus\(result\.review\.status, "submitting"\);[\s\S]{0,1400}moveToScreen\(nextScreen\);/);
+  /* Proximity, not a length budget: the retained-refusal delivery sits between the route decision
+     and the move, and carries the comment naming whose refusal it may be. */
+  assert.match(refresh, /const pollMayRoute = screenRef\.current === "submitting"[\s\S]{0,180}result\.review\.status === "submitted";[\s\S]{0,100}if \(!pollMayRoute\) return;\s*\n\s*const nextScreen = screenForStatus\(result\.review\.status, "submitting"\);[\s\S]{0,2000}moveToScreen\(nextScreen\);/);
 });
 
 test("a cleared packet audit cannot be resurrected by an older revalidation", async () => {

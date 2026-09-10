@@ -53,7 +53,7 @@ test("a dropped submit-request socket keeps the live view and hands the question
   // exported, documented as load-bearing and called from nowhere is how this ships broken again.
   assert.match(
     dashboard,
-    /const nextLiveConnection = liveRunConnectionAfterFailure\(liveConnectionRef\.current, reason, Date\.now\(\), message\);\s*\n\s*if \(options\.failureScreen === undefined && liveRunViewSurvivesFailure\(nextLiveConnection\)\) \{\s*\n\s*commitLiveConnectionFailure\(nextLiveConnection\);\s*\n\s*return;\s*\n\s*\}/,
+    /const nextLiveConnection = liveRunConnectionAfterFailure\(liveConnectionRef\.current, applicationId, reason, Date\.now\(\), message\);\s*\n\s*if \(options\.failureScreen === undefined && liveRunViewSurvivesFailure\(nextLiveConnection\)\) \{\s*\n\s*commitLiveConnectionFailure\(nextLiveConnection\);\s*\n\s*return;\s*\n\s*\}/,
   );
   // And it must sit BEFORE the screen move, or the applicant is already on review.
   assert.match(
@@ -83,11 +83,12 @@ test("a refusal the server wrote is delivered when the poll routes off the live 
   // class: the applicant lands back on review under a re-armed send with nothing on screen.
   assert.match(
     dashboard,
-    /const nextScreen = screenForStatus\(result\.review\.status, "submitting"\);[\s\S]{0,1200}if \(nextScreen !== "submitting" && nextScreen !== "submitted"\) \{\s*\n\s*const retained = liveRunRetainedRefusal\(liveConnectionRef\.current\);\s*\n\s*if \(retained\) \{[\s\S]{0,400}setPollError\(retained\);/,
+    /const nextScreen = screenForStatus\(result\.review\.status, "submitting"\);[\s\S]{0,1200}if \(nextScreen !== "submitting" && nextScreen !== "submitted"\) \{\s*\n\s*const retained = liveRunRetainedRefusal\(liveConnectionRef\.current\);[\s\S]{0,800}if \(retained && retained\.applicationId === requestedId\) \{[\s\S]{0,400}setPollError\(retained\.message\);/,
+    "the retained sentence must be delivered only on the application it refused",
   );
   // Published AFTER this tick's own banner clear, or the clean poll erases it on the way past.
   const clearAt = dashboard.indexOf("      setPollError(null);\n    }");
-  const deliverAt = dashboard.indexOf("setPollError(retained);");
+  const deliverAt = dashboard.indexOf("setPollError(retained.message);");
   assert.ok(clearAt > 0 && deliverAt > clearAt, "the retained sentence must be written after the tick's clear");
   // Delivered once, then retired.
   assert.match(dashboard, /liveRunConnectionAfterRetainedDelivery\(liveConnectionRef\.current\)/);
@@ -99,13 +100,63 @@ test("the reconnecting notice is non-blocking and cannot contradict the banner",
   // Derived from the connection state, not from a clock read at render time.
   assert.match(
     dashboard,
-    /const liveConnectionNotice = liveConnection\.consecutiveFailures > 0[\s\S]{0,320}LIVE_RUN_RECONNECTING_NOTICE/,
+    /const liveConnectionNotice = liveRunConnectionIsFor\(liveConnection, selectedId\)\s*\n\s*&& liveConnection\.consecutiveFailures > 0[\s\S]{0,320}LIVE_RUN_RECONNECTING_NOTICE/,
+    "the reconnecting notice must be about the application on screen, not whichever one last blinked",
   );
   // role="status", not role="alert": nothing has failed yet.
   assert.match(dashboard, /\{liveConnectionNotice && \(\s*\n\s*<p role="status"[^>]*>\{liveConnectionNotice\}<\/p>/);
   // The failure publisher only ever WRITES the banner. Clearing it on a blink would wipe a standing
   // packet-revalidation refusal for the length of the reconnect window.
-  assert.match(dashboard, /if \(view\.tone === "error"\) setPollError\(view\.message\);/);
+  // And it writes it only for the application on screen. The accumulator is page-level, so an
+  // exhausted window measured on a packet she has left would otherwise paint over the one she is on.
+  assert.match(
+    dashboard,
+    /if \(view\.tone === "error" && liveRunConnectionIsFor\(next, selectedIdRef\.current\)\) setPollError\(view\.message\);/,
+  );
+});
+
+/* THE SECOND-ROUND BLOCKER. The retained refusal outlives the tick that raised it by design, and
+   the accumulator holding it is page-level: without an id on the sentence and a clear on every
+   entry and exit, application A's 429 is delivered as application B's banner. Every sibling refusal
+   in the dashboard is stamped the same way, and selectPacket already clears
+   packetRevalidationRefusal on entry for exactly this reason. */
+test("leaving or entering an application retires the live-run state it accumulated", async () => {
+  const dashboard = await readFile(dashboardUrl, "utf8");
+
+  // The clear itself, and both halves of it: the ref the poll reads synchronously and the state the
+  // notice renders from. Writing only one is how a cleared banner comes back on the next tick.
+  assert.match(
+    dashboard,
+    /const resetLiveConnection = useCallback\(\(\) => \{[\s\S]{0,400}liveConnectionRef\.current = IDLE_LIVE_RUN_CONNECTION;\s*\n\s*setLiveConnection\(IDLE_LIVE_RUN_CONNECTION\);/,
+  );
+
+  // Entering a packet, beside the refusal that is already cleared there for the same reason.
+  assert.match(
+    dashboard,
+    /packetRevalidationRefusal\.current = null;[\s\S]{0,600}resetLiveConnection\(\);/,
+    "selectPacket must retire the previous packet's live-run state the way it retires its revalidation refusal",
+  );
+  // Leaving every application.
+  assert.match(
+    dashboard,
+    /const resetApplicationWorkflow = useCallback\([\s\S]{0,900}resetLiveConnection\(\);/,
+  );
+  // And a new send, which starts the connection's story over the way it starts the banners' over.
+  assert.match(
+    dashboard,
+    /moveToScreen\("submitting"\);\s*\n\s*setError\(null\);\s*\n\s*setSendRefusal\(null\);\s*\n\s*setPreSendVerification\(null\);[\s\S]{0,600}resetLiveConnection\(\);/,
+  );
+
+  // The failure publisher takes the application it is about rather than inferring it later.
+  assert.match(
+    dashboard,
+    /const publishLiveConnectionFailure = useCallback\(\s*\n\s*\(applicationId: string, reason: unknown, message: string\) =>/,
+  );
+  assert.doesNotMatch(
+    dashboard,
+    /liveRunConnectionAfterFailure\(liveConnectionRef\.current, reason,/,
+    "an unstamped failure is the cross-application leak this test exists for",
+  );
 });
 
 test("the send is withdrawn while the server says a run holds the packet", async () => {
