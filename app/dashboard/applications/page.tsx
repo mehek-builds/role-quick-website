@@ -103,6 +103,7 @@ type PacketCoverLetterRequestScope = {
   requestGeneration: number;
 };
 type PrepareApplicationOptions = {
+  workdayPageApprovalToken?: string;
   allowServerAnswerRefresh?: boolean;
   restart?: boolean;
   failureScreen?: "questions" | "portal" | "review";
@@ -4469,7 +4470,8 @@ function Applications() {
       if (!qaMode) {
         const raw = await api<SubmissionResponse>(`/applications/${applicationId}/submit-request`, {
           method: "POST",
-          body: JSON.stringify({ questions: finalQuestions, ...(options.restart ? { restart: true } : {}) }),
+          body: JSON.stringify({ questions: finalQuestions, ...(options.restart ? { restart: true } : {}),
+            ...(options.workdayPageApprovalToken ? { workday_page_approval_token: options.workdayPageApprovalToken } : {}) }),
         });
         const result = submissionResponseForDisplay(raw, { packetId: applicationId });
         captureCompletedSubmission(result, options.restart ? "restart" : "review");
@@ -5456,6 +5458,15 @@ function Applications() {
     }
   }
 
+  async function approveFilledWorkdayPage() {
+    if (!selected || !submission || submission.application_id !== selected.id) return;
+    const page = submission.review.workday_page_review;
+    if (!page || page.approved_at) return;
+    const currentQuestions = mergeDiscoveredQuestions(questions, submission.review.questions);
+    await prepareApplication(currentQuestions, { allowServerAnswerRefresh: true,
+      workdayPageApprovalToken: page.token, failureScreen: "portal" });
+  }
+
   async function retryPreparation() {
     if (!selected || !submission || submission.application_id !== selected.id) return;
     const currentQuestions = mergeDiscoveredQuestions(questions, submission.review.questions);
@@ -6329,6 +6340,7 @@ function Applications() {
           onRestart={() => void restartPreparedRun()}
           restarting={restartingId === selected.id}
           onRetry={retryPreparation}
+          onApproveWorkdayPage={approveFilledWorkdayPage}
           /* The one value that decides BOTH whether Try again renders and what
              prepareApplication says when it refuses, so the control and its handler can
              never disagree. See employerActionRefusal. */
@@ -8516,7 +8528,7 @@ export function DirectApplicationQuestion({ task, position, total, saving, saved
   );
 }
 
-function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceReviewed, approving, securityCodeSubmitting, securityCodeError, onSubmitSecurityCode, educationProfile, educationProfileStatus, onCheckResume, onReloadCoverLetter, onWriteCoverLetter, coverLetterReloading, onHandoffComplete, onApprove, sendRefusal, onRestart, restarting, onRetry, employerActionRefusal, onReviewPacket, onReviewQuestions, onOpenQuestion, onChooseOption, onSaveQuestion, onSkipQuestion, savingAnswer, answeredQuestionFingerprints, directAnswerProgress, directAnswerDrafts, directAnswerFailure, onDirectAnswerDraftChange, onClearDirectAnswerDraft, onNavigateDirectQuestion, onClearDirectAnswerFailure, onRefreshQuestionMetadata, questionMetadataRefreshing, questionMetadataRefreshDisabled, questionMetadataNeedsPacketReview, questionMetadataRefreshError, onQuestionsFinished, onAddDocument, onToggleAcknowledged, attentionTicking, onRefreshResumeContact, resumeContactRefreshBusy, resumeContactRefreshError, onConfirmPostingOpen, confirmPostingOpenBusy, confirmPostingOpenError }: { packet: GeneratedResume; resumeRecord?: ChecklistResumeRecord; submission: SubmissionResponse; packetEvidenceReviewed: boolean; approving: boolean; securityCodeSubmitting: boolean; securityCodeError: string | null; onSubmitSecurityCode: (code: string) => void; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onReloadCoverLetter: () => void; onWriteCoverLetter: () => void; coverLetterReloading: boolean; onHandoffComplete: () => void; onApprove: () => void; sendRefusal: { message: string; issues: string[] } | null; onRestart: () => void; restarting: boolean; onRetry: () => void; employerActionRefusal: string | null; onReviewPacket: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string, intent?: SubmissionChecklistAction) => void; onChooseOption: (questionId: string, option: string) => void; onSaveQuestion: (questionId: string, answer: string, intent: DirectQuestionTaskIntent, promptFingerprint: string, taskFingerprint: string, task: DirectQuestionTask) => Promise<DirectAnswerSaveResult>; onSkipQuestion: (questionId: string, intent: DirectQuestionTaskIntent, promptFingerprint: string, taskFingerprint: string, task: DirectQuestionTask) => Promise<DirectAnswerSaveResult>; savingAnswer: boolean; answeredQuestionFingerprints: ReadonlySet<string>; directAnswerProgress: DirectAnswerProgress | null; directAnswerDrafts: ReadonlyMap<string, DirectAnswerDraft>; directAnswerFailure: DirectAnswerFailure | null; onDirectAnswerDraftChange: (questionId: string, promptFingerprint: string, taskFingerprint: string, answer: string) => void; onClearDirectAnswerDraft: (promptFingerprint: string) => void; onNavigateDirectQuestion: (promptFingerprint: string) => void; onClearDirectAnswerFailure: (promptFingerprint: string) => void; onRefreshQuestionMetadata: () => void; questionMetadataRefreshing: boolean; questionMetadataRefreshDisabled: boolean; questionMetadataNeedsPacketReview: boolean; questionMetadataRefreshError: string | null; onQuestionsFinished: () => void; onAddDocument: (kind: string) => void; onToggleAcknowledged: (item: SubmissionChecklistItem, acknowledged: boolean) => void; attentionTicking: ReadonlySet<string>; onRefreshResumeContact: () => void; resumeContactRefreshBusy: boolean; resumeContactRefreshError: string | null; onConfirmPostingOpen: () => void; confirmPostingOpenBusy: boolean; confirmPostingOpenError: string | null }) {
+function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceReviewed, approving, securityCodeSubmitting, securityCodeError, onSubmitSecurityCode, educationProfile, educationProfileStatus, onCheckResume, onReloadCoverLetter, onWriteCoverLetter, coverLetterReloading, onHandoffComplete, onApprove, sendRefusal, onRestart, restarting, onRetry, onApproveWorkdayPage, employerActionRefusal, onReviewPacket, onReviewQuestions, onOpenQuestion, onChooseOption, onSaveQuestion, onSkipQuestion, savingAnswer, answeredQuestionFingerprints, directAnswerProgress, directAnswerDrafts, directAnswerFailure, onDirectAnswerDraftChange, onClearDirectAnswerDraft, onNavigateDirectQuestion, onClearDirectAnswerFailure, onRefreshQuestionMetadata, questionMetadataRefreshing, questionMetadataRefreshDisabled, questionMetadataNeedsPacketReview, questionMetadataRefreshError, onQuestionsFinished, onAddDocument, onToggleAcknowledged, attentionTicking, onRefreshResumeContact, resumeContactRefreshBusy, resumeContactRefreshError, onConfirmPostingOpen, confirmPostingOpenBusy, confirmPostingOpenError }: { packet: GeneratedResume; resumeRecord?: ChecklistResumeRecord; submission: SubmissionResponse; packetEvidenceReviewed: boolean; approving: boolean; securityCodeSubmitting: boolean; securityCodeError: string | null; onSubmitSecurityCode: (code: string) => void; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onReloadCoverLetter: () => void; onWriteCoverLetter: () => void; coverLetterReloading: boolean; onHandoffComplete: () => void; onApprove: () => void; sendRefusal: { message: string; issues: string[] } | null; onRestart: () => void; restarting: boolean; onRetry: () => void; onApproveWorkdayPage: () => void; employerActionRefusal: string | null; onReviewPacket: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string, intent?: SubmissionChecklistAction) => void; onChooseOption: (questionId: string, option: string) => void; onSaveQuestion: (questionId: string, answer: string, intent: DirectQuestionTaskIntent, promptFingerprint: string, taskFingerprint: string, task: DirectQuestionTask) => Promise<DirectAnswerSaveResult>; onSkipQuestion: (questionId: string, intent: DirectQuestionTaskIntent, promptFingerprint: string, taskFingerprint: string, task: DirectQuestionTask) => Promise<DirectAnswerSaveResult>; savingAnswer: boolean; answeredQuestionFingerprints: ReadonlySet<string>; directAnswerProgress: DirectAnswerProgress | null; directAnswerDrafts: ReadonlyMap<string, DirectAnswerDraft>; directAnswerFailure: DirectAnswerFailure | null; onDirectAnswerDraftChange: (questionId: string, promptFingerprint: string, taskFingerprint: string, answer: string) => void; onClearDirectAnswerDraft: (promptFingerprint: string) => void; onNavigateDirectQuestion: (promptFingerprint: string) => void; onClearDirectAnswerFailure: (promptFingerprint: string) => void; onRefreshQuestionMetadata: () => void; questionMetadataRefreshing: boolean; questionMetadataRefreshDisabled: boolean; questionMetadataNeedsPacketReview: boolean; questionMetadataRefreshError: string | null; onQuestionsFinished: () => void; onAddDocument: (kind: string) => void; onToggleAcknowledged: (item: SubmissionChecklistItem, acknowledged: boolean) => void; attentionTicking: ReadonlySet<string>; onRefreshResumeContact: () => void; resumeContactRefreshBusy: boolean; resumeContactRefreshError: string | null; onConfirmPostingOpen: () => void; confirmPostingOpenBusy: boolean; confirmPostingOpenError: string | null }) {
   const { review } = submission;
   /* The same decision the packet review screen renders from - see resumeContactStaleNotice and
      refreshResumeContact in this file. Computed once here rather than at each read below, so the
@@ -8907,6 +8919,31 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
         </div>}
     </Card>
   );
+  const workdayPage = review.workday_page_review;
+  if (workdayPage && !workdayPage.approved_at && review.status === "needs_attention") {
+    return <div className="mx-auto grid max-w-6xl gap-5 lg:grid-cols-[0.8fr_1.2fr]">
+      <Card className="p-7">
+        <p className="text-small text-muted">Workday page {workdayPage.step.current} of {workdayPage.step.total}</p>
+        <h2 className="mt-2 text-xl font-semibold">{workdayPage.step.name}</h2>
+        <p className="mt-4 text-body">Do you approve all of these answers?</p>
+        <p className="mt-2 text-small text-muted">These answers are filled on the company page shown here. Approving continues to the next page.</p>
+        <dl className="mt-5 space-y-4">
+          {workdayPage.answers.map((answer, index) => <div key={index}>
+            <dt className="text-small text-muted">{displayQuestionLabel(answer.question)}</dt>
+            <dd className="mt-1 text-body whitespace-pre-wrap">{answer.answer || "Left blank"}</dd>
+          </div>)}
+        </dl>
+        <div className="mt-6 flex flex-wrap gap-3">
+          <Button onClick={onApproveWorkdayPage} disabled={!previewReady || approving || restarting}>
+            Approve all answers and continue
+          </Button>
+          <Button variant="secondary" onClick={onReviewQuestions}>Edit answers</Button>
+        </div>
+        {!previewReady && <p className="mt-3 text-small text-muted">The filled page must load before you can approve it.</p>}
+      </Card>
+      {filledFormEvidence}
+    </div>;
+  }
   return (
     <div className={`mx-auto grid gap-5 ${needsAttention && !awaitingUnverifiedSubmission ? "max-w-3xl" : "max-w-5xl lg:grid-cols-[1fr_1.15fr]"}`}>
       {awaitingUnverifiedSubmission && filledFormEvidence}

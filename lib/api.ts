@@ -1099,6 +1099,11 @@ export type ManualHandoffResponse = {
 };
 
 export type ApplicationReview = {
+  workday_page_review?: {
+    version: 1; token: string; captured_at: string; approved_at?: string;
+    step: { current: number; total: number; name: string; final: boolean };
+    answers: { question: string; answer: string }[];
+  };
   jd_text: string;
   portal_url?: string;
   /** Exact company form authorized for an attended extension retry. It is distinct from the
