@@ -8955,12 +8955,19 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
   );
   const workdayPage = review.workday_page_review;
   if (workdayPage && !workdayPage.approved_at && review.status === "needs_attention") {
+    /* Final-page approval records evidence only. It uses the same token-bound request as an
+       intermediate page, but the server grants no advance or submission authority from it. Keep
+       that distinction visible here so the applicant never reads this press as Send. `kind` is
+       optional for older records; the measured step remains the compatibility source of truth. */
+    const workdayFinalPage = (workdayPage.kind ?? (workdayPage.step.final ? "final" : "advance")) === "final";
     return <div className="mx-auto grid max-w-6xl gap-5 lg:grid-cols-[0.8fr_1.2fr]">
       <Card className="p-7">
         <p className="text-small text-muted">Workday page {workdayPage.step.current} of {workdayPage.step.total}</p>
         <h2 className="mt-2 text-xl font-semibold">{workdayPage.step.name}</h2>
-        <p className="mt-4 text-body">Do you approve all of these answers?</p>
-        <p className="mt-2 text-small text-muted">These answers are filled on the company page shown here. Approving continues to the next page.</p>
+        <p className="mt-4 text-body">{workdayFinalPage ? "Do you approve this final Workday review page?" : "Do you approve all of these answers?"}</p>
+        <p className="mt-2 text-small text-muted">{workdayFinalPage
+          ? "Approval records the exact page shown here. It does not submit the application."
+          : "These answers are filled on the company page shown here. Approving continues to the next page."}</p>
         <dl className="mt-5 space-y-4">
           {workdayPage.answers.map((answer, index) => <div key={index}>
             <dt className="text-small text-muted">{displayQuestionLabel(answer.question)}</dt>
@@ -8969,7 +8976,7 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
         </dl>
         <div className="mt-6 flex flex-wrap gap-3">
           <Button onClick={onApproveWorkdayPage} disabled={!previewReady || approving || restarting}>
-            Approve all answers and continue
+            {workdayFinalPage ? "Approve final page" : "Approve all answers and continue"}
           </Button>
           <Button variant="secondary" onClick={onReviewQuestions}>Edit answers</Button>
         </div>

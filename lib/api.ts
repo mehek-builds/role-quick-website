@@ -1100,7 +1100,7 @@ export type ManualHandoffResponse = {
 
 export type ApplicationReview = {
   workday_page_review?: {
-    version: 1; token: string; captured_at: string; approved_at?: string;
+    version: 1; kind?: "advance" | "final"; token: string; captured_at: string; approved_at?: string;
     step: { current: number; total: number; name: string; final: boolean };
     answers: { question: string; answer: string }[];
   };
