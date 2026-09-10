@@ -530,9 +530,12 @@ browserTest("a pre-send refusal repairs through audit and opens the exact replac
   const REBUILT_KEY = "presend-rebuild";
   const rebuilt = {
     ...FILL,
-    ...fixtureAuthority(REBUILT_KEY, "resume_ready"),
+    /* A current replacement can retain needs_attention from its earlier employer run. Recovery
+       still owes the applicant the replacement PDF review, rather than the ordinary status-based
+       packet entry route that would reopen the old portal blocker. */
+    ...fixtureAuthority(REBUILT_KEY, "needs_attention"),
     id: fixturePacketId(REBUILT_KEY),
-    spec: { ...FILL.spec, _review: { ...FILL.spec._review, status: "resume_ready" } },
+    spec: { ...FILL.spec, _review: { ...FILL.spec._review, status: "needs_attention" } },
   };
   const { context, page, second, counts } = await openAuditedFlow(FILL, {
     submitResponse: {
@@ -573,6 +576,11 @@ browserTest("a pre-send refusal repairs through audit and opens the exact replac
   /* The new packet's own review, with its own send available again. */
   await page.getByRole("button", { name: "Fill the application", exact: true })
     .waitFor({ state: "visible", timeout: 20_000 });
+  await page.waitForTimeout(3500);
+  assert.equal(await page.getByText("Your resume for this job", { exact: true }).count(), 1,
+    "the replacement's stored status overrode the recovery-owned PDF review after selection settled");
+  assert.equal(await page.getByRole("heading", { name: "One thing to finish", exact: true }).count(), 0,
+    "recovery reopened the replacement's prior portal blocker instead of keeping PDF review");
   assert.equal(await page.getByRole("alert").filter({ hasText: PRE_SEND_ERROR }).count(), 0);
   await context.close();
 });
