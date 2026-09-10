@@ -41,7 +41,7 @@ import { duplicateBadge, duplicatePostingMarks, duplicatePostingNote } from "@/f
 import { isHttpsJobUrl, missingApplicationFields, type ApplicationDraftField } from "@/features/applications";
 import { COVER_LETTER_WAIT_MS, HANDOFF_CLOCK_TICK_MS, coverLetterBlocks, coverLetterGate, documentsFromSpecMarks, handoffWindowExpired, nextCoverLetterValue, nextSubmissionState, publishSubmissionEnvelope, reconcilePacketEvidenceAfterResumeRegeneration, reconcilePacketEvidenceWithSubmission, resumeContactRefreshBlockedReason, resumeContactStaleNotice, submissionAfterPacketAudit, submissionCoverLetterField, submissionReviewPacketIdentity, submissionSnapshotIsOlder, type ResumeContactStaleLike } from "@/features/applications";
 import { MatchScore, MatchGaps } from "@/components/app/MatchScore";
-import { auditRefusalCode, historicalPacketAuditStaleMessage, nextMatchScoreRequest, packetAuditReviewRecoveryCode, preSendVerificationRefusal, preSendVerificationReviewState, type PreSendVerificationRefusal } from "@/features/applications";
+import { PRE_SEND_VERIFICATION_NO_JD, PRE_SEND_VERIFICATION_NO_PORTAL_URL, PRE_SEND_VERIFICATION_NO_TRACKER_ROW, auditRefusalCode, historicalPacketAuditStaleMessage, nextMatchScoreRequest, packetAuditReviewRecoveryCode, preSendVerificationRefusal, preSendVerificationReviewState, type PreSendVerificationRefusal } from "@/features/applications";
 import { getBaseResume } from "@/lib/base-resume";
 import { RequirementBreakdown } from "@/components/app/RequirementBreakdown";
 import { ResumeHealth } from "@/components/app/ResumeHealth";
@@ -3170,6 +3170,13 @@ function Applications() {
                 : activePacketEvidence.questionsSnapshot !== currentQuestionsSnapshot
                   ? "The answers changed after the packet audit. Audit this packet again."
                   : null;
+  /* ONE RESOLUTION OF WHAT THE REBUILD WOULD SEND, read by the control's disabled state and by the
+     press itself. Split in two, they disagreed: the banner offered an enabled button while this
+     lookup answered null, and the press then died inside createApplication's composer refusals,
+     which this screen does not render. See PRE_SEND_VERIFICATION_NO_TRACKER_ROW. */
+  const preSendRebuildCanonical = selected ? canonicalApplicationsByAnyId[selected.id] ?? null : null;
+  const preSendRebuildPortalUrl = (preSendRebuildCanonical?.portal_url ?? review?.portal_url ?? "").trim();
+
   /* The send is WITHDRAWN, not merely captioned, while a pre-send verification refusal stands.
      Derived here, beside reviewPrimaryDisabled, so the button's disabled state and the banner that
      explains it are read off one value and can never disagree - the same rule employerActionRefusal
@@ -3177,6 +3184,8 @@ function Applications() {
   const preSendVerificationBlock = preSendVerificationReviewState(preSendVerification, {
     applicationId: selected?.id ?? null,
     jdText: review?.jd_text,
+    canonicalApplicationId: preSendRebuildCanonical?.id ?? null,
+    portalUrl: preSendRebuildPortalUrl,
     rebuilding: Boolean(selected && preSendRebuildId === selected.id),
   });
   const reviewPrimaryBusy = saving || coverLetterBusy || packetAuditBusy;
@@ -3387,24 +3396,35 @@ function Applications() {
        canonical-request guards, so a second press cannot even start a request, let alone spend a
        second monthly tailoring. */
     if (preSendRebuildRef.current) return;
+    /* THE SAME THREE PRECONDITIONS preSendVerificationReviewState derives the disabled state from,
+       in the same order, so a press that arrives anyway - a click on a render that has since moved
+       on, a scripted one - answers in the banner rather than returning silently. Every one of these
+       used to be a bare `return` or a refusal written to the closed New application composer, which
+       is how an enabled button issued no request and said nothing (measured 2026-09-10). */
+    const refuse = (message: string) => setPreSendRebuildError({ applicationId: packet.id, message });
     const jobDescription = review?.jd_text?.trim() ?? "";
-    if (!jobDescription) return;
-    const canonical = canonicalApplicationsByAnyId[packet.id] ?? null;
-    const draft: NewApplicationDraft = {
-      company: canonical?.company ?? packet.job_context.company,
-      role: canonical?.role ?? packet.job_context.role,
-      portalUrl: canonical?.portal_url ?? review?.portal_url ?? "",
-      jobDescription,
-      jobId: null,
-      canonicalApplicationId: canonical?.id ?? null,
-    };
-    if (!canonical) {
-      setPreSendRebuildError({
-        applicationId: packet.id,
-        message: "Litos could not find the Tracker application linked to this resume. Reload Applications and try again.",
-      });
+    if (!jobDescription) {
+      refuse(PRE_SEND_VERIFICATION_NO_JD);
       return;
     }
+    const canonical = preSendRebuildCanonical;
+    if (!canonical) {
+      refuse(PRE_SEND_VERIFICATION_NO_TRACKER_ROW);
+      return;
+    }
+    const portalUrl = preSendRebuildPortalUrl;
+    if (!isHttpsJobUrl(portalUrl)) {
+      refuse(PRE_SEND_VERIFICATION_NO_PORTAL_URL);
+      return;
+    }
+    const draft: NewApplicationDraft = {
+      company: canonical.company,
+      role: canonical.role,
+      portalUrl,
+      jobDescription,
+      jobId: null,
+      canonicalApplicationId: canonical.id,
+    };
     preSendRebuildRef.current = packet.id;
     setPreSendRebuildId(packet.id);
     setPreSendRebuildError(null);
@@ -5827,7 +5847,11 @@ function Applications() {
           {preSendVerificationBlock.rebuildBlockedReason && (
             <p className="mt-2">{preSendVerificationBlock.rebuildBlockedReason}</p>
           )}
-          {preSendRebuildError && preSendRebuildError.applicationId === selected?.id && (
+          {/* Never twice. A blocked rebuild already says why above, off rebuildBlockedReason, and a
+              press-time refusal that repeats that sentence would print it a second time. */}
+          {preSendRebuildError
+            && preSendRebuildError.applicationId === selected?.id
+            && preSendRebuildError.message !== preSendVerificationBlock.rebuildBlockedReason && (
             <p className="mt-2">{preSendRebuildError.message}</p>
           )}
         </div>

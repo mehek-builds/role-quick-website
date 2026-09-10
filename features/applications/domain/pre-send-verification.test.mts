@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   PRE_SEND_VERIFICATION_NO_JD,
+  PRE_SEND_VERIFICATION_NO_PORTAL_URL,
+  PRE_SEND_VERIFICATION_NO_TRACKER_ROW,
   PRE_SEND_VERIFICATION_UNNAMED_ISSUE,
   preSendVerificationRefusal,
   preSendVerificationReviewState,
@@ -93,10 +95,24 @@ test("issues are cleaned and deduped, and the untruncated body list is what is r
   assert.equal(refusal.issues[0], "grounding: line 0");
 });
 
+/* The rebuild's three preconditions in their ordinary, workable shape. A case names only the one
+   it is about, so a new precondition cannot quietly pass every existing test by defaulting to a
+   value nobody wrote down. */
+function context(overrides: Partial<Parameters<typeof preSendVerificationReviewState>[1]> = {}) {
+  return {
+    applicationId: "packet-1",
+    jdText: "jd",
+    canonicalApplicationId: "canonical-1",
+    portalUrl: "https://boards.example.com/jobs/1",
+    rebuilding: false,
+    ...overrides,
+  };
+}
+
 test("the review screen disables the send, names the entries, and offers the rebuild", () => {
   const state = preSendVerificationReviewState(
     preSendVerificationRefusal("packet-1", liveRefusal()),
-    { applicationId: "packet-1", jdText: "Senior analyst. Requirements: ...", rebuilding: false },
+    context({ jdText: "Senior analyst. Requirements: ..." }),
   );
   assert.ok(state);
   assert.equal(state.sendDisabled, true);
@@ -110,19 +126,19 @@ test("a refusal earned by another packet does not stop the one on screen", () =>
   assert.equal(
     preSendVerificationReviewState(
       preSendVerificationRefusal("packet-1", liveRefusal()),
-      { applicationId: "packet-2", jdText: "jd", rebuilding: false },
+      context({ applicationId: "packet-2" }),
     ),
     null,
   );
   assert.equal(
     preSendVerificationReviewState(
       preSendVerificationRefusal("packet-1", liveRefusal()),
-      { applicationId: null, jdText: "jd", rebuilding: false },
+      context({ applicationId: null }),
     ),
     null,
   );
   assert.equal(
-    preSendVerificationReviewState(null, { applicationId: "packet-1", jdText: "jd", rebuilding: false }),
+    preSendVerificationReviewState(null, context()),
     null,
   );
 });
@@ -130,7 +146,7 @@ test("a refusal earned by another packet does not stop the one on screen", () =>
 test("the screen never claims a list the server did not send", () => {
   const state = preSendVerificationReviewState(
     preSendVerificationRefusal("packet-1", liveRefusal([])),
-    { applicationId: "packet-1", jdText: "jd", rebuilding: false },
+    context(),
   );
   assert.ok(state);
   assert.deepEqual(state.issues, [PRE_SEND_VERIFICATION_UNNAMED_ISSUE]);
@@ -143,7 +159,7 @@ test("no frozen job description means the rebuild says why instead of failing on
   for (const jdText of [undefined, null, "   "]) {
     const state = preSendVerificationReviewState(
       preSendVerificationRefusal("packet-1", liveRefusal()),
-      { applicationId: "packet-1", jdText, rebuilding: false },
+      context({ jdText }),
     );
     assert.ok(state);
     assert.equal(state.sendDisabled, true);
@@ -155,11 +171,68 @@ test("no frozen job description means the rebuild says why instead of failing on
 test("a rebuild already running cannot be started a second time from the same banner", () => {
   const state = preSendVerificationReviewState(
     preSendVerificationRefusal("packet-1", liveRefusal()),
-    { applicationId: "packet-1", jdText: "jd", rebuilding: true },
+    context({ rebuilding: true }),
   );
   assert.ok(state);
   assert.equal(state.rebuildInProgress, true);
   /* The monthly tailoring allowance is spent by the generation this button starts, so a double
      click must not reach it. */
   assert.equal(state.rebuildAvailable, false);
+});
+
+/* THE 2026-09-10 DEAD BUTTON, in the two shapes that produced it.
+ *
+ * The banner rendered with an enabled rebuild, the press issued no request, and nothing on screen
+ * changed: the page could not name the Tracker row for the deep-linked packet - `/applications` is
+ * read one 200-row window at a time and an older packet's row can sit outside it - and every
+ * refusal on the way to /resume/generate was written to the New application composer, which is
+ * closed on this screen. Both preconditions now disable the control and say why. */
+test("a packet whose Tracker row this page cannot name says so instead of dying on press", () => {
+  for (const canonicalApplicationId of [undefined, null, "", "   "]) {
+    const state = preSendVerificationReviewState(
+      preSendVerificationRefusal("packet-1", liveRefusal()),
+      context({ canonicalApplicationId }),
+    );
+    assert.ok(state);
+    assert.equal(state.sendDisabled, true);
+    assert.equal(state.rebuildAvailable, false);
+    assert.equal(state.rebuildBlockedReason, PRE_SEND_VERIFICATION_NO_TRACKER_ROW);
+  }
+});
+
+test("a packet with no usable job link says so instead of dying on press", () => {
+  for (const portalUrl of [undefined, null, "", "   ", "not a url", "http://boards.example.com/jobs/1"]) {
+    const state = preSendVerificationReviewState(
+      preSendVerificationRefusal("packet-1", liveRefusal()),
+      context({ portalUrl }),
+    );
+    assert.ok(state);
+    assert.equal(state.rebuildAvailable, false);
+    assert.equal(state.rebuildBlockedReason, PRE_SEND_VERIFICATION_NO_PORTAL_URL);
+  }
+});
+
+/* One sentence, and it must be the first true one: a packet missing all three is missing its job
+   description first, and telling her to reopen the row would send her somewhere that cannot help. */
+test("only the first blocking reason is shown", () => {
+  const state = preSendVerificationReviewState(
+    preSendVerificationRefusal("packet-1", liveRefusal()),
+    context({ jdText: "", canonicalApplicationId: null, portalUrl: "" }),
+  );
+  assert.ok(state);
+  assert.equal(state.rebuildBlockedReason, PRE_SEND_VERIFICATION_NO_JD);
+});
+
+/* A blocked rebuild is still a STOP: the send stays withdrawn whatever the reason, because the
+   packet's wording is what the server refused and none of these reasons change it. */
+test("a blocked rebuild never re-arms the send", () => {
+  for (const blocked of [{ jdText: "" }, { canonicalApplicationId: null }, { portalUrl: "" }]) {
+    const state = preSendVerificationReviewState(
+      preSendVerificationRefusal("packet-1", liveRefusal()),
+      context(blocked),
+    );
+    assert.ok(state);
+    assert.equal(state.sendDisabled, true);
+    assert.ok(state.rebuildBlockedReason);
+  }
 });
