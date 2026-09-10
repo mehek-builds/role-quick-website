@@ -1116,6 +1116,7 @@ function Applications() {
    * nobody else is going to repeat. `error` wins the render when both are set: a refusal to
    * something she did outranks news about the connection. */
   const [pollError, setPollError] = useState<string | null>(null);
+  const [transportReconciliation, setTransportReconciliation] = useState<{ applicationId: string; message: string } | null>(null);
   /* The one poll failure that must OUTLIVE the tick that raised it, and the last silent member of
      the dead-button class ("a dead button with no console error is a swallowed 409 in the network
      tab", measured live 2026-08-19 and 2026-08-20). When the acknowledged packet revalidation is
@@ -1452,6 +1453,7 @@ function Applications() {
   const moveToScreen = useCallback((next: Screen, options: { scrollToTop?: boolean } = {}) => {
     // Publish the navigation before React commits it so an already-running poll cannot undo it.
     screenRef.current = next;
+    if (next !== "submitting") setTransportReconciliation(null);
     runDashboardTransition(() => setScreen((current) => current === next ? current : next));
     if (options.scrollToTop !== false) window.scrollTo({ top: 0, behavior: "auto" });
   }, []);
@@ -4538,6 +4540,19 @@ function Applications() {
       }
     } catch (reason) {
       if (await recoverPacketAuditReview(applicationId, reason)) return;
+      /* A lost or otherwise uncertain client response cannot tell us whether submit-request reached the server. The status
+         poll is already authoritative for this application and already runs on the submitting
+         screen, so leave that screen in place and let GET /submission reconcile the accepted run
+         or its eventual terminal state. Replaying the POST here could start a second attempt, and
+         routing back to review falsely presents the packet as idle while the first run may live. */
+      if (!(reason instanceof ApiError)) {
+        if (selectedIdRef.current !== applicationId) return;
+        setTransportReconciliation({
+          applicationId,
+          message: "The connection was interrupted. Litos is checking the saved application run.",
+        });
+        return;
+      }
       /* THE PRE-SEND VERIFICATION REFUSAL IS NOT A BANNER, it is a stop with one way out.
        *
        * 422 PRE_SEND_VERIFICATION_FAILED says this packet's own wording fails a rule that did not
@@ -6332,6 +6347,9 @@ function Applications() {
           startedAt={submittingPhase === "sending" ? approveStartedAt ?? selectedSubmission?.review.updated_at : prepareStartedAt ?? selectedSubmission?.review.updated_at}
           sending={submittingPhase === "sending"}
           submission={selectedSubmission}
+          reconciliationNotice={transportReconciliation?.applicationId === selected.id
+            ? transportReconciliation.message
+            : null}
         />
       ) : screen === "portal" && selectedSubmission ? (
         <SubmissionScreen
@@ -9800,10 +9818,11 @@ const PORTAL_SLOW_AFTER_S = 45;
 // the original defect past the first threshold.
 const PORTAL_STUCK_AFTER_S = 300;
 
-function PortalProgress({ status, startedAt, sending = false, submission }: { status?: ApplicationReview["status"]; startedAt?: string;
+function PortalProgress({ status, startedAt, sending = false, submission, reconciliationNotice }: { status?: ApplicationReview["status"]; startedAt?: string;
   /** True when this screen was entered by pressing "Send it". See submittingPhase. */
   sending?: boolean;
-  submission?: SubmissionResponse | null }) {
+  submission?: SubmissionResponse | null;
+  reconciliationNotice?: string | null }) {
   // Anchored to the server's timestamp, not to mount. A reload or a return via ?application=<id>
   // during a live run remounts this component, and a mount-anchored clock would restart at 0s and
   // report "3s elapsed" for a run four minutes old, defeating the one thing the clock is for.
@@ -9897,6 +9916,11 @@ function PortalProgress({ status, startedAt, sending = false, submission }: { st
       <Card className="h-fit p-7">
         <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-brand-ink">Live application status</p>
         <h2 className="mt-3 text-heading font-medium text-ink">{title}</h2>
+        {reconciliationNotice && (
+          <p role="status" className="mt-3 rounded-inner border border-brand/20 bg-brand-soft/35 px-4 py-3 text-sm leading-6 text-ink">
+            {reconciliationNotice}
+          </p>
+        )}
         <div className="mt-5 rounded-inner border border-brand/20 bg-brand-soft/35 px-4 py-4">
           <div className="flex items-start gap-3">
             <ThinkingOrb state="working" size={20} />

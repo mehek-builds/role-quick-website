@@ -199,7 +199,7 @@ function landedResponse(submission, packet) {
  * @param revalidationRefusal  {status, body} answered by every packet-audit AFTER the
  *                             acknowledgement, which is exactly the poll's revalidation
  */
-async function openAuditedFlow(packet, { ackResponse = null, submitResponse = null, holdSubmitMs = 0, revalidationRefusal = null, landed = null, generated = null, generateResponse = null, auditReplacementAfterSubmit = false } = {}) {
+async function openAuditedFlow(packet, { ackResponse = null, submitResponse = null, holdSubmitMs = 0, disconnectSubmit = false, disconnectActiveReads = 0, revalidationRefusal = null, landed = null, generated = null, generateResponse = null, auditReplacementAfterSubmit = false } = {}) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const auditResponse = packetAuditResponse(packet);
   const submission = submissionFor(packet, auditResponse);
@@ -208,7 +208,7 @@ async function openAuditedFlow(packet, { ackResponse = null, submitResponse = nu
      subsequent /submission poll answer), so a case can park the flow on a poll-active screen
      like the needs_attention portal instead of the terminal receipt. */
   const landedSubmission = landed ? { ...submission, review: { ...submission.review, ...landed } } : null;
-  const counts = { ack: 0, submit: 0, approve: 0, submissionReads: 0, audits: 0, revalidations: 0, generate: 0, submitBodies: [], generateBodies: [] };
+  const counts = { ack: 0, submit: 0, approve: 0, submissionReads: 0, postSubmitReads: 0, audits: 0, revalidations: 0, generate: 0, submitBodies: [], generateBodies: [] };
   const rebuildCanonicalId = "8b9b0722-7e23-4aa5-88ea-8877c11df17f";
   const rebuildCanonical = {
     id: rebuildCanonicalId,
@@ -289,6 +289,7 @@ async function openAuditedFlow(packet, { ackResponse = null, submitResponse = nu
         submitInFlight = true;
         if (holdSubmitMs > 0) await delay(holdSubmitMs);
         submitInFlight = false;
+        if (disconnectSubmit) return route.abort("connectionreset");
         if (submitResponse) return json(submitResponse.body, submitResponse.status);
         if (landedSubmission) return json(landedSubmission);
         return json(landedResponse(submission, packet));
@@ -311,8 +312,14 @@ async function openAuditedFlow(packet, { ackResponse = null, submitResponse = nu
       /* The review_edit save that precedes the audit on resume_ready packets. Echo the saved
          review; the flow only needs the envelope back. */
       if (p.endsWith("/review") && route.request().method() === "PUT") return json(submission);
-      if (p.endsWith("/submission")) counts.submissionReads += 1;
+      if (p.endsWith("/submission")) {
+        counts.submissionReads += 1;
+        if (counts.submit > 0) counts.postSubmitReads += 1;
+      }
       if (p.endsWith("/submission") && submitInFlight) {
+        return json({ ...submission, review: { ...submission.review, status: "filling" } });
+      }
+      if (p.endsWith("/submission") && disconnectSubmit && counts.postSubmitReads <= disconnectActiveReads) {
         return json({ ...submission, review: { ...submission.review, status: "filling" } });
       }
       if (p.endsWith("/submission")) return json(counts.submit > 0 && landedSubmission ? landedSubmission : submission);
@@ -492,6 +499,34 @@ browserTest("a slow submit-request polls status without re-auditing the packet",
   await page.getByRole("button", { name: "Send application", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
   await page.waitForTimeout(3500);
   assert.ok(counts.audits > auditsBeforeSubmit, "the settled portal stopped refreshing its exact packet evidence");
+  await context.close();
+});
+
+browserTest("a disconnected submit-request reconciles through status without retrying", async (hold) => {
+  const { context, page, second, counts } = await openAuditedFlow(FILL, {
+    disconnectSubmit: true,
+    disconnectActiveReads: 2,
+    landed: { status: "failed", attention_reason: "The saved run stopped before anything was sent." },
+  });
+  hold(page);
+  await second.click();
+
+  await page.getByRole("heading", { name: "Filling form", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+  const reconnectNotice = page.getByRole("status").filter({
+    hasText: "The connection was interrupted. Litos is checking the saved application run.",
+  });
+  await reconnectNotice.waitFor({ state: "visible", timeout: 10_000 });
+  assert.equal(await page.getByRole("alert").filter({ hasText: "connection was interrupted" }).count(), 0,
+    "transport reconciliation rendered through the red error channel");
+  await page.waitForTimeout(3500);
+  assert.equal(await page.getByRole("heading", { name: "Filling form", exact: true }).count(), 1,
+    "the disconnected POST routed back to review before the authoritative poll settled the run");
+  await page.getByRole("heading", { name: "Stopped", exact: true }).waitFor({ state: "visible", timeout: 15_000 });
+  assert.equal(await reconnectNotice.count(), 0, "the checking notice survived the authoritative terminal response");
+
+  assert.equal(counts.submit, 1, "transport reconciliation must not replay submit-request");
+  assert.ok(counts.postSubmitReads >= 2, "the poll must observe an active run before its terminal state");
+  assert.equal(await page.getByText(LANDED_CONFIRMATION, { exact: true }).count(), 0, "a transport failure must not invent a receipt");
   await context.close();
 });
 
