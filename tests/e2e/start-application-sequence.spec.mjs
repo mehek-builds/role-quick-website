@@ -1048,7 +1048,7 @@ describe("the application sequence, end to end", () => {
     /* No reply alert: backend #1222 forwards every employer email, so the screen says that instead
        of offering a switch that could never fire. */
     assert.doesNotMatch(body, /Tell me when an employer replies/i);
-    assert.match(body, /Emails from employers are forwarded to your inbox/i);
+    assert.match(body, /Replies from employers are forwarded to your inbox/i);
     /* The promise the backend actually enforces, said on the screen that asks. */
     assert.match(body, /at most daily/i);
     /* Auto-apply, send-without-asking and the rest are asked at the moment their feature is first

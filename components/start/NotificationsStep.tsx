@@ -220,8 +220,8 @@ export function NotificationChoices() {
       </div>
 
       <p className="mt-5 text-[13px] leading-5 text-muted">
-        Emails from employers are forwarded to your inbox either way, so there is nothing to switch
-        on for them.
+        Replies from employers are forwarded to your inbox, so there is nothing to switch on for
+        them.
       </p>
 
       {!deliverable && (

@@ -1721,7 +1721,7 @@ export function acknowledgeOnboardingFlowStep(
 
 /* ---- notifications (screen 08) ----
  *
- * TWO PERMISSIONS, NOT A SETTINGS BLOB, which is why each arrives with the date it was granted.
+ * PERMISSIONS, NOT A SETTINGS BLOB, which is why each arrives with the date it was granted.
  * Litos putting mail in somebody's inbox is a thing done TO them, and a boolean with no date
  * behind it cannot be audited later or explained back to them.
  *

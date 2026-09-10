@@ -48,8 +48,8 @@ test("Account automation uses three scannable surfaces without dropping permissi
   /* The reply alert was removed when backend #1222 began forwarding every employer email; a tile
      with no control states the forwarding in its place. */
   assert.doesNotMatch(notifications, /Tell me when an employer replies/);
-  assert.match(notifications, /Employer emails come straight to your inbox/);
-  assert.match(notifications, /Every message carries an unsubscribe link/);
+  assert.match(notifications, /Employer emails are forwarded to your inbox/);
+  assert.match(notifications, /Every alert carries an unsubscribe link/);
 });
 
 test("Account tabs expose a truthful mobile overflow cue", async () => {

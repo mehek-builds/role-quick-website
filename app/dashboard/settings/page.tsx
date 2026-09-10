@@ -139,9 +139,9 @@ export default function Settings() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
-  /* The two notification permissions, held as the server's own answer rather than as two local
+  /* The notification permissions, held as the server's own answer rather than as local
      booleans. Null while unread and on a backend that predates the endpoint, which renders no
-     controls at all rather than two dead switches: the repos deploy separately and in either
+     controls at all rather than dead switches: the repos deploy separately and in either
      order, and a toggle that silently writes nothing is worse than an absent one. */
   const [notifications, setNotifications] = useState<NotificationPreferences | null>(null);
   const [savingNotification, setSavingNotification] = useState<NotificationKind | null>(null);
@@ -1422,8 +1422,11 @@ export default function Settings() {
                 only ever fired for mail Litos held back, nothing is held back any more except
                 verification codes and the student's own replies, and the server refuses both, so
                 the switch could be turned on and never do anything. The tile that replaces it
-                states the forwarding instead, and has no control because there is nothing to choose.
-                The API still reads and tolerates `employer_reply` so an older client does not break.
+                states the forwarding instead and has no control, because there is nothing to choose.
+                It deliberately does not promise EVERY message: the backend still holds anything its
+                verification-code matcher flags, and that matcher is broad (a bare "passcode" in a
+                Zoom invite trips it). The API still reads and tolerates `employer_reply` so an older
+                client does not break.
 
                 The unsubscribe link in every message turns one off without signing in, which is the
                 half that has to work for somebody who cannot log in at all. Turning one back ON is the
@@ -1470,14 +1473,14 @@ export default function Settings() {
                     </label>
                   ))}
                   <div className="rounded-inner border border-border p-4">
-                    <span className="block text-sm font-medium text-ink">Employer emails come straight to your inbox</span>
-                    <span className="mt-1 block text-xs leading-5 text-muted">Anything an employer sends to the address Litos applied with is forwarded to you, so there is nothing to switch on. Verification codes Litos uses to finish a form stay with Litos.</span>
+                    <span className="block text-sm font-medium text-ink">Employer emails are forwarded to your inbox</span>
+                    <span className="mt-1 block text-xs leading-5 text-muted">Employer email sent to the address Litos applied with is forwarded to you, so there is nothing to switch on. Messages that look like a sign-in or verification code stay with Litos so it can finish the form.</span>
                   </div>
                 </div>
                 {!notifications.deliverable && (
                   <p className="mt-3 text-xs leading-5 text-muted">Litos cannot send to this account yet. Your choice is saved and starts working once your email address is verified.</p>
                 )}
-                <p className="mt-3 text-xs leading-5 text-muted">Every message carries an unsubscribe link that works without signing in.</p>
+                <p className="mt-3 text-xs leading-5 text-muted">Every alert carries an unsubscribe link that works without signing in.</p>
                 <p className="mt-3 text-xs leading-5 text-muted">Apart from the alert above and forwarded employer email, Litos sends transactional account, application, and billing messages only. There are no marketing subscriptions and no other notification channels.</p>
               </Card>
             )}
