@@ -8,7 +8,7 @@ const source = fs.readFileSync(
   "utf8",
 );
 
-const saveStart = source.indexOf("async function saveResume()");
+const saveStart = source.indexOf("async function saveResume(");
 const continueStart = source.indexOf("async function continueFromResume()", saveStart);
 const verifiedStart = source.indexOf("async function continueFromVerifiedPacket(", continueStart);
 const saveResume = source.slice(saveStart, continueStart);

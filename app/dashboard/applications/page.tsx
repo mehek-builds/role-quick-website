@@ -62,7 +62,7 @@ import { fetchJdMatch, resumeSpecText } from "@/features/applications";
 import { applyBankVariant, type ApplyOutcome } from "@/features/applications";
 import { RequirementProvider, RequirementText, MatchLegend } from "@/components/app/RequirementText";
 import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX, exactPacketAuditClauses, exactPacketAuditRanges } from "@/features/applications";
-import { educationDrift, educationDriftMessage, type EducationProfile } from "@/features/applications";
+import { educationDrift, educationDriftMessage, reconcileEducationFromProfile, type EducationProfile } from "@/features/applications";
 import { alreadyDecidedDirectTask, checklistRowControl, completedSubmissionGroups, directAnswerNavigationTasks, directDecisionAlreadyRecorded, directInputTaskPlan, directQuestionPromptFingerprint, directQuestionTaskFingerprint, displayQuestionLabel, documentAsksByKind, documentControls, documentStepsInPlan, fillAgainFromReviewControl, humanInputItems, metadataRefreshOutranksStandingAttention, QUESTION_CHOICE_LIST_LIMIT, reviewedAnswersSaveLanding, unconfirmedDocumentItems, type ChecklistResumeRecord, type DirectQuestionTask, type DirectQuestionTaskIntent, type SubmissionChecklistAction, type SubmissionChecklistItem } from "@/features/applications";
 import { prescriptBlocksProgress, prescriptEditableQuestions, prescriptMetadataBlockers, prescriptNeedsHer, prescriptSummary } from "@/features/applications";
 import { answerWithExactOptionToggled, exactQuestionOption, exactSelectedQuestionOptions, nextStickyNeeding, optionalQuestionNeedsDecision, questionAcceptsMultipleOptions, questionOptionsAreComplete, questionReadsAsAnswered, questionReviewPresentation, questionsNeedingApplicant, requiredQuestionReviewRoute, type StickyNeeding } from "@/features/applications";
@@ -4077,8 +4077,12 @@ function Applications() {
     );
   }
 
-  async function saveResume(): Promise<{ spec: ResumeSpec; review: ApplicationReview } | null> {
-    if (!selected || !spec) return null;
+  async function saveResume(specOverride?: ResumeSpec): Promise<{ spec: ResumeSpec; review: ApplicationReview } | null> {
+    // A caller that has just computed the spec to save (the education reconcile) passes it here,
+    // because setSpec is asynchronous and reading `spec` from this closure would save the pre-edit
+    // copy. When no override is given this is the ordinary Save button, saving the edited state.
+    const specToSave = specOverride ?? spec;
+    if (!selected || !specToSave) return null;
     const applicationId = selected.id;
     const editorRevision = editorRevisionRef.current;
     setSaving(true);
@@ -4087,7 +4091,7 @@ function Applications() {
       if (!qaMode) {
         const updated = await api<{ spec: GeneratedResume["spec"]; download_url: string }>(
           `/applications/${applicationId}/resume`,
-          { method: "PATCH", body: JSON.stringify({ spec }) },
+          { method: "PATCH", body: JSON.stringify({ spec: specToSave }) },
         );
         setPackets((current) =>
           current?.map((packet) => packetAfterLinkedResumeSave(packet, applicationId, updated)) ?? current,
@@ -4110,7 +4114,7 @@ function Applications() {
       if (!selected.spec._review) return null;
       if (resumeEditSaveApplicationRef.current === applicationId) resumeEditSaveApplicationRef.current = null;
       setNotice("Resume saved and rechecked.");
-      return { spec, review: reviewWithLists(selected.spec._review) };
+      return { spec: specToSave, review: reviewWithLists(selected.spec._review) };
     } catch (reason) {
       if (selectedIdRef.current === applicationId) {
         setError(reason instanceof Error ? reason.message : "We could not save your resume. Try again.");
@@ -4119,6 +4123,20 @@ function Applications() {
     } finally {
       setSaving(false);
     }
+  }
+
+  /* The one-click repair the education-drift banner offers. The resume must carry the profile's
+     school, degree and graduation date before the backend will send it, so Litos rewrites those
+     lines to the profile itself rather than asking the applicant to retype what the profile already
+     holds. The reconciled spec is passed straight to saveResume rather than through setSpec first:
+     setSpec has not settled by the time saveResume would read its closure, and letting the server
+     response drive state (as refreshResumeContact does) keeps the banner and an error both up if
+     the save fails, instead of clearing the banner over an edit that never persisted. */
+  async function reconcileEducationAndSave() {
+    if (!spec) return;
+    const reconciled = reconcileEducationFromProfile(spec, educationProfile);
+    if (reconciled === spec) return;
+    await saveResume(reconciled);
   }
 
   /* A live employer read can discover required questions after the applicant has already opened
@@ -5720,7 +5738,23 @@ function Applications() {
       {/* Derived from the SPEC BEING EDITED, not from the stored packet, so it clears the moment
           the student fixes the education line rather than sitting there until she saves. */}
       {reviewOpen && educationDriftBanner && (
-        <p role="alert" className="rounded-inner bg-danger-soft px-4 py-3 text-sm text-danger">{educationDriftBanner}</p>
+        <div role="alert" className="rounded-inner bg-danger-soft px-4 py-3 text-sm text-danger">
+          <p>{educationDriftBanner}</p>
+          {/* The documented remedy is "fix the education line and save", which is a manual retype of
+              what the profile already holds. This does that save for the applicant: the resume must
+              match the profile to send, so the one correct destination for these lines is the
+              profile's own text. Disabled while any resume save is in flight; a failure surfaces
+              through the same `error` note above. */}
+          <Button
+            variant="secondary"
+            size="sm"
+            className="mt-3"
+            disabled={saving}
+            onClick={() => void reconcileEducationAndSave()}
+          >
+            Update education from your profile
+          </Button>
+        </div>
       )}
       {/* A STOP WITH A WAY OUT, which is the whole point of it not being an ErrorNote.
           The sentence names what the rule objected to, line by line, in the server's own words, and
