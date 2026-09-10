@@ -2121,7 +2121,9 @@ function Applications() {
      response to read the state out of. The list is served by /resume/history, which this screen
      does fetch. See submissionPollIsRequired for the ninety minutes of measurement behind it. */
   const selectedPacketReview = (packets ?? []).find((packet) => packet.id === selectedId)?.spec._review;
-  const pollRequired = submissionPollIsRequired(screen, selectedPacketReview);
+  const pollRequired = submissionPollIsRequired(screen, selectedPacketReview)
+    || (submission?.application_id === selectedId
+      && SERVER_RUN_IN_FLIGHT_STATUSES.has(submission.server_review_status ?? ""));
 
   useEffect(() => {
     if (!selectedId || qaMode || !pollRequired) return;
