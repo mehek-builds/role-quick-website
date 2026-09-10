@@ -338,7 +338,8 @@ test("coded stale packet refusals recover to unacknowledged review without a red
     "utf8",
   );
   const recoveryStart = dashboard.indexOf("const recoverPacketAuditReview = useCallback");
-  const recoveryEnd = dashboard.indexOf("// Lifted out of MatchScore", recoveryStart);
+  const recoveryEnd = dashboard.indexOf("const resetApplicationWorkflow = useCallback", recoveryStart);
+  assert.ok(recoveryStart >= 0 && recoveryEnd > recoveryStart, "the recovery callback must retain a stable test boundary");
   const recovery = dashboard.slice(recoveryStart, recoveryEnd);
   assert.match(recovery, /packetAuditReviewRecoveryCode\(reason\)/, "recovery must be keyed on the response code");
   const ownershipGuard = recovery.indexOf("packetAuditRecoveryMayCommit(selectedIdRef.current, applicationId)");
