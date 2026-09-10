@@ -1,13 +1,32 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  PRE_SEND_VERIFICATION_NO_JD,
-  PRE_SEND_VERIFICATION_NO_PORTAL_URL,
-  PRE_SEND_VERIFICATION_NO_TRACKER_ROW,
   PRE_SEND_VERIFICATION_UNNAMED_ISSUE,
+  groundingPacketRebuilt,
   preSendVerificationRefusal,
   preSendVerificationReviewState,
 } from "./pre-send-verification.ts";
+
+test("a typed grounding repair accepts only two UUID identities", () => {
+  const canonicalApplicationId = "8b9b0722-7e23-4aa5-88ea-8877c11df17f";
+  const packetId = "34d93673-3298-4c98-b6d4-a15916b91c79";
+  assert.deepEqual(groundingPacketRebuilt(new FakeApiError(409, "updated", [], {
+    code: "GROUNDING_PACKET_REBUILT",
+    canonical_application_id: canonicalApplicationId,
+    packet_id: packetId,
+  })), { canonicalApplicationId, packetId });
+});
+
+test("grounding repair rejects wrong status, code, or malformed identity", () => {
+  const body = {
+    code: "GROUNDING_PACKET_REBUILT",
+    canonical_application_id: "8b9b0722-7e23-4aa5-88ea-8877c11df17f",
+    packet_id: "34d93673-3298-4c98-b6d4-a15916b91c79",
+  };
+  assert.equal(groundingPacketRebuilt(new FakeApiError(422, "updated", [], body)), null);
+  assert.equal(groundingPacketRebuilt(new FakeApiError(409, "updated", [], { ...body, code: "PACKET_AUDIT_STALE" })), null);
+  assert.equal(groundingPacketRebuilt(new FakeApiError(409, "updated", [], { ...body, packet_id: "not-a-uuid" })), null);
+});
 
 /* MEASURED 2026-09-07. volley-backend PR #1058 put a pre-send resume verification in front of
    POST /applications/:id/submit-request, and every one of this account's roughly two hundred stored
@@ -155,7 +174,7 @@ test("the screen never claims a list the server did not send", () => {
   assert.equal(state.rebuildAvailable, true);
 });
 
-test("no frozen job description means the rebuild says why instead of failing on press", () => {
+test("system repair remains available without a client-side job description", () => {
   for (const jdText of [undefined, null, "   "]) {
     const state = preSendVerificationReviewState(
       preSendVerificationRefusal("packet-1", liveRefusal()),
@@ -163,8 +182,8 @@ test("no frozen job description means the rebuild says why instead of failing on
     );
     assert.ok(state);
     assert.equal(state.sendDisabled, true);
-    assert.equal(state.rebuildAvailable, false);
-    assert.equal(state.rebuildBlockedReason, PRE_SEND_VERIFICATION_NO_JD);
+    assert.equal(state.rebuildAvailable, true);
+    assert.equal(state.rebuildBlockedReason, null);
   }
 });
 
@@ -175,8 +194,7 @@ test("a rebuild already running cannot be started a second time from the same ba
   );
   assert.ok(state);
   assert.equal(state.rebuildInProgress, true);
-  /* The monthly tailoring allowance is spent by the generation this button starts, so a double
-     click must not reach it. */
+  /* A double click must not start two audits or race two replacement handoffs. */
   assert.equal(state.rebuildAvailable, false);
 });
 

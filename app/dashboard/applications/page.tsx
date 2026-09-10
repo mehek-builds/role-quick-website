@@ -41,7 +41,7 @@ import { duplicateBadge, duplicatePostingMarks, duplicatePostingNote } from "@/f
 import { isHttpsJobUrl, missingApplicationFields, type ApplicationDraftField } from "@/features/applications";
 import { COVER_LETTER_WAIT_MS, HANDOFF_CLOCK_TICK_MS, coverLetterBlocks, coverLetterGate, documentsFromSpecMarks, handoffWindowExpired, nextCoverLetterValue, nextSubmissionState, publishSubmissionEnvelope, reconcilePacketEvidenceAfterResumeRegeneration, reconcilePacketEvidenceWithSubmission, resumeContactRefreshBlockedReason, resumeContactStaleNotice, submissionAfterPacketAudit, submissionCoverLetterField, submissionReviewPacketIdentity, submissionSnapshotIsOlder, type ResumeContactStaleLike } from "@/features/applications";
 import { MatchScore, MatchGaps } from "@/components/app/MatchScore";
-import { PRE_SEND_VERIFICATION_NO_JD, PRE_SEND_VERIFICATION_NO_PORTAL_URL, PRE_SEND_VERIFICATION_NO_TRACKER_ROW, auditRefusalCode, historicalPacketAuditStaleMessage, nextMatchScoreRequest, packetAuditReviewRecoveryCode, preSendVerificationRefusal, preSendVerificationReviewState, type PreSendVerificationRefusal } from "@/features/applications";
+import { auditRefusalCode, groundingPacketRebuilt, historicalPacketAuditStaleMessage, nextMatchScoreRequest, packetAuditReviewRecoveryCode, preSendVerificationRefusal, preSendVerificationReviewState, type PreSendVerificationRefusal } from "@/features/applications";
 import { getBaseResume } from "@/lib/base-resume";
 import { RequirementBreakdown } from "@/components/app/RequirementBreakdown";
 import { ResumeHealth } from "@/components/app/ResumeHealth";
@@ -96,7 +96,6 @@ type CanonicalRequestScope = {
   editorRevision: number;
   requestGeneration: number;
   channel: "cover-letter" | "tailoring";
-  packet?: { id: string; editorRevision: number };
 };
 type PacketCoverLetterRequestScope = {
   applicationId: string;
@@ -1227,7 +1226,6 @@ function Applications() {
      this exists to stop a second press ever reaching it, not as the only guard. */
   const [preSendRebuildId, setPreSendRebuildId] = useState<string | null>(null);
   const preSendRebuildRef = useRef<string | null>(null);
-  const [preSendRebuildError, setPreSendRebuildError] = useState<{ applicationId: string; message: string } | null>(null);
   const [restartingId, setRestartingId] = useState<string | null>(null);
   /* A stale metadata screen needs a new employer-form read, but it must not silently carry edits
      the applicant has not saved. The ref closes the same-tick double-click gap; the id keeps the
@@ -1348,11 +1346,7 @@ function Applications() {
     };
   }, []);
 
-  function beginCanonicalRequest(
-    applicationId: string,
-    channel: CanonicalRequestScope["channel"],
-    packet?: CanonicalRequestScope["packet"],
-  ): CanonicalRequestScope {
+  function beginCanonicalRequest(applicationId: string, channel: CanonicalRequestScope["channel"]): CanonicalRequestScope {
     const generationRef = channel === "cover-letter"
       ? coverLetterRequestGenerationRef
       : canonicalTailoringRequestGenerationRef;
@@ -1361,7 +1355,6 @@ function Applications() {
       editorRevision: canonicalCoverLetterEditorRevisionRef.current,
       requestGeneration: ++generationRef.current,
       channel,
-      packet,
     };
   }
 
@@ -1374,10 +1367,7 @@ function Applications() {
 
   function canonicalRequestMayPublish(scope: CanonicalRequestScope): boolean {
     return canonicalRequestOwnsLifecycle(scope)
-      && (scope.packet
-        ? selectedIdRef.current === scope.packet.id
-          && packetCoverLetterEditorRevisionRef.current === scope.packet.editorRevision
-        : canonicalSelectedIdRef.current === scope.applicationId)
+      && canonicalSelectedIdRef.current === scope.applicationId
       && canonicalCoverLetterEditorRevisionRef.current === scope.editorRevision;
   }
 
@@ -1465,69 +1455,6 @@ function Applications() {
     runDashboardTransition(() => setScreen((current) => current === next ? current : next));
     if (options.scrollToTop !== false) window.scrollTo({ top: 0, behavior: "auto" });
   }, []);
-
-  /* A stale packet refusal is a route transition, not a red failure banner. The server is still
-     fail-closed: this takes a new audit, clears the old acknowledgement, and sends the applicant
-     back to the exact packet review. It never acknowledges that audit and never retries the send.
-     The machine code decides whether this path runs, so changing applicant-facing copy cannot turn
-     an unrelated 409 into a packet mutation. */
-  const recoverPacketAuditReview = useCallback(async (applicationId: string, reason: unknown): Promise<boolean> => {
-    if (!packetAuditReviewRecoveryCode(reason) && !historicalPacketAuditStaleMessage(reason)) return false;
-    /* A refusal for packet A can arrive after the switcher moved to B. Treat the coded refusal as
-       handled, but do not clear B's evidence, route, questions, or banners. This guard must precede
-       every write below, including the synchronous refs. */
-    if (!packetAuditRecoveryMayCommit(selectedIdRef.current, applicationId)) return true;
-    packetEvidenceRef.current = null;
-    setPacketEvidence(null);
-    packetRevalidationRefusal.current = null;
-    setError(null);
-    setPollError(null);
-    setSendRefusal(null);
-    setPreSendVerification(null);
-    moveToScreen("review");
-    setNotice("Litos is refreshing the exact packet for review.");
-    try {
-      const audit = await api<PacketAuditResponse>(`/applications/${applicationId}/packet-audit`, { method: "POST" });
-      if (!packetAuditRecoveryMayCommit(selectedIdRef.current, applicationId)) return true;
-      const raw = await api<SubmissionResponse>(`/applications/${applicationId}/submission`);
-      if (!packetAuditRecoveryMayCommit(selectedIdRef.current, applicationId)) return true;
-      const server = submissionResponseForDisplay(raw, { packetId: applicationId });
-      const canonical = publishSubmissionEnvelope(
-        submissionRef,
-        submissionAfterPacketAudit(server, submissionRef.current, audit),
-        "direct",
-      );
-      const auditedQuestions = canonical.review.questions;
-      const freshEvidence = spec
-        ? {
-          applicationId,
-          response: audit,
-          specJson: JSON.stringify(spec),
-          questionsSnapshot: packetQuestionsSnapshot(auditedQuestions),
-          pdfVerified: false,
-          acknowledged: false,
-          serverRevalidatedAt: null,
-        }
-        : null;
-      packetEvidenceRef.current = freshEvidence;
-      setPacketEvidence(freshEvidence);
-      setQuestions(auditedQuestions);
-      setSubmission(canonical);
-      setPackets((current) => current?.map((packet) => {
-        if (packet.id !== applicationId) return packet;
-        return { ...packetWithDirectSubmission(packet, canonical), download_url: audit.pdf.download_url };
-      }) ?? current);
-      setNotice("The current exact packet is ready. Review its PDF, then continue.");
-    } catch {
-      if (selectedIdRef.current !== applicationId) return true;
-      /* The recovery itself can lose another optimistic race. Keep the gate closed and leave one
-         neutral route to run a fresh audit, without pinning the sentence the user cannot act on. */
-      packetEvidenceRef.current = null;
-      setPacketEvidence(null);
-      setNotice("This application is paused for a fresh exact-packet review.");
-    }
-    return true;
-  }, [moveToScreen, setSubmission, spec]);
 
   // Lifted out of MatchScore so the gap list and BOTH panes' highlighting read one /jd-match
   // result. The JD pane used to highlight against resumeTerms, every content word anywhere in the
@@ -1716,6 +1643,108 @@ function Applications() {
       else window.history.pushState(null, "", nextPath);
     });
   }, [selectPacket]);
+
+  /* A stale packet refusal is a route transition, not a red failure banner. The server is still
+     fail-closed: this takes a new audit, clears the old acknowledgement, and sends the applicant
+     back to the exact packet review. It never acknowledges that audit and never retries the send.
+     The machine code decides whether this path runs, so changing applicant-facing copy cannot turn
+     an unrelated 409 into a packet mutation. */
+  const recoverPacketAuditReview = useCallback(async (applicationId: string, reason: unknown): Promise<boolean> => {
+    const replacement = groundingPacketRebuilt(reason);
+    if (replacement) {
+      if (!packetAuditRecoveryMayCommit(selectedIdRef.current, applicationId)) return true;
+      const resumeRevision = editorRevisionRef.current;
+      const packetRevision = packetCoverLetterEditorRevisionRef.current;
+      const recoveryMayCommit = () => packetAuditRecoveryMayCommit(selectedIdRef.current, applicationId)
+        && editorRevisionRef.current === resumeRevision
+        && packetCoverLetterEditorRevisionRef.current === packetRevision;
+      packetEvidenceRef.current = null;
+      setPacketEvidence(null);
+      setError(null);
+      setPollError(null);
+      setSendRefusal(null);
+      setPreSendVerification(null);
+      moveToScreen("review");
+      setNotice("Litos updated this resume. Opening the current packet for review.");
+      try {
+        const history = await api<{ resumes: GeneratedResume[] }>(
+          `/resume/history?application=${encodeURIComponent(replacement.packetId)}`,
+        );
+        if (!recoveryMayCommit()) return true;
+        const exactPacket = history.resumes.find((item) => item.id === replacement.packetId);
+        if (!exactPacket) throw new Error("replacement identity mismatch");
+        /* The authenticated 409 is the backend's bounded canonical projection. It resolved this
+           exact current packet through same-user artifact ownership before returning both IDs, so
+           a capped application-list read here would weaken recovery for older canonical rows. */
+        setCanonicalIdByPacketId((current) => ({ ...current, [replacement.packetId]: replacement.canonicalApplicationId }));
+        setPackets((current) => [exactPacket, ...(current ?? []).filter((item) => item.id !== exactPacket.id)]);
+        openApplication(exactPacket, { history: "replace" });
+        moveToScreen("review");
+        setNotice("Litos updated this resume. Review the current PDF, then continue.");
+      } catch {
+        if (recoveryMayCommit()) {
+          setNotice(null);
+          setError("Litos updated this resume but could not open its exact packet. Reload Applications to continue.");
+        }
+      }
+      return true;
+    }
+    if (!packetAuditReviewRecoveryCode(reason) && !historicalPacketAuditStaleMessage(reason)) return false;
+    /* A refusal for packet A can arrive after the switcher moved to B. Treat the coded refusal as
+       handled, but do not clear B's evidence, route, questions, or banners. This guard must precede
+       every write below, including the synchronous refs. */
+    if (!packetAuditRecoveryMayCommit(selectedIdRef.current, applicationId)) return true;
+    packetEvidenceRef.current = null;
+    setPacketEvidence(null);
+    packetRevalidationRefusal.current = null;
+    setError(null);
+    setPollError(null);
+    setSendRefusal(null);
+    setPreSendVerification(null);
+    moveToScreen("review");
+    setNotice("Litos is refreshing the exact packet for review.");
+    try {
+      const audit = await api<PacketAuditResponse>(`/applications/${applicationId}/packet-audit`, { method: "POST" });
+      if (!packetAuditRecoveryMayCommit(selectedIdRef.current, applicationId)) return true;
+      const raw = await api<SubmissionResponse>(`/applications/${applicationId}/submission`);
+      if (!packetAuditRecoveryMayCommit(selectedIdRef.current, applicationId)) return true;
+      const server = submissionResponseForDisplay(raw, { packetId: applicationId });
+      const canonical = publishSubmissionEnvelope(
+        submissionRef,
+        submissionAfterPacketAudit(server, submissionRef.current, audit),
+        "direct",
+      );
+      const auditedQuestions = canonical.review.questions;
+      const freshEvidence = spec
+        ? {
+          applicationId,
+          response: audit,
+          specJson: JSON.stringify(spec),
+          questionsSnapshot: packetQuestionsSnapshot(auditedQuestions),
+          pdfVerified: false,
+          acknowledged: false,
+          serverRevalidatedAt: null,
+        }
+        : null;
+      packetEvidenceRef.current = freshEvidence;
+      setPacketEvidence(freshEvidence);
+      setQuestions(auditedQuestions);
+      setSubmission(canonical);
+      setPackets((current) => current?.map((packet) => {
+        if (packet.id !== applicationId) return packet;
+        return { ...packetWithDirectSubmission(packet, canonical), download_url: audit.pdf.download_url };
+      }) ?? current);
+      setNotice("The current exact packet is ready. Review its PDF, then continue.");
+    } catch {
+      if (selectedIdRef.current !== applicationId) return true;
+      /* The recovery itself can lose another optimistic race. Keep the gate closed and leave one
+         neutral route to run a fresh audit, without pinning the sentence the user cannot act on. */
+      packetEvidenceRef.current = null;
+      setPacketEvidence(null);
+      setNotice("This application is paused for a fresh exact-packet review.");
+    }
+    return true;
+  }, [moveToScreen, openApplication, setSubmission, spec]);
 
   const resetApplicationWorkflow = useCallback((options: { afterReset?: () => void; animate?: boolean } = {}) => {
     pendingApplicationFocusRef.current = false;
@@ -3364,83 +3393,21 @@ function Applications() {
     }
   }
 
-  /* THE ONE WAY OUT OF A FAILED PRE-SEND VERIFICATION, and the only control this screen offers while
-   * one stands. It is deliberately the SAME generation path "Tailor resume" uses on the canonical
-   * card - createApplication -> POST /resume/generate carrying application_id - and differs from it
-   * in exactly two ways, both of which matter here:
-   *
-   *   1. THE JOB DESCRIPTION IS THE ONE ALREADY FROZEN ON THIS PACKET. tailorCanonicalApplication
-   *      re-reads the posting first (GET /jobs/:id, or /jobs/extract against the portal URL), which
-   *      is the right thing when the applicant is starting from a Tracker row and wrong here: the
-   *      packet in front of her was tailored against a stored jd_text, the rebuild has to be judged
-   *      against that same text, and boards rotate and purge rows daily - a posting that closed
-   *      since would turn a repair Litos can perform into a dead end for the second time.
-   *   2. NO job_id IS SENT. The rebuild is bound to the URL and the canonical row, not to a board
-   *      row that may no longer resolve: /resume/generate 409s job_not_available for a stale id it
-   *      is handed, and canonicalApplicationBindingMismatches ignores an OMITTED jobId while
-   *      comparing every id it is given. The server still reads the canonical row's own job_id when
-   *      it has one, so the posting linkage is not lost by leaving it out.
-   *
-   * The canonical application id is carried through unchanged, so this replaces the packet on the
-   * existing Tracker row rather than minting a twin (see #855). company, role and portal_url are
-   * read off the canonical row for the same reason: those three are compared field by field against
-   * it server-side, and the packet's own copy can be older than the row's.
-   *
-   * On success createApplication opens the new packet, which lands on its review screen - the
-   * refusal state is keyed to the OLD packet id and retires itself the moment that happens. */
-  async function rebuildPacketForPreSendVerification(trigger: HTMLElement | null) {
+  /* The server owns this repair and returns the exact replacement identity from packet-audit.
+     Reusing that audited path avoids a second generation path, a tailoring credit, and any client
+     attempt to infer canonical ownership from a job URL. */
+  async function rebuildPacketForPreSendVerification(_trigger: HTMLElement | null) {
     const packet = selected;
     const refusal = preSendVerification;
     if (!packet || !refusal || refusal.applicationId !== packet.id) return;
-    /* Closes the same-tick double-click gap ahead of createApplication's own operation_id and
-       canonical-request guards, so a second press cannot even start a request, let alone spend a
-       second monthly tailoring. */
+    /* This is a server-owned repair, so retry the exact packet audit that performs it. It must not
+       call the paid tailoring route or invent a replacement from job metadata. A typed 409 hands
+       the exact new packet to recoverPacketAuditReview, which verifies both stored identities. */
     if (preSendRebuildRef.current) return;
-    /* THE SAME THREE PRECONDITIONS preSendVerificationReviewState derives the disabled state from,
-       in the same order, so a press that arrives anyway - a click on a render that has since moved
-       on, a scripted one - answers in the banner rather than returning silently. Every one of these
-       used to be a bare `return` or a refusal written to the closed New application composer, which
-       is how an enabled button issued no request and said nothing (measured 2026-09-10). */
-    const refuse = (message: string) => setPreSendRebuildError({ applicationId: packet.id, message });
-    const jobDescription = review?.jd_text?.trim() ?? "";
-    if (!jobDescription) {
-      refuse(PRE_SEND_VERIFICATION_NO_JD);
-      return;
-    }
-    const canonical = preSendRebuildCanonical;
-    if (!canonical) {
-      refuse(PRE_SEND_VERIFICATION_NO_TRACKER_ROW);
-      return;
-    }
-    const portalUrl = preSendRebuildPortalUrl;
-    if (!isHttpsJobUrl(portalUrl)) {
-      refuse(PRE_SEND_VERIFICATION_NO_PORTAL_URL);
-      return;
-    }
-    const draft: NewApplicationDraft = {
-      company: canonical.company,
-      role: canonical.role,
-      portalUrl,
-      jobDescription,
-      jobId: null,
-      canonicalApplicationId: canonical.id,
-    };
     preSendRebuildRef.current = packet.id;
     setPreSendRebuildId(packet.id);
-    setPreSendRebuildError(null);
-    /* No banner clearing here: createApplication owns the announcement for this press, clears the
-       page banner and the notice itself, and answers its own failures through
-       reportGenerationFailure. A second writer would be a second live region. */
     try {
-      const requestScope = beginCanonicalRequest(canonical.id, "tailoring", {
-        id: packet.id,
-        editorRevision: packetCoverLetterEditorRevisionRef.current,
-      });
-      await createApplication(draft, trigger, requestScope, (message) => {
-        if (selectedIdRef.current === packet.id) {
-          setPreSendRebuildError({ applicationId: packet.id, message });
-        }
-      });
+      await continueFromResume();
     } finally {
       preSendRebuildRef.current = null;
       setPreSendRebuildId(null);
@@ -3650,7 +3617,6 @@ function Applications() {
     draft: NewApplicationDraft = newApplication,
     upgradeTrigger: HTMLElement | null = null,
     inheritedCanonicalRequestScope: CanonicalRequestScope | null = null,
-    generationFailure?: (message: string) => void,
   ) {
     const requestIsCurrent = () => applicationsMountedRef.current;
     const canonicalRequestScope = draft.canonicalApplicationId
@@ -3698,10 +3664,6 @@ function Applications() {
     const jobDescription = draft.jobDescription.trim();
     const reportGenerationFailure = (message: string, fields: ApplicationDraftField[] = []) => {
       if (!requestMayPublish()) return;
-      if (generationFailure) {
-        generationFailure(message);
-        return;
-      }
       if (draft.canonicalApplicationId && canonicalSelected?.id === draft.canonicalApplicationId) {
         setCanonicalFillError(message);
       } else {
@@ -5831,7 +5793,7 @@ function Applications() {
           <ul className="mt-2 list-disc space-y-1 pl-5">
             {preSendVerificationBlock.issues.map((issue) => <li key={issue}>{issue}</li>)}
           </ul>
-          <p className="mt-2">Litos wrote this resume, so Litos fixes it. Rebuilding writes a new one for this same job and keeps it on this application.</p>
+          <p className="mt-2">Litos wrote this resume, so Litos checks and repairs it without using a tailoring credit.</p>
           <div className="mt-3">
             <Button
               type="button"
@@ -5840,19 +5802,12 @@ function Applications() {
               onClick={(event) => void rebuildPacketForPreSendVerification(event.currentTarget)}
             >
               {preSendVerificationBlock.rebuildInProgress
-                ? <PendingLabel state="solving" onColor>Rebuilding...</PendingLabel>
-                : "Rebuild the resume for this job"}
+                ? <PendingLabel state="solving" onColor>Checking...</PendingLabel>
+                : "Check for the updated resume"}
             </Button>
           </div>
           {preSendVerificationBlock.rebuildBlockedReason && (
             <p className="mt-2">{preSendVerificationBlock.rebuildBlockedReason}</p>
-          )}
-          {/* Never twice. A blocked rebuild already says why above, off rebuildBlockedReason, and a
-              press-time refusal that repeats that sentence would print it a second time. */}
-          {preSendRebuildError
-            && preSendRebuildError.applicationId === selected?.id
-            && preSendRebuildError.message !== preSendVerificationBlock.rebuildBlockedReason && (
-            <p className="mt-2">{preSendRebuildError.message}</p>
           )}
         </div>
       )}
