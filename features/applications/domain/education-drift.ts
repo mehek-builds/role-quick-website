@@ -114,3 +114,34 @@ export function educationDriftMessage(drift: EducationDriftField[]): string | nu
   );
   return `This resume was built before you last changed your profile: ${parts.join("; ")}. Fix the education line below and save before sending it.`;
 }
+
+/**
+ * Rewrite the packet's education fields to the values the profile now holds, for the one-click
+ * repair the drift banner offers.
+ *
+ * WHY LITOS DOES THIS, NOT THE STUDENT. The backend refuses to send a packet whose school, degree
+ * or graduation date disagrees with `profiles.parsed_json` (resumeValidate.ts), so the resume MUST
+ * end up carrying exactly the profile's values before it can go out. Asking the student to retype
+ * into the resume what the profile already records is friction with no decision in it: the profile
+ * is the authority the send is validated against, so the only correct destination for these three
+ * fields is the profile's own text. When the profile itself is what is wrong, she fixes it in
+ * settings and the resume then reconciles to the corrected profile the same way.
+ *
+ * ONLY THE DRIFTING FIELDS MOVE, and only toward a profile value that exists. This reuses
+ * `educationDrift`, so a field the profile leaves blank is never copied over a populated resume
+ * line (that direction is not drift), and a field that already agrees is left untouched. A spec
+ * with no drift is returned unchanged, so a caller can apply this unconditionally.
+ */
+export function reconcileEducationFromProfile<
+  T extends Pick<ResumeSpec, "school" | "degree" | "grad_date">,
+>(spec: T, profile: EducationProfile | null | undefined): T {
+  const drift = educationDrift(spec, profile);
+  if (drift.length === 0) return spec;
+  const next: T = { ...spec };
+  for (const item of drift) {
+    if (item.field === "school") next.school = item.profile;
+    else if (item.field === "degree") next.degree = item.profile;
+    else next.grad_date = item.profile;
+  }
+  return next;
+}

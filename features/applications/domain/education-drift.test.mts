@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { educationDrift, educationDriftMessage, profileGradDate } from "./education-drift.ts";
+import {
+  educationDrift,
+  educationDriftMessage,
+  profileGradDate,
+  reconcileEducationFromProfile,
+} from "./education-drift.ts";
 
 const PACKET = {
   school: "University of Southern California",
@@ -57,4 +62,38 @@ test("the drift message quotes both values so the student can tell which one is 
   assert.match(message ?? "", /May 2027/);
   assert.match(message ?? "", /May 2028/);
   assert.equal(educationDriftMessage([]), null);
+});
+
+test("reconcile rewrites only the drifting fields to the profile's values", () => {
+  const profile = {
+    school: "USC Viterbi",
+    degree: "Bachelor of Science in Computer Science",
+    grad_date: "May 2028",
+  };
+  const next = reconcileEducationFromProfile(PACKET, profile);
+  // school and grad_date drifted; degree already agreed and is left byte-for-byte.
+  assert.equal(next.school, "USC Viterbi");
+  assert.equal(next.grad_date, "May 2028");
+  assert.equal(next.degree, PACKET.degree);
+  // The reconciled packet no longer drifts against the same profile.
+  assert.deepEqual(educationDrift(next, profile), []);
+});
+
+test("reconcile adopts a profile that carries only a graduation year", () => {
+  const next = reconcileEducationFromProfile(
+    { ...PACKET, grad_date: "May 2027" },
+    { ...PACKET, grad_date: "", grad_year: 2028 },
+  );
+  assert.equal(next.grad_date, "2028");
+});
+
+test("reconcile never overwrites a resume line the profile leaves blank", () => {
+  const next = reconcileEducationFromProfile(PACKET, { school: "", degree: "  ", grad_date: undefined });
+  assert.deepEqual(next, PACKET);
+});
+
+test("reconcile returns the same spec object when there is nothing to reconcile", () => {
+  const next = reconcileEducationFromProfile(PACKET, { ...PACKET });
+  assert.equal(next, PACKET);
+  assert.equal(reconcileEducationFromProfile(PACKET, null), PACKET);
 });
