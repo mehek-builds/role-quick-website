@@ -71,9 +71,13 @@ test("an unsupported portal replaces the send control with a paused dashboard st
 
   assert.match(dashboard, /Litos cannot fill this company&rsquo;s form in the dashboard yet\. Your packet is ready, but this application stays paused here\./);
   // The send control is behind the capability check, and no employer-page action takes its place.
+  // The capability check is FIRST and the guards that joined it are additive: a run in flight on the
+  // server withdraws the same control (runInFlightBlock, 2026-09-10), so the pattern allows further
+  // `&&` guards between the capability check and the button without letting the capability check
+  // itself move or weaken.
   assert.match(
     dashboard,
-    /review\.portal_supported === false[^]*?application stays paused here(?:(?!<\/TerminalActionBar>)[^])*?review\.portal_supported !== false && <Button onClick=\{reviewPrimaryAction\}/,
+    /review\.portal_supported === false[^]*?application stays paused here(?:(?!<\/TerminalActionBar>)[^])*?review\.portal_supported !== false && (?:[A-Za-z][\w.?]* === null && )*<Button onClick=\{reviewPrimaryAction\}/,
   );
   assert.doesNotMatch(dashboard, /Open the company page/);
   assert.match(dashboard, /const reviewPrimaryLabel[\s\S]{0,500}"Approve packet and fill form"/);

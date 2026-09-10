@@ -198,8 +198,14 @@ function landedResponse(submission, packet) {
  * @param holdSubmitMs         keeps submit-request in flight so its status polling can be measured
  * @param revalidationRefusal  {status, body} answered by every packet-audit AFTER the
  *                             acknowledgement, which is exactly the poll's revalidation
+ * @param dropSubmitAfterMs    kills the long-lived submit-request socket that many ms in, the way a
+ *                             container swap does, WITHOUT stopping the run: the fixture keeps
+ *                             answering /submission with a live status afterwards. The 2026-09-10
+ *                             incident shape.
+ * @param dropSubmissionPolls  every /submission read is aborted at the network layer, so the poll
+ *                             sees the same dropped-socket rejection the incident did
  */
-async function openAuditedFlow(packet, { ackResponse = null, submitResponse = null, holdSubmitMs = 0, revalidationRefusal = null, landed = null, generated = null, generateResponse = null, canonicalRowOutOfWindow = false } = {}) {
+async function openAuditedFlow(packet, { ackResponse = null, submitResponse = null, holdSubmitMs = 0, revalidationRefusal = null, landed = null, generated = null, generateResponse = null, canonicalRowOutOfWindow = false, dropSubmitAfterMs = 0, dropSubmissionPolls = false } = {}) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const auditResponse = packetAuditResponse(packet);
   const submission = submissionFor(packet, auditResponse);
@@ -280,6 +286,14 @@ async function openAuditedFlow(packet, { ackResponse = null, submitResponse = nu
         counts.submit += 1;
         counts.submitBodies.push(route.request().postDataJSON());
         submitInFlight = true;
+        /* THE RUN DOES NOT STOP. Only this browser's socket does, which is the whole point: the
+           fixture leaves submitInFlight set, so every later /submission read still answers
+           "filling", exactly as the server did on 2026-09-10 while the dashboard claimed the run
+           had failed. */
+        if (dropSubmitAfterMs > 0) {
+          await delay(dropSubmitAfterMs);
+          return route.abort("connectionfailed");
+        }
         if (holdSubmitMs > 0) await delay(holdSubmitMs);
         submitInFlight = false;
         if (submitResponse) return json(submitResponse.body, submitResponse.status);
@@ -305,6 +319,9 @@ async function openAuditedFlow(packet, { ackResponse = null, submitResponse = nu
          review; the flow only needs the envelope back. */
       if (p.endsWith("/review") && route.request().method() === "PUT") return json(submission);
       if (p.endsWith("/submission")) counts.submissionReads += 1;
+      /* A poll tick that never reaches litos-api. The rejection the page sees is the browser's own
+         TypeError("Failed to fetch"), not a status anybody chose. */
+      if (p.endsWith("/submission") && dropSubmissionPolls) return route.abort("connectionfailed");
       if (p.endsWith("/submission") && submitInFlight) {
         return json({ ...submission, review: { ...submission.review, status: "filling" } });
       }
@@ -654,6 +671,67 @@ browserTest("the accepted walk still fills and reports the receipt", async (hold
   await second.click();
   await page.getByText("Thank you. Your application was received.").waitFor({ state: "visible", timeout: 20_000 });
   assert.equal(counts.ack, 1);
+  assert.equal(counts.submit, 1);
+  await context.close();
+});
+
+/* THE 2026-09-10 INCIDENT, IN BOTH OF ITS SHAPES.
+ *
+ * Measured on three separate managed runs against
+ * trylitos.com/dashboard/applications?application=<id>&intent=apply: within the first one to three
+ * minutes the LIVE APPLICATION STATUS view replaced itself with a red "Error: Failed to fetch" and
+ * fell back to packet review, under an armed "Approve packet and fill form", while the run kept
+ * filling on the server and finished minutes later. Both channels feeding that screen treated one
+ * dropped socket as an answer about the RUN.
+ *
+ * A dropped socket is not an answer. These two cases hold that: the run's own long-lived
+ * submit-request being killed, and the status poll being killed tick after tick.
+ */
+const RECONNECTING = "Reconnecting to Litos...";
+
+browserTest("a killed submit-request socket keeps the live view and never re-arms the send", async (hold) => {
+  const { context, page, second, counts } = await openAuditedFlow(FILL, { dropSubmitAfterMs: 700 });
+  hold(page);
+  await second.click();
+
+  // The run is alive on the server, so the poll's first clean read must be what routes the screen.
+  await page.getByRole("heading", { name: "Filling form", exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+  await page.waitForTimeout(8000);
+  await page.getByRole("heading", { name: "Filling form", exact: true }).waitFor({ state: "visible", timeout: 5000 });
+
+  assert.equal(
+    await page.getByRole("button", { name: "Approve packet and fill form", exact: true }).count(),
+    0,
+    "the send was re-armed over a run that is still filling on the server",
+  );
+  assert.equal(await page.getByText("Failed to fetch", { exact: false }).count(), 0);
+  assert.equal(counts.submit, 1, "a second submit-request is a duplicate employer attempt");
+  assert.ok(counts.submissionReads > 0, "the poll must take over the question the socket could not answer");
+  await context.close();
+});
+
+browserTest("a poll that keeps failing says Reconnecting to Litos and holds the live view", async (hold) => {
+  const { context, page, second, counts } = await openAuditedFlow(FILL, {
+    dropSubmitAfterMs: 700,
+    dropSubmissionPolls: true,
+  });
+  hold(page);
+  await second.click();
+
+  await page.getByRole("heading", { name: "Filling form", exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+  await page.getByText(RECONNECTING, { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+
+  // Non-blocking: the notice sits BESIDE the live view rather than replacing it, and the reconnect
+  // window has to elapse before any sentence is allowed to escalate into a banner.
+  await page.waitForTimeout(9000);
+  await page.getByRole("heading", { name: "Filling form", exact: true }).waitFor({ state: "visible", timeout: 5000 });
+  await page.getByText(RECONNECTING, { exact: true }).waitFor({ state: "visible", timeout: 5000 });
+  assert.equal(
+    await page.getByRole("button", { name: "Approve packet and fill form", exact: true }).count(),
+    0,
+    "a run of failed polls dropped the applicant back to packet review",
+  );
+  assert.equal(await page.getByText("Failed to fetch", { exact: false }).count(), 0);
   assert.equal(counts.submit, 1);
   await context.close();
 });
