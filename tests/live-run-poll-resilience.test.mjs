@@ -49,17 +49,48 @@ test("the status poll backs off instead of banking one rejected tick as a banner
 test("a dropped submit-request socket keeps the live view and hands the question to the poll", async () => {
   const dashboard = await readFile(dashboardUrl, "utf8");
 
-  // The transient branch must sit BEFORE the screen move, or the applicant is already on review.
+  // The hold is decided by the RULE, asked of the state the failure would produce. A helper that is
+  // exported, documented as load-bearing and called from nowhere is how this ships broken again.
   assert.match(
     dashboard,
-    /if \(options\.failureScreen === undefined && liveRunFailureKind\(reason\) === "transient"\) \{\s*\n\s*publishLiveConnectionFailure\(reason, message\);\s*\n\s*return;\s*\n\s*\}\s*\n(?:\s*\/\*[\s\S]{0,400}?\*\/\s*\n)?\s*moveToScreen\(options\.failureScreen \?\? \(options\.restart \? "portal" : "review"\)\)/,
+    /const nextLiveConnection = liveRunConnectionAfterFailure\(liveConnectionRef\.current, reason, Date\.now\(\), message\);\s*\n\s*if \(options\.failureScreen === undefined && liveRunViewSurvivesFailure\(nextLiveConnection\)\) \{\s*\n\s*commitLiveConnectionFailure\(nextLiveConnection\);\s*\n\s*return;\s*\n\s*\}/,
+  );
+  // And it must sit BEFORE the screen move, or the applicant is already on review.
+  assert.match(
+    dashboard,
+    /liveRunViewSurvivesFailure\(nextLiveConnection\)\) \{[\s\S]{0,200}\}\s*\n(?:\s*\/\*[\s\S]{0,400}?\*\/\s*\n)?\s*moveToScreen\(options\.failureScreen \?\? \(options\.restart \? "portal" : "review"\)\)/,
   );
   // The message the branch carries is the one the banner would have used, so an exhausted window
   // still says what actually happened rather than a paraphrase of it.
   assert.match(
     dashboard,
-    /const message = reason instanceof Error \? reason\.message : "We could not open the company's application page\.";\s*\n\s*if \(options\.failureScreen === undefined && liveRunFailureKind\(reason\)/,
+    /const message = reason instanceof Error \? reason\.message : "We could not open the company's application page\.";\s*\n\s*\/\*/,
   );
+  // liveRunFailureKind read straight off the rejection is what let a 429 or a 503 be swallowed:
+  // both are transient, and both are the server refusing this exact request.
+  assert.doesNotMatch(
+    dashboard,
+    /liveRunFailureKind\(reason\) === "transient"/,
+    "the send's catch may not classify the rejection without going through the accumulator",
+  );
+});
+
+test("a refusal the server wrote is delivered when the poll routes off the live view", async () => {
+  const dashboard = await readFile(dashboardUrl, "utf8");
+
+  // 429 (hourly limiter) and 503 (shutdown gate) are transient AND are litos-api refusing the run.
+  // Holding the live view for them is right; letting the heal drop the sentence is the dead-button
+  // class: the applicant lands back on review under a re-armed send with nothing on screen.
+  assert.match(
+    dashboard,
+    /const nextScreen = screenForStatus\(result\.review\.status, "submitting"\);[\s\S]{0,1200}if \(nextScreen !== "submitting" && nextScreen !== "submitted"\) \{\s*\n\s*const retained = liveRunRetainedRefusal\(liveConnectionRef\.current\);\s*\n\s*if \(retained\) \{[\s\S]{0,400}setPollError\(retained\);/,
+  );
+  // Published AFTER this tick's own banner clear, or the clean poll erases it on the way past.
+  const clearAt = dashboard.indexOf("      setPollError(null);\n    }");
+  const deliverAt = dashboard.indexOf("setPollError(retained);");
+  assert.ok(clearAt > 0 && deliverAt > clearAt, "the retained sentence must be written after the tick's clear");
+  // Delivered once, then retired.
+  assert.match(dashboard, /liveRunConnectionAfterRetainedDelivery\(liveConnectionRef\.current\)/);
 });
 
 test("the reconnecting notice is non-blocking and cannot contradict the banner", async () => {
@@ -86,9 +117,24 @@ test("the send is withdrawn while the server says a run holds the packet", async
     dashboard,
     /const runInFlightBlock = selected[\s\S]{0,400}SERVER_RUN_IN_FLIGHT_STATUSES\.has\(selectedSubmission\.server_review_status \?\? ""\)[\s\S]{0,120}RUN_IN_FLIGHT_REFUSAL/,
   );
-  // Withdrawn, not merely disabled, and disabled too so the two can never disagree.
-  assert.match(dashboard, /review\.portal_supported !== false && runInFlightBlock === null && <Button onClick=\{reviewPrimaryAction\}/);
-  assert.match(dashboard, /const reviewPrimaryDisabled = reviewPrimaryBusy\s*\n\s*\|\| runInFlightBlock !== null/);
+  // Withdrawn, not merely disabled, and disabled too so the two can never disagree - but only for
+  // the EMPLOYER SEND. "Fill the application", "Audit again", "Loading exact PDF" and "Checking
+  // saved packet" are continueFromResume / auditPacketAgain: local work that sends nothing, and
+  // withdrawing them left the action bar blank under a sentence about a run.
+  assert.match(dashboard, /const reviewPrimaryIsEmployerSend = packetEvidenceReady;\s*\n\s*const runInFlightWithdrawsPrimary = runInFlightBlock !== null && reviewPrimaryIsEmployerSend;/);
+  assert.match(dashboard, /review\.portal_supported !== false && !runInFlightWithdrawsPrimary && <Button onClick=\{reviewPrimaryAction\}/);
+  assert.match(dashboard, /const reviewPrimaryDisabled = reviewPrimaryBusy\s*\n\s*\|\| runInFlightWithdrawsPrimary/);
+  assert.doesNotMatch(
+    dashboard,
+    /runInFlightBlock === null && <Button onClick=\{reviewPrimaryAction\}/,
+    "a run in flight may not withdraw a local audit control",
+  );
+  // reviewPrimaryAction's own branches are the proof of which one is the send: only the
+  // packet-evidence branch reaches continueFromVerifiedPacket.
+  assert.match(
+    dashboard,
+    /const reviewPrimaryAction = packetEvidenceReady[\s\S]{0,400}: packetEvidenceNeedsFreshAudit \? auditPacketAgain : continueFromResume;/,
+  );
   // The sentence takes the button's place rather than leaving the bar silent.
   assert.match(dashboard, /runInFlightBlock && \(\s*\n\s*<p role="status"[^>]*>\{runInFlightBlock\}<\/p>/);
   // And the handler refuses on its own account, so no other route into it can start a second run.

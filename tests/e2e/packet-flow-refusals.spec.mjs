@@ -710,6 +710,35 @@ browserTest("a killed submit-request socket keeps the live view and never re-arm
   await context.close();
 });
 
+const HOURLY_LIMIT = "You have reached this hour's application limit. Nothing was sent. Try again shortly.";
+
+browserTest("a 429 the server wrote is a sentence on the way back to review, not a silently re-armed send", async (hold) => {
+  /* THE HALF THE TRANSIENT RULE ALMOST SWALLOWED. 429 and 503 belong in the transient class - the
+     right response to both is to back off - but litos-api WRITES them about this exact request and
+     they refuse the run outright. Holding the live view over them is correct; letting the poll's
+     next clean tick discard the message is not: the applicant lands back on packet review under a
+     re-armed "Approve packet and fill form" with the screen silent about why the first press did
+     nothing, which is the dead-button class this whole file exists for. */
+  const { context, page, second, counts } = await openAuditedFlow(FILL, {
+    submitResponse: { status: 429, body: { error: HOURLY_LIMIT } },
+  });
+  hold(page);
+  await second.click();
+
+  await page.getByText(HOURLY_LIMIT, { exact: false }).waitFor({ state: "visible", timeout: 20_000 });
+  // The poll answered "still resume_ready", so review is the honest screen to be on - WITH the
+  // reason. The send may be armed again here; what it may not be is armed in silence.
+  await page.getByRole("button", { name: "Approve packet and fill form", exact: true })
+    .waitFor({ state: "visible", timeout: 10_000 });
+  assert.equal(await page.getByText(RECONNECTING, { exact: true }).count(), 0, "a refused run is not a reconnecting connection");
+  assert.equal(counts.submit, 1, "the refusal must not be retried on its own");
+
+  // And it survives the ticks that follow, rather than being cleared 2.5s after it appears.
+  await page.waitForTimeout(6000);
+  await page.getByText(HOURLY_LIMIT, { exact: false }).waitFor({ state: "visible", timeout: 5000 });
+  await context.close();
+});
+
 browserTest("a poll that keeps failing says Reconnecting to Litos and holds the live view", async (hold) => {
   const { context, page, second, counts } = await openAuditedFlow(FILL, {
     dropSubmitAfterMs: 700,

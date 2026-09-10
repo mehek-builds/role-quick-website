@@ -5,13 +5,17 @@ import {
   LIVE_RUN_POLL_BASE_MS,
   LIVE_RUN_POLL_HIDDEN_BASE_MS,
   LIVE_RUN_POLL_MAX_DELAY_MS,
+  LIVE_RUN_MIN_FAILED_ATTEMPTS,
   LIVE_RUN_RECONNECTING_NOTICE,
   LIVE_RUN_RECONNECT_WINDOW_MS,
   liveRunConnectionAfterFailure,
+  liveRunConnectionAfterRetainedDelivery,
   liveRunConnectionAfterSuccess,
   liveRunConnectionView,
   liveRunFailureKind,
+  liveRunFailureStatus,
   liveRunPollDelayMs,
+  liveRunRetainedRefusal,
   liveRunViewSurvivesFailure,
 } from "./live-run-connection.ts";
 
@@ -71,9 +75,76 @@ test("the window measures the outage, not the latest tick", () => {
 test("the live view survives even an exhausted window", () => {
   // The banner escalates; the screen does not move. Only the server may take an applicant off a run
   // it still reports as running.
-  const state = liveRunConnectionAfterFailure(IDLE_LIVE_RUN_CONNECTION, failedToFetch, 0, "Failed to fetch");
+  let state = IDLE_LIVE_RUN_CONNECTION;
+  for (let i = 0; i < LIVE_RUN_MIN_FAILED_ATTEMPTS; i += 1) {
+    state = liveRunConnectionAfterFailure(state, failedToFetch, i * 2500, "Failed to fetch");
+  }
   assert.equal(liveRunConnectionView(state, LIVE_RUN_RECONNECT_WINDOW_MS * 5).tone, "error");
   assert.equal(liveRunViewSurvivesFailure(state), true);
+});
+
+test("an aged window with too few attempts is still only a notice", () => {
+  /* Measured shape: the poll's tick returns without fetching while document.visibilityState is not
+     "visible", so a backgrounded tab makes NO attempts while the wall clock runs. One failure and
+     two minutes on another tab used to be enough to paint a red banner the browser had never
+     earned. The window must be a window of RETRIES. */
+  const oneFailure = liveRunConnectionAfterFailure(IDLE_LIVE_RUN_CONNECTION, failedToFetch, 0, "Failed to fetch");
+  const longAfterwards = LIVE_RUN_RECONNECT_WINDOW_MS * 3;
+  assert.equal(liveRunConnectionView(oneFailure, longAfterwards).tone, "notice");
+  assert.equal(liveRunConnectionView(oneFailure, longAfterwards).message, LIVE_RUN_RECONNECTING_NOTICE);
+
+  let retried = oneFailure;
+  while (retried.consecutiveFailures < LIVE_RUN_MIN_FAILED_ATTEMPTS) {
+    retried = liveRunConnectionAfterFailure(retried, failedToFetch, retried.consecutiveFailures * 2500, "Failed to fetch");
+  }
+  assert.equal(liveRunConnectionView(retried, longAfterwards).tone, "error");
+  // A definitive refusal is never held for attempts either. The server answered on the first one.
+  const refused = liveRunConnectionAfterFailure(IDLE_LIVE_RUN_CONNECTION, apiError(409, "Start again."), 0, "Start again.");
+  assert.equal(liveRunConnectionView(refused, 0).tone, "error");
+});
+
+test("liveRunFailureStatus separates a server's bytes from a dropped socket", () => {
+  assert.equal(liveRunFailureStatus(failedToFetch), null);
+  assert.equal(liveRunFailureStatus(undefined), null);
+  assert.equal(liveRunFailureStatus({ status: "429" }), null);
+  assert.equal(liveRunFailureStatus(apiError(429)), 429);
+  assert.equal(liveRunFailureStatus(apiError(503)), 503);
+});
+
+test("a 429 on submit-request holds the live view AND keeps its sentence for the route back", () => {
+  /* The blocker this pair exists for: 429 and 503 are transient - backing off is right - but
+     litos-api WROTE them about this request and refused the run. Holding the view is correct;
+     losing the sentence on the next clean tick is how a refused send becomes a silently re-armed
+     button. */
+  const limited = "You have reached this hour's application limit. Try again shortly.";
+  const state = liveRunConnectionAfterFailure(IDLE_LIVE_RUN_CONNECTION, apiError(429, limited), 1000, limited);
+  assert.equal(liveRunViewSurvivesFailure(state), true, "the live view is held, the run may be alive");
+  assert.equal(liveRunConnectionView(state, 1000).tone, "notice", "one refused round trip is not yet a banner");
+
+  const healed = liveRunConnectionAfterSuccess(state);
+  assert.equal(healed.consecutiveFailures, 0);
+  assert.equal(healed.kind, null);
+  assert.equal(liveRunConnectionView(healed, 60_000).tone, "none", "the connection itself is fine again");
+  assert.equal(liveRunRetainedRefusal(healed), limited, "the server's sentence survives the heal");
+
+  const delivered = liveRunConnectionAfterRetainedDelivery(healed);
+  assert.equal(liveRunRetainedRefusal(delivered), null, "and is not repeated forever once shown");
+  assert.equal(liveRunConnectionAfterRetainedDelivery(delivered), delivered, "identity-stable when there is nothing owed");
+});
+
+test("a 503 shutdown gate keeps its sentence even under a later status-less blink", () => {
+  const shuttingDown = "Litos is restarting. Nothing was sent. Start the application again in a moment.";
+  let state = liveRunConnectionAfterFailure(IDLE_LIVE_RUN_CONNECTION, apiError(503, shuttingDown), 0, shuttingDown);
+  state = liveRunConnectionAfterFailure(state, failedToFetch, 2500, "Failed to fetch");
+  assert.equal(liveRunRetainedRefusal(state), shuttingDown, "a dropped socket has no sentence to overwrite it with");
+  assert.equal(liveRunRetainedRefusal(liveRunConnectionAfterSuccess(state)), shuttingDown);
+});
+
+test("a status-less rejection holds the live view and leaves nothing owed", () => {
+  const state = liveRunConnectionAfterFailure(IDLE_LIVE_RUN_CONNECTION, failedToFetch, 0, "Failed to fetch");
+  assert.equal(liveRunViewSurvivesFailure(state), true);
+  assert.equal(liveRunRetainedRefusal(state), null, "the API said nothing, so there is nothing to deliver later");
+  assert.equal(liveRunConnectionAfterSuccess(state), IDLE_LIVE_RUN_CONNECTION);
 });
 
 test("a definitive refusal skips the window entirely", () => {
@@ -92,7 +163,7 @@ test("a definitive refusal skips the window entirely", () => {
 test("one success clears the run of failures, and an already-clean tick is identity-stable", () => {
   const failed = liveRunConnectionAfterFailure(IDLE_LIVE_RUN_CONNECTION, failedToFetch, 10, "Failed to fetch");
   const healed = liveRunConnectionAfterSuccess(failed);
-  assert.deepEqual(healed, IDLE_LIVE_RUN_CONNECTION);
+  assert.equal(healed, IDLE_LIVE_RUN_CONNECTION);
   assert.equal(liveRunConnectionView(healed, 10_000).tone, "none");
   assert.equal(liveRunConnectionAfterSuccess(healed), healed);
 });

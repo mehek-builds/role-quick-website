@@ -27,7 +27,7 @@ test("every path that receives a review routes the screen from it", async () => 
   // route, and the navigation guard must read the synchronous ref rather than stale React state.
   assert.match(
     dashboard,
-    /\/applications\/\$\{requestedId\}\/submission`[\s\S]{0,10000}if \(approveInFlight\.current !== null && !terminal\) return;[\s\S]{0,800}const pollMayRoute = screenRef\.current === "submitting"[\s\S]{0,240}if \(!pollMayRoute\) return;\s*\n\s*moveToScreen\(screenForStatus\(result\.review\.status, "submitting"\)\)/,
+    /\/applications\/\$\{requestedId\}\/submission`[\s\S]{0,10000}if \(approveInFlight\.current !== null && !terminal\) return;[\s\S]{0,800}const pollMayRoute = screenRef\.current === "submitting"[\s\S]{0,240}if \(!pollMayRoute\) return;\s*\n\s*const nextScreen = screenForStatus\(result\.review\.status, "submitting"\);[\s\S]{0,1400}moveToScreen\(nextScreen\);/,
   );
   // The exception to the exception. A stalled approve never rejects (no AbortController in
   // lib/api.ts), so suppressing every poll route would strand the student on the spinner with the
@@ -77,7 +77,7 @@ test("an unsupported portal replaces the send control with a paused dashboard st
   // itself move or weaken.
   assert.match(
     dashboard,
-    /review\.portal_supported === false[^]*?application stays paused here(?:(?!<\/TerminalActionBar>)[^])*?review\.portal_supported !== false && (?:[A-Za-z][\w.?]* === null && )*<Button onClick=\{reviewPrimaryAction\}/,
+    /review\.portal_supported === false[^]*?application stays paused here(?:(?!<\/TerminalActionBar>)[^])*?review\.portal_supported !== false && (?:[A-Za-z][\w.?]* === null && |![A-Za-z][\w.?]* && )*<Button onClick=\{reviewPrimaryAction\}/,
   );
   assert.doesNotMatch(dashboard, /Open the company page/);
   assert.match(dashboard, /const reviewPrimaryLabel[\s\S]{0,500}"Approve packet and fill form"/);

@@ -29,6 +29,20 @@
 /** How long consecutive failures may run before the applicant is told the connection is gone. */
 export const LIVE_RUN_RECONNECT_WINDOW_MS = 60_000;
 
+/**
+ * And how many attempts must actually have been MADE and failed inside it.
+ *
+ * The window alone ages on the wall clock, and a hidden tab makes no attempts at all: the poll
+ * effect's tick returns immediately while document.visibilityState !== "visible". So one failure
+ * followed by two minutes on another tab used to satisfy a sixty-second window having retried the
+ * connection exactly once, and the applicant came back to a red banner the browser had never
+ * earned. The window is only honest if the connection was retried across it, so the escalation
+ * needs both: the elapsed minute AND a run of failures long enough to mean it. A visible tab backs
+ * off at 2.5s, 5s, 10s, 10s..., which reaches this count well inside the window, so nothing about
+ * the measured incident's timing changes.
+ */
+export const LIVE_RUN_MIN_FAILED_ATTEMPTS = 4;
+
 /** Non-blocking, and deliberately about the connection rather than about the run. */
 export const LIVE_RUN_RECONNECTING_NOTICE = "Reconnecting to Litos...";
 
@@ -49,11 +63,23 @@ const TRANSIENT_HTTP_STATUSES: ReadonlySet<number> = new Set([408, 425, 429, 502
 
 export type LiveRunFailureKind = "transient" | "definitive";
 
-function httpStatusOf(reason: unknown): number | null {
+/**
+ * The HTTP status the API chose for this rejection, or null when nothing answered.
+ *
+ * Exported because "did a server write these bytes" is a DIFFERENT question from "may the live view
+ * hold", and the caller needs both. A 429 from the hourly limiter and a 503 from the shutdown gate
+ * are transient - backing off is the right response - but litos-api chose them, wrote a sentence in
+ * the body, and that sentence is the applicant's only account of why nothing started. Only a
+ * status-less rejection (TypeError("Failed to fetch"), an abort, a timeout) is genuinely news about
+ * nothing.
+ */
+export function liveRunFailureStatus(reason: unknown): number | null {
   if (!reason || typeof reason !== "object") return null;
   const status = (reason as { status?: unknown }).status;
   return typeof status === "number" && Number.isFinite(status) ? status : null;
 }
+
+const httpStatusOf = liveRunFailureStatus;
 
 /**
  * Transient unless the API answered.
@@ -77,6 +103,21 @@ export type LiveRunConnection = {
   readonly firstFailureAtMs: number | null;
   readonly kind: LiveRunFailureKind | null;
   readonly message: string | null;
+  /**
+   * THE SENTENCE A TRANSIENT MAY NOT TAKE WITH IT WHEN IT HEALS.
+   *
+   * Holding the live view over a transient is right, and swallowing one is not the same thing. Six
+   * of the statuses in the transient class are written by litos-api itself about this very request:
+   * the hourly limiter's 429, the shutdown gate's 503. Those refuse the run outright - nothing was
+   * started, nothing is filling - and the poll's next clean tick then routes the applicant back to
+   * review with the send re-armed and the screen silent about why the first press did nothing. That
+   * is the dead-button class this file's siblings exist for, rebuilt out of the fix for the
+   * opposite defect.
+   *
+   * So a failure that carried a STATUS parks its message here, and the heal deliberately does not
+   * clear it. Anything the API did not write leaves this null: there is no sentence to keep.
+   */
+  readonly retainedMessage: string | null;
 };
 
 export const IDLE_LIVE_RUN_CONNECTION: LiveRunConnection = {
@@ -84,11 +125,16 @@ export const IDLE_LIVE_RUN_CONNECTION: LiveRunConnection = {
   firstFailureAtMs: null,
   kind: null,
   message: null,
+  retainedMessage: null,
 };
 
 /** Identity-stable, so a clean tick does not re-render the live view on every one of them. */
 export function liveRunConnectionAfterSuccess(current: LiveRunConnection): LiveRunConnection {
-  return current.consecutiveFailures === 0 && current.kind === null ? current : IDLE_LIVE_RUN_CONNECTION;
+  if (current.consecutiveFailures === 0 && current.kind === null) return current;
+  /* The run of failures is over; the server's sentence about the refused request is not. */
+  return current.retainedMessage === null
+    ? IDLE_LIVE_RUN_CONNECTION
+    : { ...IDLE_LIVE_RUN_CONNECTION, retainedMessage: current.retainedMessage };
 }
 
 export function liveRunConnectionAfterFailure(
@@ -102,7 +148,19 @@ export function liveRunConnectionAfterFailure(
     firstFailureAtMs: current.firstFailureAtMs ?? nowMs,
     kind: liveRunFailureKind(reason),
     message,
+    /* A later status-less blink must not erase the sentence an earlier 429 or 503 wrote. */
+    retainedMessage: liveRunFailureStatus(reason) === null ? current.retainedMessage : message,
   };
+}
+
+/** The server-chosen sentence still owed to the applicant, or null. */
+export function liveRunRetainedRefusal(state: LiveRunConnection): string | null {
+  return state.retainedMessage;
+}
+
+/** Called once the sentence has actually been put on screen, so it is not repeated forever. */
+export function liveRunConnectionAfterRetainedDelivery(state: LiveRunConnection): LiveRunConnection {
+  return state.retainedMessage === null ? state : { ...state, retainedMessage: null };
 }
 
 export type LiveRunConnectionView =
@@ -123,7 +181,10 @@ export function liveRunConnectionView(state: LiveRunConnection, nowMs: number): 
   if (state.consecutiveFailures === 0 || state.message === null) return IDLE_VIEW;
   if (state.kind === "definitive") return { tone: "error", message: state.message };
   const startedAt = state.firstFailureAtMs ?? nowMs;
-  if (nowMs - startedAt < LIVE_RUN_RECONNECT_WINDOW_MS) {
+  /* BOTH, and the attempt count is the half a hidden tab cannot fake. See
+     LIVE_RUN_MIN_FAILED_ATTEMPTS: the wall clock keeps running while the poll makes no requests at
+     all, so a minute of elapsed time on its own is not evidence that the connection is gone. */
+  if (nowMs - startedAt < LIVE_RUN_RECONNECT_WINDOW_MS || state.consecutiveFailures < LIVE_RUN_MIN_FAILED_ATTEMPTS) {
     return { tone: "notice", message: LIVE_RUN_RECONNECTING_NOTICE };
   }
   return { tone: "error", message: state.message };
@@ -135,6 +196,10 @@ export function liveRunConnectionView(state: LiveRunConnection, nowMs: number): 
  * Separate from the view above because they answer different questions and diverge at the end of
  * the window: the banner escalates to red, and the screen still does not move. Only the server, or
  * a definitive refusal, may take the applicant off a run it says is running.
+ *
+ * CALLED FROM prepareApplication's catch, which is the one place a failure can route off the live
+ * view, and it is asked of the state the failure WOULD produce rather than of the rejection: the
+ * state is what carries the retained refusal a survived failure still owes the applicant.
  */
 export function liveRunViewSurvivesFailure(state: LiveRunConnection): boolean {
   return state.kind !== "definitive";

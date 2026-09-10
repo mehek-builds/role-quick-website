@@ -86,7 +86,7 @@ import { acknowledgePacketAudit, acknowledgePacketEvidence, packetQuestionsSnaps
 import { useBilling } from "@/components/billing/BillingProvider";
 import { isStructuredUpgradeDenial } from "@/features/billing";
 import { completeOperationId, operationIdFor } from "@/lib/operation-id";
-import { IDLE_LIVE_RUN_CONNECTION, LIVE_RUN_RECONNECTING_NOTICE, liveRunConnectionAfterFailure, liveRunConnectionAfterSuccess, liveRunConnectionView, liveRunFailureKind, liveRunPollDelayMs, RUN_IN_FLIGHT_REFUSAL, type LiveRunConnection } from "@/features/applications";
+import { IDLE_LIVE_RUN_CONNECTION, LIVE_RUN_RECONNECTING_NOTICE, liveRunConnectionAfterFailure, liveRunConnectionAfterRetainedDelivery, liveRunConnectionAfterSuccess, liveRunConnectionView, liveRunPollDelayMs, liveRunRetainedRefusal, liveRunViewSurvivesFailure, RUN_IN_FLIGHT_REFUSAL, type LiveRunConnection } from "@/features/applications";
 import { applicationPacketAuthorityState, awaitingUnverifiedSubmissionResolution, employerActionRefusalMessage, SERVER_RUN_IN_FLIGHT_STATUSES, confirmedProjectionForPacket, managedPrepareAuthorityEnvelopeFromUnknown, managedPrepareAuthorityMatchesPacket, quarantinedSubmissionAuthority, reviewClaimsSubmissionSent, reviewForSubmissionProjection, submissionAuthorityEnvelopeFromUnknown, submissionMutationResponseMatchesApplication, submissionProjectionIsConfirmed, unverifiedRecoveryStatus, type UnverifiedRecoveryStatus } from "@/features/applications";
 import { useSidebarCollapse } from "@/app/dashboard/dashboard-shell";
 
@@ -1138,8 +1138,7 @@ function Applications() {
   /* FAILURES ONLY. A clean tick is healed inside the poll loop instead, because the success path of
      refreshSubmission already owns `pollError` - it is where a standing packet-revalidation refusal
      is re-pinned across ticks, and clearing the banner from out here would wipe that sentence. */
-  const publishLiveConnectionFailure = useCallback((reason: unknown, message: string) => {
-    const next = liveRunConnectionAfterFailure(liveConnectionRef.current, reason, Date.now(), message);
+  const commitLiveConnectionFailure = useCallback((next: LiveRunConnection) => {
     liveConnectionRef.current = next;
     setLiveConnection(next);
     const view = liveRunConnectionView(next, Date.now());
@@ -1150,6 +1149,15 @@ function Applications() {
     if (view.tone === "error") setPollError(view.message);
     return next;
   }, []);
+  /* Taking the next state as an argument, because the send's catch has to ASK what that state
+     implies before committing it: liveRunViewSurvivesFailure is the rule for whether the applicant
+     may be taken off a live run, and a definitive refusal must reach the review screen through the
+     ordinary path rather than being parked in this accumulator. */
+  const publishLiveConnectionFailure = useCallback(
+    (reason: unknown, message: string) =>
+      commitLiveConnectionFailure(liveRunConnectionAfterFailure(liveConnectionRef.current, reason, Date.now(), message)),
+    [commitLiveConnectionFailure],
+  );
   /* The one poll failure that must OUTLIVE the tick that raised it, and the last silent member of
      the dead-button class ("a dead button with no console error is a swallowed 409 in the network
      tab", measured live 2026-08-19 and 2026-08-20). When the acknowledged packet revalidation is
@@ -2090,7 +2098,25 @@ function Applications() {
       || screenRef.current === "portal"
       || result.review.status === "submitted";
     if (!pollMayRoute) return;
-    moveToScreen(screenForStatus(result.review.status, "submitting"));
+    const nextScreen = screenForStatus(result.review.status, "submitting");
+    /* THE ROUTE OFF THE LIVE VIEW IS WHERE A RETAINED REFUSAL COMES DUE.
+       While the live view was held over a transient, the send's own rejection may have carried a
+       status litos-api chose - the hourly limiter's 429, the shutdown gate's 503 - which refused
+       the run outright. The poll then finds the packet exactly where it left it, routes back to
+       review, and the applicant would be looking at a re-armed "Approve packet and fill form" with
+       nothing on screen saying why the first press did nothing. The sentence is published here,
+       AFTER this tick's own setPollError above, so the clean tick cannot erase it on its way past.
+       Not on the way to a receipt: a submitted run answers the question by itself. */
+    if (nextScreen !== "submitting" && nextScreen !== "submitted") {
+      const retained = liveRunRetainedRefusal(liveConnectionRef.current);
+      if (retained) {
+        const delivered = liveRunConnectionAfterRetainedDelivery(liveConnectionRef.current);
+        liveConnectionRef.current = delivered;
+        setLiveConnection(delivered);
+        setPollError(retained);
+      }
+    }
+    moveToScreen(nextScreen);
   }, [captureCompletedSubmission, moveToScreen, qaMode, revalidateAcknowledgedEvidence, selectedId, setSubmission]);
 
   // Question entry needs the same server-owned confirmation and option metadata as portal entry.
@@ -3261,9 +3287,22 @@ function Applications() {
     && SERVER_RUN_IN_FLIGHT_STATUSES.has(selectedSubmission.server_review_status ?? "")
     ? RUN_IN_FLIGHT_REFUSAL
     : null;
+  /* AND IT WITHDRAWS THE EMPLOYER SEND, NOT WHATEVER ELSE HAPPENS TO SHARE THAT SLOT.
+   *
+   * The rule above is about starting a SECOND run against the same employer, so it binds to the one
+   * action that does that: the packet-evidence branch of reviewPrimaryAction, which calls
+   * continueFromVerifiedPacket. The same button is also "Fill the application", "Audit again",
+   * "Loading exact PDF" and "Checking saved packet", and every one of those is continueFromResume
+   * or auditPacketAgain - local work against this dashboard's own routes that sends nothing to the
+   * employer. Withdrawing those left the action bar blank while a run was in flight, which is not a
+   * refusal, it is a screen with nothing on it, and it hides the audit control the packet-evidence
+   * copy is telling the applicant to press. The server remains the gate on those routes: a run that
+   * holds the row refuses an answer mutation, and continueFromResume's catch prints that sentence. */
+  const reviewPrimaryIsEmployerSend = packetEvidenceReady;
+  const runInFlightWithdrawsPrimary = runInFlightBlock !== null && reviewPrimaryIsEmployerSend;
   const reviewPrimaryBusy = saving || coverLetterBusy || packetAuditBusy;
   const reviewPrimaryDisabled = reviewPrimaryBusy
-    || runInFlightBlock !== null
+    || runInFlightWithdrawsPrimary
     || !review?.jd_text.trim()
     || preSendVerificationBlock !== null
     || Boolean(activePacketEvidence && !packetEvidenceReady && !packetEvidenceNeedsFreshAudit);
@@ -4693,8 +4732,17 @@ function Applications() {
        * `failureScreen` is excluded on purpose: the metadata-refresh route is a different press
        * with its own destination, and this rule is about the send. */
       const message = reason instanceof Error ? reason.message : "We could not open the company's application page.";
-      if (options.failureScreen === undefined && liveRunFailureKind(reason) === "transient") {
-        publishLiveConnectionFailure(reason, message);
+      /* ASKED OF THE ACCUMULATOR, not of the rejection, and that is the whole difference.
+         liveRunViewSurvivesFailure is the rule for whether the applicant may be taken off a run the
+         server still says is running; consulting it here is what makes it load-bearing rather than
+         a correct helper nobody calls. What it does NOT do is discard the reason: a status the API
+         chose is retained inside the state and delivered on the route back to review, so a 429 from
+         the hourly limiter or a 503 from the shutdown gate is a sentence the applicant reads
+         instead of a silently re-armed send. Only a status-less rejection leaves nothing behind,
+         because there is nothing the server said. */
+      const nextLiveConnection = liveRunConnectionAfterFailure(liveConnectionRef.current, reason, Date.now(), message);
+      if (options.failureScreen === undefined && liveRunViewSurvivesFailure(nextLiveConnection)) {
+        commitLiveConnectionFailure(nextLiveConnection);
         return;
       }
       /* A restart is pressed FROM the portal screen and is about the packet on it, so its refusal
@@ -6884,20 +6932,22 @@ function Applications() {
                 </Button>
               )}
               {(activePacketEvidence?.response.pdf.download_url ?? selected.download_url) && (activePacketEvidence?.response.pdf.download_url ?? selected.download_url) !== "#" && <a href={activePacketEvidence?.response.pdf.download_url ?? selected.download_url} className="rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink">View exact PDF</a>}
-              {review.portal_supported !== false && runInFlightBlock === null && <Button onClick={reviewPrimaryAction} disabled={reviewPrimaryDisabled} className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">
+              {review.portal_supported !== false && !runInFlightWithdrawsPrimary && <Button onClick={reviewPrimaryAction} disabled={reviewPrimaryDisabled} className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">
                   {reviewPrimaryBusy
                     ? <PendingLabel state="solving" onColor>Making...</PendingLabel>
                     : reviewPrimaryLabel}
                 </Button>}
             </div>
           </TerminalActionBar>
-          {/* The reason the send is not here, in the server's own words. It says what happens next
+          {/* Why the employer send is not here, in the server's own words. It says what happens next
               WITHOUT the applicant, because that is true: a fill that stops without a terminal state
-              is released server-side and the application becomes startable again. */}
+              is released server-side and the application becomes startable again. It is printed
+              whenever a run holds the packet, including the case where the primary control is a
+              local audit and therefore still rendered beside it. */}
           {review.portal_supported !== false && runInFlightBlock && (
             <p role="status" className="text-sm leading-6 text-muted">{runInFlightBlock}</p>
           )}
-          {review.portal_supported !== false && runInFlightBlock === null && packetEvidenceBlocker && (
+          {review.portal_supported !== false && !runInFlightWithdrawsPrimary && packetEvidenceBlocker && (
             <p role={matchResult && !matchResult.scorable ? "alert" : "status"} className={`text-sm leading-6 ${matchResult && !matchResult.scorable ? "text-danger" : "text-muted"}`}>
               {packetEvidenceBlocker}
             </p>
