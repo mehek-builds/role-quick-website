@@ -1328,7 +1328,7 @@ function Applications() {
   /* A ledger press selects from data already in memory, then gives the same identity to the URL.
      The history effect still refreshes that packet, but this ref tells it not to select the same
      row a second time and reset the screen after the student has already started working. */
-  const locallyOpenedRequestRef = useRef<{ id: string; revision: string; routeCommitted: boolean } | null>(null);
+  const locallyOpenedRequestRef = useRef<{ id: string; revision: string; routeCommitted: boolean; entryScreen?: Screen } | null>(null);
   const applicationBootstrapGenerationRef = useRef(0);
   const initializedQaScenarioRef = useRef<string | null>(null);
   const applicationsMountedRef = useRef(true);
@@ -1547,6 +1547,9 @@ function Applications() {
     const rememberedSubmission = submissionSnapshotsRef.current.get(packet.id) ?? null;
     const selectedReview = rememberedSubmission?.review ?? packet.spec._review;
     const status = selectedReview?.status;
+    const localEntryScreen = locallyOpenedRequestRef.current?.id === packet.id
+      ? locallyOpenedRequestRef.current.entryScreen
+      : undefined;
     /* Entering a packet starts its story over, and that includes a standing revalidation refusal:
        the sentence described evidence this entry no longer holds, and left in the ref it would
        re-pin itself onto the banner at the next poll tick. */
@@ -1607,14 +1610,15 @@ function Applications() {
       setSendRefusal(null);
       setPreSendVerification(null);
       setNotice(null);
-      moveToScreen(packetEntryScreen(selectedReview));
+      if (localEntryScreen) moveToScreen(localEntryScreen);
+      else moveToScreen(packetEntryScreen(selectedReview));
     });
   }, [clearPrescriptState, commitCanonicalSelection, moveToScreen, qaMode, setSubmission]);
 
   /* User navigation writes local state and route state as one action. The local write makes the
      switch feel immediate; the URL makes reload, sharing, and browser history reopen the same
      application instead of whichever packet happened to be selected before it. */
-  const openApplication = useCallback((packet: GeneratedResume, options: { history?: "push" | "replace" } = {}) => {
+  const openApplication = useCallback((packet: GeneratedResume, options: { history?: "push" | "replace" } = {}, entryScreen?: Screen) => {
     const nextPath = applicationSelectionPath(window.location, packet.id);
     const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
     const routeAlreadyCommitted = nextPath === currentPath;
@@ -1626,6 +1630,7 @@ function Applications() {
       id: packet.id,
       revision: applicationWorkflowRevision(packet),
       routeCommitted: routeAlreadyCommitted,
+      entryScreen,
     };
     pendingApplicationFocusRef.current = true;
     resolvedJobParam.current = null;
@@ -1686,8 +1691,10 @@ function Applications() {
            but its review, PDF binding, and authority are fresh. Do not let selectPacket prefer the
            pre-repair submission snapshot merely because the id still matches. */
         discardSubmissionSnapshotForReplacement(submissionSnapshotsRef.current, replacement.packetId);
-        openApplication(exactPacket, { history: "replace" });
-        moveToScreen("review");
+        /* Recovery owns this entry route. The current packet can still carry needs_attention from
+           an earlier run, but routing by that stored status here would replace the freshly loaded
+           PDF review with the portal blocker after the selection transition commits. */
+        openApplication(exactPacket, { history: "replace" }, "review");
         setNotice(replacement.rebuilt
           ? "Litos updated this resume. Review the current PDF, then continue."
           : "This application has a newer current packet. Review its PDF, then continue.");
@@ -2343,7 +2350,6 @@ function Applications() {
                packet with this id" fired even though the packet was found and selected. */
             const localOpen = locallyOpenedRequestRef.current;
             const alreadySelectedLocally = localOpen?.id === requestedApplicationId;
-            if (alreadySelectedLocally) locallyOpenedRequestRef.current = null;
             setResolvedActionableRequestId(requestedApplicationId);
             setOpeningApplicationId(null);
             /* A local click renders immediately, then this request returns the authoritative packet.
@@ -2351,8 +2357,13 @@ function Applications() {
                If another tab advanced or submitted the application, the fresh selection replaces
                every action, answer, document, and screen state before the user can continue. */
             if (!alreadySelectedLocally || localOpen.revision !== applicationWorkflowRevision(requested)) {
+              /* Recovery may replace a legacy packet id with the canonical row's authoritative
+                 linked packet after the local review is already visible. Preserve that explicit
+                 recovery destination while adopting the newer server bytes; ordinary local opens
+                 leave entryScreen undefined and continue to route from the stored status. */
               selectPacket(requested);
             }
+            if (alreadySelectedLocally) locallyOpenedRequestRef.current = null;
           } else {
             setResolvedActionableRequestId(null);
             setOpeningApplicationId(null);
