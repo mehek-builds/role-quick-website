@@ -32,6 +32,32 @@ export type PreSendVerificationRefusal = {
 };
 
 export const PRE_SEND_VERIFICATION_CODE = "PRE_SEND_VERIFICATION_FAILED";
+export const GROUNDING_PACKET_REBUILT_CODE = "GROUNDING_PACKET_REBUILT";
+
+export type GroundingPacketRebuilt = {
+  canonicalApplicationId: string;
+  packetId: string;
+};
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Accepts only the backend's typed replacement handoff. The two IDs are subsequently checked
+ * against the canonical ledger and exact packet row before navigation. */
+export function groundingPacketRebuilt(reason: unknown): GroundingPacketRebuilt | null {
+  if (typeof reason !== "object" || reason === null || (reason as { status?: unknown }).status !== 409) return null;
+  const data = (reason as { data?: unknown }).data;
+  if (typeof data !== "object" || data === null) return null;
+  const body = data as Record<string, unknown>;
+  if (body.code !== GROUNDING_PACKET_REBUILT_CODE
+    || typeof body.canonical_application_id !== "string"
+    || typeof body.packet_id !== "string"
+    || !UUID_PATTERN.test(body.canonical_application_id)
+    || !UUID_PATTERN.test(body.packet_id)) return null;
+  return {
+    canonicalApplicationId: body.canonical_application_id,
+    packetId: body.packet_id,
+  };
+}
 
 /** Copy for the case the server refused without naming a single entry. Still a refusal, still a
  *  rebuild, but the screen must not imply it listed something it did not. */
@@ -39,9 +65,6 @@ export const PRE_SEND_VERIFICATION_UNNAMED_ISSUE =
   "Litos did not name which line it objected to. Rebuilding this resume writes the whole packet again.";
 
 /** Why the rebuild cannot run: the packet has no frozen job description to rebuild against. */
-export const PRE_SEND_VERIFICATION_NO_JD =
-  "This packet has no saved job description, so Litos cannot rebuild it here. Open the posting again from Jobs to make a fresh application.";
-
 function refusalBody(reason: unknown): Record<string, unknown> | null {
   if (typeof reason !== "object" || reason === null) return null;
   if ((reason as { status?: unknown }).status !== 422) return null;
@@ -103,9 +126,8 @@ export type PreSendVerificationReviewState = {
  * it: switching rows must not carry a stopped send onto a different application, which is the same
  * scoping rule `sendRefusal` already follows on the portal screen.
  *
- * `jdText` is the packet's frozen `spec._review.jd_text`. The rebuild reuses it rather than re-reading
- * the posting, so a board that has since rotated or closed the row cannot block the repair; without
- * it there is nothing to tailor against and the control says so instead of failing on press.
+ * The repair belongs to the server's packet audit and does not depend on a client copy of the job
+ * description. `jdText` remains in the context for call-site compatibility during rolling deploys.
  */
 export function preSendVerificationReviewState(
   refusal: PreSendVerificationRefusal | null,
@@ -116,13 +138,12 @@ export function preSendVerificationReviewState(
   },
 ): PreSendVerificationReviewState | null {
   if (!refusal || !context.applicationId || refusal.applicationId !== context.applicationId) return null;
-  const hasJd = Boolean(context.jdText && context.jdText.trim().length > 0);
   return {
     sendDisabled: true,
     message: refusal.message,
     issues: refusal.issues.length > 0 ? refusal.issues : [PRE_SEND_VERIFICATION_UNNAMED_ISSUE],
-    rebuildAvailable: hasJd && !context.rebuilding,
-    rebuildBlockedReason: hasJd ? null : PRE_SEND_VERIFICATION_NO_JD,
+    rebuildAvailable: !context.rebuilding,
+    rebuildBlockedReason: null,
     rebuildInProgress: context.rebuilding,
   };
 }
