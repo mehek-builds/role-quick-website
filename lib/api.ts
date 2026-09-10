@@ -1729,6 +1729,11 @@ export function acknowledgeOnboardingFlowStep(
  * An account with no verified address is never mailed however the toggles read, and a deployment
  * that cannot mint an unsubscribe link refuses to send at all. Both are surfaced so a student is
  * never left switching something on and hearing nothing forever with no explanation on screen. */
+/* `employer_reply` IS KEPT, BUT NO SCREEN ASKS FOR IT ANY MORE. Backend #1222 forwards every employer
+ * email to the applicant's inbox, so the reply alert can no longer fire and both the settings switch
+ * and the onboarding switch were removed. The field stays in the type, in the normaliser and in the
+ * PUT shape so an older client or an older backend that still sends it reads cleanly; nothing in
+ * this app writes it. */
 export type NotificationKind = "strong_match" | "employer_reply" | "activity_digest";
 export type NotificationPermission = { enabled: boolean; granted_at: string | null };
 export type NotificationPreferences = {
@@ -1814,6 +1819,7 @@ export function getNotificationPreferences() {
    student never touched. */
 export function setNotificationPreferences(changes: {
   strong_match?: boolean;
+  /** Tolerated for older callers; no current screen sends it. See NotificationKind. */
   employer_reply?: boolean;
   activity_digest?: boolean;
 }) {

@@ -45,7 +45,10 @@ test("Account automation uses three scannable surfaces without dropping permissi
   assert.match(panel, /<Card className="p-5 sm:p-6 xl:col-span-2">\s*<h3 className="text-base font-medium text-ink">Email notifications/);
   assert.match(notifications, /className="mt-5 grid gap-4 md:grid-cols-2"/);
   assert.match(notifications, /Tell me when a strong match opens/);
-  assert.match(notifications, /Tell me when an employer replies/);
+  /* The reply alert was removed when backend #1222 began forwarding every employer email; a tile
+     with no control states the forwarding in its place. */
+  assert.doesNotMatch(notifications, /Tell me when an employer replies/);
+  assert.match(notifications, /Employer emails come straight to your inbox/);
   assert.match(notifications, /Every message carries an unsubscribe link/);
 });
 

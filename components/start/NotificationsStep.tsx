@@ -12,7 +12,7 @@
  * and `notifications` is the one step after it in APPLICATION_STEPS - so a student cannot reach
  * this screen, or the dashboard past it, without having actually paid.
  *
- * TWO QUESTIONS, AND THE SHORTNESS IS THE DESIGN. Auto-apply, send-without-asking, the
+ * ONE QUESTION (PLUS THE OPTIONAL LAPTOP SUMMARY), AND THE SHORTNESS IS THE DESIGN. Auto-apply, send-without-asking, the
  * security-check hand-back and the receipt-trail consent are all deliberately NOT here. They are
  * standing permissions with real consequences and each is asked at the moment its feature is first
  * used, once the student is properly inside the product. Putting them in setup would make this
@@ -20,12 +20,19 @@
  * and a worse rung on the ladder.
  *
  * WHY IT IS ASKED HERE AT ALL. Screen 03 established that the posting Litos found was four hours
- * old, and screen 06 sent a real application to a real employer. Both questions on this screen are
- * about those two facts continuing to happen. Asked cold on a settings page, "may we email you"
+ * old, and screen 06 sent a real application to a real employer. This screen is about both of
+ * those continuing: the alert covers the next posting, and the note under it says what happens when
+ * the employer writes back.
+ *
+ * THERE IS NO "TELL ME WHEN AN EMPLOYER REPLIES" SWITCH ANY MORE. Backend #1222 forwards every
+ * employer email straight to the applicant's inbox, and the reply alert only ever fired for mail
+ * Litos held back, so the switch could be ticked and never do anything. The note replaces it, and
+ * the switches no longer send `employer_reply` at all: a key this screen does not ask about must not
+ * re-date a grant or a decline the student never touched here. Asked cold on a settings page, "may we email you"
  * is a favour; asked here it is a continuation of something the student has just watched work.
  *
- * BOTH DEFAULT TO OFF AND NEITHER IS PRE-TICKED. A pre-ticked consent is not a consent, and this
- * screen can be skipped entirely: "Not now" is a real answer and both permissions live in settings
+ * EVERY SWITCH DEFAULTS TO OFF AND NONE IS PRE-TICKED. A pre-ticked consent is not a consent, and this
+ * screen can be skipped entirely: "Not now" is a real answer and the alert lives in settings
  * forever afterwards.
  *
  * WHAT THIS SCREEN PROMISES, and every word of it is enforced server-side rather than here:
@@ -47,7 +54,7 @@ import { LaterLink, PrimaryButton, StartShell } from "./ui";
 import { track } from "@/lib/analytics";
 import { firePurchaseEventOnce, matchingWithin } from "@/lib/tiktok-client";
 
-type Choice = { strong_match: boolean; employer_reply: boolean; activity_digest: boolean };
+type Choice = { strong_match: boolean; activity_digest: boolean };
 
 function Switch({
   label,
@@ -81,11 +88,11 @@ function Switch({
  *
  * EACH CHANGE SAVES ITSELF rather than waiting for a screen-level Continue: a control the student
  * can leave without losing what they just ticked is the more honest shape for a permission, and it
- * keeps the button below about one thing. Every save still sends EVERY key: an unticked box left
- * out reads server-side as "not mentioned" rather than as "no". A student who touches nothing
+ * keeps the button below about one thing. Every save still sends every key THIS SCREEN ASKS ABOUT: an
+ * unticked box left out reads server-side as "not mentioned" rather than as "no". A student who touches nothing
  * writes nothing, and all-off is exactly the state their account is already in. */
 export function NotificationChoices() {
-  const [choice, setChoice] = useState<Choice>({ strong_match: false, employer_reply: false, activity_digest: false });
+  const [choice, setChoice] = useState<Choice>({ strong_match: false, activity_digest: false });
   const [deliverable, setDeliverable] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -108,7 +115,6 @@ export function NotificationChoices() {
         if (cancelled) return;
         setChoice({
           strong_match: preferences.strong_match.enabled,
-          employer_reply: preferences.employer_reply.enabled,
           activity_digest: preferences.activity_digest.enabled,
         });
         setDeliverable(preferences.deliverable && preferences.unsubscribe_configured);
@@ -211,13 +217,12 @@ export function NotificationChoices() {
           checked={choice.strong_match}
           onChange={(strong_match) => change({ ...choice, strong_match })}
         />
-        <Switch
-          label="Tell me when an employer replies"
-          detail="One alert per reply, no message shown."
-          checked={choice.employer_reply}
-          onChange={(employer_reply) => change({ ...choice, employer_reply })}
-        />
       </div>
+
+      <p className="mt-5 text-[13px] leading-5 text-muted">
+        Emails from employers are forwarded to your inbox either way, so there is nothing to switch
+        on for them.
+      </p>
 
       {!deliverable && (
         /* The server said it cannot actually mail this account: no verified address, or no signing

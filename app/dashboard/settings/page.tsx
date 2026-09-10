@@ -1415,7 +1415,16 @@ export default function Settings() {
               </div>
             </Card>
 
-            {/* THE TWO NOTIFICATION PERMISSIONS, and this is their only re-grant path.
+            {/* THE NOTIFICATION PERMISSION, and this is its only re-grant path.
+
+                There used to be two. The employer-reply alert was removed once backend
+                #1222 began forwarding every employer email to the applicant's own inbox: the alert
+                only ever fired for mail Litos held back, nothing is held back any more except
+                verification codes and the student's own replies, and the server refuses both, so
+                the switch could be turned on and never do anything. The tile that replaces it
+                states the forwarding instead, and has no control because there is nothing to choose.
+                The API still reads and tolerates `employer_reply` so an older client does not break.
+
                 The unsubscribe link in every message turns one off without signing in, which is the
                 half that has to work for somebody who cannot log in at all. Turning one back ON is the
                 half that cannot live in an email, because there is no email to click once the mail has
@@ -1424,22 +1433,17 @@ export default function Settings() {
 
                 Rendered only when the server answered. A backend that predates the endpoint gives null
                 and draws nothing, which is the honest state: two switches that silently write nowhere
-                would be worse than no switches. */}
+                would be worse than no switch. */}
             {notifications && (
               <Card className="p-5 sm:p-6 xl:col-span-2">
                 <h3 className="text-base font-medium text-ink">Email notifications</h3>
-                <p className="mt-1 text-sm leading-6 text-muted">Two things, and nothing else. No digests, no weekly roundups, no reminders to come back.</p>
+                <p className="mt-1 text-sm leading-6 text-muted">One alert you can switch on, and nothing else. No digests, no weekly roundups, no reminders to come back.</p>
                 <div className="mt-5 grid gap-4 md:grid-cols-2">
                   {([
                     {
                       kind: "strong_match" as const,
                       label: "Tell me when a strong match opens",
                       detail: "One posting, at most once a day, and only when it clears the same match score your board ranks by.",
-                    },
-                    {
-                      kind: "employer_reply" as const,
-                      label: "Tell me when an employer replies",
-                      detail: "Once per reply, when it reaches your tracker. Litos tells you mail arrived and where to read it, never what it said.",
                     },
                   ]).map((permission) => (
                     <label key={permission.kind} className="flex items-start justify-between gap-5 rounded-inner border border-border p-4">
@@ -1465,12 +1469,16 @@ export default function Settings() {
                       />
                     </label>
                   ))}
+                  <div className="rounded-inner border border-border p-4">
+                    <span className="block text-sm font-medium text-ink">Employer emails come straight to your inbox</span>
+                    <span className="mt-1 block text-xs leading-5 text-muted">Anything an employer sends to the address Litos applied with is forwarded to you, so there is nothing to switch on. Verification codes Litos uses to finish a form stay with Litos.</span>
+                  </div>
                 </div>
                 {!notifications.deliverable && (
                   <p className="mt-3 text-xs leading-5 text-muted">Litos cannot send to this account yet. Your choice is saved and starts working once your email address is verified.</p>
                 )}
                 <p className="mt-3 text-xs leading-5 text-muted">Every message carries an unsubscribe link that works without signing in.</p>
-                <p className="mt-3 text-xs leading-5 text-muted">Apart from the two above, Litos sends transactional account, application, and billing messages only. There are no marketing subscriptions and no other notification channels.</p>
+                <p className="mt-3 text-xs leading-5 text-muted">Apart from the alert above and forwarded employer email, Litos sends transactional account, application, and billing messages only. There are no marketing subscriptions and no other notification channels.</p>
               </Card>
             )}
           </div>
