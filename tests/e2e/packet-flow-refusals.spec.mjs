@@ -199,7 +199,7 @@ function landedResponse(submission, packet) {
  * @param revalidationRefusal  {status, body} answered by every packet-audit AFTER the
  *                             acknowledgement, which is exactly the poll's revalidation
  */
-async function openAuditedFlow(packet, { ackResponse = null, submitResponse = null, holdSubmitMs = 0, revalidationRefusal = null, landed = null, generated = null } = {}) {
+async function openAuditedFlow(packet, { ackResponse = null, submitResponse = null, holdSubmitMs = 0, revalidationRefusal = null, landed = null, generated = null, generateResponse = null } = {}) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const auditResponse = packetAuditResponse(packet);
   const submission = submissionFor(packet, auditResponse);
@@ -209,6 +209,20 @@ async function openAuditedFlow(packet, { ackResponse = null, submitResponse = nu
      like the needs_attention portal instead of the terminal receipt. */
   const landedSubmission = landed ? { ...submission, review: { ...submission.review, ...landed } } : null;
   const counts = { ack: 0, submit: 0, approve: 0, submissionReads: 0, audits: 0, revalidations: 0, generate: 0, submitBodies: [], generateBodies: [] };
+  const rebuildCanonicalId = "8b9b0722-7e23-4aa5-88ea-8877c11df17f";
+  const rebuildCanonical = {
+    id: rebuildCanonicalId,
+    legacy_generated_resume_id: packet.id,
+    job_id: packet.job_context.job_id ?? null,
+    company: packet.job_context.company,
+    role: packet.job_context.role,
+    portal_url: packet.spec._review.portal_url,
+    tracker_state: "saved",
+    review_state: packet.spec._review.status,
+    submission_state: packet.spec._review.status,
+    created_at: packet.created_at,
+    updated_at: packet.created_at,
+  };
   let submitInFlight = false;
   await context.route("**/*", async (route) => {
     const url = route.request().url();
@@ -221,13 +235,16 @@ async function openAuditedFlow(packet, { ackResponse = null, submitResponse = nu
       const json = async (body, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
       const historyResumes = generated && counts.generate > 0 ? [generated, ...fixtureResumes] : fixtureResumes;
       if (p === "/resume/history") return json({ resumes: historyResumes });
+      if (p === "/applications" && (generated || generateResponse)) {
+        return json({ applications: [rebuildCanonical] });
+      }
       /* The rebuild path reads the account's resume identity before it generates anything, and
          refuses without a personal email. The shared PROFILE fixture predates that read. */
       if (p === "/profile") return json({ ...STUB["/profile"], resume_email: "fixture@example.invalid" });
       /* Only the rebuild case needs a tailoring entitlement, so it is granted here rather than in
          the shared fixture: a Free account genuinely meets the upgrade modal on this button, and
          that is the correct product behaviour every other spec should keep measuring. */
-      if (p === "/billing/state" && generated) {
+      if (p === "/billing/state" && (generated || generateResponse)) {
         const base = STUB[p];
         return json({
           ...base,
@@ -237,8 +254,10 @@ async function openAuditedFlow(packet, { ackResponse = null, submitResponse = nu
       if (p === "/resume/generate") {
         counts.generate += 1;
         counts.generateBodies.push(route.request().postDataJSON());
+        if (generateResponse) return json(generateResponse.body, generateResponse.status);
         if (!generated) return json({ error: "no rebuild fixture" }, 500);
-        return json({ resume_id: generated.id, application: generated, artifact_id: null });
+        return json({ resume_id: generated.id, application: generated, artifact_id: null,
+          canonical_application_id: rebuildCanonicalId });
       }
       if (p === "/dashboard/bootstrap") return json({ ...STUB[p], resume_history: { resumes: historyResumes } });
       if (p.endsWith("/packet-audit/acknowledge")) {
@@ -552,6 +571,28 @@ browserTest("a pre-send verification refusal disables the send and offers one re
   await page.getByRole("button", { name: "Fill the application", exact: true })
     .waitFor({ state: "visible", timeout: 20_000 });
   assert.equal(await page.getByRole("alert").filter({ hasText: PRE_SEND_ERROR }).count(), 0);
+  await context.close();
+});
+
+browserTest("a failed pre-send rebuild reports the API refusal beside its button", async (hold) => {
+  const refusal = "The saved application changed before Litos could rebuild its resume. Reload and try again.";
+  const { context, page, second, counts } = await openAuditedFlow(FILL, {
+    submitResponse: {
+      status: 422,
+      body: { error: PRE_SEND_ERROR, code: "PRE_SEND_VERIFICATION_FAILED", issues: [PRE_SEND_ISSUE] },
+    },
+    generateResponse: { status: 409, body: { error: refusal, code: "application_changed" } },
+  });
+  hold(page);
+  await second.click();
+
+  const rebuild = page.getByRole("button", { name: "Rebuild the resume for this job", exact: true });
+  await rebuild.click();
+  const banner = page.getByRole("alert").filter({ hasText: PRE_SEND_ERROR }).first();
+  await banner.getByText(refusal, { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+  assert.equal(counts.generate, 1);
+  assert.equal(counts.submit, 1, "a failed rebuild must not retry or approve the submission");
+  assert.equal(await page.getByRole("button", { name: "Approve packet and fill form", exact: true }).isDisabled(), true);
   await context.close();
 });
 

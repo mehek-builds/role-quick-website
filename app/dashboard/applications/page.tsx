@@ -96,6 +96,7 @@ type CanonicalRequestScope = {
   editorRevision: number;
   requestGeneration: number;
   channel: "cover-letter" | "tailoring";
+  packet?: { id: string; editorRevision: number };
 };
 type PacketCoverLetterRequestScope = {
   applicationId: string;
@@ -1226,6 +1227,7 @@ function Applications() {
      this exists to stop a second press ever reaching it, not as the only guard. */
   const [preSendRebuildId, setPreSendRebuildId] = useState<string | null>(null);
   const preSendRebuildRef = useRef<string | null>(null);
+  const [preSendRebuildError, setPreSendRebuildError] = useState<{ applicationId: string; message: string } | null>(null);
   const [restartingId, setRestartingId] = useState<string | null>(null);
   /* A stale metadata screen needs a new employer-form read, but it must not silently carry edits
      the applicant has not saved. The ref closes the same-tick double-click gap; the id keeps the
@@ -1346,7 +1348,11 @@ function Applications() {
     };
   }, []);
 
-  function beginCanonicalRequest(applicationId: string, channel: CanonicalRequestScope["channel"]): CanonicalRequestScope {
+  function beginCanonicalRequest(
+    applicationId: string,
+    channel: CanonicalRequestScope["channel"],
+    packet?: CanonicalRequestScope["packet"],
+  ): CanonicalRequestScope {
     const generationRef = channel === "cover-letter"
       ? coverLetterRequestGenerationRef
       : canonicalTailoringRequestGenerationRef;
@@ -1355,6 +1361,7 @@ function Applications() {
       editorRevision: canonicalCoverLetterEditorRevisionRef.current,
       requestGeneration: ++generationRef.current,
       channel,
+      packet,
     };
   }
 
@@ -1367,7 +1374,10 @@ function Applications() {
 
   function canonicalRequestMayPublish(scope: CanonicalRequestScope): boolean {
     return canonicalRequestOwnsLifecycle(scope)
-      && canonicalSelectedIdRef.current === scope.applicationId
+      && (scope.packet
+        ? selectedIdRef.current === scope.packet.id
+          && packetCoverLetterEditorRevisionRef.current === scope.packet.editorRevision
+        : canonicalSelectedIdRef.current === scope.applicationId)
       && canonicalCoverLetterEditorRevisionRef.current === scope.editorRevision;
   }
 
@@ -3388,13 +3398,29 @@ function Applications() {
       jobId: null,
       canonicalApplicationId: canonical?.id ?? null,
     };
+    if (!canonical) {
+      setPreSendRebuildError({
+        applicationId: packet.id,
+        message: "Litos could not find the Tracker application linked to this resume. Reload Applications and try again.",
+      });
+      return;
+    }
     preSendRebuildRef.current = packet.id;
     setPreSendRebuildId(packet.id);
+    setPreSendRebuildError(null);
     /* No banner clearing here: createApplication owns the announcement for this press, clears the
        page banner and the notice itself, and answers its own failures through
        reportGenerationFailure. A second writer would be a second live region. */
     try {
-      await createApplication(draft, trigger);
+      const requestScope = beginCanonicalRequest(canonical.id, "tailoring", {
+        id: packet.id,
+        editorRevision: packetCoverLetterEditorRevisionRef.current,
+      });
+      await createApplication(draft, trigger, requestScope, (message) => {
+        if (selectedIdRef.current === packet.id) {
+          setPreSendRebuildError({ applicationId: packet.id, message });
+        }
+      });
     } finally {
       preSendRebuildRef.current = null;
       setPreSendRebuildId(null);
@@ -3604,6 +3630,7 @@ function Applications() {
     draft: NewApplicationDraft = newApplication,
     upgradeTrigger: HTMLElement | null = null,
     inheritedCanonicalRequestScope: CanonicalRequestScope | null = null,
+    generationFailure?: (message: string) => void,
   ) {
     const requestIsCurrent = () => applicationsMountedRef.current;
     const canonicalRequestScope = draft.canonicalApplicationId
@@ -3651,6 +3678,10 @@ function Applications() {
     const jobDescription = draft.jobDescription.trim();
     const reportGenerationFailure = (message: string, fields: ApplicationDraftField[] = []) => {
       if (!requestMayPublish()) return;
+      if (generationFailure) {
+        generationFailure(message);
+        return;
+      }
       if (draft.canonicalApplicationId && canonicalSelected?.id === draft.canonicalApplicationId) {
         setCanonicalFillError(message);
       } else {
@@ -5795,6 +5826,9 @@ function Applications() {
           </div>
           {preSendVerificationBlock.rebuildBlockedReason && (
             <p className="mt-2">{preSendVerificationBlock.rebuildBlockedReason}</p>
+          )}
+          {preSendRebuildError && preSendRebuildError.applicationId === selected?.id && (
+            <p className="mt-2">{preSendRebuildError.message}</p>
           )}
         </div>
       )}
