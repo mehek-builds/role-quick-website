@@ -319,8 +319,10 @@ export default function ResumeWorkspace() {
     // step: once the resume is uploaded, building the one-page resume is Litos's job. This runs
     // outside the upload mutation (handleBuildBaseResume is not a mutations.run) and no-ops if a
     // build is already in flight; errors surface on the banner for manual retry, so it cannot loop.
+    // We deliberately do NOT force baseResumeState to "missing" first: when a base resume already
+    // exists the rebuild runs in the background without flashing the "finish setup" banner, and when
+    // none exists that banner is already showing and its button reflects the running build.
     if (uploadSucceeded) {
-      setBaseResumeState("missing");
       handleBuildBaseResume();
     }
   }
