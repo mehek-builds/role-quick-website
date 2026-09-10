@@ -1028,11 +1028,12 @@ describe("the application sequence, end to end", () => {
    * new order - the same derivation production runs, just reached without the external hop.
    *
    * Everything below is what this screen must still do now that it stands alone again:
-   *   - both asks are present, and they are the two the backend actually enforces;
-   *   - the two promises it keeps are said on the screen that asks;
+   *   - the strong-match ask is present, and the employer-reply switch is gone (backend #1222
+   *     forwards every employer email, so the screen states the forwarding instead);
+   *   - the promise it keeps is said on the screen that asks;
    *   - NOTHING is pre-ticked, because a pre-ticked consent is not a consent;
-   *   - the PUT carries EVERY key, so an untouched box arrives as an explicit `false` rather than
-   *     as an omission the server reads as "not mentioned" and leaves a stale grant on;
+   *   - the PUT carries every key the screen ASKS about, so an untouched box arrives as an explicit
+   *     `false` rather than as an omission, and carries no `employer_reply` at all;
    *   - a switch saves itself, as it is ticked, so Continue stays about one thing;
    *   - the wall of standing permissions is still not here.
    */
@@ -1044,20 +1045,23 @@ describe("the application sequence, end to end", () => {
 
     const body = await page.locator("main").innerText();
     assert.match(body, /Tell me when a strong match opens/i);
-    assert.match(body, /Tell me when an employer replies/i);
-    /* The two promises the backend actually enforces, said on the screen that asks. */
+    /* No reply alert: backend #1222 forwards every employer email, so the screen says that instead
+       of offering a switch that could never fire. */
+    assert.doesNotMatch(body, /Tell me when an employer replies/i);
+    assert.match(body, /Replies from employers are forwarded to your inbox/i);
+    /* The promise the backend actually enforces, said on the screen that asks. */
     assert.match(body, /at most daily/i);
     /* Auto-apply, send-without-asking and the rest are asked at the moment their feature is first
        used, not on the last screen of setup. */
     assert.doesNotMatch(body, /apply automatically|send without asking|auto-submit/i);
 
     /* Chromium in this harness supports the Push API, so the laptop-summary control renders and
-       there are three boxes. It is deliberately NOT ticked here: doing so fires the real browser
+       there are two boxes. It is deliberately NOT ticked here: doing so fires the real browser
        permission prompt, which Playwright answers by denying, and the assertion worth making is
        that a refused browser leaves the box off rather than that the prompt can be automated. */
     const boxes = page.locator('main input[type="checkbox"]');
     const count = await boxes.count();
-    assert.ok(count === 2 || count === 3, `expected two asks plus the optional laptop one, saw ${count}`);
+    assert.ok(count === 1 || count === 2, `expected one ask plus the optional laptop one, saw ${count}`);
     for (let i = 0; i < count; i += 1) {
       assert.equal(await boxes.nth(i).isChecked(), false, "a pre-ticked consent is not a consent");
     }
@@ -1075,7 +1079,7 @@ describe("the application sequence, end to end", () => {
     await waitFor(() => notificationSaves.length >= 1, "ticking a switch did not save it");
     assert.equal(notificationSaves.length, 1, "one tick must issue exactly one save");
     assert.equal(notificationSaves[0].strong_match, true);
-    assert.equal(notificationSaves[0].employer_reply, false, "an unticked box is a decline, not an omission");
+    assert.equal("employer_reply" in notificationSaves[0], false, "a permission this screen no longer asks about must not be written");
     assert.equal(notificationSaves[0].activity_digest, false, "the laptop summary was never granted");
 
     await page.getByRole("button", { name: "Continue" }).click();
