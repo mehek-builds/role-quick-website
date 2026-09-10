@@ -8852,6 +8852,8 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
       ) : review.status === "failed" && review.progress_screenshot_url ? (
         <div>
           <p className="px-5 py-3 text-small text-muted">Last view captured before this attempt stopped.</p>
+          {/* Preserve the signed capture URL and its original dimensions without an image proxy. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={review.progress_screenshot_url}
             alt="Last view of the company application before Litos stopped"
             className="h-auto w-full" />
