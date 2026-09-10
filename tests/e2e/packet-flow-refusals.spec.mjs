@@ -198,17 +198,30 @@ function landedResponse(submission, packet) {
  * @param holdSubmitMs         keeps submit-request in flight so its status polling can be measured
  * @param revalidationRefusal  {status, body} answered by every packet-audit AFTER the
  *                             acknowledgement, which is exactly the poll's revalidation
+ * @param dropSubmitAfterMs    kills the long-lived submit-request socket that many ms in, the way a
+ *                             container swap does, WITHOUT stopping the run: the fixture keeps
+ *                             answering /submission with a live status afterwards. The 2026-09-10
+ *                             incident shape.
+ * @param dropSubmissionPolls  every /submission read is aborted at the network layer, so the poll
+ *                             sees the same dropped-socket rejection the incident did
+ * @param companion            a SECOND application that answers for itself, so a case can switch
+ *                             into it mid-run through the ordinary switcher. The live-run
+ *                             accumulator is page-level, so "which application is this news about"
+ *                             is only measurable with two of them on screen.
  */
-async function openAuditedFlow(packet, { ackResponse = null, submitResponse = null, holdSubmitMs = 0, disconnectSubmit = false, disconnectActiveReads = 0, revalidationRefusal = null, landed = null, generated = null, generateResponse = null, auditReplacementAfterSubmit = false } = {}) {
+async function openAuditedFlow(packet, { ackResponse = null, submitResponse = null, holdSubmitMs = 0, disconnectSubmit = false, disconnectActiveReads = 0, revalidationRefusal = null, landed = null, generated = null, generateResponse = null, auditReplacementAfterSubmit = false, dropSubmitAfterMs = 0, dropSubmissionPolls = false, companion = null } = {}) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const auditResponse = packetAuditResponse(packet);
   const submission = submissionFor(packet, auditResponse);
   const fixtureResumes = RESUMES.map((stored) => stored.id === packet.id ? packet : stored);
+  /* The companion is a second application the case can switch into. It is appended rather than
+     substituted, so the walked packet keeps its own row. */
+  if (companion) fixtureResumes.push(companion);
   /* `landed` overrides where the accepted send LANDS (both the submit response and every
      subsequent /submission poll answer), so a case can park the flow on a poll-active screen
      like the needs_attention portal instead of the terminal receipt. */
   const landedSubmission = landed ? { ...submission, review: { ...submission.review, ...landed } } : null;
-  const counts = { ack: 0, submit: 0, approve: 0, submissionReads: 0, postSubmitReads: 0, audits: 0, revalidations: 0, generate: 0, submitBodies: [], generateBodies: [] };
+  const counts = { ack: 0, submit: 0, approve: 0, submissionReads: 0, postSubmitReads: 0, companionReads: 0, audits: 0, revalidations: 0, generate: 0, submitBodies: [], generateBodies: [] };
   const rebuildCanonicalId = "8b9b0722-7e23-4aa5-88ea-8877c11df17f";
   const rebuildCanonical = {
     id: rebuildCanonicalId,
@@ -287,6 +300,14 @@ async function openAuditedFlow(packet, { ackResponse = null, submitResponse = nu
         counts.submit += 1;
         counts.submitBodies.push(route.request().postDataJSON());
         submitInFlight = true;
+        /* THE RUN DOES NOT STOP. Only this browser's socket does, which is the whole point: the
+           fixture leaves submitInFlight set, so every later /submission read still answers
+           "filling", exactly as the server did on 2026-09-10 while the dashboard claimed the run
+           had failed. */
+        if (dropSubmitAfterMs > 0) {
+          await delay(dropSubmitAfterMs);
+          return route.abort("connectionfailed");
+        }
         if (holdSubmitMs > 0) await delay(holdSubmitMs);
         submitInFlight = false;
         if (disconnectSubmit) return route.abort("connectionreset");
@@ -308,6 +329,13 @@ async function openAuditedFlow(packet, { ackResponse = null, submitResponse = nu
           cover_letter: null,
         });
       }
+      /* The companion application answers with ITS OWN envelope. Serving the walked packet's here
+         would hand the second row another application's identity, and the dashboard quarantines
+         that on sight rather than rendering the screen this case needs to look at. */
+      if (companion && p === `/applications/${companion.id}/submission`) {
+        counts.companionReads += 1;
+        return json(submissionFor(companion, packetAuditResponse(companion)));
+      }
       if (p.endsWith("/submission/approve")) counts.approve += 1;
       /* The review_edit save that precedes the audit on resume_ready packets. Echo the saved
          review; the flow only needs the envelope back. */
@@ -316,6 +344,9 @@ async function openAuditedFlow(packet, { ackResponse = null, submitResponse = nu
         counts.submissionReads += 1;
         if (counts.submit > 0) counts.postSubmitReads += 1;
       }
+      /* A poll tick that never reaches litos-api. The rejection the page sees is the browser's own
+         TypeError("Failed to fetch"), not a status anybody chose. */
+      if (p.endsWith("/submission") && dropSubmissionPolls) return route.abort("connectionfailed");
       if (p.endsWith("/submission") && submitInFlight) {
         return json({ ...submission, review: { ...submission.review, status: "filling" } });
       }
@@ -660,5 +691,167 @@ browserTest("the accepted walk still fills and reports the receipt", async (hold
   await page.getByText("Thank you. Your application was received.").waitFor({ state: "visible", timeout: 20_000 });
   assert.equal(counts.ack, 1);
   assert.equal(counts.submit, 1);
+  await context.close();
+});
+
+/* THE 2026-09-10 INCIDENT, IN BOTH OF ITS SHAPES.
+ *
+ * Measured on three separate managed runs against
+ * trylitos.com/dashboard/applications?application=<id>&intent=apply: within the first one to three
+ * minutes the LIVE APPLICATION STATUS view replaced itself with a red "Error: Failed to fetch" and
+ * fell back to packet review, under an armed "Approve packet and fill form", while the run kept
+ * filling on the server and finished minutes later. Both channels feeding that screen treated one
+ * dropped socket as an answer about the RUN.
+ *
+ * A dropped socket is not an answer. These two cases hold that: the run's own long-lived
+ * submit-request being killed, and the status poll being killed tick after tick.
+ */
+const RECONNECTING = "Reconnecting to Litos...";
+/* The ledger the switcher opens, by its own landmark rather than by a class. */
+const LEDGER = 'section[aria-labelledby="application-ledger-heading"]';
+
+browserTest("a killed submit-request socket keeps the live view and never re-arms the send", async (hold) => {
+  const { context, page, second, counts } = await openAuditedFlow(FILL, { dropSubmitAfterMs: 700 });
+  hold(page);
+  await second.click();
+
+  // The run is alive on the server, so the poll's first clean read must be what routes the screen.
+  await page.getByRole("heading", { name: "Filling form", exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+  await page.waitForTimeout(8000);
+  await page.getByRole("heading", { name: "Filling form", exact: true }).waitFor({ state: "visible", timeout: 5000 });
+
+  assert.equal(
+    await page.getByRole("button", { name: "Approve packet and fill form", exact: true }).count(),
+    0,
+    "the send was re-armed over a run that is still filling on the server",
+  );
+  assert.equal(await page.getByText("Failed to fetch", { exact: false }).count(), 0);
+  assert.equal(counts.submit, 1, "a second submit-request is a duplicate employer attempt");
+  assert.ok(counts.submissionReads > 0, "the poll must take over the question the socket could not answer");
+  await context.close();
+});
+
+const HOURLY_LIMIT = "You have reached this hour's application limit. Nothing was sent. Try again shortly.";
+
+browserTest("a 429 the server wrote is a sentence on the way back to review, not a silently re-armed send", async (hold) => {
+  /* THE HALF THE TRANSIENT RULE ALMOST SWALLOWED. 429 and 503 belong in the transient class - the
+     right response to both is to back off - but litos-api WRITES them about this exact request and
+     they refuse the run outright. Holding the live view over them is correct; letting the poll's
+     next clean tick discard the message is not: the applicant lands back on packet review under a
+     re-armed "Approve packet and fill form" with the screen silent about why the first press did
+     nothing, which is the dead-button class this whole file exists for. */
+  const { context, page, second, counts } = await openAuditedFlow(FILL, {
+    submitResponse: { status: 429, body: { error: HOURLY_LIMIT } },
+  });
+  hold(page);
+  await second.click();
+
+  await page.getByText(HOURLY_LIMIT, { exact: false }).waitFor({ state: "visible", timeout: 20_000 });
+  // The poll answered "still resume_ready", so review is the honest screen to be on - WITH the
+  // reason. The send may be armed again here; what it may not be is armed in silence.
+  await page.getByRole("button", { name: "Approve packet and fill form", exact: true })
+    .waitFor({ state: "visible", timeout: 10_000 });
+  assert.equal(await page.getByText(RECONNECTING, { exact: true }).count(), 0, "a refused run is not a reconnecting connection");
+  assert.equal(counts.submit, 1, "the refusal must not be retried on its own");
+
+  // And it survives the ticks that follow, rather than being cleared 2.5s after it appears.
+  await page.waitForTimeout(6000);
+  await page.getByText(HOURLY_LIMIT, { exact: false }).waitFor({ state: "visible", timeout: 5000 });
+  await context.close();
+});
+
+browserTest("a poll that keeps failing says Reconnecting to Litos and holds the live view", async (hold) => {
+  const { context, page, second, counts } = await openAuditedFlow(FILL, {
+    dropSubmitAfterMs: 700,
+    dropSubmissionPolls: true,
+  });
+  hold(page);
+  await second.click();
+
+  await page.getByRole("heading", { name: "Filling form", exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+  await page.getByText(RECONNECTING, { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+
+  // Non-blocking: the notice sits BESIDE the live view rather than replacing it, and the reconnect
+  // window has to elapse before any sentence is allowed to escalate into a banner.
+  await page.waitForTimeout(9000);
+  await page.getByRole("heading", { name: "Filling form", exact: true }).waitFor({ state: "visible", timeout: 5000 });
+  await page.getByText(RECONNECTING, { exact: true }).waitFor({ state: "visible", timeout: 5000 });
+  assert.equal(
+    await page.getByRole("button", { name: "Approve packet and fill form", exact: true }).count(),
+    0,
+    "a run of failed polls dropped the applicant back to packet review",
+  );
+  assert.equal(await page.getByText("Failed to fetch", { exact: false }).count(), 0);
+  assert.equal(counts.submit, 1);
+  await context.close();
+});
+
+/* THE SECOND-ROUND BLOCKER: THE RETAINED REFUSAL IS PAGE-LEVEL, THE APPLICANT IS NOT.
+ *
+ * The live-run accumulator holds a server-chosen sentence across the ticks that follow it, which is
+ * the whole point of it. What it did not hold was the answer to "about WHICH application", and the
+ * applicant can switch inside that window: a 429 refuses A's send, the live view is held over it
+ * because the run may be alive, and one click later she is on B, whose needs_attention entry screen
+ * is a routable nextScreen and whose very first poll tick reaches the delivery site. A's sentence
+ * then printed as B's banner - a refusal about a job she is not looking at, over a job she is.
+ *
+ * Every sibling refusal in that file is stamped with an application id for exactly this reason, and
+ * selectPacket already clears packetRevalidationRefusal on entry for exactly this reason. */
+browserTest("a refusal retained for one application is never delivered on another", async (hold) => {
+  /* B is a STOPPED run: its entry screen is the portal, which polls on its own account, and its
+     poll's nextScreen is a routable screen rather than the live view - which is precisely the
+     condition the delivery site fires on. It carries its own authority envelope, or
+     packetForSubmissionDisplay quarantines another packet's identity on sight. */
+  const COMPANION_KEY = "retained-refusal-companion";
+  const COMPANION = {
+    ...FILL,
+    ...fixtureAuthority(COMPANION_KEY, "failed"),
+    id: fixturePacketId(COMPANION_KEY),
+    job_context: { ...FILL.job_context, company: "Fixture Company companion", role: "Fixture Role companion" },
+    spec: {
+      ...FILL.spec,
+      _review: {
+        ...FILL.spec._review,
+        status: "failed",
+        questions: [],
+        attention_reason: "The saved run stopped before anything was sent.",
+      },
+    },
+  };
+
+  const { context, page, second, counts } = await openAuditedFlow(FILL, {
+    submitResponse: { status: 429, body: { error: HOURLY_LIMIT } },
+    /* The run keeps reporting "filling", so the poll never routes A off the live view and the
+       retained sentence is still owed when she leaves. That is the window this case lives in. */
+    landed: { status: "filling" },
+    companion: COMPANION,
+  });
+  hold(page);
+  await second.click();
+
+  await page.getByRole("heading", { name: "Filling form", exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+  assert.equal(counts.submit, 1);
+
+  await page.getByRole("button", { name: "Switch applications", exact: true }).click();
+  await page.locator(`${LEDGER} button:visible`).filter({ hasText: COMPANION.job_context.role }).first().click();
+
+  /* B's own screen, reached by B's own status: a stopped run, on the poll-active portal. */
+  await page.getByRole("heading", { name: "Stopped", exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+
+  /* SAMPLED, NOT SNAPSHOTTED AT THE END. The leaked banner is not sticky: the poll's own
+     setPollError(null) at the top of the next clean tick wipes it about 2.5s later, so a single
+     read taken after the window measures nothing at all. Measured on a deliberately broken build:
+     the delivery site handed B application A's sentence and the tick after it cleared the screen.
+     This watches every ~200ms across several ticks instead. */
+  const watchUntil = Date.now() + 9000;
+  let leaked = null;
+  while (leaked === null && Date.now() < watchUntil) {
+    if (await page.getByText(HOURLY_LIMIT, { exact: false }).count() > 0) leaked = "refusal";
+    else if (await page.getByText(RECONNECTING, { exact: true }).count() > 0) leaked = "reconnecting notice";
+    else await page.waitForTimeout(200);
+  }
+  assert.equal(leaked, null, `application A's ${leaked} was rendered on application B's screen`);
+  assert.ok(counts.companionReads > 1, "B's poll must actually have ticked, or this case measures nothing");
+  assert.equal(counts.submit, 1, "switching applications must not resend anything");
   await context.close();
 });

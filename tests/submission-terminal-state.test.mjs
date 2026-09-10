@@ -25,9 +25,11 @@ test("every path that receives a review routes the screen from it", async () => 
   // poll can be reporting the status from before that approve. An in-flight poll can also land
   // after the applicant deliberately leaves portal for review. Both guards must sit before the
   // route, and the navigation guard must read the synchronous ref rather than stale React state.
+  // The span between the route decision and the move is PROXIMITY, not a length budget: the
+  // delivery of a retained refusal sits inside it, stamped with the application it refused.
   assert.match(
     dashboard,
-    /\/applications\/\$\{requestedId\}\/submission`[\s\S]{0,10000}if \(approveInFlight\.current !== null && !terminal\) return;[\s\S]{0,800}const pollMayRoute = screenRef\.current === "submitting"[\s\S]{0,240}if \(!pollMayRoute\) return;\s*\n\s*moveToScreen\(screenForStatus\(result\.review\.status, "submitting"\)\)/,
+    /\/applications\/\$\{requestedId\}\/submission`[\s\S]{0,10000}if \(approveInFlight\.current !== null && !terminal\) return;[\s\S]{0,800}const pollMayRoute = screenRef\.current === "submitting"[\s\S]{0,240}if \(!pollMayRoute\) return;\s*\n\s*const nextScreen = screenForStatus\(result\.review\.status, "submitting"\);[\s\S]{0,2000}moveToScreen\(nextScreen\);/,
   );
   // The exception to the exception. A stalled approve never rejects (no AbortController in
   // lib/api.ts), so suppressing every poll route would strand the student on the spinner with the
@@ -71,9 +73,13 @@ test("an unsupported portal replaces the send control with a paused dashboard st
 
   assert.match(dashboard, /Litos cannot fill this company&rsquo;s form in the dashboard yet\. Your packet is ready, but this application stays paused here\./);
   // The send control is behind the capability check, and no employer-page action takes its place.
+  // The capability check is FIRST and the guards that joined it are additive: a run in flight on the
+  // server withdraws the same control (runInFlightBlock, 2026-09-10), so the pattern allows further
+  // `&&` guards between the capability check and the button without letting the capability check
+  // itself move or weaken.
   assert.match(
     dashboard,
-    /review\.portal_supported === false[^]*?application stays paused here(?:(?!<\/TerminalActionBar>)[^])*?review\.portal_supported !== false && <Button onClick=\{reviewPrimaryAction\}/,
+    /review\.portal_supported === false[^]*?application stays paused here(?:(?!<\/TerminalActionBar>)[^])*?review\.portal_supported !== false && (?:[A-Za-z][\w.?]* === null && |![A-Za-z][\w.?]* && )*<Button onClick=\{reviewPrimaryAction\}/,
   );
   assert.doesNotMatch(dashboard, /Open the company page/);
   assert.match(dashboard, /const reviewPrimaryLabel[\s\S]{0,500}"Approve packet and fill form"/);

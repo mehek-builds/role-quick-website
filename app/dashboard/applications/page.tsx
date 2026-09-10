@@ -86,6 +86,7 @@ import { acknowledgePacketAudit, acknowledgePacketEvidence, packetQuestionsSnaps
 import { useBilling } from "@/components/billing/BillingProvider";
 import { isStructuredUpgradeDenial } from "@/features/billing";
 import { completeOperationId, operationIdFor } from "@/lib/operation-id";
+import { IDLE_LIVE_RUN_CONNECTION, LIVE_RUN_RECONNECTING_NOTICE, liveRunConnectionAfterFailure, liveRunConnectionAfterRetainedDelivery, liveRunConnectionAfterSuccess, liveRunConnectionIsFor, liveRunConnectionView, liveRunPollDelayMs, liveRunRetainedRefusal, liveRunViewSurvivesFailure, RUN_IN_FLIGHT_REFUSAL, type LiveRunConnection } from "@/features/applications";
 import { applicationPacketAuthorityState, awaitingUnverifiedSubmissionResolution, employerActionRefusalMessage, SERVER_RUN_IN_FLIGHT_STATUSES, confirmedProjectionForPacket, managedPrepareAuthorityEnvelopeFromUnknown, managedPrepareAuthorityMatchesPacket, quarantinedSubmissionAuthority, reviewClaimsSubmissionSent, reviewForSubmissionProjection, submissionAuthorityEnvelopeFromUnknown, submissionMutationResponseMatchesApplication, submissionProjectionIsConfirmed, unverifiedRecoveryStatus, type UnverifiedRecoveryStatus } from "@/features/applications";
 import { useSidebarCollapse } from "@/app/dashboard/dashboard-shell";
 
@@ -1116,6 +1117,63 @@ function Applications() {
    * nobody else is going to repeat. `error` wins the render when both are set: a refusal to
    * something she did outranks news about the connection. */
   const [pollError, setPollError] = useState<string | null>(null);
+  /* THE THIRD CHANNEL, AND WHY ONE RED BANNER WAS NOT ENOUGH EITHER.
+   *
+   * Measured 2026-09-10 on three separate managed runs: within the first one to three minutes the
+   * LIVE APPLICATION STATUS view replaced itself with a red "Error: Failed to fetch" and dropped
+   * back to packet review, under an armed "Approve packet and fill form", while the run kept going
+   * on the server and finished minutes later. One rejected round trip - a container swap, a single
+   * failed poll - was being reported as news about the RUN.
+   *
+   * `pollError` above already stopped the poll from erasing a refusal. It did not stop the poll
+   * from INVENTING one. A dropped socket is not an answer, so consecutive failures now accumulate
+   * here and are given a minute to heal before any sentence appears; the interim is the
+   * non-blocking notice below, which sits beside the live view instead of replacing it. See
+   * features/applications/domain/live-run-connection.ts for the rule and its tests. */
+  const [liveConnection, setLiveConnection] = useState<LiveRunConnection>(IDLE_LIVE_RUN_CONNECTION);
+  /* The poll loop reads the failure count synchronously to choose its next delay, and must not
+     re-subscribe on every tick to learn it. Same ref+state pairing the file uses elsewhere. */
+  const liveConnectionRef = useRef<LiveRunConnection>(IDLE_LIVE_RUN_CONNECTION);
+  /* FAILURES ONLY. A clean tick is healed inside the poll loop instead, because the success path of
+     refreshSubmission already owns `pollError` - it is where a standing packet-revalidation refusal
+     is re-pinned across ticks, and clearing the banner from out here would wipe that sentence. */
+  const commitLiveConnectionFailure = useCallback((next: LiveRunConnection) => {
+    liveConnectionRef.current = next;
+    setLiveConnection(next);
+    const view = liveRunConnectionView(next, Date.now());
+    /* Only ever WRITES the banner, never clears it. A blink during a standing packet-revalidation
+       refusal must not wipe the server's sentence for a minute; the next clean tick owns the
+       clearing, exactly as it did before. And this is still the poll's channel, so `error` - a
+       refusal to something the applicant pressed - outranks it at the render.
+
+       Scoped to the application on screen, for the same reason the delivery site below is: an
+       exhausted window measured on the packet she has since left must not paint its sentence over
+       the packet she is looking at now. */
+    if (view.tone === "error" && liveRunConnectionIsFor(next, selectedIdRef.current)) setPollError(view.message);
+    return next;
+  }, []);
+  /* Taking the next state as an argument, because the send's catch has to ASK what that state
+     implies before committing it: liveRunViewSurvivesFailure is the rule for whether the applicant
+     may be taken off a live run, and a definitive refusal must reach the review screen through the
+     ordinary path rather than being parked in this accumulator. */
+  const publishLiveConnectionFailure = useCallback(
+    (applicationId: string, reason: unknown, message: string) =>
+      commitLiveConnectionFailure(
+        liveRunConnectionAfterFailure(liveConnectionRef.current, applicationId, reason, Date.now(), message),
+      ),
+    [commitLiveConnectionFailure],
+  );
+  /* LEAVING AN APPLICATION RETIRES ITS OUTAGE, and this is the half the id alone cannot do.
+     The accumulator is page-level: it outlives the packet it was measured on. The id keeps a stale
+     sentence from being PRINTED on another application, and this keeps it from being carried at
+     all - so a run of failures on A does not lend B a half-exhausted reconnect window, and A's
+     undelivered 429 does not sit in the ref waiting for a screen that will never come. Every entry
+     into and exit from an application calls it, exactly as packetRevalidationRefusal is cleared. */
+  const resetLiveConnection = useCallback(() => {
+    if (liveConnectionRef.current === IDLE_LIVE_RUN_CONNECTION) return;
+    liveConnectionRef.current = IDLE_LIVE_RUN_CONNECTION;
+    setLiveConnection(IDLE_LIVE_RUN_CONNECTION);
+  }, []);
   const [transportReconciliation, setTransportReconciliation] = useState<{ applicationId: string; message: string } | null>(null);
   /* The one poll failure that must OUTLIVE the tick that raised it, and the last silent member of
      the dead-button class ("a dead button with no console error is a swallowed 409 in the network
@@ -1521,6 +1579,8 @@ function Applications() {
       selectedIdRef.current = null;
       editorRevisionRef.current += 1;
       packetCoverLetterEditorRevisionRef.current += 1;
+      /* Leaving the legacy packet entirely. Its outage, and any sentence it still owed, go with it. */
+      resetLiveConnection();
       runDashboardTransition(() => {
         setSelectedId(null);
         commitCanonicalSelection(canonical);
@@ -1554,6 +1614,10 @@ function Applications() {
        the sentence described evidence this entry no longer holds, and left in the ref it would
        re-pin itself onto the banner at the next poll tick. */
     packetRevalidationRefusal.current = null;
+    /* And the live-run accumulator with it, for the same reason one line up. It is page-level, so a
+       429 retained while application A was open would otherwise ride into B and be delivered as B's
+       banner on B's first poll tick, and A's half-spent reconnect window would count against B. */
+    resetLiveConnection();
     /* A ready packet still has one mandatory stop before the employer send: the posting, exact
        resume, evidence colours and gap list. Routing it straight to the portal screen is how the
        Cresta packet reached Send it without that audit. The packet and this route commit in the
@@ -1613,7 +1677,7 @@ function Applications() {
       if (localEntryScreen) moveToScreen(localEntryScreen);
       else moveToScreen(packetEntryScreen(selectedReview));
     });
-  }, [clearPrescriptState, commitCanonicalSelection, moveToScreen, qaMode, setSubmission]);
+  }, [clearPrescriptState, commitCanonicalSelection, moveToScreen, qaMode, resetLiveConnection, setSubmission]);
 
   /* User navigation writes local state and route state as one action. The local write makes the
      switch feel immediate; the URL makes reload, sharing, and browser history reopen the same
@@ -1770,6 +1834,9 @@ function Applications() {
     resumeEditSaveApplicationRef.current = null;
     editorRevisionRef.current += 1;
     packetCoverLetterEditorRevisionRef.current += 1;
+    /* No application is open after this, so nothing on screen can be the subject of a retained
+       refusal or a reconnect notice. Left standing, both would reappear on the next packet. */
+    resetLiveConnection();
     const commitReset = () => {
       setPendingJob(null);
       setOpeningApplicationId(null);
@@ -1795,7 +1862,7 @@ function Applications() {
        reset to a transition lane would violate that before-paint guarantee. */
     if (options.animate === false) commitReset();
     else runDashboardTransition(commitReset);
-  }, [commitCanonicalSelection, setSubmission]);
+  }, [commitCanonicalSelection, resetLiveConnection, setSubmission]);
 
   const closeApplication = useCallback(() => {
     const selectedPacketId = selectedIdRef.current;
@@ -2103,7 +2170,30 @@ function Applications() {
       || screenRef.current === "portal"
       || result.review.status === "submitted";
     if (!pollMayRoute) return;
-    moveToScreen(screenForStatus(result.review.status, "submitting"));
+    const nextScreen = screenForStatus(result.review.status, "submitting");
+    /* THE ROUTE OFF THE LIVE VIEW IS WHERE A RETAINED REFUSAL COMES DUE.
+       While the live view was held over a transient, the send's own rejection may have carried a
+       status litos-api chose - the hourly limiter's 429, the shutdown gate's 503 - which refused
+       the run outright. The poll then finds the packet exactly where it left it, routes back to
+       review, and the applicant would be looking at a re-armed "Approve packet and fill form" with
+       nothing on screen saying why the first press did nothing. The sentence is published here,
+       AFTER this tick's own setPollError above, so the clean tick cannot erase it on its way past.
+       Not on the way to a receipt: a submitted run answers the question by itself. */
+    if (nextScreen !== "submitting" && nextScreen !== "submitted") {
+      const retained = liveRunRetainedRefusal(liveConnectionRef.current);
+      /* AND IT MUST BE THIS APPLICATION'S SENTENCE. The accumulator is page-level and the applicant
+         can switch packets inside the very window this holds the view open for: a 429 refusing A's
+         send, then a click into B, whose entry screen is a routable "portal" and whose first poll
+         tick lands right here. Unstamped, A's refusal printed as B's banner. Every sibling refusal
+         in this file carries an id for the same reason. */
+      if (retained && retained.applicationId === requestedId) {
+        const delivered = liveRunConnectionAfterRetainedDelivery(liveConnectionRef.current);
+        liveConnectionRef.current = delivered;
+        setLiveConnection(delivered);
+        setPollError(retained.message);
+      }
+    }
+    moveToScreen(nextScreen);
   }, [captureCompletedSubmission, moveToScreen, qaMode, revalidateAcknowledgedEvidence, selectedId, setSubmission]);
 
   // Question entry needs the same server-owned confirmation and option metadata as portal entry.
@@ -2197,8 +2287,26 @@ function Applications() {
       inFlight = true;
       try {
         await refreshSubmission();
+        if (cancelled) return;
+        /* One clean answer ends the outage. Identity-stable, so the ordinary case does not
+           re-render the live view every 2.5s. */
+        const healed = liveRunConnectionAfterSuccess(liveConnectionRef.current);
+        if (healed !== liveConnectionRef.current) {
+          liveConnectionRef.current = healed;
+          setLiveConnection(healed);
+        }
       } catch (reason) {
-        if (!cancelled) setPollError(reason instanceof Error ? reason.message : "We lost sight of the form. Reload the page to check.");
+        /* NOT a banner on the first rejected tick any more. A dropped socket during a multi-minute
+           fill is news about this round trip, not about the run: it accumulates, backs off, and
+           only becomes a sentence once the reconnect window is exhausted or the API answers with a
+           status it chose. Measured 2026-09-10, see live-run-connection.ts. */
+        if (!cancelled) {
+          publishLiveConnectionFailure(
+            selectedId,
+            reason,
+            reason instanceof Error ? reason.message : "We lost sight of the form. Reload the page to check.",
+          );
+        }
       } finally {
         inFlight = false;
       }
@@ -2206,7 +2314,12 @@ function Applications() {
 
     const poll = async () => {
       await tick();
-      if (!cancelled) timer = window.setTimeout(poll, document.visibilityState === "visible" ? 2500 : 10_000);
+      if (!cancelled) {
+        timer = window.setTimeout(
+          poll,
+          liveRunPollDelayMs(liveConnectionRef.current.consecutiveFailures, document.visibilityState === "visible"),
+        );
+      }
     };
 
     const onVisibility = () => {
@@ -2220,7 +2333,7 @@ function Applications() {
       document.removeEventListener("visibilitychange", onVisibility);
       if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, [qaMode, refreshSubmission, pollRequired, selectedId]);
+  }, [qaMode, refreshSubmission, pollRequired, publishLiveConnectionFailure, selectedId]);
 
   useEffect(() => {
     const bootstrapGeneration = ++applicationBootstrapGenerationRef.current;
@@ -3236,8 +3349,40 @@ function Applications() {
     portalUrl: preSendRebuildPortalUrl,
     rebuilding: Boolean(selected && preSendRebuildId === selected.id),
   });
+  /* A RUN THE SERVER SAYS IS HOLDING THIS PACKET WITHDRAWS THE SEND, it does not merely caption it.
+   *
+   * The portal screen has always hidden its controls while a run is in flight - that branch renders
+   * PortalProgress instead of SubmissionScreen. The REVIEW screen never learned the same rule, and
+   * the 2026-09-10 incident is what that costs: a dropped socket dropped the applicant back here
+   * mid-run, under an armed "Approve packet and fill form", while the run was still filling the
+   * employer's form. Pressing it starts a duplicate employer attempt or eats a refusal, and there
+   * is no third outcome worth offering.
+   *
+   * Read off the SERVER's status, never the displayed review, for the reason employer-action-
+   * refusal.ts states: the display rewrite is exactly what turns one of these into
+   * "needs_attention", so asking the rewritten copy would always answer no. One value again, so the
+   * control's presence and the sentence under it cannot disagree. */
+  const runInFlightBlock = selected
+    && selectedSubmission?.application_id === selected.id
+    && SERVER_RUN_IN_FLIGHT_STATUSES.has(selectedSubmission.server_review_status ?? "")
+    ? RUN_IN_FLIGHT_REFUSAL
+    : null;
+  /* AND IT WITHDRAWS THE EMPLOYER SEND, NOT WHATEVER ELSE HAPPENS TO SHARE THAT SLOT.
+   *
+   * The rule above is about starting a SECOND run against the same employer, so it binds to the one
+   * action that does that: the packet-evidence branch of reviewPrimaryAction, which calls
+   * continueFromVerifiedPacket. The same button is also "Fill the application", "Audit again",
+   * "Loading exact PDF" and "Checking saved packet", and every one of those is continueFromResume
+   * or auditPacketAgain - local work against this dashboard's own routes that sends nothing to the
+   * employer. Withdrawing those left the action bar blank while a run was in flight, which is not a
+   * refusal, it is a screen with nothing on it, and it hides the audit control the packet-evidence
+   * copy is telling the applicant to press. The server remains the gate on those routes: a run that
+   * holds the row refuses an answer mutation, and continueFromResume's catch prints that sentence. */
+  const reviewPrimaryIsEmployerSend = packetEvidenceReady;
+  const runInFlightWithdrawsPrimary = runInFlightBlock !== null && reviewPrimaryIsEmployerSend;
   const reviewPrimaryBusy = saving || coverLetterBusy || packetAuditBusy;
   const reviewPrimaryDisabled = reviewPrimaryBusy
+    || runInFlightWithdrawsPrimary
     || !review?.jd_text.trim()
     || preSendVerificationBlock !== null
     || Boolean(activePacketEvidence && !packetEvidenceReady && !packetEvidenceNeedsFreshAudit);
@@ -4489,12 +4634,30 @@ function Applications() {
       moveToScreen("review");
       return;
     }
+    /* THE SECOND HALF OF THE SAME RULE the review screen's runInFlightBlock states, held at the
+       handler so no other route into this function can start a duplicate run either. It is NOT
+       covered by employerActionRefusal above: that one answers null for a `safe_not_sent` packet
+       whatever the run is doing, and a fill that is in flight right now is exactly such a packet.
+       No screen move: the applicant pressed nothing worth navigating for, and moving would be the
+       2026-09-10 defect run in reverse. */
+    if (!qaMode
+      && submission?.application_id === applicationId
+      && SERVER_RUN_IN_FLIGHT_STATUSES.has(submission.server_review_status ?? "")) {
+      setError(RUN_IN_FLIGHT_REFUSAL);
+      return;
+    }
     setPrepareStartedAt(new Date().toISOString());
     setSubmittingPhase("preparing");
     moveToScreen("submitting");
     setError(null);
     setSendRefusal(null);
     setPreSendVerification(null);
+    /* A NEW SEND STARTS THE CONNECTION'S STORY OVER TOO. Whatever the last attempt accumulated -
+       another application's outage, or this one's own undelivered 429 from a press she has since
+       retried - is about a round trip that is over. Carrying it forward would let the previous
+       attempt's sentence land on this one's route back, and would start this run inside an already
+       half-exhausted reconnect window. */
+    resetLiveConnection();
     track("application_submission_requested", {
       source: qaMode ? "qa" : options.source ?? (options.restart ? "restart" : "review"),
     });
@@ -4581,10 +4744,42 @@ function Applications() {
         setPreSendVerification(preSend);
         return;
       }
+      /* THE LONG-LIVED SOCKET IS NOT THE RUN, and this is where the measured incident happened.
+       *
+       * POST /submit-request is held open for the WHOLE fill and resolves with the terminal review
+       * minutes later. On 2026-09-10 three runs lost that one socket inside the first one to three
+       * minutes - a container swap, a proxy hiccup - and this catch took a bare TypeError("Failed
+       * to fetch") as the run's outcome: red banner, back to packet review, "Approve packet and
+       * fill form" armed again, while the run went on filling the employer's form and finished. A
+       * second press there is a duplicate employer attempt or a refusal, and both are worse than
+       * waiting.
+       *
+       * So a rejection the API did not write stays on the live view and hands the question to the
+       * 2.5s poll, which is the only thing here that can actually ask the server what the run is
+       * doing. The poll is required on this screen by construction (submissionPollIsRequired), it
+       * routes off the moment a real status arrives - including straight back to review if the
+       * request never landed and the packet is still resume_ready - and its reconnect window owns
+       * the words on screen until then. Definitive statuses are untouched and still land below.
+       *
+       * `failureScreen` is excluded on purpose: the metadata-refresh route is a different press
+       * with its own destination, and this rule is about the send. */
+      const message = reason instanceof Error ? reason.message : "We could not open the company's application page.";
+      /* ASKED OF THE ACCUMULATOR, not of the rejection, and that is the whole difference.
+         liveRunViewSurvivesFailure is the rule for whether the applicant may be taken off a run the
+         server still says is running; consulting it here is what makes it load-bearing rather than
+         a correct helper nobody calls. What it does NOT do is discard the reason: a status the API
+         chose is retained inside the state and delivered on the route back to review, so a 429 from
+         the hourly limiter or a 503 from the shutdown gate is a sentence the applicant reads
+         instead of a silently re-armed send. Only a status-less rejection leaves nothing behind,
+         because there is nothing the server said. */
+      const nextLiveConnection = liveRunConnectionAfterFailure(liveConnectionRef.current, applicationId, reason, Date.now(), message);
+      if (options.failureScreen === undefined && liveRunViewSurvivesFailure(nextLiveConnection)) {
+        commitLiveConnectionFailure(nextLiveConnection);
+        return;
+      }
       /* A restart is pressed FROM the portal screen and is about the packet on it, so its refusal
          goes back there and lands beside the control, not on the review screen behind a banner. */
       moveToScreen(options.failureScreen ?? (options.restart ? "portal" : "review"));
-      const message = reason instanceof Error ? reason.message : "We could not open the company's application page.";
       const issues = reason instanceof ApiError ? reason.issues : [];
       if (options.restart) refuseSend(applicationId, message, issues);
       else if (options.failureScreen === "questions") {
@@ -5684,6 +5879,17 @@ function Applications() {
 
   const visiblePageError = historicalPacketAuditStaleMessage(error) ? null : error;
   const visiblePollError = historicalPacketAuditStaleMessage(pollError) ? null : pollError;
+  /* Derived from the connection state rather than from a clock read at render time, so the notice
+     cannot disagree with the banner: publishLiveConnectionFailure writes `pollError` at exactly the
+     moment the reconnect window is exhausted, so a standing transient with no banner beside it IS
+     the reconnecting case. A definitive refusal never reaches here - it goes straight to red. */
+  const liveConnectionNotice = liveRunConnectionIsFor(liveConnection, selectedId)
+    && liveConnection.consecutiveFailures > 0
+    && liveConnection.kind === "transient"
+    && !visiblePageError
+    && !visiblePollError
+    ? LIVE_RUN_RECONNECTING_NOTICE
+    : null;
 
   if (visiblePageError && packets === null) {
     return (
@@ -5791,6 +5997,13 @@ function Applications() {
       {/* One banner, two sources, and `error` wins. A refusal to something the student pressed
           outranks news about the connection, and the poll can no longer overwrite either. */}
       {(visiblePageError ?? visiblePollError) && <ErrorNote message={visiblePageError ?? visiblePollError!} />}
+      {/* NON-BLOCKING, AND IT REPLACES NOTHING. The live view stays exactly where it is underneath;
+          this only says why the elapsed clock is the newest thing on screen. It retires itself on
+          the first clean tick, and escalates into the banner above once the reconnect window is
+          exhausted. Muted rather than red: nothing has failed yet. */}
+      {liveConnectionNotice && (
+        <p role="status" aria-live="polite" className="rounded-inner bg-surface-alt px-4 py-3 text-sm text-muted">{liveConnectionNotice}</p>
+      )}
       {/* Derived from the SPEC BEING EDITED, not from the stored packet, so it clears the moment
           the student fixes the education line rather than sitting there until she saves. */}
       {reviewOpen && educationDriftBanner && (
@@ -6748,14 +6961,22 @@ function Applications() {
                 </Button>
               )}
               {(activePacketEvidence?.response.pdf.download_url ?? selected.download_url) && (activePacketEvidence?.response.pdf.download_url ?? selected.download_url) !== "#" && <a href={activePacketEvidence?.response.pdf.download_url ?? selected.download_url} className="rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink">View exact PDF</a>}
-              {review.portal_supported !== false && <Button onClick={reviewPrimaryAction} disabled={reviewPrimaryDisabled} className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">
+              {review.portal_supported !== false && !runInFlightWithdrawsPrimary && <Button onClick={reviewPrimaryAction} disabled={reviewPrimaryDisabled} className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">
                   {reviewPrimaryBusy
                     ? <PendingLabel state="solving" onColor>Making...</PendingLabel>
                     : reviewPrimaryLabel}
                 </Button>}
             </div>
           </TerminalActionBar>
-          {review.portal_supported !== false && packetEvidenceBlocker && (
+          {/* Why the employer send is not here, in the server's own words. It says what happens next
+              WITHOUT the applicant, because that is true: a fill that stops without a terminal state
+              is released server-side and the application becomes startable again. It is printed
+              whenever a run holds the packet, including the case where the primary control is a
+              local audit and therefore still rendered beside it. */}
+          {review.portal_supported !== false && runInFlightBlock && (
+            <p role="status" className="text-sm leading-6 text-muted">{runInFlightBlock}</p>
+          )}
+          {review.portal_supported !== false && !runInFlightWithdrawsPrimary && packetEvidenceBlocker && (
             <p role={matchResult && !matchResult.scorable ? "alert" : "status"} className={`text-sm leading-6 ${matchResult && !matchResult.scorable ? "text-danger" : "text-muted"}`}>
               {packetEvidenceBlocker}
             </p>
