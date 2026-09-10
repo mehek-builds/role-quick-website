@@ -419,12 +419,40 @@ export function reviewForSubmissionProjection(
   }
 
   const validatedProjection = authoritativeSubmissionProjectionFromUnknown(projection);
+  /* An authority that carries no verdict about a send yet: either unparseable (validated to null),
+   * or the client-side "canonical projection incomplete" fallback that submissionResponseForDisplay
+   * substitutes when the server attached NO envelope at all (quarantinedSubmissionAuthority). Both
+   * mean "no send authority", which is the EXPECTED state before a packet's first send. A genuine
+   * repair_required carries other reasons and is NOT this. */
+  const projectionMalformed = projection !== undefined && projection !== null && validatedProjection === null;
+  const incompleteAuthorityFallback = validatedProjection?.state === "repair_required"
+    && validatedProjection.reasons.length === 1
+    && validatedProjection.reasons[0] === "canonical_projection_incomplete";
+  const noSendAuthorityYet = projectionMalformed || incompleteAuthorityFallback;
+  const mutableSentClaim = reviewClaimsSubmissionSent(review);
+  /* A packet that has not started a send - resume_ready, questions_ready or ready_to_submit with no
+   * sent claim - legitimately carries no submission authority yet, so "no send authority" is the
+   * EXPECTED pre-send state, not a quarantine signal. Rewriting it to needs_attention strands a ready
+   * packet on the portal screen behind an inert retry: screenForStatus maps needs_attention -> portal,
+   * while its own status routes to the review screen whose first-fill control is the one that can act.
+   * Measured 2026-09-10 on a freshly tailored Exa packet (canonical 0eaa8f3a) - ready_to_submit, zero
+   * submission attempts in the ledger, and the server had attached no envelope, so the client's
+   * canonical_projection_incomplete fallback quarantined it - shown as an inert "restart" it could
+   * never leave. That is the safe_not_sent envelope gap seen from the read side. The unverified,
+   * confirmed-mismatch, and GENUINE repair_required (any reason beyond the incomplete-authority
+   * fallback) states are NOT relaxed: each describes an authority that believes a send occurred, which
+   * a pre-submit review would be stale about, so they still fail closed. This decides a SCREEN, never
+   * a send: the backend gates every send independently (refuseDuplicateApplication and the
+   * submission-attempt lock), so a duplicate submission stays impossible either way. */
+  const preSubmitWithoutSendClaim = !mutableSentClaim
+    && (review.status === "resume_ready"
+      || review.status === "questions_ready"
+      || review.status === "ready_to_submit");
   const projectionRequiresAttention = validatedProjection?.state === "unverified"
-    || validatedProjection?.state === "repair_required"
+    || (validatedProjection?.state === "repair_required" && !incompleteAuthorityFallback)
     || (validatedProjection?.state === "confirmed"
       && !submissionProjectionIsConfirmed(validatedProjection, expected))
-    || (projection !== undefined && projection !== null && validatedProjection === null);
-  const mutableSentClaim = reviewClaimsSubmissionSent(review);
+    || (noSendAuthorityYet && !preSubmitWithoutSendClaim);
   if (!mutableSentClaim && !projectionRequiresAttention) return review;
   return {
     ...review,

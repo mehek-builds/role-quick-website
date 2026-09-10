@@ -370,6 +370,53 @@ test("nonterminal operational review state is preserved", () => {
   assert.equal(reviewForSubmissionProjection(original, { state: "none" }, { packetId: PACKET_ID }), original);
 });
 
+test("a pre-submit packet with no send claim is not quarantined by a missing authority", () => {
+  /* The safe_not_sent envelope gap from the read side. A freshly tailored packet carries no
+     submission authority yet, so "no authority" - an unparseable projection OR the client's
+     canonical_projection_incomplete fallback that stands in for a server envelope that never arrived
+     (quarantinedSubmissionAuthority) - is the expected pre-send state, not a quarantine signal. It
+     must keep its own status so screenForStatus routes it to the review screen's first-fill control
+     instead of stranding it on the portal screen behind an inert retry. Measured 2026-09-10 on a
+     ready_to_submit Exa packet with zero submission attempts. The send-belief, genuine-repair, and
+     sent-claim cases are NOT relaxed. */
+  const NO_AUTHORITY_YET = [
+    { state: "unknown" },
+    { garbage: true },
+    { state: "repair_required", reasons: ["canonical_projection_incomplete"], packet_id: PACKET_ID },
+  ];
+  const STILL_QUARANTINES = [
+    { state: "unverified", attempt_id: ATTEMPT_ID, observed_at: "2026-08-28T09:00:01.000Z", reason: "pressed" },
+    { state: "repair_required", reasons: ["receipt_missing"], packet_id: PACKET_ID },
+  ];
+  for (const status of ["resume_ready", "questions_ready", "ready_to_submit"] as const) {
+    const ready = { ...review(status), submitted_at: undefined, receipt: undefined };
+    for (const projection of NO_AUTHORITY_YET) {
+      assert.equal(
+        reviewForSubmissionProjection(ready, projection as unknown as AuthoritativeSubmissionProjection, { packetId: PACKET_ID }).status,
+        status,
+        `${status} + ${JSON.stringify(projection)} must stay fillable`,
+      );
+    }
+    for (const projection of STILL_QUARANTINES) {
+      assert.equal(
+        reviewForSubmissionProjection(ready, projection as unknown as AuthoritativeSubmissionProjection, { packetId: PACKET_ID }).status,
+        "needs_attention",
+        `${status} + ${JSON.stringify(projection)} must still quarantine`,
+      );
+    }
+  }
+  // A sent claim overrides the exemption even for the same "no authority" projections a pre-submit
+  // packet is allowed to ignore: a review claiming sent without confirmed authority quarantines.
+  for (const projection of NO_AUTHORITY_YET) {
+    const claimed = { ...review("ready_to_submit"), submitted_at: "2026-08-28T09:00:01.000Z" };
+    assert.equal(
+      reviewForSubmissionProjection(claimed, projection as unknown as AuthoritativeSubmissionProjection, { packetId: PACKET_ID }).status,
+      "needs_attention",
+      `sent-claim + ${JSON.stringify(projection)} must still quarantine`,
+    );
+  }
+});
+
 /* Haize Labs packet 093fddb4-1c02-42b5-9bf7-bf4099fe4fba, measured 2026-09-05 09:55Z against
    mehekmandal05@gmail.com: GET /applications/:id/submission returned exactly this shape once
    litos-api PR #966/#968 started backfilling `unverified_submission` onto legacy needs_attention
