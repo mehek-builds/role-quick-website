@@ -24,10 +24,6 @@
  * on screen.
  */
 
-/* Relative with its extension, and imported for the same rule the composer applies to a typed job
-   link: this module is loaded directly by the node test runner, which resolves no path aliases. */
-import { isHttpsJobUrl } from "./daily-matches.ts";
-
 export type PreSendVerificationRefusal = {
   applicationId: string;
   /** The server's own sentence, without the "Issues: ..." suffix `apiErrorMessage` appends. */
@@ -36,6 +32,39 @@ export type PreSendVerificationRefusal = {
 };
 
 export const PRE_SEND_VERIFICATION_CODE = "PRE_SEND_VERIFICATION_FAILED";
+export const GROUNDING_PACKET_REBUILT_CODE = "GROUNDING_PACKET_REBUILT";
+export const CURRENT_PACKET_REQUIRED_CODE = "CURRENT_PACKET_REQUIRED";
+
+export type GroundingPacketRebuilt = {
+  canonicalApplicationId: string;
+  packetId: string;
+  rebuilt: boolean;
+};
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Accepts only the backend's typed replacement handoff. The two IDs are subsequently checked
+ * against the canonical ledger and exact packet row before navigation. */
+export function groundingPacketRebuilt(reason: unknown): GroundingPacketRebuilt | null {
+  if (typeof reason !== "object" || reason === null || (reason as { status?: unknown }).status !== 409) return null;
+  const data = (reason as { data?: unknown }).data;
+  if (typeof data !== "object" || data === null) return null;
+  const body = data as Record<string, unknown>;
+  if ((body.code !== GROUNDING_PACKET_REBUILT_CODE && body.code !== CURRENT_PACKET_REQUIRED_CODE)
+    || typeof body.canonical_application_id !== "string"
+    || typeof body.packet_id !== "string"
+    || !UUID_PATTERN.test(body.canonical_application_id)
+    || !UUID_PATTERN.test(body.packet_id)) return null;
+  return {
+    canonicalApplicationId: body.canonical_application_id,
+    packetId: body.packet_id,
+    rebuilt: body.code === GROUNDING_PACKET_REBUILT_CODE,
+  };
+}
+
+export function discardSubmissionSnapshotForReplacement<T>(snapshots: Map<string, T>, packetId: string): void {
+  snapshots.delete(packetId);
+}
 
 /** Copy for the case the server refused without naming a single entry. Still a refusal, still a
  *  rebuild, but the screen must not imply it listed something it did not. */
@@ -43,23 +72,6 @@ export const PRE_SEND_VERIFICATION_UNNAMED_ISSUE =
   "Litos did not name which line it objected to. Rebuilding this resume writes the whole packet again.";
 
 /** Why the rebuild cannot run: the packet has no frozen job description to rebuild against. */
-export const PRE_SEND_VERIFICATION_NO_JD =
-  "This packet has no saved job description, so Litos cannot rebuild it here. Open the posting again from Jobs to make a fresh application.";
-
-/** Why the rebuild cannot run: the Tracker row this packet belongs to is not loaded on this page.
- *
- *  MEASURED 2026-09-10 on a live packet opened by deep link. The rebuild must carry the canonical
- *  application id, or /resume/generate mints a SECOND Tracker row for the same job (#855), so a
- *  packet whose row the page cannot name has no safe rebuild to offer. The row is not missing from
- *  the account: `/applications?limit=200` is a window, and an older packet's row can sit outside it.
- *  Reloading Applications from the Tracker itself opens the row with its packet linked. */
-export const PRE_SEND_VERIFICATION_NO_TRACKER_ROW =
-  "Litos could not find the Tracker application this resume belongs to, so it cannot rebuild it here without creating a second copy of this job. Open the application from the Tracker and try again.";
-
-/** Why the rebuild cannot run: there is no usable job link to tailor against. */
-export const PRE_SEND_VERIFICATION_NO_PORTAL_URL =
-  "This packet has no saved job link, so Litos cannot rebuild it here. Open the posting again from Jobs to make a fresh application.";
-
 function refusalBody(reason: unknown): Record<string, unknown> | null {
   if (typeof reason !== "object" || reason === null) return null;
   if ((reason as { status?: unknown }).status !== 422) return null;
@@ -121,20 +133,8 @@ export type PreSendVerificationReviewState = {
  * it: switching rows must not carry a stopped send onto a different application, which is the same
  * scoping rule `sendRefusal` already follows on the portal screen.
  *
- * `jdText` is the packet's frozen `spec._review.jd_text`. The rebuild reuses it rather than re-reading
- * the posting, so a board that has since rotated or closed the row cannot block the repair; without
- * it there is nothing to tailor against and the control says so instead of failing on press.
- *
- * `canonicalApplicationId` and `portalUrl` are the OTHER two things the rebuild request cannot be
- * built without, and they are derived here for exactly the reason `jdText` is.
- *
- * THE 2026-09-10 DEAD BUTTON. The banner rendered, the control was enabled, and pressing it issued
- * no request at all: the page could not name the Tracker row for that packet, and every refusal on
- * the way to /resume/generate was written to a surface the review screen does not render - the New
- * application composer, which is closed. A control that cannot work must say so BEFORE it is
- * pressed, on the same derived value the press itself reads, which is the rule the send control
- * beside it already follows. Nothing here re-arms on a press: these are the request's own
- * preconditions, not a guess about how the server will answer.
+ * The repair belongs to the server's packet audit and does not depend on a client copy of the job
+ * description. `jdText` remains in the context for call-site compatibility during rolling deploys.
  */
 export function preSendVerificationReviewState(
   refusal: PreSendVerificationRefusal | null,
@@ -149,25 +149,12 @@ export function preSendVerificationReviewState(
   },
 ): PreSendVerificationReviewState | null {
   if (!refusal || !context.applicationId || refusal.applicationId !== context.applicationId) return null;
-  const hasJd = Boolean(context.jdText && context.jdText.trim().length > 0);
-  const hasRow = Boolean(context.canonicalApplicationId && context.canonicalApplicationId.trim().length > 0);
-  const hasPortalUrl = isHttpsJobUrl(context.portalUrl ?? "");
-  /* Ordered by what the applicant can do about it. A missing job description is a property of the
-     packet, a missing row is a property of how this screen was reached, and the link is the one the
-     request is refused on last. Only one sentence is shown, so it must be the first true one. */
-  const blocked = !hasJd
-    ? PRE_SEND_VERIFICATION_NO_JD
-    : !hasRow
-      ? PRE_SEND_VERIFICATION_NO_TRACKER_ROW
-      : !hasPortalUrl
-        ? PRE_SEND_VERIFICATION_NO_PORTAL_URL
-        : null;
   return {
     sendDisabled: true,
     message: refusal.message,
     issues: refusal.issues.length > 0 ? refusal.issues : [PRE_SEND_VERIFICATION_UNNAMED_ISSUE],
-    rebuildAvailable: blocked === null && !context.rebuilding,
-    rebuildBlockedReason: blocked,
+    rebuildAvailable: !context.rebuilding,
+    rebuildBlockedReason: null,
     rebuildInProgress: context.rebuilding,
   };
 }

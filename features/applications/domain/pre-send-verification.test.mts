@@ -1,13 +1,45 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  PRE_SEND_VERIFICATION_NO_JD,
-  PRE_SEND_VERIFICATION_NO_PORTAL_URL,
-  PRE_SEND_VERIFICATION_NO_TRACKER_ROW,
   PRE_SEND_VERIFICATION_UNNAMED_ISSUE,
+  discardSubmissionSnapshotForReplacement,
+  groundingPacketRebuilt,
   preSendVerificationRefusal,
   preSendVerificationReviewState,
 } from "./pre-send-verification.ts";
+
+test("an in-place replacement discards only the stale same-packet submission snapshot", () => {
+  const snapshots = new Map([["current", { review: "stale" }], ["other", { review: "keep" }]]);
+  discardSubmissionSnapshotForReplacement(snapshots, "current");
+  assert.equal(snapshots.has("current"), false);
+  assert.deepEqual(snapshots.get("other"), { review: "keep" });
+});
+
+test("a typed grounding repair accepts only two UUID identities", () => {
+  const canonicalApplicationId = "8b9b0722-7e23-4aa5-88ea-8877c11df17f";
+  const packetId = "34d93673-3298-4c98-b6d4-a15916b91c79";
+  assert.deepEqual(groundingPacketRebuilt(new FakeApiError(409, "updated", [], {
+    code: "GROUNDING_PACKET_REBUILT",
+    canonical_application_id: canonicalApplicationId,
+    packet_id: packetId,
+  })), { canonicalApplicationId, packetId, rebuilt: true });
+  assert.deepEqual(groundingPacketRebuilt(new FakeApiError(409, "current", [], {
+    code: "CURRENT_PACKET_REQUIRED",
+    canonical_application_id: canonicalApplicationId,
+    packet_id: packetId,
+  })), { canonicalApplicationId, packetId, rebuilt: false });
+});
+
+test("grounding repair rejects wrong status, code, or malformed identity", () => {
+  const body = {
+    code: "GROUNDING_PACKET_REBUILT",
+    canonical_application_id: "8b9b0722-7e23-4aa5-88ea-8877c11df17f",
+    packet_id: "34d93673-3298-4c98-b6d4-a15916b91c79",
+  };
+  assert.equal(groundingPacketRebuilt(new FakeApiError(422, "updated", [], body)), null);
+  assert.equal(groundingPacketRebuilt(new FakeApiError(409, "updated", [], { ...body, code: "PACKET_AUDIT_STALE" })), null);
+  assert.equal(groundingPacketRebuilt(new FakeApiError(409, "updated", [], { ...body, packet_id: "not-a-uuid" })), null);
+});
 
 /* MEASURED 2026-09-07. volley-backend PR #1058 put a pre-send resume verification in front of
    POST /applications/:id/submit-request, and every one of this account's roughly two hundred stored
@@ -155,7 +187,7 @@ test("the screen never claims a list the server did not send", () => {
   assert.equal(state.rebuildAvailable, true);
 });
 
-test("no frozen job description means the rebuild says why instead of failing on press", () => {
+test("system repair remains available without a client-side job description", () => {
   for (const jdText of [undefined, null, "   "]) {
     const state = preSendVerificationReviewState(
       preSendVerificationRefusal("packet-1", liveRefusal()),
@@ -163,8 +195,8 @@ test("no frozen job description means the rebuild says why instead of failing on
     );
     assert.ok(state);
     assert.equal(state.sendDisabled, true);
-    assert.equal(state.rebuildAvailable, false);
-    assert.equal(state.rebuildBlockedReason, PRE_SEND_VERIFICATION_NO_JD);
+    assert.equal(state.rebuildAvailable, true);
+    assert.equal(state.rebuildBlockedReason, null);
   }
 });
 
@@ -175,64 +207,6 @@ test("a rebuild already running cannot be started a second time from the same ba
   );
   assert.ok(state);
   assert.equal(state.rebuildInProgress, true);
-  /* The monthly tailoring allowance is spent by the generation this button starts, so a double
-     click must not reach it. */
+  /* A double click must not start two audits or race two replacement handoffs. */
   assert.equal(state.rebuildAvailable, false);
-});
-
-/* THE 2026-09-10 DEAD BUTTON, in the two shapes that produced it.
- *
- * The banner rendered with an enabled rebuild, the press issued no request, and nothing on screen
- * changed: the page could not name the Tracker row for the deep-linked packet - `/applications` is
- * read one 200-row window at a time and an older packet's row can sit outside it - and every
- * refusal on the way to /resume/generate was written to the New application composer, which is
- * closed on this screen. Both preconditions now disable the control and say why. */
-test("a packet whose Tracker row this page cannot name says so instead of dying on press", () => {
-  for (const canonicalApplicationId of [undefined, null, "", "   "]) {
-    const state = preSendVerificationReviewState(
-      preSendVerificationRefusal("packet-1", liveRefusal()),
-      context({ canonicalApplicationId }),
-    );
-    assert.ok(state);
-    assert.equal(state.sendDisabled, true);
-    assert.equal(state.rebuildAvailable, false);
-    assert.equal(state.rebuildBlockedReason, PRE_SEND_VERIFICATION_NO_TRACKER_ROW);
-  }
-});
-
-test("a packet with no usable job link says so instead of dying on press", () => {
-  for (const portalUrl of [undefined, null, "", "   ", "not a url", "http://boards.example.com/jobs/1"]) {
-    const state = preSendVerificationReviewState(
-      preSendVerificationRefusal("packet-1", liveRefusal()),
-      context({ portalUrl }),
-    );
-    assert.ok(state);
-    assert.equal(state.rebuildAvailable, false);
-    assert.equal(state.rebuildBlockedReason, PRE_SEND_VERIFICATION_NO_PORTAL_URL);
-  }
-});
-
-/* One sentence, and it must be the first true one: a packet missing all three is missing its job
-   description first, and telling her to reopen the row would send her somewhere that cannot help. */
-test("only the first blocking reason is shown", () => {
-  const state = preSendVerificationReviewState(
-    preSendVerificationRefusal("packet-1", liveRefusal()),
-    context({ jdText: "", canonicalApplicationId: null, portalUrl: "" }),
-  );
-  assert.ok(state);
-  assert.equal(state.rebuildBlockedReason, PRE_SEND_VERIFICATION_NO_JD);
-});
-
-/* A blocked rebuild is still a STOP: the send stays withdrawn whatever the reason, because the
-   packet's wording is what the server refused and none of these reasons change it. */
-test("a blocked rebuild never re-arms the send", () => {
-  for (const blocked of [{ jdText: "" }, { canonicalApplicationId: null }, { portalUrl: "" }]) {
-    const state = preSendVerificationReviewState(
-      preSendVerificationRefusal("packet-1", liveRefusal()),
-      context(blocked),
-    );
-    assert.ok(state);
-    assert.equal(state.sendDisabled, true);
-    assert.ok(state.rebuildBlockedReason);
-  }
 });

@@ -205,7 +205,7 @@ function landedResponse(submission, packet) {
  * @param dropSubmissionPolls  every /submission read is aborted at the network layer, so the poll
  *                             sees the same dropped-socket rejection the incident did
  */
-async function openAuditedFlow(packet, { ackResponse = null, submitResponse = null, holdSubmitMs = 0, revalidationRefusal = null, landed = null, generated = null, generateResponse = null, canonicalRowOutOfWindow = false, dropSubmitAfterMs = 0, dropSubmissionPolls = false } = {}) {
+async function openAuditedFlow(packet, { ackResponse = null, submitResponse = null, holdSubmitMs = 0, disconnectSubmit = false, disconnectActiveReads = 0, revalidationRefusal = null, landed = null, generated = null, generateResponse = null, auditReplacementAfterSubmit = false, dropSubmitAfterMs = 0, dropSubmissionPolls = false } = {}) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const auditResponse = packetAuditResponse(packet);
   const submission = submissionFor(packet, auditResponse);
@@ -214,7 +214,7 @@ async function openAuditedFlow(packet, { ackResponse = null, submitResponse = nu
      subsequent /submission poll answer), so a case can park the flow on a poll-active screen
      like the needs_attention portal instead of the terminal receipt. */
   const landedSubmission = landed ? { ...submission, review: { ...submission.review, ...landed } } : null;
-  const counts = { ack: 0, submit: 0, approve: 0, submissionReads: 0, audits: 0, revalidations: 0, generate: 0, submitBodies: [], generateBodies: [] };
+  const counts = { ack: 0, submit: 0, approve: 0, submissionReads: 0, postSubmitReads: 0, audits: 0, revalidations: 0, generate: 0, submitBodies: [], generateBodies: [] };
   const rebuildCanonicalId = "8b9b0722-7e23-4aa5-88ea-8877c11df17f";
   const rebuildCanonical = {
     id: rebuildCanonicalId,
@@ -239,13 +239,12 @@ async function openAuditedFlow(packet, { ackResponse = null, submitResponse = nu
     if (url.startsWith(BACKEND_ORIGIN)) {
       const p = new URL(url).pathname;
       const json = async (body, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
-      const historyResumes = generated && counts.generate > 0 ? [generated, ...fixtureResumes] : fixtureResumes;
+      const replacementAvailable = generated && (counts.generate > 0 || counts.submit > 0);
+      const historyResumes = replacementAvailable ? [generated, ...fixtureResumes] : fixtureResumes;
       if (p === "/resume/history") return json({ resumes: historyResumes });
-      /* `canonicalRowOutOfWindow` serves the ledger WITHOUT this packet's row, which is the live
-         2026-09-10 shape: GET /applications is read one 200-row window at a time, and the row an
-         older packet belongs to can sit outside it while the packet itself still opens by id. */
       if (p === "/applications" && (generated || generateResponse)) {
-        return json({ applications: canonicalRowOutOfWindow ? [] : [rebuildCanonical] });
+        return json({ applications: [{ ...rebuildCanonical,
+          legacy_generated_resume_id: replacementAvailable ? generated.id : packet.id }] });
       }
       /* The rebuild path reads the account's resume identity before it generates anything, and
          refuses without a personal email. The shared PROFILE fixture predates that read. */
@@ -276,6 +275,14 @@ async function openAuditedFlow(packet, { ackResponse = null, submitResponse = nu
       }
       if (p.endsWith("/packet-audit")) {
         counts.audits += 1;
+        if (auditReplacementAfterSubmit && counts.submit > 0) {
+          return json({
+            error: "Litos rebuilt this packet from the current resume source.",
+            code: "CURRENT_PACKET_REQUIRED",
+            canonical_application_id: rebuildCanonicalId,
+            packet_id: generated.id,
+          }, 409);
+        }
         if (revalidationRefusal && counts.ack > 0 && counts.revalidations === 0) {
           counts.revalidations += 1;
           return json(revalidationRefusal.body, revalidationRefusal.status);
@@ -296,6 +303,7 @@ async function openAuditedFlow(packet, { ackResponse = null, submitResponse = nu
         }
         if (holdSubmitMs > 0) await delay(holdSubmitMs);
         submitInFlight = false;
+        if (disconnectSubmit) return route.abort("connectionreset");
         if (submitResponse) return json(submitResponse.body, submitResponse.status);
         if (landedSubmission) return json(landedSubmission);
         return json(landedResponse(submission, packet));
@@ -318,11 +326,17 @@ async function openAuditedFlow(packet, { ackResponse = null, submitResponse = nu
       /* The review_edit save that precedes the audit on resume_ready packets. Echo the saved
          review; the flow only needs the envelope back. */
       if (p.endsWith("/review") && route.request().method() === "PUT") return json(submission);
-      if (p.endsWith("/submission")) counts.submissionReads += 1;
+      if (p.endsWith("/submission")) {
+        counts.submissionReads += 1;
+        if (counts.submit > 0) counts.postSubmitReads += 1;
+      }
       /* A poll tick that never reaches litos-api. The rejection the page sees is the browser's own
          TypeError("Failed to fetch"), not a status anybody chose. */
       if (p.endsWith("/submission") && dropSubmissionPolls) return route.abort("connectionfailed");
       if (p.endsWith("/submission") && submitInFlight) {
+        return json({ ...submission, review: { ...submission.review, status: "filling" } });
+      }
+      if (p.endsWith("/submission") && disconnectSubmit && counts.postSubmitReads <= disconnectActiveReads) {
         return json({ ...submission, review: { ...submission.review, status: "filling" } });
       }
       if (p.endsWith("/submission")) return json(counts.submit > 0 && landedSubmission ? landedSubmission : submission);
@@ -505,6 +519,34 @@ browserTest("a slow submit-request polls status without re-auditing the packet",
   await context.close();
 });
 
+browserTest("a disconnected submit-request reconciles through status without retrying", async (hold) => {
+  const { context, page, second, counts } = await openAuditedFlow(FILL, {
+    disconnectSubmit: true,
+    disconnectActiveReads: 2,
+    landed: { status: "failed", attention_reason: "The saved run stopped before anything was sent." },
+  });
+  hold(page);
+  await second.click();
+
+  await page.getByRole("heading", { name: "Filling form", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+  const reconnectNotice = page.getByRole("status").filter({
+    hasText: "The connection was interrupted. Litos is checking the saved application run.",
+  });
+  await reconnectNotice.waitFor({ state: "visible", timeout: 10_000 });
+  assert.equal(await page.getByRole("alert").filter({ hasText: "connection was interrupted" }).count(), 0,
+    "transport reconciliation rendered through the red error channel");
+  await page.waitForTimeout(3500);
+  assert.equal(await page.getByRole("heading", { name: "Filling form", exact: true }).count(), 1,
+    "the disconnected POST routed back to review before the authoritative poll settled the run");
+  await page.getByRole("heading", { name: "Stopped", exact: true }).waitFor({ state: "visible", timeout: 15_000 });
+  assert.equal(await reconnectNotice.count(), 0, "the checking notice survived the authoritative terminal response");
+
+  assert.equal(counts.submit, 1, "transport reconciliation must not replay submit-request");
+  assert.ok(counts.postSubmitReads >= 2, "the poll must observe an active run before its terminal state");
+  assert.equal(await page.getByText(LANDED_CONFIRMATION, { exact: true }).count(), 0, "a transport failure must not invent a receipt");
+  await context.close();
+});
+
 /* A polled revalidation has no button press to return to. A coded stale response now clears the old
    acknowledgement, takes a fresh audit, and routes to review with neutral status. The fresh packet
    must remain unacknowledged, and recovery must not replay either the acknowledgement or the send. */
@@ -532,9 +574,8 @@ const PRE_SEND_ERROR = "Verify the resume before sending. The current packet is 
 const PRE_SEND_ISSUE = "grounding: a <entry> metric is stored as a target, plan, or forecast but rendered as an achieved result";
 /* features/applications/domain/pre-send-verification.ts, verbatim. Copy on screen, so it is pinned
    here rather than matched loosely: a reworded sentence must fail this, not pass it by substring. */
-const NO_TRACKER_ROW = "Litos could not find the Tracker application this resume belongs to, so it cannot rebuild it here without creating a second copy of this job. Open the application from the Tracker and try again.";
 
-browserTest("a pre-send verification refusal disables the send and offers one rebuild", async (hold) => {
+browserTest("a pre-send refusal repairs through audit and opens the exact replacement without tailoring", async (hold) => {
   /* The rebuilt packet needs its OWN unsent submission-authority envelope. Copying FILL's would
      bind another packet's identity to this id, and packetForSubmissionDisplay quarantines that on
      sight into the needs-attention screen - the review flow would never render. */
@@ -551,6 +592,7 @@ browserTest("a pre-send verification refusal disables the send and offers one re
       body: { error: PRE_SEND_ERROR, code: "PRE_SEND_VERIFICATION_FAILED", issues: [PRE_SEND_ISSUE] },
     },
     generated: rebuilt,
+    auditReplacementAfterSubmit: true,
   });
   hold(page);
   await second.click();
@@ -567,7 +609,7 @@ browserTest("a pre-send verification refusal disables the send and offers one re
   await send.waitFor({ state: "visible", timeout: 20_000 });
   assert.equal(await send.isDisabled(), true, "the send stayed armed over a refusal it cannot clear");
 
-  const rebuild = page.getByRole("button", { name: "Rebuild the resume for this job", exact: true });
+  const rebuild = page.getByRole("button", { name: "Check for the updated resume", exact: true });
   await rebuild.waitFor({ state: "visible", timeout: 20_000 });
   assert.equal(await rebuild.isDisabled(), false);
   assert.equal(counts.submit, 1);
@@ -578,17 +620,7 @@ browserTest("a pre-send verification refusal disables the send and offers one re
     rebuilt.id,
     { timeout: 25_000 },
   );
-  assert.equal(counts.generate, 1, "one press must spend exactly one tailoring");
-  const body = counts.generateBodies[0];
-  /* The posting is NOT re-read: the rebuild is judged against the same frozen job description the
-     refused packet was tailored against, so a board row that has since closed cannot block it. */
-  assert.equal(body.jd_text, FILL.spec._review.jd_text);
-  /* No job_id. A stale board id 409s job_not_available at /resume/generate; the canonical row
-     carries its own and the server reads that one. */
-  assert.equal(body.job_id, undefined);
-  assert.equal(body.application.portal_url, FILL.spec._review.portal_url);
-  assert.equal(body.company, FILL.job_context.company);
-  assert.equal(body.role, FILL.job_context.role);
+  assert.equal(counts.generate, 0, "a system repair must not spend a tailoring credit");
   assert.equal(counts.submit, 1, "the rebuild must not send anything");
   /* The new packet's own review, with its own send available again. */
   await page.getByRole("button", { name: "Fill the application", exact: true })
@@ -597,71 +629,36 @@ browserTest("a pre-send verification refusal disables the send and offers one re
   await context.close();
 });
 
-browserTest("a failed pre-send rebuild reports the API refusal beside its button", async (hold) => {
-  const refusal = "The saved application changed before Litos could rebuild its resume. Reload and try again.";
-  const { context, page, second, counts } = await openAuditedFlow(FILL, {
-    submitResponse: {
-      status: 422,
-      body: { error: PRE_SEND_ERROR, code: "PRE_SEND_VERIFICATION_FAILED", issues: [PRE_SEND_ISSUE] },
-    },
-    generateResponse: { status: 409, body: { error: refusal, code: "application_changed" } },
-  });
-  hold(page);
-  await second.click();
-
-  const rebuild = page.getByRole("button", { name: "Rebuild the resume for this job", exact: true });
-  await rebuild.click();
-  const banner = page.getByRole("alert").filter({ hasText: PRE_SEND_ERROR }).first();
-  await banner.getByText(refusal, { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
-  assert.equal(counts.generate, 1);
-  assert.equal(counts.submit, 1, "a failed rebuild must not retry or approve the submission");
-  assert.equal(await page.getByRole("button", { name: "Approve packet and fill form", exact: true }).isDisabled(), true);
-  await context.close();
-});
-
-/* THE 2026-09-10 DEAD BUTTON. Measured on prod at
-   /dashboard/applications?state=action&application=<packetId>&intent=apply: the banner rendered,
-   "Rebuild the resume for this job" was enabled, and a real click issued NO request and changed
-   nothing on screen. The page could not name the Tracker row for that packet, so the draft carried
-   no canonical application id, and every refusal on the way to /resume/generate was written to the
-   New application composer - a surface the review screen does not render. A control that cannot
-   work must say so before it is pressed. */
-browserTest("a rebuild that cannot name its Tracker row is disabled and says why", async (hold) => {
-  const REBUILT_KEY = "presend-rebuild-no-row";
-  const rebuilt = {
+browserTest("a submit-request replacement opens fresh review without retrying the send", async (hold) => {
+  const replacementKey = "submit-replacement";
+  const replacement = {
     ...FILL,
-    ...fixtureAuthority(REBUILT_KEY, "resume_ready"),
-    id: fixturePacketId(REBUILT_KEY),
+    ...fixtureAuthority(replacementKey, "resume_ready"),
+    id: fixturePacketId(replacementKey),
     spec: { ...FILL.spec, _review: { ...FILL.spec._review, status: "resume_ready" } },
   };
+  const canonicalApplicationId = "8b9b0722-7e23-4aa5-88ea-8877c11df17f";
   const { context, page, second, counts } = await openAuditedFlow(FILL, {
     submitResponse: {
-      status: 422,
-      body: { error: PRE_SEND_ERROR, code: "PRE_SEND_VERIFICATION_FAILED", issues: [PRE_SEND_ISSUE] },
+      status: 409,
+      body: {
+        error: "Litos rebuilt this packet from the current resume source.",
+        code: "GROUNDING_PACKET_REBUILT",
+        canonical_application_id: canonicalApplicationId,
+        packet_id: replacement.id,
+      },
     },
-    generated: rebuilt,
-    canonicalRowOutOfWindow: true,
+    generated: replacement,
   });
   hold(page);
   await second.click();
-
-  const banner = page.getByRole("alert").filter({ hasText: PRE_SEND_ERROR }).first();
-  await banner.waitFor({ state: "visible", timeout: 20_000 });
-  const rebuild = page.getByRole("button", { name: "Rebuild the resume for this job", exact: true });
-  await rebuild.waitFor({ state: "visible", timeout: 20_000 });
-  assert.equal(await rebuild.isDisabled(), true, "an unpressable rebuild was left armed");
-  await banner.getByText(NO_TRACKER_ROW, { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
-
-  /* Bypassing the disabled attribute is the whole measurement: the handler must refuse in the
-     banner rather than return silently, and must not reach /resume/generate. */
-  await rebuild.dispatchEvent("click");
-  await page.waitForTimeout(1500);
-  assert.equal(counts.generate, 0, "a rebuild with no Tracker row must not spend a tailoring");
-  assert.equal(counts.submit, 1, "the blocked rebuild must not retry the send");
-  assert.equal(
-    await page.getByRole("button", { name: "Approve packet and fill form", exact: true }).isDisabled(),
-    true,
-  );
+  await page.getByRole("status").filter({ hasText: "Review the current PDF" }).first()
+    .waitFor({ state: "visible", timeout: 20_000 });
+  await page.waitForFunction((id) => window.location.search.includes(id), replacement.id, { timeout: 20_000 });
+  assert.equal(counts.submit, 1, "replacement recovery must not retry the submit request");
+  assert.equal(counts.generate, 0, "replacement recovery must not call paid tailoring");
+  await page.getByRole("button", { name: "Fill the application", exact: true })
+    .waitFor({ state: "visible", timeout: 20_000 });
   await context.close();
 });
 
