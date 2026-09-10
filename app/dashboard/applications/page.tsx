@@ -8849,6 +8849,13 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
             onError={() => setPreviewState({ url: previewUrl, loaded: false, failed: true })}
           />
         )
+      ) : review.status === "failed" && review.progress_screenshot_url ? (
+        <div>
+          <p className="px-5 py-3 text-small text-muted">Last view captured before this attempt stopped.</p>
+          <img src={review.progress_screenshot_url}
+            alt="Last view of the company application before Litos stopped"
+            className="h-auto w-full" />
+        </div>
       ) : <div className="p-10 text-center text-sm text-muted">
           {/* THIS CARD ONLY RENDERS ONCE THE RUN HAS STOPPED (the live view owns the filling
               states), so a missing picture here is one that was never saved, not one still being
