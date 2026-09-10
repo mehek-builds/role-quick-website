@@ -446,6 +446,7 @@ async function routeResume(context, {
   let profileUploads = 0;
   let bankReads = 0;
   let baseResumeReads = 0;
+  let baseResumeBuilds = 0;
   const unknown = [];
   const parsedEntries = [{
     id: "entry-1",
@@ -506,6 +507,18 @@ async function routeResume(context, {
       baseResumeReads += 1;
       return route.fulfill({ status: 404, json: { error: "no main resume" } });
     }
+    /* THE AUTO-BUILD AFTER A SUCCESSFUL UPLOAD. Once the resume is uploaded, building the one-page
+       base resume is Litos's job rather than a manual "Build main resume" click, so a successful
+       upload POSTs this build stream. Stubbed with a terminal `done` frame and counted, so the
+       auto-build is a contract this file checks rather than an unstubbed request. */
+    if (key === "POST /resume/base/stream") {
+      baseResumeBuilds += 1;
+      return route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: `data: ${JSON.stringify({ event: "done", spec: { school: "", degree: "", grad_date: "", coursework: "", experience: [], skills: [] }, warnings: [], metrics: [], ats: { passed: true, issues: [], pages: 1, extractable_chars: 0, keyword_coverage_pct: 0, scored_against: "" }, built_at: "2026-01-01T00:00:00.000Z" })}\n\n`,
+      });
+    }
     if (key === "POST /profile") {
       profileUploads += 1;
       if (profileUploads === 1) {
@@ -523,6 +536,7 @@ async function routeResume(context, {
     get profileUploads() { return profileUploads; },
     get bankReads() { return bankReads; },
     get baseResumeReads() { return baseResumeReads; },
+    get baseResumeBuilds() { return baseResumeBuilds; },
     unknown,
   };
 }
@@ -534,7 +548,7 @@ test("resume upload validates PDF input before making a request", async () => {
   await page.goto(`${ORIGIN}/dashboard/resume`, { waitUntil: "networkidle" });
   await page.getByRole("button", { name: "Upload resume PDF" }).waitFor();
   await page.locator('input[type="file"]').setInputFiles({ name: "resume.txt", mimeType: "text/plain", buffer: Buffer.from("not a pdf") });
-  await page.getByRole("alert").filter({ hasText: "Choose one PDF file." }).waitFor();
+  await page.getByRole("alert").filter({ hasText: "Choose a PDF, Word document, or photo of your resume." }).waitFor();
   /* Retrying a client-rejected file re-runs a check that can only fail again, so that state
      offers the picker instead. Clicking it must actually open the file chooser. */
   const chooseAnother = page.getByRole("button", { name: "Choose another file" });
@@ -609,6 +623,7 @@ test("resume upload accepts a PDF filename with empty or generic MIME metadata",
     assert.equal(await page.getByRole("button", { name: "Save changes" }).isDisabled(), true);
     assert.equal(traffic.profileUploads, 1);
     await settlesAt(() => traffic.baseResumeReads, 1, "the main-resume probe must run once per parsed profile");
+    await settlesAt(() => traffic.baseResumeBuilds, 1, "a successful upload auto-builds the base resume once");
     assert.deepEqual(traffic.unknown, []);
     await context.close();
   }
@@ -650,6 +665,7 @@ test("resume upload blocks a concurrent selection, then retries a genuine failur
   /* Once, even though the upload was attempted twice: the failed attempt never produced a parsed
      profile, so the probe's effect had nothing to run on until the retry succeeded. */
   await settlesAt(() => traffic.baseResumeReads, 1, "a retried upload must not probe the main resume twice");
+  await settlesAt(() => traffic.baseResumeBuilds, 1, "a retried upload auto-builds the base resume once, after the successful attempt");
   assert.deepEqual(traffic.unknown, []);
   await context.close();
 });

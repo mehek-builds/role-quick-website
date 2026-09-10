@@ -34,8 +34,12 @@ import {
 /* One gate object for both the choose-time check and the render-time affordance, so the two
    cannot answer differently about the same File. */
 const RESUME_UPLOAD_GATE: ApplicationDocumentGate = {
-  accept: "pdf",
-  typeMessage: "Choose one PDF file.",
+  // Was "pdf", which the OS picker and the client validator both narrowed to PDF only, even though
+  // POST /profile and onboarding accept PDF, DOCX and photos. A returning student exporting a fresh
+  // resume from Word/Google Docs as .docx (or uploading a phone photo) was refused at the client
+  // while the identical file uploads fine during onboarding. Match onboarding and the backend.
+  accept: "resume-or-photo",
+  typeMessage: "Choose a PDF, Word document, or photo of your resume.",
   oversizeHint: OVERSIZE_DOCUMENT_HINT,
 };
 
@@ -282,6 +286,7 @@ export default function ResumeWorkspace() {
   }
 
   async function upload(file: File) {
+    let uploadSucceeded = false;
     await mutations.run("upload", async () => {
       setUploading(true);
       setError(null);
@@ -302,12 +307,24 @@ export default function ResumeWorkspace() {
         entriesRevisionRef.current += 1;
         setEntries(null);
         await refreshUploadedProfile();
+        uploadSucceeded = true;
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : "Could not read that resume.");
       } finally {
         setUploading(false);
       }
     });
+    // A fresh upload replaces the parsed profile the base resume is built from, so any existing base
+    // resume is now stale. Rebuild it automatically instead of leaving a manual "Build main resume"
+    // step: once the resume is uploaded, building the one-page resume is Litos's job. This runs
+    // outside the upload mutation (handleBuildBaseResume is not a mutations.run) and no-ops if a
+    // build is already in flight; errors surface on the banner for manual retry, so it cannot loop.
+    // We deliberately do NOT force baseResumeState to "missing" first: when a base resume already
+    // exists the rebuild runs in the background without flashing the "finish setup" banner, and when
+    // none exists that banner is already showing and its button reflects the running build.
+    if (uploadSucceeded) {
+      handleBuildBaseResume();
+    }
   }
 
   async function saveBank() {

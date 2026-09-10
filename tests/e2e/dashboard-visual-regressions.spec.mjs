@@ -1467,6 +1467,18 @@ async function dashboardContext({
         await fulfillJson(route, { error: "fixture has no sponsorship record" }, 404);
         return;
       }
+      if (method === "POST" && pathname === "/resume/base/stream") {
+        // The auto-build fired after a successful resume upload: once a resume is uploaded, building
+        // the one-page base resume is Litos's job, not a manual "Build main resume" click. Answer
+        // with a terminal `done` frame so the build completes cleanly instead of the POST landing in
+        // unstubbedBackend.
+        await route.fulfill({
+          status: 200,
+          contentType: "text/event-stream",
+          body: `data: ${JSON.stringify({ event: "done", spec: { school: "", degree: "", grad_date: "", coursework: "", experience: [], skills: [] }, warnings: [], metrics: [], ats: { passed: true, issues: [], pages: 1, extractable_chars: 0, keyword_coverage_pct: 0, scored_against: "" }, built_at: "2026-01-01T00:00:00.000Z" })}\n\n`,
+        });
+        return;
+      }
 
       unstubbedBackend.add(`${method} ${pathname}`);
       await fulfillJson(route, { error: `unstubbed ${method} ${pathname}` }, 500);
@@ -4620,7 +4632,7 @@ test("Resume upload ownership and its parsed profile survive Documents tab and r
       full_name: "Uploaded Student",
       resume_email: "uploaded@example.invalid",
     });
-    await page.locator('input[type="file"][accept="application/pdf,.pdf"]').setInputFiles({
+    await page.locator('input[type="file"][accept*="application/pdf"]').setInputFiles({
       name: "new-resume.pdf",
       mimeType: "application/pdf",
       buffer: Buffer.from("%PDF-1.4\nfixture resume\n%%EOF"),
@@ -4641,7 +4653,7 @@ test("Resume upload ownership and its parsed profile survive Documents tab and r
     await remountedUploadButton.waitFor({ state: "visible" });
     assert.equal(await remountedUploadButton.isDisabled(), true, "the remounted workspace exposed a second profile upload");
     assert.equal(
-      await page.locator('input[type="file"][accept="application/pdf,.pdf"]').isDisabled(),
+      await page.locator('input[type="file"][accept*="application/pdf"]').isDisabled(),
       true,
       "the remounted file input accepted a second profile upload",
     );
