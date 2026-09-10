@@ -33,10 +33,12 @@ export type PreSendVerificationRefusal = {
 
 export const PRE_SEND_VERIFICATION_CODE = "PRE_SEND_VERIFICATION_FAILED";
 export const GROUNDING_PACKET_REBUILT_CODE = "GROUNDING_PACKET_REBUILT";
+export const CURRENT_PACKET_REQUIRED_CODE = "CURRENT_PACKET_REQUIRED";
 
 export type GroundingPacketRebuilt = {
   canonicalApplicationId: string;
   packetId: string;
+  rebuilt: boolean;
 };
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -48,7 +50,7 @@ export function groundingPacketRebuilt(reason: unknown): GroundingPacketRebuilt 
   const data = (reason as { data?: unknown }).data;
   if (typeof data !== "object" || data === null) return null;
   const body = data as Record<string, unknown>;
-  if (body.code !== GROUNDING_PACKET_REBUILT_CODE
+  if ((body.code !== GROUNDING_PACKET_REBUILT_CODE && body.code !== CURRENT_PACKET_REQUIRED_CODE)
     || typeof body.canonical_application_id !== "string"
     || typeof body.packet_id !== "string"
     || !UUID_PATTERN.test(body.canonical_application_id)
@@ -56,7 +58,12 @@ export function groundingPacketRebuilt(reason: unknown): GroundingPacketRebuilt 
   return {
     canonicalApplicationId: body.canonical_application_id,
     packetId: body.packet_id,
+    rebuilt: body.code === GROUNDING_PACKET_REBUILT_CODE,
   };
+}
+
+export function discardSubmissionSnapshotForReplacement<T>(snapshots: Map<string, T>, packetId: string): void {
+  snapshots.delete(packetId);
 }
 
 /** Copy for the case the server refused without naming a single entry. Still a refusal, still a

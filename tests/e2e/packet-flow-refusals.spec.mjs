@@ -272,7 +272,7 @@ async function openAuditedFlow(packet, { ackResponse = null, submitResponse = nu
         if (auditReplacementAfterSubmit && counts.submit > 0) {
           return json({
             error: "Litos rebuilt this packet from the current resume source.",
-            code: "GROUNDING_PACKET_REBUILT",
+            code: "CURRENT_PACKET_REQUIRED",
             canonical_application_id: rebuildCanonicalId,
             packet_id: generated.id,
           }, 409);

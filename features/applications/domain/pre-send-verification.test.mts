@@ -2,10 +2,18 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   PRE_SEND_VERIFICATION_UNNAMED_ISSUE,
+  discardSubmissionSnapshotForReplacement,
   groundingPacketRebuilt,
   preSendVerificationRefusal,
   preSendVerificationReviewState,
 } from "./pre-send-verification.ts";
+
+test("an in-place replacement discards only the stale same-packet submission snapshot", () => {
+  const snapshots = new Map([["current", { review: "stale" }], ["other", { review: "keep" }]]);
+  discardSubmissionSnapshotForReplacement(snapshots, "current");
+  assert.equal(snapshots.has("current"), false);
+  assert.deepEqual(snapshots.get("other"), { review: "keep" });
+});
 
 test("a typed grounding repair accepts only two UUID identities", () => {
   const canonicalApplicationId = "8b9b0722-7e23-4aa5-88ea-8877c11df17f";
@@ -14,7 +22,12 @@ test("a typed grounding repair accepts only two UUID identities", () => {
     code: "GROUNDING_PACKET_REBUILT",
     canonical_application_id: canonicalApplicationId,
     packet_id: packetId,
-  })), { canonicalApplicationId, packetId });
+  })), { canonicalApplicationId, packetId, rebuilt: true });
+  assert.deepEqual(groundingPacketRebuilt(new FakeApiError(409, "current", [], {
+    code: "CURRENT_PACKET_REQUIRED",
+    canonical_application_id: canonicalApplicationId,
+    packet_id: packetId,
+  })), { canonicalApplicationId, packetId, rebuilt: false });
 });
 
 test("grounding repair rejects wrong status, code, or malformed identity", () => {

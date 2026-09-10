@@ -41,7 +41,7 @@ import { duplicateBadge, duplicatePostingMarks, duplicatePostingNote } from "@/f
 import { isHttpsJobUrl, missingApplicationFields, type ApplicationDraftField } from "@/features/applications";
 import { COVER_LETTER_WAIT_MS, HANDOFF_CLOCK_TICK_MS, coverLetterBlocks, coverLetterGate, documentsFromSpecMarks, handoffWindowExpired, nextCoverLetterValue, nextSubmissionState, publishSubmissionEnvelope, reconcilePacketEvidenceAfterResumeRegeneration, reconcilePacketEvidenceWithSubmission, resumeContactRefreshBlockedReason, resumeContactStaleNotice, submissionAfterPacketAudit, submissionCoverLetterField, submissionReviewPacketIdentity, submissionSnapshotIsOlder, type ResumeContactStaleLike } from "@/features/applications";
 import { MatchScore, MatchGaps } from "@/components/app/MatchScore";
-import { auditRefusalCode, groundingPacketRebuilt, historicalPacketAuditStaleMessage, nextMatchScoreRequest, packetAuditReviewRecoveryCode, preSendVerificationRefusal, preSendVerificationReviewState, type PreSendVerificationRefusal } from "@/features/applications";
+import { auditRefusalCode, discardSubmissionSnapshotForReplacement, groundingPacketRebuilt, historicalPacketAuditStaleMessage, nextMatchScoreRequest, packetAuditReviewRecoveryCode, preSendVerificationRefusal, preSendVerificationReviewState, type PreSendVerificationRefusal } from "@/features/applications";
 import { getBaseResume } from "@/lib/base-resume";
 import { RequirementBreakdown } from "@/components/app/RequirementBreakdown";
 import { ResumeHealth } from "@/components/app/ResumeHealth";
@@ -1665,7 +1665,9 @@ function Applications() {
       setSendRefusal(null);
       setPreSendVerification(null);
       moveToScreen("review");
-      setNotice("Litos updated this resume. Opening the current packet for review.");
+      setNotice(replacement.rebuilt
+        ? "Litos updated this resume. Opening the current packet for review."
+        : "Opening the current packet for this application.");
       try {
         const history = await api<{ resumes: GeneratedResume[] }>(
           `/resume/history?application=${encodeURIComponent(replacement.packetId)}`,
@@ -1678,13 +1680,19 @@ function Applications() {
            a capped application-list read here would weaken recovery for older canonical rows. */
         setCanonicalIdByPacketId((current) => ({ ...current, [replacement.packetId]: replacement.canonicalApplicationId }));
         setPackets((current) => [exactPacket, ...(current ?? []).filter((item) => item.id !== exactPacket.id)]);
+        /* A grounding repair normally rewrites the current packet in place. Its id is unchanged,
+           but its review, PDF binding, and authority are fresh. Do not let selectPacket prefer the
+           pre-repair submission snapshot merely because the id still matches. */
+        discardSubmissionSnapshotForReplacement(submissionSnapshotsRef.current, replacement.packetId);
         openApplication(exactPacket, { history: "replace" });
         moveToScreen("review");
-        setNotice("Litos updated this resume. Review the current PDF, then continue.");
+        setNotice(replacement.rebuilt
+          ? "Litos updated this resume. Review the current PDF, then continue."
+          : "This application has a newer current packet. Review its PDF, then continue.");
       } catch {
         if (recoveryMayCommit()) {
           setNotice(null);
-          setError("Litos updated this resume but could not open its exact packet. Reload Applications to continue.");
+          setError("Litos could not open the current packet. Reload Applications to continue.");
         }
       }
       return true;
