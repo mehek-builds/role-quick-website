@@ -37,18 +37,39 @@ test("every refusal the autopilot cannot clear parks the row", () => {
     "PACKET_AUDIT_REQUIRED",
     "PACKET_PDF_INVALID",
     "PACKET_RESUME_EXPIRED",
+    "COURSEWORK_PACKET_REBUILT",
   ]) {
     assert.equal(auditRefusalCode(new FakeApiError("refused", { code })), code);
   }
 });
 
-test("only stale or missing acknowledgement enters canonical packet review recovery", () => {
-  for (const code of ["PACKET_AUDIT_STALE", "PACKET_AUDIT_ACK_REQUIRED"]) {
+test("stale, missing acknowledgement, or a coursework rebuild enters canonical packet review recovery", () => {
+  for (const code of ["PACKET_AUDIT_STALE", "PACKET_AUDIT_ACK_REQUIRED", "COURSEWORK_PACKET_REBUILT"]) {
     assert.equal(packetAuditReviewRecoveryCode(new FakeApiError("wording is irrelevant", { code })), code);
   }
   for (const code of ["PACKET_AUDIT_REQUIRED", "PACKET_PDF_INVALID", "PACKET_RESUME_EXPIRED"]) {
     assert.equal(packetAuditReviewRecoveryCode(new FakeApiError("wording is irrelevant", { code })), null);
   }
+});
+
+/* THE COURSEWORK REBUILD 409 IS A RECOVERY SIGNAL, NOT A DEAD BANNER.
+ *
+ * Measured 2026-09-10 on a Neuralink packet (application 4c42ea73) built before the account's CS
+ * resume was re-uploaded: its education block printed finance coursework the current uploaded resume
+ * no longer lists. The send guard rebuilt the coursework in place and answered 409
+ * COURSEWORK_PACKET_REBUILT, but that code was in neither set, so recoverPacketAuditReview never
+ * fired: the client showed the sentence as a refusal on the restart screen and every subsequent
+ * "Try again" bounced back there without re-fetching the repaired packet. The rebuild persisted a
+ * clean PDF that nobody could reach. This is the regression the two additions above prevent, held
+ * here as its own case so a future edit to either set has to look at it. */
+test("a coursework-rebuild 409 reaches manual review recovery", () => {
+  const rebuilt = new FakeApiError(
+    "Litos rebuilt this resume from the coursework on your current uploaded resume. Review the refreshed packet before filling the company form.",
+    { code: "COURSEWORK_PACKET_REBUILT", application_id: "4c42ea73" },
+  );
+  assert.equal(auditRefusalCode(rebuilt), "COURSEWORK_PACKET_REBUILT");
+  assert.equal(packetAuditReviewRecoveryCode(rebuilt), "COURSEWORK_PACKET_REBUILT");
+  assert.equal(packetAuditReviewRecoveryRequired(rebuilt), true);
 });
 
 /* Parking is not the answer to everything. A blank required answer, a quota, a portal that is
