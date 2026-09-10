@@ -94,7 +94,7 @@ test("the page keeps the status the server sent, above the rewrite that destroys
   /* reviewForSubmissionProjection overwrites review.status with "needs_attention" for a quarantined
      packet, so the raw status has to be captured from the WIRE response or the rule can never see
      `filling`. Pinned by source because nothing else can observe the ordering. */
-  assert.match(page, /server_review_status: response\.review\.status,/);
+  assert.match(page, /server_review_status: response\.server_review_status \?\? response\.review\.status,/);
 });
 
 test("prepareApplication refuses through the shared rule, not through its own sentence", () => {

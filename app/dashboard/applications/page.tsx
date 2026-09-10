@@ -349,8 +349,9 @@ function submissionResponseForDisplay(
     )),
     submission_projection: projectionForReview,
     retry_safety: retrySafety as SubmissionRetrySafety | null,
-    /* Captured from the WIRE review, above the rewrite, so it survives being overwritten. */
-    server_review_status: response.review.status,
+    /* setSubmission normalizes an already-normalized response again. Preserve the original
+       wire status rather than replacing it with that response's attention projection. */
+    server_review_status: response.server_review_status ?? response.review.status,
     ...(rejectedProjection === undefined
       ? {}
       : { rejected_submission_projection: rejectedProjection }),
