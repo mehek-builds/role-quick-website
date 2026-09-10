@@ -111,7 +111,7 @@ export function MatchScore({
   const unreadCount = result.clauses_unread ?? 0;
   const unreadPlural = unreadCount === 1 ? "" : "s";
   const unreadSentence = unreadCount > 0
-    ? ` At least ${unreadCount} further line${unreadPlural} in this posting could not be read, so this score is drawn over part of it.`
+    ? ` This quick score grades the requirements that name a specific skill; ${unreadCount} more requirement${unreadPlural} are read in the full requirement breakdown below this score.`
     : "";
 
   const tone = result.band?.tone ?? "fair";
@@ -163,22 +163,26 @@ export function MatchScore({
                  wording, because two versions of one clause is the drift this constant exists to
                  prevent, and the fraction it refers to is the line the tooltip is attached to. */}
         {/* "we counted" was always literally true and was still being read as "the posting asks for
-            three things". On a prose-heavy posting it is not: the extractor recognises a fraction of
-            what the employer wrote, and because an unrecognised requirement leaves the numerator and
-            the denominator together, failing to read one could only ever raise the score. Measured
-            live 2026-08-26: this exact Databricks posting states roughly eight things and rendered
-            "3 of 3 requirements we counted" beside a ring reading 100.
+            three things". On a prose-heavy posting it is not: THIS QUICK SCORE recognises a fraction
+            of what the employer wrote, and because an unrecognised requirement leaves the numerator
+            and the denominator together, failing to grade one could only ever raise the score.
+            Measured live 2026-08-26: this exact Databricks posting states roughly eight things and
+            rendered "3 of 3 requirements we counted" beside a ring reading 100.
 
-            So the count now says what it is drawn over, and only when there is something to say.
-            "at least" is load-bearing and not hedging: splitClauses ignores lines under four words,
-            so clauses_unread is a floor on what was missed rather than a total, and a caption that
-            printed it as a total would be making the same kind of claim this line exists to stop. */}
+            THE SECOND LINE NO LONGER SAYS "we could not read". That was false and it was the wording
+            the operator flagged: the clauses ARE read - splitClauses lists every one of them
+            deterministically, and the full requirement breakdown below (RequirementBreakdown) grades
+            each met/unmet through the clause matcher. What this quick score cannot do is GRADE the
+            ones that name no specific skill without a model call, which is exactly what the breakdown
+            below is for. So the line now points there instead of claiming the posting went unread.
+            "clauses_unread" stays a floor, not a total (splitClauses ignores lines under four
+            words), so the caption says "more", never a complete tally. */}
         <p className="text-[11px] leading-4 text-muted" title={MATCH_WEIGHTING_NOTE}>
           {result.matched.length} of {result.term_count} requirements we counted
         </p>
         {unreadCount > 0 && (
           <p className="text-[11px] leading-4 text-muted" title={MATCH_WEIGHTING_NOTE}>
-            at least {unreadCount} more line{unreadPlural} we could not read
+            {unreadCount} more requirement{unreadPlural} in the full read below
           </p>
         )}
       </div>
