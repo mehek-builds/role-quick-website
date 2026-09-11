@@ -1646,6 +1646,15 @@ async function resetPageScroll(page, { blurActive = true } = {}) {
   assert.deepEqual(scroll, { window: 0, document: 0, main: 0 }, `page did not reset before capture: ${JSON.stringify(scroll)}`);
 }
 
+async function ensureDesktopSidebarExpanded(page) {
+  const toggle = page.getByRole("button", { name: /^(?:Expand|Collapse) sidebar$/ });
+  await toggle.waitFor({ state: "visible" });
+  if (await toggle.getAttribute("aria-expanded") === "false") await toggle.click();
+  await page.waitForFunction(() =>
+    document.querySelector('button[aria-label="Collapse sidebar"]')?.getAttribute("aria-expanded") === "true",
+  );
+}
+
 async function waitForStableGeometry(locator, label) {
   const stable = await locator.evaluate(async (node) => {
     const deadline = performance.now() + 2_000;
@@ -1976,6 +1985,7 @@ test("hand-built application overlays retain an inert exit and restore their exa
     const allApplications = page.getByRole("button", { name: /All applications/ });
     await allApplications.waitFor({ state: "visible" });
     await allApplications.click();
+    await ensureDesktopSidebarExpanded(page);
     const packetTrigger = page.getByRole("button", {
       name: /See the application built for Product Engineer at Acme Labs/,
     });
@@ -2508,6 +2518,7 @@ test("reduced motion closes hand-built and native overlays without retained anim
   try {
     await page.goto(`${QA_ORIGIN}/dashboard/applications?qa=1`, { waitUntil: "domcontentloaded" });
     await page.getByRole("button", { name: /All applications/ }).click();
+    await ensureDesktopSidebarExpanded(page);
     const packetTrigger = page.getByRole("button", {
       name: /See the application built for Product Engineer at Acme Labs/,
     });

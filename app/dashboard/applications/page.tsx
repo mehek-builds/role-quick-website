@@ -9,6 +9,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   api,
   ApiError,
+  getManagedLiveFrame,
   getPostingQuestions,
   type ApplicationQuestion,
   type ApplicationQuestionMetadataBlocker,
@@ -89,6 +90,15 @@ import { completeOperationId, operationIdFor } from "@/lib/operation-id";
 import { IDLE_LIVE_RUN_CONNECTION, LIVE_RUN_RECONNECTING_NOTICE, liveRunConnectionAfterFailure, liveRunConnectionAfterRetainedDelivery, liveRunConnectionAfterSuccess, liveRunConnectionIsFor, liveRunConnectionView, liveRunPollDelayMs, liveRunRetainedRefusal, liveRunViewSurvivesFailure, RUN_IN_FLIGHT_REFUSAL, type LiveRunConnection } from "@/features/applications";
 import { applicationPacketAuthorityState, awaitingUnverifiedSubmissionResolution, employerActionRefusalMessage, SERVER_RUN_IN_FLIGHT_STATUSES, confirmedProjectionForPacket, managedPrepareAuthorityEnvelopeFromUnknown, managedPrepareAuthorityMatchesPacket, quarantinedSubmissionAuthority, reviewClaimsSubmissionSent, reviewForSubmissionProjection, submissionAuthorityEnvelopeFromUnknown, submissionMutationResponseMatchesApplication, submissionProjectionIsConfirmed, unverifiedRecoveryStatus, type UnverifiedRecoveryStatus } from "@/features/applications";
 import { useSidebarCollapse } from "@/app/dashboard/dashboard-shell";
+import {
+  EMPTY_MANAGED_LIVE_FRAME_VIEW,
+  MANAGED_LIVE_FRAME_POLL_MS,
+  acceptManagedLiveFrame,
+  clearManagedLiveFrame,
+  managedLiveFrameIdentity,
+  shouldAcceptManagedLiveFrame,
+  type ManagedLiveFrameView,
+} from "@/features/applications";
 
 type Screen = "review" | "questions" | "submitting" | "portal" | "submitted";
 type ApplicationSort = "next" | "recent" | "company";
@@ -279,6 +289,8 @@ export type SubmissionResponse = {
    * packet screen and the Review screen's checklist cannot disagree about what counts as stale.
    */
   resume_contact_stale?: ResumeContactStaleLike;
+  managed_live_frame_available?: boolean;
+  managed_live_frame_id?: string;
   partial?: boolean;
 };
 
@@ -1386,7 +1398,7 @@ function Applications() {
   /* A ledger press selects from data already in memory, then gives the same identity to the URL.
      The history effect still refreshes that packet, but this ref tells it not to select the same
      row a second time and reset the screen after the student has already started working. */
-  const locallyOpenedRequestRef = useRef<{ id: string; revision: string; routeCommitted: boolean; entryScreen?: Screen } | null>(null);
+  const locallyOpenedRequestRef = useRef<{ id: string; revision: string; routeCommitted: boolean; entryScreen?: Screen; entryNotice?: string } | null>(null);
   const applicationBootstrapGenerationRef = useRef(0);
   const initializedQaScenarioRef = useRef<string | null>(null);
   const applicationsMountedRef = useRef(true);
@@ -1610,6 +1622,9 @@ function Applications() {
     const localEntryScreen = locallyOpenedRequestRef.current?.id === packet.id
       ? locallyOpenedRequestRef.current.entryScreen
       : undefined;
+    const localEntryNotice = locallyOpenedRequestRef.current?.id === packet.id
+      ? locallyOpenedRequestRef.current.entryNotice
+      : undefined;
     /* Entering a packet starts its story over, and that includes a standing revalidation refusal:
        the sentence described evidence this entry no longer holds, and left in the ref it would
        re-pin itself onto the banner at the next poll tick. */
@@ -1673,7 +1688,10 @@ function Applications() {
       setPollError(null);
       setSendRefusal(null);
       setPreSendVerification(null);
-      setNotice(null);
+      /* A recovery-owned entry sentence belongs to this same packet selection. Keeping it inside
+         selectPacket's transition prevents this later commit from clearing the notice after the
+         replacement review is already visible. Ordinary opens still clear the prior notice. */
+      setNotice(localEntryNotice ?? null);
       if (localEntryScreen) moveToScreen(localEntryScreen);
       else moveToScreen(packetEntryScreen(selectedReview));
     });
@@ -1682,7 +1700,7 @@ function Applications() {
   /* User navigation writes local state and route state as one action. The local write makes the
      switch feel immediate; the URL makes reload, sharing, and browser history reopen the same
      application instead of whichever packet happened to be selected before it. */
-  const openApplication = useCallback((packet: GeneratedResume, options: { history?: "push" | "replace" } = {}, entryScreen?: Screen) => {
+  const openApplication = useCallback((packet: GeneratedResume, options: { history?: "push" | "replace" } = {}, entryScreen?: Screen, entryNotice?: string) => {
     const nextPath = applicationSelectionPath(window.location, packet.id);
     const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
     const routeAlreadyCommitted = nextPath === currentPath;
@@ -1695,6 +1713,7 @@ function Applications() {
       revision: applicationWorkflowRevision(packet),
       routeCommitted: routeAlreadyCommitted,
       entryScreen,
+      entryNotice,
     };
     pendingApplicationFocusRef.current = true;
     resolvedJobParam.current = null;
@@ -1758,8 +1777,7 @@ function Applications() {
         /* Recovery owns this entry route. The current packet can still carry needs_attention from
            an earlier run, but routing by that stored status here would replace the freshly loaded
            PDF review with the portal blocker after the selection transition commits. */
-        openApplication(exactPacket, { history: "replace" }, "review");
-        setNotice(replacement.rebuilt
+        openApplication(exactPacket, { history: "replace" }, "review", replacement.rebuilt
           ? "Litos updated this resume. Review the current PDF, then continue."
           : "This application has a newer current packet. Review its PDF, then continue.");
       } catch {
@@ -10114,10 +10132,79 @@ function PortalProgress({ status, startedAt, sending = false, submission, reconc
     : "Not sent yet.";
   const liveViewUrl = submission?.handoff_url;
   const progressPreviewUrl = submission?.review.progress_screenshot_url;
+  const managedFrameId = submission?.managed_live_frame_id;
+  const managedFrameIdentity = managedLiveFrameIdentity({
+    packetId: submission?.application_id,
+    runId: submission?.review.submission_run_id,
+    frameId: managedFrameId,
+    status,
+    available: submission?.managed_live_frame_available,
+  });
+  const managedFrameRef = useRef<ManagedLiveFrameView>(EMPTY_MANAGED_LIVE_FRAME_VIEW);
+  const [managedFrame, setManagedFrame] = useState<ManagedLiveFrameView>(EMPTY_MANAGED_LIVE_FRAME_VIEW);
+
+  useEffect(() => {
+    let cancelled = false;
+    let timer: number | undefined;
+    const controller = new AbortController();
+    const releaseDisplayedFrame = (publish: boolean) => {
+      const cleared = clearManagedLiveFrame(managedFrameRef.current);
+      managedFrameRef.current = cleared.view;
+      for (const objectUrl of cleared.revoke) URL.revokeObjectURL(objectUrl);
+      if (publish) setManagedFrame(cleared.view);
+    };
+
+    releaseDisplayedFrame(true);
+    if (!managedFrameIdentity || !submission?.application_id || !managedFrameId) {
+      return () => {
+        cancelled = true;
+        controller.abort();
+        releaseDisplayedFrame(false);
+      };
+    }
+
+    const packetId = submission.application_id;
+    const frameId = managedFrameId;
+    const scheduleNext = () => {
+      if (!cancelled) timer = window.setTimeout(readFrame, MANAGED_LIVE_FRAME_POLL_MS);
+    };
+    const readFrame = async () => {
+      try {
+        const result = await getManagedLiveFrame(packetId, frameId, controller.signal);
+        if (cancelled) return;
+        if (result.state === "closed") {
+          releaseDisplayedFrame(true);
+          return;
+        }
+        if (result.state === "frame") {
+          const current = managedFrameRef.current;
+          // Avoid even a temporary object URL for a repeated or stale sequence.
+          if (shouldAcceptManagedLiveFrame(current, managedFrameIdentity, result.sequence)) {
+            const next = acceptManagedLiveFrame(current, managedFrameIdentity, result.sequence, URL.createObjectURL(result.image));
+            managedFrameRef.current = next.view;
+            for (const objectUrl of next.revoke) URL.revokeObjectURL(objectUrl);
+            setManagedFrame(next.view);
+          }
+        }
+        scheduleNext();
+      } catch (error) {
+        if (!cancelled && !(error instanceof DOMException && error.name === "AbortError")) scheduleNext();
+      }
+    };
+    void readFrame();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+      if (timer !== undefined) window.clearTimeout(timer);
+      releaseDisplayedFrame(false);
+    };
+  }, [managedFrameId, managedFrameIdentity, submission?.application_id]);
   const progressStage = submitting
     ? "Waiting for the company confirmation"
     : submission?.review.progress_stage ?? "Opening the company form";
-  const previewModeLabel = liveViewUrl ? "Live" : progressPreviewUrl ? "Updating" : "Starting";
+  const managedFrameUrl = managedFrame.identity === managedFrameIdentity ? managedFrame.objectUrl : null;
+  const previewModeLabel = liveViewUrl || managedFrameUrl ? "Live" : progressPreviewUrl ? "Updating" : "Starting";
 
   // The run's own history of stages, built client-side because the backend hands over one current
   // string at a time (`progress_stage`), not a log.
@@ -10209,6 +10296,14 @@ function PortalProgress({ status, startedAt, sending = false, submission, reconc
             title="Live company application form while Litos fills it"
             className="h-[72vh] min-h-[560px] w-full bg-white"
             allow="clipboard-read; clipboard-write"
+          />
+        ) : managedFrameUrl ? (
+          // Blob URLs are authenticated, short-lived browser resources and cannot use Next Image optimization.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={managedFrameUrl}
+            alt="Live view of the company application form while Litos fills it"
+            className="h-auto w-full"
           />
         ) : progressPreviewUrl ? (
           <img
