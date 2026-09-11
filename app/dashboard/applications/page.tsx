@@ -1694,7 +1694,7 @@ function Applications() {
   /* User navigation writes local state and route state as one action. The local write makes the
      switch feel immediate; the URL makes reload, sharing, and browser history reopen the same
      application instead of whichever packet happened to be selected before it. */
-  const openApplication = useCallback((packet: GeneratedResume, options: { history?: "push" | "replace" } = {}, entryScreen?: Screen) => {
+  const openApplication = useCallback((packet: GeneratedResume, options: { history?: "push" | "replace" } = {}, entryScreen?: Screen, entryNotice?: string) => {
     const nextPath = applicationSelectionPath(window.location, packet.id);
     const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
     const routeAlreadyCommitted = nextPath === currentPath;
@@ -1718,6 +1718,10 @@ function Applications() {
       setComposerRefusal(null);
       setResolvedActionableRequestId(packet.id);
       selectPacket(packet);
+      /* Recovery selection clears the prior packet's notice inside selectPacket. Commit the
+         replacement's sentence in this same transition so a later transition commit cannot erase
+         an urgent setNotice from the caller after the fresh packet is already on screen. */
+      if (entryNotice) setNotice(entryNotice);
       if (routeAlreadyCommitted) return;
       /* Next patches native history writes into its own transition. Keeping that write inside the
          same dashboard transition prevents the router restore from retiring the local selection
@@ -1770,8 +1774,7 @@ function Applications() {
         /* Recovery owns this entry route. The current packet can still carry needs_attention from
            an earlier run, but routing by that stored status here would replace the freshly loaded
            PDF review with the portal blocker after the selection transition commits. */
-        openApplication(exactPacket, { history: "replace" }, "review");
-        setNotice(replacement.rebuilt
+        openApplication(exactPacket, { history: "replace" }, "review", replacement.rebuilt
           ? "Litos updated this resume. Review the current PDF, then continue."
           : "This application has a newer current packet. Review its PDF, then continue.");
       } catch {
