@@ -9,6 +9,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   api,
   ApiError,
+  getManagedLiveFrame,
   getPostingQuestions,
   type ApplicationQuestion,
   type ApplicationQuestionMetadataBlocker,
@@ -89,6 +90,15 @@ import { completeOperationId, operationIdFor } from "@/lib/operation-id";
 import { IDLE_LIVE_RUN_CONNECTION, LIVE_RUN_RECONNECTING_NOTICE, liveRunConnectionAfterFailure, liveRunConnectionAfterRetainedDelivery, liveRunConnectionAfterSuccess, liveRunConnectionIsFor, liveRunConnectionView, liveRunPollDelayMs, liveRunRetainedRefusal, liveRunViewSurvivesFailure, RUN_IN_FLIGHT_REFUSAL, type LiveRunConnection } from "@/features/applications";
 import { applicationPacketAuthorityState, awaitingUnverifiedSubmissionResolution, employerActionRefusalMessage, SERVER_RUN_IN_FLIGHT_STATUSES, confirmedProjectionForPacket, managedPrepareAuthorityEnvelopeFromUnknown, managedPrepareAuthorityMatchesPacket, quarantinedSubmissionAuthority, reviewClaimsSubmissionSent, reviewForSubmissionProjection, submissionAuthorityEnvelopeFromUnknown, submissionMutationResponseMatchesApplication, submissionProjectionIsConfirmed, unverifiedRecoveryStatus, type UnverifiedRecoveryStatus } from "@/features/applications";
 import { useSidebarCollapse } from "@/app/dashboard/dashboard-shell";
+import {
+  EMPTY_MANAGED_LIVE_FRAME_VIEW,
+  MANAGED_LIVE_FRAME_POLL_MS,
+  acceptManagedLiveFrame,
+  clearManagedLiveFrame,
+  managedLiveFrameIdentity,
+  shouldAcceptManagedLiveFrame,
+  type ManagedLiveFrameView,
+} from "@/features/applications";
 
 type Screen = "review" | "questions" | "submitting" | "portal" | "submitted";
 type ApplicationSort = "next" | "recent" | "company";
@@ -279,6 +289,8 @@ export type SubmissionResponse = {
    * packet screen and the Review screen's checklist cannot disagree about what counts as stale.
    */
   resume_contact_stale?: ResumeContactStaleLike;
+  managed_live_frame_available?: boolean;
+  managed_live_frame_id?: string;
   partial?: boolean;
 };
 
@@ -10114,10 +10126,79 @@ function PortalProgress({ status, startedAt, sending = false, submission, reconc
     : "Not sent yet.";
   const liveViewUrl = submission?.handoff_url;
   const progressPreviewUrl = submission?.review.progress_screenshot_url;
+  const managedFrameId = submission?.managed_live_frame_id;
+  const managedFrameIdentity = managedLiveFrameIdentity({
+    packetId: submission?.application_id,
+    runId: submission?.review.submission_run_id,
+    frameId: managedFrameId,
+    status,
+    available: submission?.managed_live_frame_available,
+  });
+  const managedFrameRef = useRef<ManagedLiveFrameView>(EMPTY_MANAGED_LIVE_FRAME_VIEW);
+  const [managedFrame, setManagedFrame] = useState<ManagedLiveFrameView>(EMPTY_MANAGED_LIVE_FRAME_VIEW);
+
+  useEffect(() => {
+    let cancelled = false;
+    let timer: number | undefined;
+    const controller = new AbortController();
+    const releaseDisplayedFrame = (publish: boolean) => {
+      const cleared = clearManagedLiveFrame(managedFrameRef.current);
+      managedFrameRef.current = cleared.view;
+      for (const objectUrl of cleared.revoke) URL.revokeObjectURL(objectUrl);
+      if (publish) setManagedFrame(cleared.view);
+    };
+
+    releaseDisplayedFrame(true);
+    if (!managedFrameIdentity || !submission?.application_id || !managedFrameId) {
+      return () => {
+        cancelled = true;
+        controller.abort();
+        releaseDisplayedFrame(false);
+      };
+    }
+
+    const packetId = submission.application_id;
+    const frameId = managedFrameId;
+    const scheduleNext = () => {
+      if (!cancelled) timer = window.setTimeout(readFrame, MANAGED_LIVE_FRAME_POLL_MS);
+    };
+    const readFrame = async () => {
+      try {
+        const result = await getManagedLiveFrame(packetId, frameId, controller.signal);
+        if (cancelled) return;
+        if (result.state === "closed") {
+          releaseDisplayedFrame(true);
+          return;
+        }
+        if (result.state === "frame") {
+          const current = managedFrameRef.current;
+          // Avoid even a temporary object URL for a repeated or stale sequence.
+          if (shouldAcceptManagedLiveFrame(current, managedFrameIdentity, result.sequence)) {
+            const next = acceptManagedLiveFrame(current, managedFrameIdentity, result.sequence, URL.createObjectURL(result.image));
+            managedFrameRef.current = next.view;
+            for (const objectUrl of next.revoke) URL.revokeObjectURL(objectUrl);
+            setManagedFrame(next.view);
+          }
+        }
+        scheduleNext();
+      } catch (error) {
+        if (!cancelled && !(error instanceof DOMException && error.name === "AbortError")) scheduleNext();
+      }
+    };
+    void readFrame();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+      if (timer !== undefined) window.clearTimeout(timer);
+      releaseDisplayedFrame(false);
+    };
+  }, [managedFrameId, managedFrameIdentity, submission?.application_id]);
   const progressStage = submitting
     ? "Waiting for the company confirmation"
     : submission?.review.progress_stage ?? "Opening the company form";
-  const previewModeLabel = liveViewUrl ? "Live" : progressPreviewUrl ? "Updating" : "Starting";
+  const managedFrameUrl = managedFrame.identity === managedFrameIdentity ? managedFrame.objectUrl : null;
+  const previewModeLabel = liveViewUrl || managedFrameUrl ? "Live" : progressPreviewUrl ? "Updating" : "Starting";
 
   // The run's own history of stages, built client-side because the backend hands over one current
   // string at a time (`progress_stage`), not a log.
@@ -10209,6 +10290,14 @@ function PortalProgress({ status, startedAt, sending = false, submission, reconc
             title="Live company application form while Litos fills it"
             className="h-[72vh] min-h-[560px] w-full bg-white"
             allow="clipboard-read; clipboard-write"
+          />
+        ) : managedFrameUrl ? (
+          // Blob URLs are authenticated, short-lived browser resources and cannot use Next Image optimization.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={managedFrameUrl}
+            alt="Live view of the company application form while Litos fills it"
+            className="h-auto w-full"
           />
         ) : progressPreviewUrl ? (
           <img

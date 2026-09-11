@@ -269,6 +269,64 @@ export function api<T>(
   return shareInFlight(inFlightGets, dedupeKey, () => requestApi<T>(path, init, token));
 }
 
+export type ManagedLiveFrameResponse =
+  | { state: "not_ready" }
+  | { state: "closed" }
+  | { state: "frame"; sequence: number; image: Blob };
+
+const MANAGED_LIVE_FRAME_MAX_BYTES = 409_600;
+
+async function readBoundedBlob(response: Response): Promise<Blob> {
+  const declaredLength = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > MANAGED_LIVE_FRAME_MAX_BYTES) {
+    throw new Error("The live company form frame was too large");
+  }
+  if (!response.body) throw new Error("The live company form frame was empty");
+  const reader = response.body.getReader();
+  const chunks: ArrayBuffer[] = [];
+  let received = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      received += value.byteLength;
+      if (received > MANAGED_LIVE_FRAME_MAX_BYTES) {
+        await reader.cancel();
+        throw new Error("The live company form frame was too large");
+      }
+      chunks.push(new Uint8Array(value).buffer);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  if (received === 0) throw new Error("The live company form frame was empty");
+  return new Blob(chunks, { type: "image/jpeg" });
+}
+
+/** Read-only image projection for one active managed run. The backend owns the correlation tuple. */
+export async function getManagedLiveFrame(packetId: string, frameId: string, signal?: AbortSignal): Promise<ManagedLiveFrameResponse> {
+  const token = getToken();
+  const headers = new Headers(litosClientHeaders());
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const response = await fetch(
+    `${API_URL}/applications/${encodeURIComponent(packetId)}/submission/live-frame?frame_id=${encodeURIComponent(frameId)}`,
+    { method: "GET", cache: "no-store", headers, signal },
+  );
+  if (response.status === 401) {
+    throw new ApiError(401, "Signed out");
+  }
+  if (response.status === 204) return { state: "not_ready" };
+  if (response.status === 404 || response.status === 410) return { state: "closed" };
+  if (!response.ok) throw new ApiError(response.status, "The live company form view is temporarily unavailable");
+  const sequenceText = response.headers.get("x-litos-frame-sequence")?.trim() ?? "";
+  const sequence = Number(sequenceText);
+  if (!/^\d+$/.test(sequenceText) || !Number.isSafeInteger(sequence) || sequence < 0
+    || response.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase() !== "image/jpeg") {
+    throw new Error("The live company form frame response was invalid");
+  }
+  return { state: "frame", sequence, image: await readBoundedBlob(response) };
+}
+
 async function requestApi<T>(
   path: string,
   init: RequestInit,
