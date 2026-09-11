@@ -124,7 +124,12 @@ function isRawFieldKey(token: string): boolean {
      token ate genuine label fragments - "Salary expectation [USD]" and "Rate your experience [1-5]"
      both lose the unit or the scale, which silently changes the question being answered. A form
      path always has an identifier before its first subscript; a bracketed aside in prose does not. */
-  return /^[a-z0-9]+(?:[_.][a-z0-9]+)+$/i.test(trimmed) || /^[a-z0-9_.]+\[[^\]]*\]/i.test(trimmed);
+  if (/^[a-z0-9]+(?:[_.][a-z0-9]+)+$/i.test(trimmed) || /^[a-z0-9_.]+\[[^\]]*\]/i.test(trimmed)) return true;
+  /* WORKDAY'S AUTOMATION HANDLE, "section--field". Measured on the dashboard, 2026-09-11: Ambarella's
+     referral prompt rendered as "How did you hear about us?* source--source" and McKesson's address
+     line as "address line 1* addressline1 address--addressline1". A double hyphen joining two
+     identifiers is never prose; "well-known" and "e-mail" have one. */
+  return /^[a-z][a-z0-9]*(?:--[a-z][a-z0-9]*)+$/i.test(trimmed);
 }
 
 /**

@@ -172,3 +172,12 @@ test("the required marker comes off the end, and only off the end", () => {
   assert.equal(cleanScrapedLabel("University attended? ✱"), "University attended?");
   assert.equal(cleanScrapedLabel("Rate 1*-5"), "Rate 1*-5", "an asterisk inside the text is the employer's");
 });
+
+test("a Workday automation handle is a field key, not part of the question", () => {
+  assert.equal(cleanScrapedLabel("How did you hear about us?* source--source"), "How did you hear about us?");
+  assert.equal(cleanScrapedLabel("address line 1* addressline1 address--addressline1"), "address line 1");
+  assert.equal(cleanScrapedLabel("country phone code* phonenumber--countryphonecode"), "country phone code");
+  assert.equal(cleanScrapedLabel("middle name legalname--middlename name--legalname--middlename"), "middle name");
+  /* One hyphen is prose. */
+  assert.equal(cleanScrapedLabel("Are you a well-known e-mail user?"), "Are you a well-known e-mail user?");
+});
