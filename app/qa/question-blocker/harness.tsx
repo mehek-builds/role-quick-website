@@ -11,6 +11,7 @@ const settled = async () => ({ ok: true }) as never;
 
 export function QuestionBlockerHarness({ tasks }: { tasks: DirectQuestionTask[] }) {
   const [index, setIndex] = useState(0);
+  const [refreshRequests, setRefreshRequests] = useState(0);
   /* Flips to "1" only after hydration commits, so a driver knows the tab buttons are live. The
      server-rendered markup looks complete and clickable before React attaches a single handler,
      and a click landing in that window is silently lost: the same trap the controlled portal
@@ -56,7 +57,18 @@ export function QuestionBlockerHarness({ tasks }: { tasks: DirectQuestionTask[] 
         onReviewApplication={noop}
         onSave={settled}
         onSkip={settled}
+        /* The managed re-read, recorded rather than run: this harness has no backend and must not
+           pretend a run started. The control's presence, wording and gating are what the
+           unreadable-choice-list fixture exists to show. */
+        onRefreshMetadata={() => setRefreshRequests((n) => n + 1)}
+        refreshingMetadata={false}
+        metadataRefreshDisabled={false}
+        metadataRefreshNeedsPacketReview={false}
+        metadataRefreshError={null}
       />
+      <p data-litos-qa-refresh-requests={refreshRequests} className="text-xs text-ink-muted">
+        Re-read requests recorded: {refreshRequests}
+      </p>
     </div>
   );
 }

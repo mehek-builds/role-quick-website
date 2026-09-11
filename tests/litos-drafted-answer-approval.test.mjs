@@ -58,10 +58,14 @@ describe("the drafted answer arrives in the ordinary answer box, labelled", () =
     assert.doesNotMatch(prompt, /role="alert"[\s\S]{0,120}Litos wrote this answer/);
   });
 
-  test("Previous, Next and Skip are still the only non-submit controls", () => {
+  test("approving a draft still adds no control of its own", () => {
+    /* FOUR SINCE 2026-09-03: Previous, Next, the optional Skip, and the unreadable-choice-list
+       re-read added for the Zeus breezy packet, where her stored answer was on none of the single
+       option the reader captured and the screen had no correct press on it. None of the four is
+       the draft approval, which is still the save press and still adds nothing. */
     assert.equal(
       [...prompt.matchAll(/type="button"/g)].length,
-      3,
+      4,
       "approving a draft must not add a control; it is the save press",
     );
     assert.match(prompt, /\? "Saving\.\.\." : "Skip"/);

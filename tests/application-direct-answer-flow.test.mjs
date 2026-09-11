@@ -98,10 +98,16 @@ test("Applications asks one trusted employer question at a time with explicit sa
   assert.match(prompt, /<option value="" disabled>Choose an answer<\/option>/);
   assert.match(prompt, /<textarea\s+value=\{answer\}\s+readOnly=\{busy\}\s+aria-disabled=\{busy\}/);
   assert.match(prompt, /<Button type="submit" block className="sm:w-auto" disabled=\{busy \|\| answerBlocked\}>/);
+  /* FOUR SINCE 2026-09-03, and the fourth is named so that a fifth still has to be argued for. The
+     unreadable-choice-list block adds the managed re-read to this screen: on the Zeus breezy packet
+     her stored answer was on none of the one option the reader captured, so Save was disabled, the
+     question was required so there was no Skip, and the only selectable control on screen was a
+     protected-veteran claim she does not make. It is deliberately type="button" and deliberately
+     outside the form: it starts a run, it never submits an answer. */
   assert.equal(
     [...prompt.matchAll(/type="button"/g)].length,
-    3,
-    "Previous, Next, and optional Skip must be non-submit controls",
+    4,
+    "Previous, Next, optional Skip, and the unreadable-list re-read must be non-submit controls",
   );
   assert.match(prompt, /\? "Saving\.\.\." : "Skip"/);
   assert.match(prompt, /aria-label="Previous question"[\s\S]*?disabled=\{busy\}[\s\S]*?onClick=\{\(\) => navigate\(onPrevious\)\}/);
