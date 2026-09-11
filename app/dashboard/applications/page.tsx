@@ -1398,7 +1398,7 @@ function Applications() {
   /* A ledger press selects from data already in memory, then gives the same identity to the URL.
      The history effect still refreshes that packet, but this ref tells it not to select the same
      row a second time and reset the screen after the student has already started working. */
-  const locallyOpenedRequestRef = useRef<{ id: string; revision: string; routeCommitted: boolean; entryScreen?: Screen } | null>(null);
+  const locallyOpenedRequestRef = useRef<{ id: string; revision: string; routeCommitted: boolean; entryScreen?: Screen; entryNotice?: string } | null>(null);
   const applicationBootstrapGenerationRef = useRef(0);
   const initializedQaScenarioRef = useRef<string | null>(null);
   const applicationsMountedRef = useRef(true);
@@ -1622,6 +1622,9 @@ function Applications() {
     const localEntryScreen = locallyOpenedRequestRef.current?.id === packet.id
       ? locallyOpenedRequestRef.current.entryScreen
       : undefined;
+    const localEntryNotice = locallyOpenedRequestRef.current?.id === packet.id
+      ? locallyOpenedRequestRef.current.entryNotice
+      : undefined;
     /* Entering a packet starts its story over, and that includes a standing revalidation refusal:
        the sentence described evidence this entry no longer holds, and left in the ref it would
        re-pin itself onto the banner at the next poll tick. */
@@ -1685,7 +1688,10 @@ function Applications() {
       setPollError(null);
       setSendRefusal(null);
       setPreSendVerification(null);
-      setNotice(null);
+      /* A recovery-owned entry sentence belongs to this same packet selection. Keeping it inside
+         selectPacket's transition prevents this later commit from clearing the notice after the
+         replacement review is already visible. Ordinary opens still clear the prior notice. */
+      setNotice(localEntryNotice ?? null);
       if (localEntryScreen) moveToScreen(localEntryScreen);
       else moveToScreen(packetEntryScreen(selectedReview));
     });
@@ -1707,6 +1713,7 @@ function Applications() {
       revision: applicationWorkflowRevision(packet),
       routeCommitted: routeAlreadyCommitted,
       entryScreen,
+      entryNotice,
     };
     pendingApplicationFocusRef.current = true;
     resolvedJobParam.current = null;
@@ -1718,10 +1725,6 @@ function Applications() {
       setComposerRefusal(null);
       setResolvedActionableRequestId(packet.id);
       selectPacket(packet);
-      /* Recovery selection clears the prior packet's notice inside selectPacket. Commit the
-         replacement's sentence in this same transition so a later transition commit cannot erase
-         an urgent setNotice from the caller after the fresh packet is already on screen. */
-      if (entryNotice) setNotice(entryNotice);
       if (routeAlreadyCommitted) return;
       /* Next patches native history writes into its own transition. Keeping that write inside the
          same dashboard transition prevents the router restore from retiring the local selection
