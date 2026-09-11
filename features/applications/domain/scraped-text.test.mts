@@ -178,6 +178,12 @@ test("a Workday automation handle is a field key, not part of the question", () 
   assert.equal(cleanScrapedLabel("address line 1* addressline1 address--addressline1"), "address line 1");
   assert.equal(cleanScrapedLabel("country phone code* phonenumber--countryphonecode"), "country phone code");
   assert.equal(cleanScrapedLabel("middle name legalname--middlename name--legalname--middlename"), "middle name");
-  /* One hyphen is prose. */
+  assert.equal(cleanScrapedLabel("please select your gender. personalinfous--gender"), "please select your gender.");
+  /* One hyphen is prose, and so is a double hyphen that restates nothing in the label. */
   assert.equal(cleanScrapedLabel("Are you a well-known e-mail user?"), "Are you a well-known e-mail user?");
+  assert.equal(cleanScrapedLabel("Did you say yes--or no?"), "Did you say yes--or no?");
+  assert.equal(cleanScrapedLabel("Choose stop--think carefully"), "Choose stop--think carefully");
+  assert.equal(cleanScrapedLabel("Describe your role--your role at the startup"), "Describe your role--your role at the startup");
+  /* A handle that is the whole label is still the only name the field has. */
+  assert.equal(cleanScrapedLabel("source--source"), "source--source");
 });

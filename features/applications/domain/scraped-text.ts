@@ -124,12 +124,25 @@ function isRawFieldKey(token: string): boolean {
      token ate genuine label fragments - "Salary expectation [USD]" and "Rate your experience [1-5]"
      both lose the unit or the scale, which silently changes the question being answered. A form
      path always has an identifier before its first subscript; a bracketed aside in prose does not. */
-  if (/^[a-z0-9]+(?:[_.][a-z0-9]+)+$/i.test(trimmed) || /^[a-z0-9_.]+\[[^\]]*\]/i.test(trimmed)) return true;
-  /* WORKDAY'S AUTOMATION HANDLE, "section--field". Measured on the dashboard, 2026-09-11: Ambarella's
-     referral prompt rendered as "How did you hear about us?* source--source" and McKesson's address
-     line as "address line 1* addressline1 address--addressline1". A double hyphen joining two
-     identifiers is never prose; "well-known" and "e-mail" have one. */
-  return /^[a-z][a-z0-9]*(?:--[a-z][a-z0-9]*)+$/i.test(trimmed);
+  return /^[a-z0-9]+(?:[_.][a-z0-9]+)+$/i.test(trimmed) || /^[a-z0-9_.]+\[[^\]]*\]/i.test(trimmed);
+}
+
+/* WORKDAY'S AUTOMATION HANDLE, "section--field", captured after the label it names. Measured on the
+   dashboard, 2026-09-11: Ambarella's referral prompt rendered as "How did you hear about us?*
+   source--source" and McKesson's address line as "address line 1* addressline1 address--addressline1".
+
+   A double hyphen alone is not enough: "yes--or no" is an ASCII dash in prose. So the token has to
+   trail the label and prove it is a handle by restating what came before it: its segments repeat
+   each other ("source--source"), or one segment of four or more characters is already in the label
+   ("address--addressline1" after "address line 1", "personalinfous--gender" after "gender"). */
+const WORKDAY_HANDLE_SHAPE = /^[a-z][a-z0-9]*(?:--[a-z][a-z0-9]*)+$/i;
+
+function isWorkdayHandleRestatement(token: string, rest: string): boolean {
+  if (!WORKDAY_HANDLE_SHAPE.test(token)) return false;
+  const segments = token.toLowerCase().split("--");
+  if (segments.every((segment) => segment === segments[0])) return true;
+  const restKey = fragmentKey(rest);
+  return segments.some((segment) => segment.length >= 4 && restKey.includes(segment));
 }
 
 /**
@@ -156,8 +169,11 @@ export function cleanScrapedLabel(value: string | null | undefined): string {
   /* Field keys next: they are unambiguous, and removing them shortens the duplicate search. */
   const words = (withoutChrome || collapsed).split(" ");
   const stems = new Set(words.map((word) => fragmentKey(word)).filter(Boolean));
-  const withoutKeys = words.filter((word) => {
+  const withoutKeys = words.filter((word, index) => {
     if (isRawFieldKey(word)) return false;
+    /* Trailing only: everything after it must be a key as well, the way a capture appends them. */
+    const trailing = words.slice(index + 1).every((later) => isRawFieldKey(later) || WORKDAY_HANDLE_SHAPE.test(later));
+    if (trailing && isWorkdayHandleRestatement(word, words.slice(0, index).join(" "))) return false;
     /* A prefixed restatement of a field already named in plain words. Measured live on the snapAddy
        packet 2026-08-29: "location* (required) location location field-location" and
        "github* (required) github custom_attribute_2706278 field-custom_attribute_270627". Dropped
