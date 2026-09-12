@@ -1213,16 +1213,33 @@ export type ApplicationReview = {
   attention_acknowledgements?: Record<string, { label?: string; acknowledged_at: string }>;
   attention_categories?: Array<
     | "captcha"
+    /** The portal will not expose an application form until the applicant signs in, creates an
+     *  account, or completes the account recovery step. Not a required application field and not
+     *  evidence anything reached the employer. Mirrors ApplicationAttentionCategory in the backend's
+     *  src/lib/applicationReview.ts; this union had fallen out of sync with it (missing this value
+     *  among others), which is how a genuine account_login stop (Motorola Solutions, 12277892,
+     *  2026-09-12) went unrecognized by every category check in this file. */
+    | "account_login"
+    /** The portal is waiting for a legal privacy choice before it exposes the application form.
+     *  Litos may describe and hand off this gate, but never operates it. */
+    | "privacy_consent"
     | "security_code"
+    /** The run never got to the application form at all: no field was typed, no control was
+     *  located, nothing was discovered. */
+    | "form_not_reached"
+    | "run_failed"
+    | "duplicate_application"
+    | "unverified_submission"
+    | "employer_refused"
+    | "packet_expired"
+    /** The posting itself, not the packet - a take-down or a stated deadline that has passed. See
+     *  posting_status above for which. */
+    | "posting_closed"
     | "required_document"
     | "sensitive_attestation"
     | "required_field"
     | "evidence_gap"
     | "cover_letter"
-    | "unverified_submission"
-    /** The posting itself, not the packet - a take-down or a stated deadline that has passed. See
-     *  posting_status above for which. */
-    | "posting_closed"
     | "unknown"
   >;
   /* The typed half of attention_reason. Written by the backend when an application stops on a
