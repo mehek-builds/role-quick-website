@@ -77,6 +77,7 @@ import { userFacingError } from "@/lib/user-facing-error";
 import { resumeContactLine } from "@/lib/resumeContact";
 import { APPLICATION_DOCUMENT_ACCEPT_ATTRIBUTE, validateApplicationDocument } from "@/lib/document-size";
 import { messageAsksForTheExtension } from "@/lib/extension-store-link";
+import { lastUpdateLabel, quietRunNotice, runProgressFreshness } from "@/lib/run-progress-freshness";
 import { track } from "@/lib/analytics";
 import { replaceClosedComposerUrl } from "./composer-url";
 import { applicationSelectionPath } from "./application-selection-url";
@@ -10139,6 +10140,9 @@ function PortalProgress({ status, startedAt, sending = false, submission, reconc
   // Mirrors `elapsed` without being a render dependency, so the stage-history effect below can
   // stamp a step with "how long in" it arrived without re-running on every clock tick.
   const elapsedRef = useRef(0);
+  // The same tick's wall clock, for "last update Ns ago". Null until the first tick, for the same
+  // purity reason `elapsed` starts at 0.
+  const [nowMs, setNowMs] = useState<number | null>(null);
 
   useEffect(() => {
     // Deliberately a self-rescheduling timeout rather than an interval. The repo bans setInterval in
@@ -10149,9 +10153,11 @@ function PortalProgress({ status, startedAt, sending = false, submission, reconc
     const anchor = startedMs ?? Date.now();
     const tick = () => {
       if (cancelled) return;
-      const next = Math.max(0, Math.floor((Date.now() - anchor) / 1000));
+      const wallNow = Date.now();
+      const next = Math.max(0, Math.floor((wallNow - anchor) / 1000));
       elapsedRef.current = next;
       setElapsed(next);
+      setNowMs(wallNow);
       timer = window.setTimeout(tick, 1000);
     };
     tick();
@@ -10249,7 +10255,13 @@ function PortalProgress({ status, startedAt, sending = false, submission, reconc
   }, [managedFrameId, managedFrameIdentity, submission?.application_id]);
   const progressStage = submitting
     ? "Waiting for the company confirmation"
-    : submission?.review.progress_stage ?? "Opening the company form";
+    : submission?.review.progress_stage ?? "Getting the application ready";
+  // The backend stamps progress_updated_at only when a new phase of the run starts, so its age is
+  // what separates a long step from a stopped run. Not shown while sending: the send path writes no
+  // stage, and a stamp from the fill before it would read as the send going quiet.
+  const freshness = submitting
+    ? null
+    : runProgressFreshness(submission?.review.progress_updated_at, nowMs);
   const managedFrameUrl = managedFrame.identity === managedFrameIdentity ? managedFrame.objectUrl : null;
   const previewModeLabel = liveViewUrl || managedFrameUrl ? "Live" : progressPreviewUrl ? "Updating" : "Starting";
 
@@ -10270,8 +10282,11 @@ function PortalProgress({ status, startedAt, sending = false, submission, reconc
   const showHistoryToggle = priorStages.length > 0;
   const [historyOpen, setHistoryOpen] = useState(false);
 
-  const milestone =
-    elapsed >= PORTAL_STUCK_AFTER_S
+  // A quiet stage outranks the elapsed clock: a run can be ten minutes old and have started a new
+  // step a few seconds ago, and only the stage stamp can tell those apart.
+  const milestone = freshness?.quiet
+    ? quietRunNotice(freshness)
+    : elapsed >= PORTAL_STUCK_AFTER_S
       ? "Still working."
       : elapsed >= PORTAL_SLOW_AFTER_S
         ? "Still working."
@@ -10326,6 +10341,9 @@ function PortalProgress({ status, startedAt, sending = false, submission, reconc
           )}
         </div>
         <p className="mt-4 font-mono text-[11px] text-muted" aria-hidden>{formatElapsed(elapsed)} elapsed</p>
+        {/* Ticks every second like the elapsed clock, so it is hidden from screen readers for the
+            same reason; the quiet notice below carries the part that matters. */}
+        {freshness && <p className="mt-1 font-mono text-[11px] text-muted" aria-hidden>{lastUpdateLabel(freshness)}</p>}
         {milestone && <p className="mt-2 text-xs text-muted">{milestone}</p>}
         <p className="mt-5 text-xs leading-5 text-muted">This view refreshes as Litos moves through the company form.</p>
       </Card>
