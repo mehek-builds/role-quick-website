@@ -1,6 +1,6 @@
 import type { ApplicationQuestion, ApplicationReview, RequiredDocumentAsk } from "@/lib/api";
 import { screenForStatus, type ReviewScreen } from "./application-review.ts";
-import { questionReadsAsAnswered, questionReviewPresentation, requiredQuestionReviewRoute } from "./question-review-presentation.ts";
+import { optionalQuestionNeedsDecision, questionReadsAsAnswered, questionReviewPresentation, requiredQuestionReviewRoute } from "./question-review-presentation.ts";
 import { withRequiredParentQuestionIds } from "./dependent-questions.ts";
 import { cleanScrapedLabel, cleanScrapedPrompt } from "./scraped-text.ts";
 
@@ -1078,7 +1078,7 @@ export function humanInputItems(
       });
       continue;
     }
-    if (review.status !== "submitted" && !question.required && !answer && question.answer_state !== "skipped") {
+    if (review.status !== "submitted" && !answer && optionalQuestionNeedsDecision(question)) {
       addUnique(items, {
         id: `optional-${question.id}`,
         label: displayQuestionLabel(question.question),
