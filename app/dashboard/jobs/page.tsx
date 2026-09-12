@@ -27,6 +27,7 @@ function jobParams(
   location: string,
   remoteOnly: boolean,
   employmentType: string,
+  strongOnly: boolean,
   offset: number,
 ) {
   const params = new URLSearchParams({ offset: String(offset) });
@@ -34,6 +35,11 @@ function jobParams(
   if (location.trim()) params.set("location", location.trim());
   if (remoteOnly) params.set("remote", "true");
   if (employmentType) params.set("employment_type", employmentType);
+  /* Harmless against a backend that predates this: it simply ignores an unknown param and keeps
+     hiding under-25% postings by its own old default, which is the case this toggle cannot yet
+     turn off. Against the new backend it is the one thing separating "show everything, ranked"
+     from "apply the 25% floor". */
+  if (strongOnly) params.set("strong_only", "true");
   return params;
 }
 
@@ -45,8 +51,9 @@ function filterKey(
   location: string,
   remoteOnly: boolean,
   employmentType: string,
+  strongOnly: boolean,
 ): string {
-  return `${query.trim()}|${location.trim()}|${remoteOnly}|${employmentType}`;
+  return `${query.trim()}|${location.trim()}|${remoteOnly}|${employmentType}|${strongOnly}`;
 }
 
 /* Appending a page can repeat a row. The server ranks a live pool on every request, so a posting
@@ -91,6 +98,10 @@ export default function JobsPage() {
   const [query, setQuery] = useState("");
   const [location, setLocation] = useState("");
   const [remoteOnly, setRemoteOnly] = useState(false);
+  /* Off by default, per the 2026-09-12 product decision: the board now shows everything, ranked
+     best fit first, and only asks the backend to apply the 25%+ floor when this is on. Persisted
+     the same way the other three filters are, plain component state rather than a URL param. */
+  const [strongOnly, setStrongOnly] = useState(false);
   const [employmentType, setEmploymentType] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
@@ -183,7 +194,7 @@ export default function JobsPage() {
      counter was not enough: the filter effect and loadMore both read the same counter, so neither
      could tell the other's response apart from its own, and a load-more that finished after a
      keystroke appended page 3 of the OLD filter onto page 1 of the NEW one. */
-  const activeFilter = useRef(filterKey("", "", false, ""));
+  const activeFilter = useRef(filterKey("", "", false, "", false));
   /* Demand is recorded only after the student commits the title with Enter or blur. The board may
      still filter live, but intermediate keystrokes and half-written titles are not sourcing data. */
   const zeroResultIntent = useRef<string | null>(null);
@@ -234,10 +245,10 @@ export default function JobsPage() {
   useEffect(() => {
     if (qaMode !== false) return;
     let cancelled = false;
-    const key = filterKey(query, location, remoteOnly, employmentType);
+    const key = filterKey(query, location, remoteOnly, employmentType, strongOnly);
     activeFilter.current = key;
     const timer = window.setTimeout(() => {
-      api<JobsPage>(`/jobs?${jobParams(query, location, remoteOnly, employmentType, 0).toString()}`)
+      api<JobsPage>(`/jobs?${jobParams(query, location, remoteOnly, employmentType, strongOnly, 0).toString()}`)
         .then((result) => {
           if (cancelled || activeFilter.current !== key) return;
           setJobs(result.jobs);
@@ -278,7 +289,7 @@ export default function JobsPage() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [employmentType, location, qaMode, query, remoteOnly]);
+  }, [employmentType, location, qaMode, query, remoteOnly, strongOnly]);
 
   /* Which of these the student has already applied to. Fetched once, not per filter change: it is
      a fact about their account, not about the query. A failure here leaves it null, and a row that
@@ -321,7 +332,7 @@ export default function JobsPage() {
     const key = activeFilter.current;
     setLoadingMore(true);
     try {
-      const result = await api<JobsPage>(`/jobs?${jobParams(query, location, remoteOnly, employmentType, jobs.length).toString()}`);
+      const result = await api<JobsPage>(`/jobs?${jobParams(query, location, remoteOnly, employmentType, strongOnly, jobs.length).toString()}`);
       // Only merge if the student is still looking at the list this answers.
       if (activeFilter.current !== key) return;
       setJobs((current) => (current ? appendUnseen(current, result.jobs) : result.jobs));
@@ -344,7 +355,7 @@ export default function JobsPage() {
          the DATA, above, and it is there. */
       setLoadingMore(false);
     }
-  }, [employmentType, hasMore, jobs, loadingMore, location, query, remoteOnly]);
+  }, [employmentType, hasMore, jobs, loadingMore, location, query, remoteOnly, strongOnly]);
 
   /* visibleJobs, not the raw fetch: a skipped role is not "new today" any more than it is
      "loaded", and the header pill disagreeing with the list and the count below it is the exact
@@ -375,7 +386,7 @@ export default function JobsPage() {
       try { window.localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(next)); } catch {}
       return next;
     });
-    const key = filterKey(query, location, remoteOnly, employmentType);
+    const key = filterKey(query, location, remoteOnly, employmentType, strongOnly);
     zeroResultIntent.current = key;
     const completed = latestResult.current;
     if (!completed || completed.key !== key) return;
@@ -438,7 +449,7 @@ export default function JobsPage() {
         </p>
       )}
 
-      <Card className="grid gap-3 p-4 md:grid-cols-[1fr_0.7fr_auto_auto]">
+      <Card className="grid gap-3 p-4 md:grid-cols-[1fr_0.7fr_auto_auto_auto]">
         <input aria-label="Search job titles" value={query} onChange={(event) => setQuery(event.target.value)} onBlur={commitTargetRole} onKeyDown={(event) => { if (event.key === "Enter") commitTargetRole(); }} placeholder="Search job title" className="rounded-inner border border-control-border bg-surface px-4 py-2.5 text-sm text-ink outline-none transition-colors hover:border-brand focus:border-brand focus-visible:ring-2 focus-visible:ring-brand/30" />
         <input aria-label="Filter by location" value={location} onChange={(event) => setLocation(event.target.value)} placeholder="Location" className="rounded-inner border border-control-border bg-surface px-4 py-2.5 text-sm text-ink outline-none transition-colors hover:border-brand focus:border-brand focus-visible:ring-2 focus-visible:ring-brand/30" />
         {/* Same closed vocabulary as /browse-jobs, and the same reason it is a select: the title
@@ -468,6 +479,14 @@ export default function JobsPage() {
               offered a switch with no subject. */}
           <input aria-label="Remote only" type="checkbox" checked={remoteOnly} onChange={(event) => setRemoteOnly(event.target.checked)} className="accent-brand" />
           Remote only
+        </label>
+        <label className="flex items-center gap-2 rounded-control border border-border px-4 py-2.5 text-sm text-ink transition-colors hover:border-brand focus-within:ring-2 focus-within:ring-brand/30">
+          {/* Off by default: the board's new baseline is "show everything, ranked best fit first",
+              and this switch is the one thing that goes back to the old 25%+ floor. Same accessible-
+              name pattern as Remote only, for the same reason (the checkbox's own `value` attribute
+              is not a name). */}
+          <input aria-label="Strong matches only" type="checkbox" checked={strongOnly} onChange={(event) => setStrongOnly(event.target.checked)} className="accent-brand" />
+          Strong matches only
         </label>
       </Card>
 
@@ -569,8 +588,12 @@ export default function JobsPage() {
             {ranked
               ? rankedByResume
                 ? rankedPool !== null && poolExhausted
-                  ? ` · best ${minimumMatchScore ?? 25}%+ resume matches from ${rankedPool} recently matched roles`
-                  : ` · sorted by resume match${minimumMatchScore !== null ? ` · ${minimumMatchScore}%+ only` : ""}`
+                  ? strongOnly
+                    ? ` · best ${minimumMatchScore ?? 25}%+ resume matches from ${rankedPool} recently matched roles`
+                    : ` · best resume matches from ${rankedPool} recently matched roles`
+                  : strongOnly
+                    ? ` · sorted by resume match${minimumMatchScore !== null ? ` · ${minimumMatchScore}%+ only` : ""}`
+                    : " · sorted by resume match"
                 : rankedPool !== null && poolExhausted
                   ? ` · best preference matches from ${rankedPool} recently matched roles`
                   : " · sorted by your preferences"
