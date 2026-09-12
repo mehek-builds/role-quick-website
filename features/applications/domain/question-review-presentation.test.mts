@@ -209,6 +209,21 @@ test("an optional question requires an explicit answer or persisted Skip", () =>
   assert.equal(optionalQuestionNeedsDecision({ ...optional, answer: "Applicant answer", answer_state: undefined }), false);
 });
 
+/* Mirrors the server gate (volley isOptionalWorkdayProfileGapQuestion): Workday's own optional
+   profile boxes she has nothing for never disable Send, measured on campbellsoup.wd5 and danaher.wd1. */
+test("an empty optional Workday profile box is not a decision she owes; an employer question still is", () => {
+  const optional = question({ required: false, answer: "", answer_state: "unanswered" });
+  for (const selector of ["#skills--skills", "#name--legalName--middleName", '[id="name--legalName--social"]',
+    "#phoneNumber--extension", "#address--addressLine2", "#socialNetworkAccounts--linkedInAccount"]) {
+    assert.equal(optionalQuestionNeedsDecision({ ...optional, portal_selector: selector }), false, selector);
+  }
+  for (const selector of ["#primaryQuestionnaire--abc123", "#skills--skills-0", "input#skills--skills", undefined]) {
+    assert.equal(optionalQuestionNeedsDecision({ ...optional, portal_selector: selector }), true, String(selector));
+  }
+  assert.equal(optionalQuestionNeedsDecision({ ...optional, portal_selector: "#skills--skills", answer_state: "litos_refused" }), true,
+    "a question Litos refused is still hers");
+});
+
 test("a server blocker suppresses the matching historical question without duplicating the card", () => {
   const stored = question({
     question: "What is your location preference?",

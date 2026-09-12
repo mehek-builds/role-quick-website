@@ -223,13 +223,38 @@ export function answerWithExactOptionToggled(
   return exactOptions.filter((candidate) => next.has(candidate)).join(", ");
 }
 
+/* OPTIONAL WORKDAY PROFILE BOXES SHE HAS NOTHING FOR ARE NOT A DECISION SHE OWES.
+ *
+ * The server's optional-question gate (volley isOptionalWorkdayProfileGapQuestion) stopped waiting
+ * on these, measured on campbellsoup.wd5 and danaher.wd1 2026-09-11: Workday's own optional profile
+ * boxes (middle name, suffix, phone extension, the "Type to Add Skills" prompt) each held the packet
+ * until she skipped it by hand, and her rule is that absence on her profile IS the answer. This is
+ * the same exact-id list, so the dashboard never disables Send over a row the server does not hold
+ * the packet for. Nothing is written: the row stays blank, a value she adds later still lands. */
+const WORKDAY_OPTIONAL_PROFILE_GAP_CONTROL =
+  /^(?:name--legalName--(?:middleName|social)|phoneNumber--extension|skills--skills|address--addressLine2|socialNetworkAccounts--[A-Za-z]+Account)$/;
+
+function workdayControlId(selector: string | undefined): string | null {
+  const value = (selector ?? "").trim();
+  return value.match(/^#([A-Za-z][\w-]*)$/)?.[1] ?? value.match(/^\[id="([\w-]+)"\]$/)?.[1] ?? null;
+}
+
+export function optionalWorkdayProfileGap(
+  question: Pick<ApplicationQuestion, "required" | "answer" | "answer_state" | "portal_selector">,
+): boolean {
+  if (question.required || question.answer.trim() || question.answer_state === "litos_refused") return false;
+  const id = workdayControlId(question.portal_selector);
+  return Boolean(id && WORKDAY_OPTIONAL_PROFILE_GAP_CONTROL.test(id));
+}
+
 /** Optional rows stay actionable until the applicant answers or explicitly skips them. */
 export function optionalQuestionNeedsDecision(
-  question: Pick<ApplicationQuestion, "required" | "answer" | "answer_state">,
+  question: Pick<ApplicationQuestion, "required" | "answer" | "answer_state" | "portal_selector">,
 ): boolean {
   return !question.required
     && !question.answer.trim()
-    && question.answer_state !== "skipped";
+    && question.answer_state !== "skipped"
+    && !optionalWorkdayProfileGap(question);
 }
 
 /**
