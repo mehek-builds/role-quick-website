@@ -9232,6 +9232,12 @@ function SubmissionScreen({ packet, resumeRecord, submission, packetEvidenceRevi
             {workdayFinalPage ? "Approve final page" : "Approve all answers and continue"}
           </Button>
           <Button variant="secondary" onClick={onReviewQuestions}>Edit answers</Button>
+          {/* THE WAY OUT OF A STALE PAGE, on the page itself. When the server answers "This filled
+              page changed. Fill it again" (WORKDAY_PAGE_REVIEW_STALE), this card used to offer only
+              the Approve press that had just been refused and Edit answers, so the banner named a
+              step no control on the screen could take (danaher.wd1, 2026-09-12). Same restart the
+              stopped-run card's "Fill the form again" uses; nothing reaches the employer. */}
+          <Button variant="secondary" onClick={onRestart} disabled={approving || restarting}>Fill the form again</Button>
         </div>
         {!previewReady && <p className="mt-3 text-small text-muted">The filled page must load before you can approve it.</p>}
       </Card>
