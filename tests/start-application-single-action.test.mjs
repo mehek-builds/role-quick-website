@@ -48,7 +48,9 @@ test("pressing the card claims the build lock the prewarm loop reads", () => {
 });
 
 test("arriving from the card starts the tailoring without a second press", () => {
-  assert.match(applications, /if \(intent === "tailor"\) \{[\s\S]*?void createApplication\(draft\);/);
+  /* Only for a student who can still tailor, and as an ARRIVAL, which never raises the upgrade
+     modal. See tests/tailor-intent-never-auto-opens-upgrade.test.mjs for the capped student. */
+  assert.match(applications, /if \(intent === "tailor" && arrivalMayTailor\) \{[\s\S]*?void createApplication\(draft, null, null, "arrival"\);/);
   /* Guarded by an action key so the effect cannot spend two generations if it runs twice for one
      arrival. */
   assert.match(applications, /const actionKey = `\$\{pendingJob\.id\}:tailor`;\s*if \(actionStartedFor\.current !== actionKey\)/);
