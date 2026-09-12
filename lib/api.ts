@@ -823,6 +823,11 @@ export type JobsPage = {
   pool_exhausted?: boolean;
   /** True when this list only holds employers whose sponsorship Litos could confirm. */
   sponsor_only?: boolean;
+  /** True when the request asked for, and the backend applied, the 25%+ resume-match floor.
+      Older backends that predate `strong_only` never set this and keep hiding by default; a
+      request that sent `strong_only=true` against one of those still gets a filtered board, so
+      this field is read as a hint rather than as the only signal that the floor is active. */
+  strong_only?: boolean;
 };
 
 /**
