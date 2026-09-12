@@ -124,6 +124,31 @@ test("a stale packet is repaired inside Litos rather than assigned to the compan
   });
 });
 
+/* MEASURED live 2026-09-12 on application 12277892 (Motorola Solutions, Workday). The backend's
+ * authored account_login sentence - "This employer's sign-up form is not the one Litos measured, so
+ * it did not type anything into it. Open the employer page and create the account yourself when you
+ * have a minute." - contains the substring "employer page", which dashboardOnlyBlockerLabel's
+ * pattern matches anywhere in the sentence regardless of what kind of stop wrote it. With no quoted
+ * field name to keep, that function replaced the whole authored sentence with the generic
+ * "Litos could not finish a required employer step in the dashboard", and the loop also forced the
+ * generic "could not finish this required step" detail underneath it - so the one card meant to tell
+ * her what happened told her nothing. Contrast with the account_login sentences on 99cccf89 and
+ * 41a60c60, which never contained "employer page/site/form" and so passed through unmolested: the
+ * inconsistency was the bug. account_login stops now render their own sentence verbatim, unrewritten
+ * and without the generic detail line. */
+test("an account_login stop shows its own authored sentence, not the generic dashboard-step copy", () => {
+  const sentence = "This employer's sign-up form is not the one Litos measured, so it did not type anything into it. Open the employer page and create the account yourself when you have a minute.";
+  const items = humanInputItems({
+    status: "needs_attention",
+    attention_categories: ["account_login"],
+    attention_reason: sentence,
+    questions: [],
+  });
+
+  assert.deepEqual(items.map((item) => item.label), [sentence]);
+  assert.equal(items[0]?.detail, undefined, "the authored sentence already says what happened; no generic sub-line should repeat under it");
+});
+
 test("humanInputItems still shows non-captcha answer work when there is no captcha stop", () => {
   const items = humanInputItems({
     ...review,

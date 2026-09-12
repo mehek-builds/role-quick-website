@@ -1006,6 +1006,24 @@ export function humanInputItems(
     review.question_metadata_blockers ?? [],
   ).editableQuestions.map((question) => [question.id, question]));
 
+  /* account_login stops are the applicant's own recovery: the backend writes a full sentence about
+     what it tried and what she should do (see managedSubmitOutcome / portal-account write-ups on the
+     backend), and that sentence is already the "next step" - there is no separate control on this
+     row to summarize. dashboardOnlyBlockerLabel's job is different: it collapses an unnamed "a
+     required step on the company's page/site/form" sentence down to one generic line so the row has
+     SOME label when the runner named no field. It fires on any occurrence of the phrase "employer
+     page" / "company site" / etc anywhere in the sentence, with no regard for what kind of stop wrote
+     it, so an account_login sentence merely instructing her to "open the employer page" (Motorola
+     Solutions, application 12277892, measured 2026-09-12) got flattened to the same generic label as
+     an unnamed missing-field stop, discarding the authored diagnosis in favor of one that names
+     nothing. Other account_login sentences that happen not to contain "employer page/site/form" were
+     never touched by the regex and passed straight through (Clearwater, 99cccf89; 41a60c60) - the
+     inconsistency IS the bug, not a difference in how those two classes of stop should render.
+     Excluding account_login here keeps the label AND authored sentence intact and skips the generic
+     detail line below, which would otherwise repeat "could not finish this required step" under a
+     sentence that already says exactly what happened and what to do about it. */
+  const accountLoginBlocker = review.attention_categories?.includes("account_login") ?? false;
+
   for (const blocker of blockers) {
     if (blockerDuplicatesQuestion(blocker, review.questions)) continue;
     if (fieldEvidenceAlreadyCoversBlocker(blocker, review.filled_fields, review.questions)) continue;
@@ -1018,10 +1036,16 @@ export function humanInputItems(
     const rewriteUsable = rewrite !== null && !items.some((existing) => existing.label === rewrite.label);
     addUnique(items, {
       id: `blocker-${keyFor(blocker)}`,
-      label: rewriteUsable ? rewrite.label : dashboardOnlyBlockerLabel(blocker),
+      label: rewriteUsable
+        ? rewrite.label
+        : accountLoginBlocker
+          ? blocker
+          : dashboardOnlyBlockerLabel(blocker),
       ...(restartInLitos
         ? { ...(rewriteUsable ? { detail: rewrite.detail } : {}), action: "Fill the application", actionKind: "restart" as const }
-        : { detail: "Litos could not finish this required step in the dashboard. The application remains paused here." }),
+        : accountLoginBlocker
+          ? {}
+          : { detail: "Litos could not finish this required step in the dashboard. The application remains paused here." }),
       subject: blockerSubject(blocker),
     });
   }
