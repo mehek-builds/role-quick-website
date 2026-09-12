@@ -85,7 +85,7 @@ import { ExactPacketPdf } from "@/components/app/ExactPacketPdf";
 import { AuditedJobDescription, PacketAuditBreakdown, packetAuditDisplayIsExact, packetAuditResponseMatchesApplication } from "@/components/app/PacketAuditEvidence";
 import { acknowledgePacketAudit, acknowledgePacketEvidence, packetQuestionsSnapshot, reconcilePacketPdfVerification, reconcileUnacknowledgedPacketPoll, revalidateAcknowledgedPacketEvidence, type PacketEvidenceSession, type PacketPdfEvidenceVerification } from "@/features/applications";
 import { useBilling } from "@/components/billing/BillingProvider";
-import { isStructuredUpgradeDenial } from "@/features/billing";
+import { isStructuredUpgradeDenial, tailoringAllowanceSpent } from "@/features/billing";
 import { completeOperationId, operationIdFor } from "@/lib/operation-id";
 import { IDLE_LIVE_RUN_CONNECTION, LIVE_RUN_RECONNECTING_NOTICE, liveRunConnectionAfterFailure, liveRunConnectionAfterRetainedDelivery, liveRunConnectionAfterSuccess, liveRunConnectionIsFor, liveRunConnectionView, liveRunPollDelayMs, liveRunRetainedRefusal, liveRunViewSurvivesFailure, RUN_IN_FLIGHT_REFUSAL, type LiveRunConnection } from "@/features/applications";
 import { applicationPacketAuthorityState, awaitingUnverifiedSubmissionResolution, employerActionRefusalMessage, SERVER_RUN_IN_FLIGHT_STATUSES, confirmedProjectionForPacket, managedPrepareAuthorityEnvelopeFromUnknown, managedPrepareAuthorityMatchesPacket, quarantinedSubmissionAuthority, reviewClaimsSubmissionSent, reviewForSubmissionProjection, submissionAuthorityEnvelopeFromUnknown, submissionMutationResponseMatchesApplication, submissionProjectionIsConfirmed, unverifiedRecoveryStatus, type UnverifiedRecoveryStatus } from "@/features/applications";
@@ -817,7 +817,11 @@ function requiresSensitiveQuestionReview(label: string, answer?: string | null):
 }
 
 function Applications() {
-  const { canUse, openUpgrade } = useBilling();
+  const { access: billingAccess, loading: billingLoading, canUse, openUpgrade } = useBilling();
+  /* The posting whose tailoring the server refused with a structured upgrade denial. Kept so the
+     composer can say "tailoring needs Litos+" beside Prepare in Litos after that refusal, on the
+     meters the entitlement snapshot does not publish (the monthly cap). */
+  const [tailoringDeniedJobId, setTailoringDeniedJobId] = useState<string | null>(null);
   const [packets, setPackets] = useState<GeneratedResume[] | null>(null);
   const [canonicalSelected, setCanonicalSelected] = useState<CanonicalApplication | null>(null);
   /* The canonical editor has its own identity because selectedIdRef deliberately names only the
@@ -2600,7 +2604,20 @@ function Applications() {
 
   useEffect(() => {
     if (!pendingJob || packets === null) return;
+    /* Wait for the plan before deciding whether arrival may start a build. Consuming the job while
+       entitlements are unresolved would have to guess, and the old guess (start anyway) is what
+       raised the upgrade modal over the composer on page load. A billing error resolves loading
+       too, so this cannot hold the job forever. */
+    if (billingLoading) return;
     const existing = onlyReviewablePackets(packets).find((packet) => packetMatchesJob(packet, pendingJob));
+    /* ARRIVAL IS NOT A PRESS. Jobs' and Home's "Start" link here with intent=tailor, and a student
+       who can still tailor gets the build started without a second press. A student who cannot
+       (Free, or a trial whose allowance is spent - the grant still reads true there, only the meter
+       says so) gets the composer with Prepare in Litos, and no modal: measured 2026-09-12, the
+       auto-started build 402'd, the denial opened a full-screen Litos+ dialog on page load, and it
+       swallowed the first press on Prepare in Litos. The dialog now opens only from a press on
+       "Tailor resume first". */
+    const arrivalMayTailor = canUse("ai_resume_tailoring") === true && !tailoringAllowanceSpent(billingAccess);
     queueMicrotask(() => {
       const params = new URLSearchParams(window.location.search);
       const intent = params.get("intent");
@@ -2625,11 +2642,11 @@ function Applications() {
           setPendingJob(null);
           return;
         }
-        if (intent === "tailor") {
+        if (intent === "tailor" && arrivalMayTailor) {
           const actionKey = `${pendingJob.id}:tailor`;
           if (actionStartedFor.current !== actionKey) {
             actionStartedFor.current = actionKey;
-            void createApplication(draft);
+            void createApplication(draft, null, null, "arrival");
           }
         } else {
           setNotice("Job details are ready. Choose Prepare in Litos to use your main resume without opening another tab.");
@@ -2637,10 +2654,11 @@ function Applications() {
       }
       setPendingJob(null);
     });
-    // createApplication is redeclared every render and is not a dependency worth chasing: the
-    // effect is keyed on pendingJob, which is cleared above, so it runs once per arrival.
+    // createApplication and canUse are redeclared every render and are not dependencies worth
+    // chasing: the effect is keyed on pendingJob, which is cleared above, so it runs once per
+    // arrival, and billingLoading/billingAccess re-run it once the plan it waited for arrives.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openApplication, packets, pendingJob]);
+  }, [openApplication, packets, pendingJob, billingLoading, billingAccess]);
 
   /* Fail closed during query-only navigation. The router can publish application=B while the
      history request for B is still resolving and selectedId still names A. No actionable control
@@ -3799,6 +3817,10 @@ function Applications() {
     draft: NewApplicationDraft = newApplication,
     upgradeTrigger: HTMLElement | null = null,
     inheritedCanonicalRequestScope: CanonicalRequestScope | null = null,
+    /* "arrival" is the build a route starts on its own when a Jobs/Home "Start" link lands here. It
+       is not a press, so it may never raise the upgrade modal: a refusal on arrival only records
+       itself for the composer's inline note. Only "press" (every button) opens the dialog. */
+    initiation: "press" | "arrival" = "press",
   ) {
     const requestIsCurrent = () => applicationsMountedRef.current;
     const canonicalRequestScope = draft.canonicalApplicationId
@@ -3814,6 +3836,7 @@ function Applications() {
       ? `/dashboard/applications?application=${encodeURIComponent(draft.canonicalApplicationId)}&intent=detail&checkout_action=tailor`
       : "/dashboard/applications?new=1&checkout_action=tailor";
     const openTailoringUpgrade = (source: "proactive" | "server_denial") => {
+      if (source === "server_denial" && draft.jobId) setTailoringDeniedJobId(draft.jobId);
       const trigger = applicationUpgradeFocusTarget(
         upgradeTrigger,
         draft.canonicalApplicationId ? "application-ledger-heading" : "new-application-heading",
@@ -3836,8 +3859,14 @@ function Applications() {
         ? { source: "server_denial", trigger }
         : { trigger });
     };
+    const holdTailoringForPlus = () => {
+      if (draft.jobId) setTailoringDeniedJobId(draft.jobId);
+      setNotice("Job details are ready. Choose Prepare in Litos to use your main resume without opening another tab.");
+    };
     if (canUse("ai_resume_tailoring") !== true) {
-      if (requestMayPublish()) openTailoringUpgrade("proactive");
+      if (!requestMayPublish()) return;
+      if (initiation === "arrival") holdTailoringForPlus();
+      else openTailoringUpgrade("proactive");
       return;
     }
     const company = draft.company.trim();
@@ -4008,7 +4037,8 @@ function Applications() {
     } catch (reason) {
       if (!requestMayPublish()) return;
       if (isStructuredUpgradeDenial(reason, "ai_resume_tailoring")) {
-        openTailoringUpgrade("server_denial");
+        if (initiation === "arrival") holdTailoringForPlus();
+        else openTailoringUpgrade("server_denial");
         return;
       }
       /* ISSUE-043. This is the press of "Make my resume" failing, so it is answered beside "Make my
@@ -6097,6 +6127,7 @@ function Applications() {
           onFetchJobDescription={fetchJobDescription}
           extractingJd={extractingJd}
           refusal={composerRefusal}
+          tailoringNeedsPlus={Boolean(newApplication.jobId) && (tailoringAllowanceSpent(billingAccess) || tailoringDeniedJobId === newApplication.jobId)}
         />
       )}
       {legacyCount > 0 && !applicationTaskOpen && (
@@ -7409,6 +7440,7 @@ function NewApplicationPanel({
   onFetchJobDescription,
   extractingJd,
   refusal,
+  tailoringNeedsPlus,
 }: {
   value: NewApplicationDraft;
   onChange: (value: NewApplicationDraft) => void;
@@ -7420,6 +7452,9 @@ function NewApplicationPanel({
   /** Why the last press of a composer button did nothing, which boxes it was about, and which of
       the two buttons is being answered. */
   refusal: { message: string; fields: ApplicationDraftField[]; at: ComposerSlot; needsExtension: boolean } | null;
+  /** The plan will refuse a tailoring build for this posting: spent per the entitlement meters, or
+      already refused by the server. Says so beside the buttons instead of in a dialog. */
+  tailoringNeedsPlus: boolean;
 }) {
   const patch = (next: Partial<NewApplicationDraft>) => onChange({ ...value, ...next });
   const invalid = (field: ApplicationDraftField) => refusal?.fields.includes(field) ?? false;
@@ -7429,6 +7464,10 @@ function NewApplicationPanel({
     && Boolean(value.role.trim())
     && isHttpsJobUrl(value.portalUrl.trim());
   const managedPrepare = Boolean(value.jobId);
+  /* Prepare in Litos stays the primary button either way; this only changes what the line beside
+     the buttons says, so a capped student reads why tailoring is not the way on before pressing it.
+     "Tailor resume first" stays pressable: that press is where the Litos+ dialog belongs. */
+  const tailoringLocked = managedPrepare && tailoringNeedsPlus;
   const tailorReady = fillReady && Boolean(value.jobDescription.trim());
   const readinessId = "new-application-readiness";
 
@@ -7488,7 +7527,9 @@ function NewApplicationPanel({
       <div className="mt-5 flex flex-wrap items-center justify-end gap-3">
         <ComposerRefusalNote refusal={refusal} at="action" />
         <p id={readinessId} className="mr-auto max-w-xl text-small leading-6 text-muted">
-          {managedPrepare
+          {tailoringLocked
+            ? "Tailoring needs Litos+. Prepare in Litos uses your main resume, and you review the exact packet here before anything can be sent."
+            : managedPrepare
             ? "Prepare with your main resume inside Litos. You will review the exact packet here before anything can be sent."
             : "Add or read the job description, then tailor the packet in Litos."}
         </p>

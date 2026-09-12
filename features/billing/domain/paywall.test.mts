@@ -6,6 +6,7 @@ import {
   canStartSubscriptionNow,
   isStructuredUpgradeDenial,
   shouldOpenUpgrade,
+  tailoringAllowanceSpent,
 } from "./paywall.ts";
 
 const trialAccess: EntitlementSnapshot = {
@@ -127,4 +128,38 @@ test("a paid account is not shown a trial conversion", () => {
 
 test("no access snapshot at all is not an invitation to charge a card", () => {
   assert.equal(canStartSubscriptionNow(null), false);
+});
+
+test("a spent trial allowance is visible before any press, although the cached grant still reads true", () => {
+  const meter = (used: number, limit: number): EntitlementSnapshot => ({
+    ...trialAccess,
+    trial: {
+      meter_policy: "litos_plus_v2_lifetime",
+      starts_at: "2026-09-01T00:00:00.000Z",
+      ends_at: "2026-09-30T00:00:00.000Z",
+      active: true,
+      generations_used: used,
+      generations_limit: limit,
+      outreach_companies_used: 0,
+      outreach_companies_limit: 2,
+      company_usage: [],
+    },
+  });
+  // The measured account: trial_plus, every feature granted, allowance used up.
+  assert.equal(meter(5, 5).features.ai_resume_tailoring, true);
+  assert.equal(tailoringAllowanceSpent(meter(5, 5)), true);
+  assert.equal(tailoringAllowanceSpent(meter(6, 5)), true);
+  assert.equal(tailoringAllowanceSpent(meter(4, 5)), false);
+  // No meter published is "not known to be spent"; the server stays the authority.
+  assert.equal(tailoringAllowanceSpent(trialAccess), false);
+  assert.equal(tailoringAllowanceSpent(null), false);
+  // A plain feature refusal is spent however the meters read.
+  assert.equal(tailoringAllowanceSpent({
+    ...trialAccess,
+    access_class: "free_new",
+    product: null,
+    features: { ai_resume_tailoring: false },
+  }), true);
+  // Paid access is never inferred spent from a trial meter it does not use.
+  assert.equal(tailoringAllowanceSpent({ ...meter(5, 5), access_class: "plus_paid" }), false);
 });
