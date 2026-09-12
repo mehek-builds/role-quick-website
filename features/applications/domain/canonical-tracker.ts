@@ -74,14 +74,24 @@ export function linkedLegacyPacketFromCanonicalTrackerPacket(
  * It is a strictly safer admission than READY, not a looser one: READY says a send MAY happen, this
  * says one already did. Refusing it cannot prevent a send; it can only abandon one mid-flight.
  */
-const MID_SUBMISSION_STATUSES = ['awaiting_security_code'];
-
-function reviewIsMidSubmission(review: GeneratedResume['spec']['_review']): boolean {
-  return MID_SUBMISSION_STATUSES.includes(review?.status ?? '')
-    // The same server-owned answer the READY path defers to. A portal Litos may not submit on has no
-    // code step to finish, so an unsupported row stays with the attended handoff either way.
-    && review?.portal_supported !== false;
-}
+/* Every status during which Litos itself is driving or about to drive the employer form. The
+ * security-code pause was the first member; the five live-run statuses joined on 2026-09-02,
+ * measured on DSI Innovations mid-send: with a run live (status 'submitting', claim held, Stratus
+ * streaming the company form), a reload of the exact same deep link routed to the attended detail
+ * card, because this list did not name the one state the student most needs the managed screens
+ * for. The live view (the panel that shows what the browser changes to, including the confirmation
+ * reload) was reachable only from the client session that pressed Send; close or reload that tab
+ * and no path on the page led back to it, while the card underneath invited a second fill against
+ * a held claim. screenForStatus already maps all five to the submitting screen; this list was the
+ * only thing keeping a reload from reaching it. */
+const MID_SUBMISSION_STATUSES = [
+  'awaiting_security_code',
+  'submit_requested',
+  'preparing',
+  'filling',
+  'submitting',
+  'submission_claimed',
+];
 
 /* THE DASHBOARD IS SELF-SUFFICIENT, and the extension is separate software.
  *
